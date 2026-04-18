@@ -1,0 +1,14 @@
+# 测试
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-asyncio>=0.21.0
+
+# 代码质量
+black>=24.3.0
+ruff>=0.3.0
+mypy>=1.9.0
+pre-commit>=3.6.0
+
+# 类型桩
+types-requests
+pandas-stubs

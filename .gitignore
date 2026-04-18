@@ -27,3 +27,22 @@ Thumbs.db
 
 # Output files
 portfolio_risk_report.xlsx
+
+# 测试和覆盖率
+.pytest_cache/
+.coverage
+htmlcov/
+.cache/
+
+# 开发工具
+.mypy_cache/
+.ruff_cache/
+
+# 日志
+logs/
+*.log
+
+# Claude Code workspace (local working docs, not for public repo)
+.claude/
+CLAUDE.md
+docs/session-*.md

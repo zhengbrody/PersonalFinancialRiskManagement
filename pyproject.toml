@@ -1,0 +1,50 @@
+[tool.black]
+line-length = 100
+target-version = ['py310']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | __pycache__
+  | build
+  | dist
+  | \.cache
+)/
+'''
+
+[tool.ruff]
+select = [
+    "E",   # pycodestyle错误
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8命名
+    "W",   # pycodestyle警告
+]
+ignore = ["E501"]  # 行长度由black处理
+line-length = 100
+exclude = [".git", ".venv", "__pycache__", "build", "dist"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+exclude = ['tests/', 'build/']
+
+[tool.coverage.run]
+omit = [
+    "pages/*",
+    "ui/*",
+    "tests/*",
+    "app.py",
+    "calc_weights.py",
+    "market_intelligence.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.",
+    "raise NotImplementedError",
+]

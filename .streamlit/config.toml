@@ -1,0 +1,10 @@
+[theme]
+base = "dark"
+primaryColor = "#0B7285"
+
+[server]
+maxUploadSize = 10
+maxMessageSize = 200
+
+[browser]
+gatherUsageStats = false
