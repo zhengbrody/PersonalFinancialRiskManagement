@@ -11,7 +11,7 @@ PORTFOLIO_HOLDINGS = {
     'TSLA':  {'shares': 9.00},
     'TSM':   {'shares': 5.39},
     'NFLX':  {'shares': 17.01},
-    'AVGO':  {'shares': 4.65},
+    'AVGO':  {'shares': 4.02},
     'AXP':   {'shares': 5.00},
     'INTU':  {'shares': 3.00},
     'MU':    {'shares': 0.77},
@@ -20,13 +20,15 @@ PORTFOLIO_HOLDINGS = {
     'COST':  {'shares': 0.55},
     'HOOD':  {'shares': 10.00},
     'ONDS':  {'shares': 30.00},
-    'CPNG':  {'shares': 10.00},
-    'S':     {'shares': 15.00},
     'COPX':  {'shares': 5.00},
     'AA':    {'shares': 7.01},
     'QQQ':   {'shares': 2.24},
     'SPY':   {'shares': 2.03},
     'GLD':   {'shares': 2.53},
+    'SQQQ':  {'shares': 13.00},
+    'SOXS':  {'shares': 10.00},
+    'SPXS':  {'shares': 5.00},
+
     # 加密货币
     'BTC-USD':  {'shares': 0.038},
     'ETH-USD':  {'shares': 0.60},
@@ -36,7 +38,7 @@ PORTFOLIO_HOLDINGS = {
     'LINK-USD': {'shares': 16.00},
 }
 
-MARGIN_LOAN = 16792
+MARGIN_LOAN = 16822
 
 # 本金（总投入成本），可随时修改
 TOTAL_COST_BASIS = 19700
@@ -59,8 +61,14 @@ SECTOR_MAP = {
     "SMMT": "Biotech", "ONDS": "Technology / IoT",
     "AA": "Materials", "COPX": "Mining ETF", "VST": "Utilities",
     "COST": "Consumer Staples", "WMT": "Consumer Staples",
+    # Long-leverage / broad ETFs
     "TQQQ": "Leveraged ETF", "QQQ": "Tech ETF",
     "SPY": "Broad Market ETF", "GLD": "Gold / Commodities", "SLV": "Gold / Commodities",
+    # Inverse/short ETFs (3x daily short — hedge instruments)
+    "SQQQ": "Inverse ETF (3x QQQ)",
+    "SOXS": "Inverse ETF (3x Semis)",
+    "SPXS": "Inverse ETF (3x S&P)",
+    # Crypto
     "BTC-USD": "Crypto", "ETH-USD": "Crypto", "XRP-USD": "Crypto",
     "ADA-USD": "Crypto", "SOL-USD": "Crypto", "LINK-USD": "Crypto",
     "DOGE-USD": "Crypto", "BNB-USD": "Crypto",

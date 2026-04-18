@@ -557,10 +557,13 @@ def stream_ollama(messages: list, system_prompt: str, model: str):
 @st.cache_data(ttl=60, show_spinner=False, max_entries=10)
 def fetch_asset_news(tickers: tuple[str, ...], max_per_ticker: int = 6) -> dict[str, list[str]]:
     """
-    Fetch news headlines for a list of tickers (stocks + crypto) via yfinance.
-    yfinance actually does cover crypto (BTC-USD, ETH-USD, etc) — returns ~10
-    headlines each. Short 60s cache absorbs Streamlit re-runs without blocking
-    a user-initiated refresh (user expects each button click to get fresh data).
+    Fetch news headlines for a list of tickers (stocks + crypto).
+    Primary source: yfinance (covers crypto via BTC-USD, ETH-USD, etc).
+    Supplement: if yfinance returns <3 headlines for an equity ticker and an
+    FMP_API_KEY is configured, top up with FMP stock news so thin coverage
+    doesn't starve the sentiment scorer.
+    Short 60s cache absorbs Streamlit re-runs without blocking a user-initiated
+    refresh (user expects each button click to get fresh data).
     """
     result: dict[str, list[str]] = {}
     for tk in tickers:
@@ -575,6 +578,28 @@ def fetch_asset_news(tickers: tuple[str, ...], max_per_ticker: int = 6) -> dict[
             result[tk] = titles
         except Exception:
             result[tk] = []
+
+    # FMP supplement: top up equity tickers with thin yfinance coverage.
+    fmp_key = _safe_get_secret("FMP_API_KEY") or os.environ.get("FMP_API_KEY", "")
+    if fmp_key:
+        thin_tickers = tuple(
+            tk for tk in tickers
+            if not tk.upper().endswith("-USD") and len(result.get(tk, [])) < 3
+        )
+        if thin_tickers:
+            try:
+                from market_intelligence import fetch_stock_news_fmp
+                fmp_news = fetch_stock_news_fmp(thin_tickers, fmp_key, max_per_ticker=max_per_ticker)
+                for tk, extras in fmp_news.items():
+                    existing = set(result.get(tk, []))
+                    for title in extras:
+                        if title not in existing:
+                            result[tk].append(title)
+                            existing.add(title)
+                            if len(result[tk]) >= max_per_ticker:
+                                break
+            except Exception:
+                pass  # FMP supplement is best-effort
     return result
 
 

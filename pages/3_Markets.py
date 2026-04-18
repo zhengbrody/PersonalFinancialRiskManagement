@@ -122,6 +122,35 @@ with rc3:
     else:
         st.metric("Yield Curve", "-- (Load data)")
 
+# ── Yield curve visualization (current vs 30d ago vs 90d ago) ──
+_yc_df = st.session_state.get("yield_curve_df")
+if _yc_df is not None and not _yc_df.empty:
+    fig_yc = go.Figure()
+    fig_yc.add_trace(go.Scatter(
+        x=_yc_df["Maturity"], y=_yc_df["Current (%)"],
+        mode="lines+markers", name="Current",
+        line=dict(color="#0B7285", width=3), marker=dict(size=8),
+    ))
+    fig_yc.add_trace(go.Scatter(
+        x=_yc_df["Maturity"], y=_yc_df["30d Ago (%)"],
+        mode="lines+markers", name="30 days ago",
+        line=dict(color="#8B949E", width=2, dash="dash"), marker=dict(size=6),
+    ))
+    fig_yc.add_trace(go.Scatter(
+        x=_yc_df["Maturity"], y=_yc_df["90d Ago (%)"],
+        mode="lines+markers", name="90 days ago",
+        line=dict(color="#484F58", width=1, dash="dot"), marker=dict(size=5),
+    ))
+    fig_yc.update_layout(
+        title="US Treasury Yield Curve" if lang == "en" else "美国国债收益率曲线",
+        xaxis_title="Maturity" if lang == "en" else "期限",
+        yaxis_title="Yield (%)" if lang == "en" else "收益率 (%)",
+        height=320,
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    render_chart(fig_yc)
+
 
 # ══════════════════════════════════════════════════════════════
 #  2. Macro News Feed (compact, 8 items max)
