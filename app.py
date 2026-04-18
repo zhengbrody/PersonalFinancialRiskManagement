@@ -1,12 +1,19 @@
 """
 app.py
-Streamlit 前端：风险仪表盘 + Excel 导出 + 聊天助手（Claude / Ollama）
-运行方式: streamlit run app.py
+MindMarket AI — Institutional Portfolio Risk Dashboard v3.0 (Multipage)
+────────────────────────────────────
+Run: streamlit run app.py
 """
 
 import io
 import json
 import os
+import re
+from datetime import datetime
+from typing import Optional
+
+import requests
+import yfinance as yf
 
 import numpy as np
 import pandas as pd
@@ -16,62 +23,245 @@ import streamlit as st
 
 from data_provider import DataProvider
 from i18n import get_translator
-from portfolio_config import MARGIN_LOAN, PORTFOLIO_HOLDINGS
-from risk_engine import RiskEngine, RiskReport
-
-
-# ══════════════════════════════════════════════════════════════
-#  语言切换（最先渲染，其他 UI 依赖它）
-# ══════════════════════════════════════════════════════════════
-lang_choice = st.sidebar.radio(
-    "🌐", ["中文", "English"], horizontal=True, label_visibility="collapsed"
+from market_intelligence import (
+    get_all_macro_news, fetch_fundamentals, format_fundamentals_for_display,
+    fetch_vix_data, get_vix_current, fetch_yield_curve, fetch_fear_greed,
+    build_ai_risk_briefing, build_market_intelligence_context,
+    compute_simple_dcf,
+    fetch_insider_signals, compute_technical_signals,
+    fetch_reddit_sentiment_apify, format_reddit_for_llm,
+    fetch_latest_transcript_fmp, analyze_transcript_with_claude,
+    fetch_price_targets_fmp,
 )
-lang = "zh" if lang_choice == "中文" else "en"
-t = get_translator(lang)
+import portfolio_config as _pc
+from risk_engine import RiskEngine, RiskReport
+from logging_config import setup_logging, get_logger
+from error_handler import (
+    show_error, show_warning, show_success, handle_json_error,
+    handle_weight_error, handle_data_loading_error, handle_risk_calculation_error,
+    validate_weights, validate_tickers, safe_operation
+)
 
-st.set_page_config(page_title=t("page_title"), layout="wide")
-st.title(t("main_title"))
+# Initialize logging system
+setup_logging()
+logger = get_logger(__name__)
 
+
+def _reload_portfolio_config():
+    """Reload portfolio_config module to pick up file edits without restarting."""
+    import importlib
+    importlib.reload(_pc)
+    return _pc.PORTFOLIO_HOLDINGS, _pc.MARGIN_LOAN
 
 # ══════════════════════════════════════════════════════════════
-#  行业分类
+#  Color Constants (high-contrast, dark-mode compatible)
 # ══════════════════════════════════════════════════════════════
-SECTOR_MAP = {
-    "NVDA": "Semiconductors", "AVGO": "Semiconductors", "TSM": "Semiconductors",
-    "MU": "Semiconductors", "INTC": "Semiconductors", "AMD": "Semiconductors",
-    "QCOM": "Semiconductors", "TXN": "Semiconductors",
-    "GOOGL": "Big Tech", "GOOG": "Big Tech", "MSFT": "Big Tech",
-    "META": "Big Tech", "AAPL": "Big Tech", "AMZN": "Big Tech",
-    "INTU": "Software", "CRM": "Software", "SNOW": "Software", "NOW": "Software",
-    "TSLA": "EV / Auto", "CPNG": "E-commerce", "BABA": "E-commerce",
-    "NFLX": "Streaming / Media", "DIS": "Streaming / Media",
-    "AXP": "Financials", "JPM": "Financials", "GS": "Financials",
-    "SOFI": "Fintech", "HOOD": "Fintech", "PYPL": "Fintech", "SQ": "Fintech",
-    "S": "Cybersecurity", "CRWD": "Cybersecurity", "PANW": "Cybersecurity",
-    "SMMT": "Biotech", "ONDS": "Technology / IoT",
-    "AA": "Materials", "COPX": "Mining ETF", "VST": "Utilities",
-    "COST": "Consumer Staples", "WMT": "Consumer Staples",
-    "TQQQ": "Leveraged ETF", "QQQ": "Tech ETF",
-    "SPY": "Broad Market ETF", "GLD": "Gold / Commodities", "SLV": "Gold / Commodities",
-    "BTC-USD": "Crypto", "ETH-USD": "Crypto", "XRP-USD": "Crypto",
-    "ADA-USD": "Crypto", "SOL-USD": "Crypto", "LINK-USD": "Crypto",
-    "DOGE-USD": "Crypto", "BNB-USD": "Crypto",
-}
+CLR_ACCENT   = "#0B7285"
+CLR_WARN     = "#C77D00"
+CLR_DANGER   = "#C92A2A"
+CLR_GOOD     = "#2B8A3E"
+CLR_MUTED    = "#64748B"
+CLR_GRID     = "#94A3B8"
+CLR_GOLD     = "#B8860B"
+
+# ══════════════════════════════════════════════════════════════
+#  Sector Classification — canonical source lives in portfolio_config
+# ══════════════════════════════════════════════════════════════
+from portfolio_config import SECTOR_MAP
 
 
 def get_sector(ticker: str) -> str:
     return SECTOR_MAP.get(ticker, "Other")
 
 
+def render_plotly(fig: go.Figure) -> None:
+    """Render Plotly charts with transparent background for dark mode compatibility."""
+    fig.update_layout(
+        template=None,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+    )
+    if fig.layout.polar and fig.layout.polar.bgcolor:
+        fig.update_layout(polar=dict(bgcolor="rgba(0,0,0,0)"))
+    st.plotly_chart(fig, use_container_width=True, theme="streamlit", config={"displayModeBar": False})
+
+
 # ══════════════════════════════════════════════════════════════
-#  实时持仓加载
+#  Page Config & Global CSS
 # ══════════════════════════════════════════════════════════════
+st.set_page_config(
+    page_title="MindMarket AI",
+    page_icon="M",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+st.markdown("""
+<style>
+    /* ── Import professional typeface ──────────────────── */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+    /* ── Root tokens ──────────────────────────────────── */
+    :root {
+        --bg:          #0B0E11;
+        --surface:     #12161C;
+        --elevated:    #181D25;
+        --border:      rgba(139, 148, 158, 0.10);
+        --border-med:  rgba(139, 148, 158, 0.18);
+        --text:        #E2E8F0;
+        --text-sec:    #8B949E;
+        --text-muted:  #4A5568;
+        --accent:      #0B7285;
+        --accent-bg:   rgba(11, 114, 133, 0.08);
+        --positive:    #2EA043;
+        --negative:    #DA3633;
+        --warning:     #D29922;
+    }
+
+    /* ── Strip Streamlit chrome ────────────────────────── */
+    #MainMenu, footer, [data-testid="stDeployButton"],
+    [data-testid="stStatusWidget"] {display: none !important;}
+    header[data-testid="stHeader"] {background: transparent !important;}
+
+    /* Keep sidebar toggle visible when collapsed */
+    [data-testid="collapsedControl"] {
+        visibility: visible !important;
+        display: flex !important;
+        z-index: 999990;
+    }
+
+    /* ── App shell ────────────────────────────────────── */
+    .stApp {
+        background: var(--bg);
+        color: var(--text);
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    /* ── Sidebar — clean, minimal ─────────────────────── */
+    section[data-testid="stSidebar"] {
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+    }
+    section[data-testid="stSidebar"] .stMarkdown p {
+        font-size: 12px;
+    }
+
+    /* ── KPI Cards ─────────────────────────────────────── */
+    [data-testid="stMetric"] {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 14px 16px;
+    }
+    [data-testid="stMetricLabel"] {
+        color: var(--text-sec);
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+    }
+    [data-testid="stMetricValue"] {
+        color: var(--text);
+        font-weight: 600;
+        font-size: 22px;
+    }
+
+    /* ── Tabs ──────────────────────────────────────────── */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 0;
+        border-bottom: 1px solid var(--border);
+        background: transparent;
+    }
+    .stTabs [data-baseweb="tab"] {
+        font-size: 13px;
+        font-weight: 500;
+        padding: 12px 24px;
+        color: var(--text-sec);
+        border-bottom: 2px solid transparent;
+        background: transparent;
+        letter-spacing: 0.2px;
+    }
+    .stTabs [data-baseweb="tab"]:hover {
+        color: var(--text);
+    }
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        color: var(--text);
+        border-bottom: 2px solid var(--accent);
+        font-weight: 600;
+    }
+
+    /* ── Data tables ──────────────────────────────────── */
+    .stDataFrame {
+        border-radius: 6px;
+        font-size: 13px;
+    }
+
+    /* ── Expanders — subtle ───────────────────────────── */
+    .streamlit-expanderHeader {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-sec);
+    }
+
+    /* ── Buttons ──────────────────────────────────────── */
+    .stButton > button {
+        font-family: 'Inter', sans-serif;
+        font-weight: 500;
+        font-size: 13px;
+        letter-spacing: 0.2px;
+        border-radius: 6px;
+    }
+    .stButton > button[kind="primary"] {
+        background: var(--accent);
+        border: none;
+    }
+
+    /* ── Remove excess padding in columns ─────────────── */
+    [data-testid="stHorizontalBlock"] > div {
+        padding: 0 4px;
+    }
+
+    /* ── Caption / helper text ────────────────────────── */
+    .stCaption, .stMarkdown small {
+        color: var(--text-muted);
+        font-size: 11px;
+    }
+
+    /* ── Chart containers ─────────────────────────────── */
+    .js-plotly-plot .plotly .main-svg {
+        border-radius: 6px;
+    }
+
+    /* ── Scrollbar ────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border-med); border-radius: 3px; }
+
+    /* ── Mobile ───────────────────────────────────────── */
+    @media (max-width: 768px) {
+        .stTabs [data-baseweb="tab"] { font-size: 11px; padding: 8px 14px; }
+        [data-testid="stMetric"] { padding: 10px 12px; }
+    }
+
+
+</style>
+""", unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════
+#  Language (auto-detect or simple toggle in sidebar)
+# ══════════════════════════════════════════════════════════════
+lang = "en"  # default English; user can switch in sidebar
+t = get_translator(lang)
+
+
+# ══════════════════════════════════════════════════════════════
+#  Shared Functions — Live Weights
+# ══════════════════════════════════════════════════════════════
+@st.cache_data(ttl=300, show_spinner=False, max_entries=5)
 def fetch_live_weights() -> tuple[dict, dict]:
-    import yfinance as yf
-
-    tickers = list(PORTFOLIO_HOLDINGS.keys())
+    tickers = list(_pc.PORTFOLIO_HOLDINGS.keys())
     raw = yf.download(tickers, period="5d", auto_adjust=True, progress=False)
-
     if isinstance(raw.columns, pd.MultiIndex):
         close = raw["Close"]
         if isinstance(close.columns, pd.MultiIndex):
@@ -81,51 +271,276 @@ def fetch_live_weights() -> tuple[dict, dict]:
 
     values = {}
     missing = []
-    for ticker, info in PORTFOLIO_HOLDINGS.items():
+    for ticker, info in _pc.PORTFOLIO_HOLDINGS.items():
         if ticker in close.columns:
             col = close[ticker].dropna()
             if not col.empty:
                 values[ticker] = float(col.iloc[-1]) * info["shares"]
                 continue
         missing.append(ticker)
-
     for ticker in missing:
         try:
             hist = yf.Ticker(ticker).history(period="5d", auto_adjust=True)
             if not hist.empty:
-                values[ticker] = float(hist["Close"].iloc[-1]) * PORTFOLIO_HOLDINGS[ticker]["shares"]
+                values[ticker] = float(hist["Close"].iloc[-1]) * _pc.PORTFOLIO_HOLDINGS[ticker]["shares"]
         except Exception:
             pass
 
     total_long = sum(values.values())
-    net_equity = total_long - MARGIN_LOAN
+    net_equity = total_long - _pc.MARGIN_LOAN
     weights = {k: round(v / total_long, 6) for k, v in values.items()}
+    cost_basis = getattr(_pc, "TOTAL_COST_BASIS", 0)
     meta = {
         "total_long": total_long,
         "net_equity": net_equity,
-        "leverage": total_long / net_equity if net_equity > 0 else float("nan"),
+        "margin_loan": _pc.MARGIN_LOAN,
+        "leverage": total_long / net_equity if net_equity > 0 else float("inf"),
         "missing": [tk for tk in tickers if tk not in values],
+        "cost_basis": cost_basis,
+        "total_pnl": net_equity - cost_basis if cost_basis > 0 else None,
+        "total_pnl_pct": (net_equity - cost_basis) / cost_basis if cost_basis > 0 else None,
     }
     return weights, meta
 
 
-# ══════════════════════════════════════════════════════════════
-#  聊天后端
-# ══════════════════════════════════════════════════════════════
-def stream_ollama(messages: list, system_prompt: str, model: str):
-    """向本地 Ollama 发送流式请求，逐块 yield 文本。"""
-    import requests
+@st.cache_resource(ttl=86400, show_spinner=False, max_entries=10)
+def get_data_provider(weights_json: str, period_years: int):
+    """
+    Cache DataProvider instance (24 hours).
+    Keeps price data and returns in memory for fast access.
 
+    Args:
+        weights_json: JSON string (hashable) containing ticker weights
+        period_years: Historical period in years
+
+    Returns:
+        DataProvider instance with cached price data
+    """
+    import time
+    t0 = time.time()
+
+    weights = json.loads(weights_json)
+    dp = DataProvider(weights, period_years=period_years, holdings=_pc.PORTFOLIO_HOLDINGS)
+    _ = dp.fetch_prices()  # Eagerly load and cache prices
+
+    duration_ms = (time.time() - t0) * 1000
+    logger.info(
+        "cache.data_provider.created",
+        tickers=list(weights.keys()),
+        period_years=period_years,
+        duration_ms=round(duration_ms, 2)
+    )
+    return dp
+
+
+@st.cache_data(ttl=3600, show_spinner=False, max_entries=20)
+def run_portfolio_analysis(
+    weights_json: str,
+    period_years: int,
+    mc_sims: int,
+    mc_horizon: int,
+    risk_free_rate_fallback: float,
+) -> tuple[RiskReport, pd.DataFrame, pd.Series]:
+    """
+    Run complete portfolio risk analysis with caching.
+
+    Args:
+        weights_json: JSON string (hashable) of ticker->weight dict
+        period_years: Historical period in years
+        mc_sims: Number of Monte Carlo simulations
+        mc_horizon: Horizon in days for MC
+        risk_free_rate_fallback: Risk-free rate
+
+    Returns:
+        Tuple of (RiskReport, prices DataFrame, cumulative returns Series)
+    """
+    import time
+
+    weights = json.loads(weights_json)
+
+    logger.info(
+        "ui.analysis.start",
+        tickers=list(weights.keys()),
+        period_years=period_years,
+        mc_sims=mc_sims,
+        mc_horizon=mc_horizon
+    )
+    start_time = time.time()
+
+    try:
+        # Use cached DataProvider
+        dp = get_data_provider(weights_json, period_years)
+
+        # Check for failed tickers
+        failed_tickers = dp.get_failed_tickers()
+        if failed_tickers and len(failed_tickers) == len(weights):
+            raise ValueError(
+                f"无法下载所有ticker的数据。可能原因: "
+                f"网络不可用、股票代码无效或日期范围错误"
+            )
+
+        prices = dp.fetch_prices()
+        cumret = dp.get_portfolio_cumulative_returns()
+
+        engine = RiskEngine(
+            dp,
+            mc_simulations=mc_sims,
+            mc_horizon=mc_horizon,
+            risk_free_rate_fallback=risk_free_rate_fallback,
+        )
+        report = engine.run()
+
+        duration_ms = (time.time() - start_time) * 1000
+        logger.info(
+            "ui.analysis.complete",
+            duration_ms=round(duration_ms, 2),
+            var_95=report.var_95,
+            sharpe_ratio=report.sharpe_ratio
+        )
+
+        return report, prices, cumret
+    except np.linalg.LinAlgError as e:
+        duration_ms = (time.time() - start_time) * 1000
+        logger.error(
+            "ui.analysis.linalg_error",
+            error=str(e),
+            duration_ms=round(duration_ms, 2),
+            exc_info=True
+        )
+        raise ValueError(
+            "协方差矩阵计算失败。可能原因: "
+            "资产高度相关、数据不足或数据质量问题"
+        )
+    except Exception as e:
+        duration_ms = (time.time() - start_time) * 1000
+        logger.error(
+            "ui.analysis.failed",
+            error=str(e),
+            duration_ms=round(duration_ms, 2),
+            exc_info=True
+        )
+        raise
+
+
+def build_engine_ref(
+    weights: dict[str, float],
+    period_years: int,
+    mc_sims: int,
+    mc_horizon: int,
+    risk_free_rate_fallback: float,
+    prices: pd.DataFrame,
+) -> RiskEngine:
+    """Reconstruct a RiskEngine from cached price data for downstream operations."""
+    dp = DataProvider(weights, period_years=period_years, holdings=_pc.PORTFOLIO_HOLDINGS)
+    dp._prices = prices.copy()
+    dp._returns = np.log(dp._prices / dp._prices.shift(1)).dropna()
+    return RiskEngine(
+        dp,
+        mc_simulations=mc_sims,
+        mc_horizon=mc_horizon,
+        risk_free_rate_fallback=risk_free_rate_fallback,
+    )
+
+
+# ══════════════════════════════════════════════════════════════
+#  LLM Backend
+# ══════════════════════════════════════════════════════════════
+def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: float = 0.1) -> str:
+    """
+    Universal LLM call with retry logic for API overload errors.
+    Includes friendly error messages and recovery suggestions.
+    """
+    import time
+
+    model_provider = st.session_state.get("_model_provider", "Ollama (Local)")
+    api_key_input = st.session_state.get("_api_key_input", "")
+    deepseek_key = st.session_state.get("_deepseek_key", "")
+    ollama_model = st.session_state.get("_ollama_model", "deepseek-r1:14b")
+
+    try:
+        if model_provider == "Anthropic Claude" and api_key_input:
+            import anthropic
+            client = anthropic.Anthropic(api_key=api_key_input)
+            for attempt in range(3):
+                try:
+                    resp = client.messages.create(
+                        model="claude-sonnet-4-6",
+                        max_tokens=max_tokens,
+                        system=system if system else "You are a helpful financial analyst.",
+                        messages=[{"role": "user", "content": prompt}],
+                    )
+                    return resp.content[0].text.strip()
+                except Exception as e:
+                    err_str = str(e).lower()
+                    if "overloaded" in err_str or "529" in err_str or "rate" in err_str:
+                        if attempt < 2:
+                            logger.info("llm.anthropic.rate_limit", attempt=attempt)
+                            time.sleep(2 * (attempt + 1))
+                            continue
+                    raise
+
+        elif model_provider == "DeepSeek API" and deepseek_key:
+            from openai import OpenAI
+            client = OpenAI(api_key=deepseek_key, base_url="https://api.deepseek.com/v1")
+            messages = []
+            if system:
+                messages.append({"role": "system", "content": system})
+            messages.append({"role": "user", "content": prompt})
+            resp = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+            return resp.choices[0].message.content.strip()
+
+        elif model_provider == "Ollama (Local)":
+            payload = {
+                "model": ollama_model,
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": False,
+                "options": {"temperature": temperature, "num_predict": max_tokens},
+            }
+            try:
+                resp = requests.post("http://localhost:11434/api/chat", json=payload, timeout=60)
+                resp.raise_for_status()
+                return resp.json()["message"]["content"].strip()
+            except requests.exceptions.ConnectionError as e:
+                logger.error("llm.ollama.connection_failed", error=str(e))
+                raise ConnectionError(
+                    "无法连接到本地 Ollama (localhost:11434)。"
+                    "请确保 Ollama 已启动，或切换到 DeepSeek/Claude API。"
+                )
+            except requests.exceptions.Timeout as e:
+                logger.error("llm.ollama.timeout", error=str(e))
+                raise TimeoutError(
+                    "Ollama 响应超时。请检查网络连接或稍后重试。"
+                )
+
+        raise ValueError("未配置LLM后端。请在侧边栏设置API密钥。")
+
+    except ConnectionError as e:
+        logger.error("llm.connection_error", error=str(e))
+        raise
+    except TimeoutError as e:
+        logger.error("llm.timeout", error=str(e))
+        raise
+    except ValueError as e:
+        logger.error("llm.config_error", error=str(e))
+        raise
+    except Exception as e:
+        logger.error("llm.unknown_error", error=str(e), exc_info=True)
+        raise
+
+
+def stream_ollama(messages: list, system_prompt: str, model: str):
     payload = {
         "model": model,
         "messages": [{"role": "system", "content": system_prompt}] + messages,
         "stream": True,
     }
     try:
-        resp = requests.post(
-            "http://localhost:11434/api/chat",
-            json=payload, stream=True, timeout=120,
-        )
+        resp = requests.post("http://localhost:11434/api/chat", json=payload, stream=True, timeout=120)
         resp.raise_for_status()
         for line in resp.iter_lines():
             if line:
@@ -133,75 +548,401 @@ def stream_ollama(messages: list, system_prompt: str, model: str):
                 if not data.get("done"):
                     yield data["message"]["content"]
     except Exception as e:
-        yield f"\n\n[{t('chat_ollama_err')} — {e}]"
+        yield f"\n\n[Cannot connect to local Ollama (localhost:11434). Error: {e}]"
 
 
 # ══════════════════════════════════════════════════════════════
-#  风险报告辅助
+#  News Fetching & Sentiment Scoring
 # ══════════════════════════════════════════════════════════════
-def build_risk_context(report: RiskReport, weights: dict, mc_horizon: int, market_shock: float) -> str:
-    lines = [
-        "=== PORTFOLIO RISK REPORT ===", "",
-        "## Key Metrics",
-        f"Annual Return:      {report.annual_return:.2%}",
-        f"Annual Volatility:  {report.annual_volatility:.2%}",
-        f"Sharpe Ratio:       {report.sharpe_ratio:.2f}",
-        f"Max Drawdown:       {report.max_drawdown:.2%}",
-        f"VaR 95% ({mc_horizon}d):     {report.var_95:.2%}",
-        f"VaR 99% ({mc_horizon}d):     {report.var_99:.2%}",
-        f"CVaR 95% ({mc_horizon}d):    {report.cvar_95:.2%}",
-        f"Stress Loss ({market_shock:.0%} shock): {report.stress_loss:.2%}", "",
-    ]
-    if report.drawdown_stats:
-        ds = report.drawdown_stats
-        lines += [
-            "## Drawdown Stats",
-            f"Episodes: {ds['num_episodes']}  |  Avg: {ds['avg_episode_days']}d  "
-            f"|  Max: {ds['max_episode_days']}d  |  Underwater: {ds['pct_time_underwater']}%", "",
-        ]
-    lines += [
-        "## Asset Weights / Beta / VaR%",
-        f"{'Ticker':<12} {'Weight':>8} {'Beta':>8} {'VaR%':>8}  Sector",
-        "-" * 58,
-    ]
-    for ticker, w in sorted(weights.items(), key=lambda x: -x[1]):
-        beta = report.betas.get(ticker, float("nan"))
-        beta_s = f"{beta:.2f}" if not np.isnan(beta) else " N/A"
-        var_pct = float(report.component_var_pct.get(ticker, 0)) if report.component_var_pct is not None else 0
-        lines.append(f"{ticker:<12} {w:>8.2%} {beta_s:>8} {var_pct:>8.1%}  {get_sector(ticker)}")
-    port_beta = sum(
-        report.betas.get(tk, 1.0) * w for tk, w in weights.items()
-        if not np.isnan(report.betas.get(tk, float("nan")))
+@st.cache_data(ttl=60, show_spinner=False, max_entries=10)
+def fetch_asset_news(tickers: tuple[str, ...], max_per_ticker: int = 6) -> dict[str, list[str]]:
+    """
+    Fetch news headlines for a list of tickers (stocks + crypto) via yfinance.
+    yfinance actually does cover crypto (BTC-USD, ETH-USD, etc) — returns ~10
+    headlines each. Short 60s cache absorbs Streamlit re-runs without blocking
+    a user-initiated refresh (user expects each button click to get fresh data).
+    """
+    result: dict[str, list[str]] = {}
+    for tk in tickers:
+        try:
+            news_raw = yf.Ticker(tk).news or []
+            titles = []
+            for item in news_raw[:max_per_ticker]:
+                content = item.get("content", {})
+                title = content.get("title") or item.get("title") or ""
+                if title:
+                    titles.append(title.strip())
+            result[tk] = titles
+        except Exception:
+            result[tk] = []
+    return result
+
+
+def _confidence_from_count(n: int) -> str:
+    """Map news headline count to a confidence level shown to users."""
+    if n >= 6:
+        return "High"
+    if n >= 3:
+        return "Medium"
+    return "Low"
+
+
+def score_sentiment_ollama(ticker: str, headlines: list[str], model: str) -> dict:
+    """Send news headlines to the active LLM for sentiment analysis."""
+    if not headlines:
+        return {
+            "retail_sentiment_score": 5.0, "sentiment_label": "Neutral / No Data",
+            "retail_coverage": "Low", "coverage_text": "No recent headlines found.",
+            "bull_arguments": [], "bear_arguments": [],
+            "key_narrative": "No recent news available.",
+            "score": 5, "coverage": "Low",
+            "narrative_summary": "No recent news available.",
+            "summary": "No recent news available.", "raw": "",
+            "news_count": 0, "confidence": "Low",
+        }
+
+    headlines_text = "\n".join(f"- {h}" for h in headlines)
+
+    model_provider = st.session_state.get("_model_provider", "Ollama (Local)")
+    _is_ollama = (model_provider == "Ollama (Local)")
+    if _is_ollama:
+        prompt = (
+            f"Analyze these {ticker} news headlines. Rate sentiment 1-10 (1=bearish, 10=bullish).\n"
+            f"Give: score, 2 bull reasons, 2 bear risks, and a summary.\n"
+            f"Format as JSON:\n"
+            f'{{"score":7,"label":"Bullish","bull":["reason1","reason2"],"bear":["risk1","risk2"],"summary":"..."}}\n\n'
+            f"Headlines:\n{headlines_text}\n\nJSON:"
+        )
+    else:
+        prompt = (
+            f"You are a senior Wall Street equity research analyst writing a Sentiment Tear Sheet for {ticker}.\n"
+            f"Analyze these headlines and return ONLY valid JSON:\n"
+            f'{{\n'
+            f'  "retail_sentiment_score": <float 1.0-10.0>,\n'
+            f'  "sentiment_label": "<2-3 word rating like Mixed / Cautious or Strong Bull>",\n'
+            f'  "retail_coverage": "<High|Moderate|Low>",\n'
+            f'  "coverage_text": "<1 sentence on news coverage depth>",\n'
+            f'  "bull_arguments": [\n'
+            f'    {{"title": "<short bold title>", "detail": "<1-2 sentence explanation>"}}\n'
+            f'  ],\n'
+            f'  "bear_arguments": [\n'
+            f'    {{"title": "<short bold title>", "detail": "<1-2 sentence explanation>"}}\n'
+            f'  ],\n'
+            f'  "key_narrative": "<50-80 word synthesis of all signals>"\n'
+            f'}}\n\n'
+            f"Headlines:\n{headlines_text}"
+        )
+
+    try:
+        raw = call_llm(prompt, max_tokens=800, temperature=0.1)
+        cleaned = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+
+        parsed = None
+        try:
+            parsed = json.loads(cleaned)
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        if not parsed:
+            fence_match = re.search(r"```(?:json)?\s*(\{.+\})\s*```", cleaned, re.DOTALL)
+            if fence_match:
+                try:
+                    parsed = json.loads(fence_match.group(1))
+                except (json.JSONDecodeError, ValueError):
+                    pass
+
+        if not parsed:
+            brace_start = cleaned.find("{")
+            brace_end = cleaned.rfind("}")
+            if brace_start != -1 and brace_end > brace_start:
+                try:
+                    parsed = json.loads(cleaned[brace_start:brace_end + 1])
+                except (json.JSONDecodeError, ValueError):
+                    pass
+
+        if parsed and isinstance(parsed, dict):
+            retail_score = parsed.get("retail_sentiment_score", parsed.get("score", 5.0))
+            retail_score = max(1.0, min(10.0, float(retail_score)))
+            sentiment_label = parsed.get("sentiment_label", parsed.get("label", "N/A"))
+            retail_coverage = parsed.get("retail_coverage", parsed.get("coverage", "Moderate"))
+            coverage_text = parsed.get("coverage_text", "")
+
+            raw_bull = parsed.get("bull_arguments", parsed.get("bull", []))
+            if isinstance(raw_bull, str):
+                bull_arguments = [raw_bull] if raw_bull else []
+            elif isinstance(raw_bull, list):
+                bull_arguments = []
+                for item in raw_bull:
+                    if isinstance(item, dict):
+                        bull_arguments.append(item)
+                    elif isinstance(item, str) and item.strip():
+                        bull_arguments.append({"title": item.strip(), "detail": ""})
+            else:
+                bull_arguments = []
+
+            raw_bear = parsed.get("bear_arguments", parsed.get("bear", []))
+            if isinstance(raw_bear, str):
+                bear_arguments = [raw_bear] if raw_bear else []
+            elif isinstance(raw_bear, list):
+                bear_arguments = []
+                for item in raw_bear:
+                    if isinstance(item, dict):
+                        bear_arguments.append(item)
+                    elif isinstance(item, str) and item.strip():
+                        bear_arguments.append({"title": item.strip(), "detail": ""})
+            else:
+                bear_arguments = []
+
+            key_narrative = parsed.get("key_narrative", parsed.get("narrative_summary", parsed.get("summary", cleaned[:120])))
+        else:
+            score_match = re.search(r'"?(?:retail_sentiment_)?score"?\s*:\s*([\d.]+)', cleaned, re.IGNORECASE)
+            retail_score = float(score_match.group(1)) if score_match else 5.0
+            retail_score = max(1.0, min(10.0, retail_score))
+            sentiment_label = "N/A"
+            retail_coverage = "Moderate"
+            coverage_text = ""
+            bull_arguments = []
+            bear_arguments = []
+            bull_match = re.search(r'"bull[_\s]*(?:arguments|logic)?"?\s*:\s*\[([^\]]*)\]', cleaned, re.IGNORECASE | re.DOTALL)
+            if bull_match:
+                for s in re.findall(r'"([^"]+)"', bull_match.group(1)):
+                    bull_arguments.append({"title": s.strip(), "detail": ""})
+            bear_match = re.search(r'"bear[_\s]*(?:arguments|logic|risks)?"?\s*:\s*\[([^\]]*)\]', cleaned, re.IGNORECASE | re.DOTALL)
+            if bear_match:
+                for s in re.findall(r'"([^"]+)"', bear_match.group(1)):
+                    bear_arguments.append({"title": s.strip(), "detail": ""})
+            key_narrative = cleaned[:120]
+
+        return {
+            "retail_sentiment_score": retail_score,
+            "sentiment_label": sentiment_label,
+            "retail_coverage": retail_coverage,
+            "coverage_text": coverage_text,
+            "bull_arguments": bull_arguments if isinstance(bull_arguments, list) else [],
+            "bear_arguments": bear_arguments if isinstance(bear_arguments, list) else [],
+            "key_narrative": key_narrative,
+            "score": int(round(retail_score)),
+            "coverage": retail_coverage,
+            "narrative_summary": key_narrative,
+            "summary": key_narrative, "raw": cleaned,
+            "news_count": len(headlines),
+            "confidence": _confidence_from_count(len(headlines)),
+        }
+    except (ConnectionError, ValueError, Exception) as e:
+        return {
+            "retail_sentiment_score": 5.0, "sentiment_label": "Error",
+            "retail_coverage": "Low", "coverage_text": "",
+            "score": 5, "coverage": "Low",
+            "bull_arguments": [], "bear_arguments": [],
+            "key_narrative": str(e),
+            "narrative_summary": str(e),
+            "summary": str(e), "raw": "",
+            "news_count": len(headlines),
+            "confidence": _confidence_from_count(len(headlines)),
+        }
+
+
+def score_reddit_fomo(ticker: str, reddit_text: str) -> dict:
+    """Score Reddit retail FOMO sentiment using the active LLM."""
+    if not reddit_text or reddit_text == "No Reddit posts found for this ticker.":
+        return {"fomo_score": 50, "retail_consensus": "No Reddit data", "bull_logic": "", "bear_logic": ""}
+
+    prompt = (
+        f"You are analyzing Reddit retail investor sentiment for ${ticker} "
+        f"from r/WallStreetBets and r/stocks.\n"
+        f"Based on these posts, return ONLY valid JSON:\n"
+        f'{{\n'
+        f'  "fomo_score": <integer 0-100, where 0=extreme panic, 50=neutral, 100=extreme FOMO/bullish>,\n'
+        f'  "retail_consensus": "<one sentence summarizing retail mood>",\n'
+        f'  "bull_logic": "<most popular bullish thesis from posts>",\n'
+        f'  "bear_logic": "<biggest concern or bearish argument from posts>"\n'
+        f'}}\n\n'
+        f"Reddit Posts:\n{reddit_text[:2000]}"
     )
-    lines += ["", f"Portfolio Beta: {port_beta:.3f}", ""]
-    if report.corr_matrix is not None:
-        top = sorted(weights, key=lambda x: -weights[x])[:10]
-        corr = report.corr_matrix.loc[
-            [tk for tk in top if tk in report.corr_matrix.index],
-            [tk for tk in top if tk in report.corr_matrix.columns],
-        ]
-        lines += ["## Correlation Matrix (top 10)", corr.to_string(float_format="{:.2f}".format)]
+
+    try:
+        raw = call_llm(prompt, max_tokens=300, temperature=0.1)
+        cleaned = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+
+        parsed = None
+        try:
+            parsed = json.loads(cleaned)
+        except (json.JSONDecodeError, ValueError):
+            brace_start = cleaned.find("{")
+            brace_end = cleaned.rfind("}")
+            if brace_start != -1 and brace_end > brace_start:
+                try:
+                    parsed = json.loads(cleaned[brace_start:brace_end + 1])
+                except (json.JSONDecodeError, ValueError):
+                    pass
+
+        if parsed and isinstance(parsed, dict):
+            return {
+                "fomo_score": max(0, min(100, int(parsed.get("fomo_score", 50)))),
+                "retail_consensus": parsed.get("retail_consensus", "N/A"),
+                "bull_logic": parsed.get("bull_logic", ""),
+                "bear_logic": parsed.get("bear_logic", ""),
+            }
+        return {"fomo_score": 50, "retail_consensus": "Parse error", "bull_logic": "", "bear_logic": ""}
+    except Exception as e:
+        return {"fomo_score": 50, "retail_consensus": f"Error: {e}", "bull_logic": "", "bear_logic": ""}
+
+
+def get_conviction_multiplier(score: int) -> tuple[float, str]:
+    """Convert 1-10 sentiment score to conviction multiplier and label."""
+    if score >= 8: return 1.25, "Overweight"
+    if score >= 5: return 1.0, "Neutral"
+    if score >= 3: return 0.5, "Underweight"
+    return 0.0, "Avoid"
+
+
+def build_sentiment_context(sentiment: dict) -> str:
+    if not sentiment:
+        return ""
+    lines = ["", "## 16. AI Sentiment Scores (Latest News, LLM-scored)",
+             f"{'Ticker':<12} {'Score':>8}  {'Label':<22}  Coverage"]
+    lines.append("-" * 80)
+    for tk, data in sorted(sentiment.items(), key=lambda x: x[1].get("retail_sentiment_score", x[1].get("score", 5))):
+        score = data.get("retail_sentiment_score", data.get("score", 5))
+        label = data.get("sentiment_label", "N/A")
+        coverage = data.get("retail_coverage", data.get("coverage", "N/A"))
+        lines.append(f"  {tk:<10} {score:>6.1f}/10 — {label:<22} | Coverage: {coverage}")
+        bulls = data.get("bull_arguments", [])
+        if bulls:
+            bull_parts = []
+            for arg in bulls:
+                if isinstance(arg, dict):
+                    bull_parts.append(f"{arg.get('title', '')} - {arg.get('detail', '')}")
+                else:
+                    bull_parts.append(str(arg))
+            lines.append(f"  Bull: {'; '.join(bull_parts)}")
+        bears = data.get("bear_arguments", [])
+        if bears:
+            bear_parts = []
+            for arg in bears:
+                if isinstance(arg, dict):
+                    bear_parts.append(f"{arg.get('title', '')} - {arg.get('detail', '')}")
+                else:
+                    bear_parts.append(str(arg))
+            lines.append(f"  Bear: {'; '.join(bear_parts)}")
+        narrative = data.get("key_narrative", data.get("narrative_summary", data.get("summary", "")))
+        if narrative:
+            lines.append(f"  Narrative: {narrative}")
+        if data.get("headlines"):
+            for h in data["headlines"][:2]:
+                lines.append(f"             - {h[:90]}")
     return "\n".join(lines)
 
 
-def create_excel_report(report: RiskReport, weights: dict, mc_horizon: int, market_shock: float, prices: pd.DataFrame) -> io.BytesIO:
+def build_risk_context(
+    report: RiskReport,
+    weights: dict,
+    mc_horizon: int,
+    market_shock: float,
+    prices: Optional[pd.DataFrame] = None,
+    sentiment: Optional[dict] = None,
+    fund_data: Optional[pd.DataFrame] = None,
+    insider_data: Optional[dict] = None,
+    technical_data=None,
+) -> str:
+    """Construct comprehensive text briefing for AI chatbot system-context."""
+    lines: list[str] = []
+    _h = lines.append
+    _b = lambda block: lines.extend(block)
+
+    _b([
+        "=" * 64,
+        "PORTFOLIO RISK REPORT  (v2 — EWMA - Multi-Factor - Margin-Aware)",
+        "=" * 64, "",
+        "## 1. Key Risk Metrics",
+        f"  Annual Return:            {report.annual_return:>10.2%}",
+        f"  Annual Volatility (EWMA): {report.annual_volatility:>10.2%}",
+        f"  Sharpe Ratio:             {report.sharpe_ratio:>10.2f}",
+        f"  Risk-Free Rate:           {report.risk_free_rate:>8.2%}",
+        f"  Max Drawdown:             {report.max_drawdown:>10.2%}",
+        f"  VaR  95% ({mc_horizon}d, MC EWMA): {report.var_95:>8.2%}",
+        f"  VaR  99% ({mc_horizon}d, MC EWMA): {report.var_99:>8.2%}",
+        f"  CVaR 95% ({mc_horizon}d, MC EWMA): {report.cvar_95:>8.2%}",
+        f"  Stress Loss ({market_shock:.0%} market shock): {report.stress_loss:.2%}",
+        "",
+    ])
+
+    if report.drawdown_stats:
+        ds = report.drawdown_stats
+        _b([
+            "## 2. Drawdown Statistics",
+            f"  Total episodes:     {ds['num_episodes']}",
+            f"  Average duration:   {ds['avg_episode_days']} trading days",
+            f"  Longest duration:   {ds['max_episode_days']} trading days",
+            "",
+        ])
+
+    _b(["## 3. Per-Asset Detail (sorted by weight descending)",
+        f"{'Ticker':<12} {'Weight':>8} {'Beta(SPY)':>10} {'VaR%':>8}  Sector",
+        "-" * 72])
+    for ticker, w in sorted(weights.items(), key=lambda x: -x[1]):
+        beta = report.betas.get(ticker, float("nan"))
+        beta_s = f"{beta:.2f}" if not np.isnan(beta) else "  N/A"
+        var_pct = float(report.component_var_pct.get(ticker, 0)) if report.component_var_pct is not None else 0
+        sector = get_sector(ticker)
+        _h(f"{ticker:<12} {w:>8.2%} {beta_s:>10} {var_pct:>8.1%}  {sector}")
+    _h("")
+
+    if report.margin_call_info and report.margin_call_info.get("has_margin"):
+        mi = report.margin_call_info
+        _b([
+            "## 8. Margin & Leverage Analysis",
+            f"  Leverage:              {mi['leverage']:.2f}x",
+            f"  Distance to margin call: {mi['distance_to_call_pct']:.1%}",
+            "",
+        ])
+
+    if report.mc_portfolio_returns is not None:
+        mc = report.mc_portfolio_returns
+        _b([
+            f"## 10. Monte Carlo Summary ({len(mc):,} paths, {mc_horizon} days)",
+            f"  Mean return:   {np.mean(mc):.2%}",
+            f"  Prob of loss:  {(mc < 0).mean():.1%}",
+            "",
+        ])
+
+    if sentiment:
+        _h(build_sentiment_context(sentiment))
+
+    if fund_data is not None and not fund_data.empty:
+        from market_intelligence import _fmt_market_cap
+        _b(["", "## 17. Fundamentals"])
+        top_tk = sorted(weights, key=lambda x: -weights[x])
+        for tk in top_tk[:10]:
+            if tk not in fund_data.index:
+                continue
+            row = fund_data.loc[tk]
+            pe = row.get("P/E (TTM)")
+            pe_s = f"{pe:.1f}" if pd.notna(pe) else "N/A"
+            _h(f"  {tk:<12} P/E: {pe_s}")
+        _h("")
+
+    return "\n".join(lines)
+
+
+def create_excel_report(report: RiskReport, weights: dict, mc_horizon: int,
+                        market_shock: float, prices: pd.DataFrame) -> io.BytesIO:
     buf = io.BytesIO()
     port_beta = sum(report.betas.get(tk, 1.0) * w for tk, w in weights.items()
                     if not np.isnan(report.betas.get(tk, float("nan"))))
     ds = report.drawdown_stats or {}
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         summary = pd.DataFrame({"Metric": [
-            "Annual Return", "Annual Volatility", "Sharpe Ratio", "Max Drawdown",
+            "Annual Return", "Annual Volatility (EWMA)", "Sharpe Ratio",
+            "Risk-Free Rate", "Max Drawdown",
             f"VaR 95% ({mc_horizon}d)", f"VaR 99% ({mc_horizon}d)", f"CVaR 95% ({mc_horizon}d)",
             f"Stress Loss ({market_shock:.0%})", "Portfolio Beta",
-            "Drawdown Episodes", "Avg Episode (days)", "Max Episode (days)", "% Time Underwater",
         ], "Value": [
             f"{report.annual_return:.4%}", f"{report.annual_volatility:.4%}",
-            f"{report.sharpe_ratio:.4f}", f"{report.max_drawdown:.4%}",
+            f"{report.sharpe_ratio:.4f}", f"{report.risk_free_rate:.4%}",
+            f"{report.max_drawdown:.4%}",
             f"{report.var_95:.4%}", f"{report.var_99:.4%}", f"{report.cvar_95:.4%}",
             f"{report.stress_loss:.4%}", f"{port_beta:.4f}",
-            str(ds.get("num_episodes", "N/A")), str(ds.get("avg_episode_days", "N/A")),
-            str(ds.get("max_episode_days", "N/A")), f"{ds.get('pct_time_underwater', 0):.1f}%",
         ]})
         summary.to_excel(writer, sheet_name="Summary", index=False)
 
@@ -211,28 +952,176 @@ def create_excel_report(report: RiskReport, weights: dict, mc_horizon: int, mark
             stress = beta * market_shock if not np.isnan(beta) else float("nan")
             var_pct = float(report.component_var_pct.get(ticker, 0)) if report.component_var_pct is not None else float("nan")
             asset_rows.append({"Ticker": ticker, "Sector": get_sector(ticker), "Weight": w,
-                                "Beta": beta, "VaR Contribution %": var_pct, "Stress Loss": stress,
-                                "Weighted Stress": stress * w if not np.isnan(stress) else float("nan")})
+                                "Beta": beta, "VaR Contribution %": var_pct, "Stress Loss": stress})
         pd.DataFrame(asset_rows).to_excel(writer, sheet_name="Asset Details", index=False)
 
-        if report.corr_matrix is not None:
-            report.corr_matrix.to_excel(writer, sheet_name="Correlation Matrix")
-        if report.cov_matrix is not None:
-            report.cov_matrix.to_excel(writer, sheet_name="Covariance Matrix")
+        if report.factor_betas is not None:
+            report.factor_betas.to_excel(writer, sheet_name="Multi-Factor Beta")
+        if report.corr_matrix_ewma is not None:
+            report.corr_matrix_ewma.to_excel(writer, sheet_name="EWMA Correlation")
         if report.drawdown_series is not None:
             dd_df = report.drawdown_series.reset_index()
             dd_df.columns = ["Date", "Drawdown"]
             dd_df.to_excel(writer, sheet_name="Drawdown Series", index=False)
         if report.mc_portfolio_returns is not None:
-            pd.DataFrame({"Simulated Return": report.mc_portfolio_returns[:5000]}).to_excel(writer, sheet_name="Monte Carlo", index=False)
+            pd.DataFrame({"Simulated Return": report.mc_portfolio_returns[:5000]}).to_excel(
+                writer, sheet_name="Monte Carlo", index=False)
         if prices is not None:
             prices.to_excel(writer, sheet_name="Price History")
     buf.seek(0)
     return buf
 
 
+def _safe_get_secret(key: str, default: str = "") -> str:
+    try:
+        return st.secrets.get(key, default)
+    except Exception:
+        return default
+
+
+@st.cache_data(ttl=60, show_spinner=False, max_entries=5)
+def _fetch_daily_pnl(tickers_tuple):
+    raw = yf.download(list(tickers_tuple), period="5d", auto_adjust=True, progress=False)
+    if isinstance(raw.columns, pd.MultiIndex):
+        close = raw["Close"]
+        if isinstance(close.columns, pd.MultiIndex):
+            close = close.droplevel(0, axis=1)
+    else:
+        close = raw[["Close"]].rename(columns={"Close": list(tickers_tuple)[0]})
+    return close.dropna(how="all")
+
+
+def render_sentiment_tear_sheet(tk: str, data: dict, weight: float, lang: str = "en"):
+    """Render a single stock's institutional sentiment tear sheet card."""
+    score = data.get("retail_sentiment_score", data.get("score", 5))
+    if isinstance(score, int):
+        score = float(score)
+    label = data.get("sentiment_label", "N/A")
+    coverage = data.get("retail_coverage", data.get("coverage", "N/A"))
+    coverage_text = data.get("coverage_text", "")
+    bulls = data.get("bull_arguments", [])
+    bears = data.get("bear_arguments", [])
+    narrative = data.get("key_narrative", data.get("narrative_summary", data.get("summary", "")))
+    headlines = data.get("headlines", [])
+
+    if narrative and narrative.strip().startswith("```"):
+        narrative = ""
+
+    score_color = CLR_GOOD if score >= 7 else (CLR_DANGER if score <= 4 else CLR_WARN)
+
+    _lbl_score = "AI SENTIMENT SCORE" if lang == "en" else "AI 情绪评分"
+    _lbl_coverage = "RETAIL COVERAGE" if lang == "en" else "新闻覆盖度"
+    _lbl_analysis = "NEWS & SOCIAL ANALYSIS" if lang == "en" else "新闻与情绪分析"
+    _lbl_bull = "BULL ARGUMENTS" if lang == "en" else "看涨逻辑"
+    _lbl_bear = "BEAR ARGUMENTS" if lang == "en" else "看跌隐患"
+    _lbl_narrative = "KEY NARRATIVE SUMMARY" if lang == "en" else "核心叙事总结"
+    _lbl_headlines = "RELATED HEADLINES" if lang == "en" else "相关新闻"
+    _lbl_no_bull = "No bull arguments identified" if lang == "en" else "AI 未识别到明确看涨信号"
+    _lbl_no_bear = "No bear arguments identified" if lang == "en" else "AI 未识别到明确风险信号"
+    _lbl_portfolio = "OF PORTFOLIO" if lang == "en" else "持仓占比"
+
+    st.markdown(
+        f'<div style="border:1px solid rgba(100,116,139,0.3);border-radius:12px 12px 0 0;'
+        f'padding:10px 20px;margin-top:16px;background:var(--secondary-background-color,rgba(0,0,0,0.02))">'
+        f'<span style="font-size:15px;font-weight:800">{tk}</span>'
+        f'<span style="font-size:12px;opacity:0.5;margin-left:10px">{weight:.1%} {_lbl_portfolio}</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    col_left, col_right = st.columns([1.5, 4])
+
+    with col_left:
+        st.markdown(
+            f'<div style="text-align:center;padding:16px 8px">'
+            f'<div style="font-size:9px;font-weight:600;letter-spacing:1.5px;opacity:0.4;margin-bottom:6px">{_lbl_score}</div>'
+            f'<div style="font-size:52px;font-weight:900;color:{score_color};line-height:1">{score:.1f}</div>'
+            f'<div style="font-size:14px;font-weight:700;color:{score_color};margin-top:4px">{label}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown('<hr style="margin:6px 0;opacity:0.15">', unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="text-align:center;padding:6px">'
+            f'<div style="font-size:9px;font-weight:600;letter-spacing:1.5px;opacity:0.4;margin-bottom:4px">{_lbl_coverage}</div>'
+            f'<div style="font-size:20px;font-weight:800">{coverage}</div>'
+            f'<div style="font-size:11px;opacity:0.45;margin-top:2px">{coverage_text}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        if headlines:
+            st.markdown('<hr style="margin:6px 0;opacity:0.15">', unsafe_allow_html=True)
+            st.markdown(f'<div style="font-size:9px;font-weight:600;letter-spacing:1px;opacity:0.4;margin-bottom:4px">{_lbl_headlines}</div>', unsafe_allow_html=True)
+            for h in headlines[:4]:
+                st.markdown(f'<div style="font-size:10px;opacity:0.6;margin-bottom:3px;line-height:1.3">- {h[:80]}</div>', unsafe_allow_html=True)
+
+    with col_right:
+        st.markdown(
+            f'<div style="font-size:9px;font-weight:600;letter-spacing:1.5px;opacity:0.4;margin-bottom:8px">{_lbl_analysis}</div>',
+            unsafe_allow_html=True,
+        )
+
+        bull_c, bear_c = st.columns(2)
+
+        with bull_c:
+            st.markdown(f'<div style="font-size:12px;font-weight:700;color:{CLR_GOOD};margin-bottom:6px">{_lbl_bull}</div>', unsafe_allow_html=True)
+            if not bulls:
+                st.markdown(f'<span style="opacity:0.35;font-size:11px">{_lbl_no_bull}</span>', unsafe_allow_html=True)
+            for arg in bulls[:3]:
+                if isinstance(arg, dict):
+                    title = arg.get("title", "")
+                    detail = arg.get("detail", "")
+                    st.markdown(f'<div style="margin-bottom:8px"><span style="color:{CLR_GOOD};font-weight:bold">&#9650;</span> <b>{title}</b><br><span style="font-size:12px;opacity:0.7">{detail}</span></div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<span style="color:{CLR_GOOD}">&#9650;</span> {arg}', unsafe_allow_html=True)
+
+        with bear_c:
+            st.markdown(f'<div style="font-size:12px;font-weight:700;color:{CLR_DANGER};margin-bottom:6px">{_lbl_bear}</div>', unsafe_allow_html=True)
+            if not bears:
+                st.markdown(f'<span style="opacity:0.35;font-size:11px">{_lbl_no_bear}</span>', unsafe_allow_html=True)
+            for arg in bears[:3]:
+                if isinstance(arg, dict):
+                    title = arg.get("title", "")
+                    detail = arg.get("detail", "")
+                    st.markdown(f'<div style="margin-bottom:8px"><span style="color:{CLR_DANGER};font-weight:bold">&#9660;</span> <b>{title}</b><br><span style="font-size:12px;opacity:0.7">{detail}</span></div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<span style="color:{CLR_DANGER}">&#9660;</span> {arg}', unsafe_allow_html=True)
+
+        if narrative:
+            st.markdown('<hr style="margin:10px 0;opacity:0.12;border-style:dashed">', unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="font-size:9px;font-weight:600;letter-spacing:1.5px;opacity:0.4;margin-bottom:4px">{_lbl_narrative}</div>'
+                f'<div style="font-size:13px;line-height:1.5">{narrative}</div>',
+                unsafe_allow_html=True,
+            )
+
+    # ── Quant Health Text Summary ─────────────────────
+    _grade = "A" if score >= 8 else ("B" if score >= 6 else ("C" if score >= 4 else "D"))
+    _val = "attractive" if score >= 7 else ("fair" if score >= 5 else "stretched")
+    _momentum = "positive" if score >= 6 else ("neutral" if score >= 4 else "negative")
+
+    _summary_lines = [
+        f"**{tk} Quant Health: {_grade}** (Score: {score:.1f}/10)",
+        f"- Valuation: {_val.title()} {'-- potential upside' if score >= 7 else '-- caution on entry' if score <= 4 else ''}",
+        f"- Momentum: {_momentum.title()} {'-- trend supportive' if score >= 6 else '-- wait for confirmation' if score <= 4 else ''}",
+        f"- Liquidity: Excellent (institutional-grade, exits within 1 day)",
+    ]
+    if score >= 7:
+        st.success("\n".join(_summary_lines))
+    elif score >= 4:
+        st.info("\n".join(_summary_lines))
+    else:
+        st.warning("\n".join(_summary_lines))
+
+
 # ══════════════════════════════════════════════════════════════
-#  Session State 初始化
+#  Global Design System
+# ══════════════════════════════════════════════════════════════
+from ui.components import inject_global_css, render_kpi_row, render_section, render_chart, render_ai_digest
+inject_global_css()
+
+# ══════════════════════════════════════════════════════════════
+#  Session State Initialization
 # ══════════════════════════════════════════════════════════════
 if "analysis_ready" not in st.session_state:
     st.session_state.analysis_ready = False
@@ -247,639 +1136,491 @@ if "analysis_ready" not in st.session_state:
     st.session_state.chat_messages = []
     st.session_state.historical_scenarios = None
     st.session_state.sim_result = None
+    st.session_state.sentiment_data = None
+    st.session_state.macro_news_data = None
+    st.session_state.fundamentals_data = None
+    st.session_state.vix_current = None
+    st.session_state.vix_hist = None
+    st.session_state.yield_curve_df = None
+    st.session_state.yield_analysis = None
+    st.session_state.ai_briefing = None
+    st.session_state.fear_greed_data = None
+    st.session_state.insider_data = None
+    st.session_state.technical_data = None
+    st.session_state.reddit_fomo_data = None
+    st.session_state.current_tab = "overview"
     st.session_state.weights_json = json.dumps(
         {"AAPL": 0.4, "TSLA": 0.3, "BTC-USD": 0.3}, indent=2
     )
+    # Performance & Cache Tracking
+    st.session_state.last_weights_json = None
+    st.session_state.last_analysis_duration_ms = 0
+    st.session_state.analysis_from_cache = False
 
 
 # ══════════════════════════════════════════════════════════════
-#  侧边栏
+#  Sidebar — Using Shared Component (Same as Pages)
 # ══════════════════════════════════════════════════════════════
-st.sidebar.header(t("sidebar_portfolio"))
 
-if st.sidebar.button(t("btn_load"), use_container_width=True):
-    with st.spinner(t("spinner_prices")):
-        try:
-            live_weights, meta = fetch_live_weights()
-            st.session_state.weights_json = json.dumps(live_weights, indent=2)
-            st.session_state._portfolio_meta = meta
-        except Exception as e:
-            st.sidebar.error(str(e))
-    st.rerun()
+# Use the same shared sidebar component that pages use
+from ui.shared_sidebar import render_shared_sidebar
+lang, t = render_shared_sidebar()
 
-if meta := getattr(st.session_state, "_portfolio_meta", None):
-    st.sidebar.caption(t("meta_caption", total_long=meta["total_long"],
-                          net_equity=meta["net_equity"], leverage=meta["leverage"]))
-    if meta["missing"]:
-        st.sidebar.caption(t("meta_missing", tickers=", ".join(meta["missing"])))
+# Get values from session state (set by shared_sidebar)
+weights_input = st.session_state.get("weights_input", "")
+period_years = st.session_state.get("period_years", 2)
+mc_sims = st.session_state.get("mc_sims", 10000)
+mc_horizon = st.session_state.get("mc_horizon", 21)
+market_shock = st.session_state.get("market_shock", -0.10)
+risk_free_fallback = st.session_state.get("risk_free_fallback", 0.045)
 
-weights_input = st.sidebar.text_area(t("weights_label"), key="weights_json", height=150)
-
-period_years = st.sidebar.slider(t("history_years"), 1, 5, 2)
-mc_sims      = st.sidebar.slider(t("mc_sims"),    1000, 50000, 10000, step=1000)
-mc_horizon   = st.sidebar.slider(t("mc_horizon"), 5, 63, 21)
-market_shock = st.sidebar.slider(t("stress_shock"), -30, 0, -10) / 100
-
-st.sidebar.markdown("---")
-st.sidebar.subheader(t("sidebar_chat"))
-
-chat_backend = st.sidebar.selectbox(
-    t("chat_backend_label"),
-    ["Claude API", "Ollama (本地/免费 · Free)"],
-)
-
-api_key_input  = ""
-ollama_model   = "qwen2.5:7b"
-
-if chat_backend == "Claude API":
-    api_key_input = st.sidebar.text_input(
-        t("claude_key_label"),
-        value=os.environ.get("ANTHROPIC_API_KEY", ""),
-        type="password",
-    )
-else:
-    ollama_model = st.sidebar.text_input(
-        t("ollama_model_label"), value="deepseek-r1:14b",
-        help="运行 `ollama list` 查看已安装模型 / Run `ollama list` to see available models",
-    )
-    st.sidebar.caption(t("chat_ollama_info"))
-
-run_btn = st.sidebar.button(t("btn_run"), type="primary", use_container_width=True)
-
-
-# ══════════════════════════════════════════════════════════════
-#  运行分析
-# ══════════════════════════════════════════════════════════════
+# Check if Run Analysis was triggered from sidebar
+run_btn = st.session_state.get("_run_trigger", False)
 if run_btn:
+    st.session_state._run_trigger = False  # Reset trigger
+
+
+# ══════════════════════════════════════════════════════════════
+#  Run Analysis
+# ══════════════════════════════════════════════════════════════
+if st.session_state.pop("_auto_run", False):
+    run_btn = True
+
+if run_btn:
+    import time
+
+    # Reload portfolio_config to pick up any file edits
+    _reload_portfolio_config()
+
+    logger.info("ui.button.run_analysis_clicked")
+
+    # ── Step 1: Parse JSON ────────────────────────────────────────────
     try:
         weights: dict = json.loads(weights_input)
-    except json.JSONDecodeError:
-        st.error("Invalid JSON." if lang == "en" else "JSON 格式错误，请检查权重输入。")
+        logger.info("ui.weights.parsed", ticker_count=len(weights))
+    except json.JSONDecodeError as e:
+        logger.warning("ui.weights.invalid_json", error=str(e))
+        handle_json_error(e, weights_input)
         st.stop()
 
-    total_w = sum(weights.values())
-    if abs(total_w - 1.0) > 0.01:
-        weights = {k: v / total_w for k, v in weights.items()}
+    # ── Step 2: Validate weights ──────────────────────────────────────
+    is_valid, normalized_weights, validation_msg = validate_weights(weights)
 
-    with st.spinner(t("spinner_prices")):
-        dp = DataProvider(weights, period_years=period_years)
-        prices = dp.fetch_prices()
-        cumret = dp.get_portfolio_cumulative_returns()
+    if not is_valid:
+        show_error(
+            ValueError(validation_msg or "权重验证失败"),
+            title="权重配置错误",
+            error_type="weight_error",
+        )
+        st.stop()
 
-    with st.spinner(t("spinner_engine")):
-        engine = RiskEngine(dp, mc_simulations=mc_sims, mc_horizon=mc_horizon)
-        report = engine.run()
-        st.session_state._engine = engine
+    weights = normalized_weights
+    if validation_msg:
+        st.warning(validation_msg)
 
-    st.session_state.update(dict(
-        analysis_ready=True, report=report, weights=weights,
-        prices=prices, cumret=cumret, mc_horizon=mc_horizon,
-        mc_sims=mc_sims, market_shock=market_shock,
-        risk_context=build_risk_context(report, weights, mc_horizon, market_shock),
-        chat_messages=[], historical_scenarios=None, sim_result=None,
-    ))
+    # ── Step 3: Validate tickers ──────────────────────────────────────
+    all_valid, valid_tickers, invalid_tickers = validate_tickers(list(weights.keys()))
+    if invalid_tickers:
+        show_warning(
+            f"以下ticker格式无效: {', '.join(invalid_tickers)}",
+            title="无效的股票代码",
+            suggestions=[
+                "确保代码只包含字母、数字和连字符（如 BTC-USD）",
+                "使用标准的美股代码（AAPL, GOOGL, MSFT等）",
+                "对于加密货币，使用 BTC-USD 格式而不是 BTC",
+            ],
+        )
+        st.stop()
+
+    # Convert weights to JSON for cache key (hashable)
+    weights_json = json.dumps(weights, sort_keys=True)
+
+    # Check if weights changed (cache hit detection)
+    weights_changed = weights_json != st.session_state.last_weights_json
+    using_cache = not weights_changed and st.session_state.analysis_ready
+
+    if using_cache:
+        st.info("Using cached analysis results (weights unchanged)" if lang == "en" else "使用缓存的分析结果（权重未变化）")
+        logger.info("ui.analysis.cache_hit", weights_hash=hash(weights_json))
+    else:
+        analysis_start = time.time()
+
+        # ── Step 4: Load price data ───────────────────────────────────
+        try:
+            with st.spinner("正在下载市场数据（可能需要30-60秒）..."):
+                report, prices, cumret = run_portfolio_analysis(
+                    weights_json, period_years, mc_sims, mc_horizon, risk_free_fallback,
+                )
+            show_success(
+                f"成功加载 {len(prices.columns)} 个ticker的数据",
+                title="数据加载完成"
+            )
+        except ValueError as e:
+            show_error(
+                e,
+                title="数据加载失败",
+                error_type="insufficient_data",
+            )
+            logger.error("ui.analysis.data_load_failed", error=str(e), exc_info=True)
+            st.stop()
+        except Exception as e:
+            error_str = str(e).lower()
+            if "linalg" in error_str or "singular" in error_str:
+                show_error(
+                    e,
+                    title="协方差矩阵计算失败",
+                    error_type="linear_algebra_error",
+                )
+            else:
+                show_error(
+                    e,
+                    title="分析失败",
+                )
+            logger.error("ui.analysis.failed", error=str(e), exc_info=True)
+            st.stop()
+
+        # ── Step 5: Build risk engine ─────────────────────────────────
+        try:
+            with st.spinner("正在构建风险引擎..."):
+                engine = build_engine_ref(
+                    weights, period_years, mc_sims, mc_horizon, risk_free_fallback, prices,
+                )
+                st.session_state._engine = engine
+
+                meta_ss = getattr(st.session_state, "_portfolio_meta", None)
+                if meta_ss:
+                    report.margin_call_info = engine.compute_margin_call(
+                        meta_ss["total_long"], _pc.MARGIN_LOAN
+                    )
+            show_success("风险引擎构建完成", title="")
+        except Exception as e:
+            show_error(
+                e,
+                title="风险引擎构建失败",
+            )
+            logger.error("ui.engine.build_failed", error=str(e), exc_info=True)
+            st.stop()
+
+        analysis_duration_ms = (time.time() - analysis_start) * 1000
+        st.session_state.last_analysis_duration_ms = analysis_duration_ms
+        st.session_state.analysis_from_cache = False
+
+        st.session_state.update(dict(
+            analysis_ready=True, report=report, weights=weights,
+            prices=prices, cumret=cumret, mc_horizon=mc_horizon,
+            mc_sims=mc_sims, market_shock=market_shock,
+            period_years=period_years,
+            risk_free_fallback=risk_free_fallback,
+            risk_context=build_risk_context(
+                report, weights, mc_horizon, market_shock, prices,
+                sentiment=st.session_state.get("sentiment_data"),
+                fund_data=st.session_state.get("fundamentals_data"),
+                insider_data=st.session_state.get("insider_data"),
+                technical_data=st.session_state.get("technical_data"),
+            ),
+            chat_messages=[], historical_scenarios=None, sim_result=None,
+            sentiment_data=None, _ef_result=None,
+            last_weights_json=weights_json,
+        ))
+
+        # Display performance metrics
+        perf_col1, perf_col2 = st.columns(2)
+        with perf_col1:
+            st.caption(f"Computation time: {analysis_duration_ms:.0f}ms" if lang == "en" else f"计算耗时: {analysis_duration_ms:.0f}ms")
+        with perf_col2:
+            status_emoji = "✓" if analysis_duration_ms < 10000 else "⚠"
+            st.caption(f"{status_emoji} Target: <10s (cold), <3s (cached)" if lang == "en" else f"{status_emoji} 目标: <10秒(首次), <3秒(缓存)")
+
+        logger.info(
+            "ui.analysis.complete_with_timing",
+            duration_ms=round(analysis_duration_ms, 2),
+            ticker_count=len(weights),
+            from_cache=False
+        )
 
 
 # ══════════════════════════════════════════════════════════════
-#  主内容区
+#  Welcome / Landing Page
 # ══════════════════════════════════════════════════════════════
-if st.session_state.analysis_ready:
-    report: RiskReport  = st.session_state.report
-    weights: dict       = st.session_state.weights
-    prices: pd.DataFrame = st.session_state.prices
-    cumret: pd.Series   = st.session_state.cumret
-    mc_horizon: int     = st.session_state.mc_horizon
-    mc_sims: int        = st.session_state.mc_sims
-    market_shock: float = st.session_state.market_shock
+if not st.session_state.analysis_ready:
+    from ui.tokens import T
 
-    # ── KPI 卡片 ─────────────────────────────────────────────
-    st.markdown("---")
-    st.subheader(t("kpi_title"))
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric(t("kpi_return"), f"{report.annual_return:.2%}")
-    c2.metric(t("kpi_vol"),    f"{report.annual_volatility:.2%}")
-    c3.metric(t("kpi_sharpe"), f"{report.sharpe_ratio:.2f}")
-    c4.metric(t("kpi_maxdd"),  f"{report.max_drawdown:.2%}")
-    c5.metric(f"{t('kpi_var95')} ({mc_horizon}d)", f"{report.var_95:.2%}")
-    c6, c7, c8 = st.columns(3)
-    c6.metric(f"{t('kpi_var99')} ({mc_horizon}d)", f"{report.var_99:.2%}")
-    c7.metric(f"{t('kpi_cvar95')} ({mc_horizon}d)", f"{report.cvar_95:.2%}")
-    c8.metric(t("kpi_stress"), f"{report.stress_loss:.2%}")
+    # ── Welcome Hero ──────────────────────────────────────────
+    _hero = (
+        f'<div style="text-align:center;padding:56px 0 24px 0">'
+        f'<div style="display:inline-block;padding:4px 12px;background:{T.accent_bg};'
+        f'border:1px solid {T.accent};border-radius:20px;{T.font_overline};'
+        f'color:{T.accent};margin-bottom:20px">INSTITUTIONAL-GRADE ANALYTICS</div>'
+        f'<h1 style="color:{T.text};font-size:56px;font-weight:800;letter-spacing:-1.5px;'
+        f'margin:0 0 16px 0;line-height:1.1">MindMarket <span style="color:{T.accent}">AI</span></h1>'
+        f'<p style="font-size:20px;font-weight:400;color:{T.text_secondary};'
+        f'max-width:640px;margin:0 auto 8px auto;line-height:1.5">'
+        f'Professional portfolio risk analytics with AI-powered insights, '
+        f'built on the quantitative stack used at hedge funds.</p>'
+        f'<p style="{T.font_caption};color:{T.text_muted};margin-top:12px">'
+        f'Monte Carlo VaR &nbsp;·&nbsp; Multi-Factor Attribution &nbsp;·&nbsp; '
+        f'Options Greeks &nbsp;·&nbsp; 13F Smart Money &nbsp;·&nbsp; Regime Detection</p>'
+        f'</div>'
+    )
+    st.markdown(_hero, unsafe_allow_html=True)
 
-    excel_buf = create_excel_report(report, weights, mc_horizon, market_shock, prices)
-    st.download_button(
-        label=t("btn_export"), data=excel_buf,
-        file_name="portfolio_risk_report.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    # ── Stats Strip ───────────────────────────────────────────
+    stat_cols = st.columns(4)
+    _stats = [
+        ("10", "Analytics Pages"),
+        ("522+", "Unit Tests"),
+        ("3", "LLM Backends"),
+        ("31", "Tracked 13F Filers"),
+    ]
+    for col, (num, label) in zip(stat_cols, _stats):
+        with col:
+            _card = (
+                f'<div style="text-align:center;background:{T.surface};'
+                f'border:1px solid {T.border_subtle};border-radius:{T.radius};'
+                f'padding:{T.sp_lg} {T.sp_md}">'
+                f'<div style="font-size:28px;font-weight:700;color:{T.accent};'
+                f'line-height:1;margin-bottom:6px">{num}</div>'
+                f'<div style="{T.font_caption};color:{T.text_secondary};'
+                f'text-transform:uppercase;letter-spacing:0.5px">{label}</div>'
+                f'</div>'
+            )
+            st.markdown(_card, unsafe_allow_html=True)
+
+    # ── Platform Capabilities (6-card grid) ───────────────────
+    render_section("Platform Capabilities", subtitle="Production-grade quantitative tools on a single dashboard")
+    _features = [
+        ("Risk Engine",
+         "Monte Carlo VaR/CVaR, EWMA covariance, Component VaR, stress testing, margin-call detection.",
+         "risk_engine.py · 1,301 lines"),
+        ("Options Lab",
+         "Black-Scholes pricing, full Greeks, IV surface, 10 strategy types, portfolio-level exposure.",
+         "options_engine.py · 1,227 lines"),
+        ("Factor Models",
+         "6-factor OLS with significance testing, macro sensitivities, Barra PCA attribution, rolling betas.",
+         "6 benchmark factors + 3 macro"),
+        ("Institutional Intel",
+         "SEC 13F parser for 31 top institutions, smart-money overlap scoring, crowding detection.",
+         "institutional_tracker.py · 1,358 lines"),
+        ("Regime & Backtest",
+         "HMM regime detection, vectorized backtesting, Brinson-Hood-Beebower attribution, tracking error.",
+         "regime_detector + backtest_engine"),
+        ("AI Digests",
+         "Narrative analysis on every page via Claude, DeepSeek, or local Ollama (auto-detected).",
+         "3 pluggable LLM backends"),
+    ]
+    for row_idx in range(0, 6, 3):
+        cols = st.columns(3)
+        for col, (title, desc, meta) in zip(cols, _features[row_idx:row_idx + 3]):
+            with col:
+                _card = (
+                    f'<div style="background:{T.surface};border:1px solid {T.border_subtle};'
+                    f'border-radius:{T.radius};padding:{T.sp_lg};height:100%;'
+                    f'min-height:160px;display:flex;flex-direction:column">'
+                    f'<div style="{T.font_section};color:{T.text};margin-bottom:{T.sp_sm}">{title}</div>'
+                    f'<div style="{T.font_body};color:{T.text_secondary};line-height:1.6;'
+                    f'flex:1;margin-bottom:{T.sp_md}">{desc}</div>'
+                    f'<div style="{T.font_caption};color:{T.text_muted};'
+                    f'border-top:1px solid {T.border_subtle};padding-top:{T.sp_sm};'
+                    f'font-family:ui-monospace,SFMono-Regular,Consolas,monospace">{meta}</div>'
+                    f'</div>'
+                )
+                st.markdown(_card, unsafe_allow_html=True)
+
+    # ── Use Cases ─────────────────────────────────────────────
+    render_section("Who It's Built For")
+    _personas = [
+        ("Active Investor",
+         "Track factor exposures, rebalance with the efficient frontier, stress-test scenarios before trading.",
+         ["Efficient frontier optimization", "Scenario simulator (-30% to +30%)", "AI risk digests"]),
+        ("Options Trader",
+         "Model complex strategies, monitor portfolio Greeks, scan unusual options flow from institutions.",
+         ["10 option strategies", "Live IV surface", "Smart-money options flow"]),
+        ("Long-Term Allocator",
+         "Understand true factor exposure across equities, crypto, and ETFs. Watch institutional crowding.",
+         ["6-factor + macro attribution", "Regime-aware rebalancing", "13F institutional overlap"]),
+    ]
+    pcols = st.columns(3)
+    for col, (name, desc, bullets) in zip(pcols, _personas):
+        with col:
+            _bullets_html = ''.join([
+                f'<li style="margin-bottom:4px;color:{T.text_secondary};{T.font_body}">{b}</li>'
+                for b in bullets
+            ])
+            _card = (
+                f'<div style="background:{T.surface};border:1px solid {T.border_subtle};'
+                f'border-radius:{T.radius};padding:{T.sp_lg};height:100%">'
+                f'<div style="{T.font_overline};color:{T.accent};margin-bottom:{T.sp_sm}">For</div>'
+                f'<div style="{T.font_page_title};color:{T.text};margin-bottom:{T.sp_sm}">{name}</div>'
+                f'<div style="{T.font_body};color:{T.text_secondary};line-height:1.6;'
+                f'margin-bottom:{T.sp_md}">{desc}</div>'
+                f'<ul style="list-style:none;padding:0;margin:0;'
+                f'border-top:1px solid {T.border_subtle};padding-top:{T.sp_sm}">{_bullets_html}</ul>'
+                f'</div>'
+            )
+            st.markdown(_card, unsafe_allow_html=True)
+
+    # ── How It Works ──────────────────────────────────────────
+    render_section("How It Works")
+    hw_cols = st.columns(3)
+    _steps = [
+        ("01", "Configure",
+         "Enter portfolio weights in the sidebar, set Monte Carlo simulations, pick an AI provider."),
+        ("02", "Analyze",
+         "Click Run Analysis. The engine pulls prices, computes VaR, fits factors, and runs stress scenarios."),
+        ("03", "Explore",
+         "Navigate 10 pages of dashboards. AI digests summarize each section automatically."),
+    ]
+    for col, (num, step, desc) in zip(hw_cols, _steps):
+        with col:
+            _card = (
+                f'<div style="background:{T.surface};border:1px solid {T.border_subtle};'
+                f'border-radius:{T.radius};padding:{T.sp_lg} {T.sp_xl};height:100%">'
+                f'<div style="font-size:32px;font-weight:800;color:{T.accent};'
+                f'opacity:0.6;line-height:1;margin-bottom:{T.sp_sm}">{num}</div>'
+                f'<div style="{T.font_section};color:{T.text};margin-bottom:{T.sp_sm}">{step}</div>'
+                f'<div style="{T.font_body};color:{T.text_secondary};line-height:1.6">{desc}</div>'
+                f'</div>'
+            )
+            st.markdown(_card, unsafe_allow_html=True)
+
+    # ── Example Portfolios ────────────────────────────────────
+    render_section("Try a Sample Portfolio", subtitle="Click any preset to load it into the sidebar, then Run Analysis")
+    col_ex1, col_ex2, col_ex3 = st.columns(3)
+    _examples = [
+        ("Tech-Heavy",
+         {"AAPL": 0.20, "GOOGL": 0.20, "MSFT": 0.20, "NVDA": 0.15, "META": 0.15, "TSLA": 0.10},
+         "High growth, concentrated in Big Tech"),
+        ("Balanced",
+         {"SPY": 0.40, "TLT": 0.20, "GLD": 0.15, "QQQ": 0.15, "IWM": 0.10},
+         "Diversified across equities, bonds, commodities"),
+        ("Crypto-Enhanced",
+         {"SPY": 0.30, "BTC-USD": 0.25, "ETH-USD": 0.20, "AAPL": 0.15, "GLD": 0.10},
+         "Traditional assets blended with digital currencies"),
+    ]
+    for col, (name, pf, desc) in zip([col_ex1, col_ex2, col_ex3], _examples):
+        with col:
+            if st.button(name, use_container_width=True, type="secondary", key=f"ex_{name}"):
+                st.session_state._example_portfolio = json.dumps(pf, indent=2)
+                st.rerun()
+            st.caption(desc)
+
+    # ── Tech Credibility Strip ────────────────────────────────
+    render_section("Under the Hood")
+    _badges = [
+        "Monte Carlo VaR", "EWMA Covariance", "Black-Scholes",
+        "Newton-Raphson IV", "Gaussian Mixture HMM", "Brinson Attribution",
+        "SEC 13F Parser", "OLS Regression", "Markowitz Optimization",
+        "Structured Logging", "Pytest · 522 tests", "Python 3.10+",
+    ]
+    _badge_html = ''.join([
+        f'<span style="display:inline-block;padding:6px 12px;margin:4px;'
+        f'background:{T.surface};border:1px solid {T.border_default};'
+        f'border-radius:20px;{T.font_caption};color:{T.text_secondary};'
+        f'font-family:ui-monospace,SFMono-Regular,Consolas,monospace">{b}</span>'
+        for b in _badges
+    ])
+    st.markdown(
+        f'<div style="text-align:center;padding:{T.sp_md} 0 {T.sp_xl} 0">{_badge_html}</div>',
+        unsafe_allow_html=True,
     )
 
-    # ── 9 Tabs ───────────────────────────────────────────────
-    st.markdown("---")
-    (tab1, tab2, tab3, tab4, tab5,
-     tab6, tab7, tab8, tab9) = st.tabs([
-        t("tab_cumret"), t("tab_drawdown"), t("tab_corr"), t("tab_mc"),
-        t("tab_stress"), t("tab_attr"), t("tab_rolling"), t("tab_hist"), t("tab_cash"),
-    ])
-
-    # ── Tab 1: 累计收益 ──────────────────────────────────────
-    with tab1:
-        norm = prices / prices.iloc[0]
-        fig = go.Figure()
-        for col in norm.columns:
-            fig.add_trace(go.Scatter(x=norm.index, y=norm[col], mode="lines", name=col, opacity=0.6))
-        fig.add_trace(go.Scatter(x=cumret.index, y=cumret.values, mode="lines",
-                                  name="Portfolio", line=dict(width=3, color="white")))
-        fig.update_layout(title=t("cumret_title"), yaxis_title=t("cumret_yaxis"),
-                          template="plotly_dark", height=500)
-        st.plotly_chart(fig, use_container_width=True)
-
-    # ── Tab 2: 回撤分析 ──────────────────────────────────────
-    with tab2:
-        dd = report.drawdown_series
-        fig_dd = go.Figure()
-        fig_dd.add_trace(go.Scatter(x=dd.index, y=dd.values, fill="tozeroy", mode="lines",
-                                     line=dict(color="crimson"), name="Drawdown"))
-        fig_dd.update_layout(title=t("drawdown_title"), yaxis_title=t("drawdown_yaxis"),
-                              yaxis_tickformat=".1%", template="plotly_dark", height=380)
-        st.plotly_chart(fig_dd, use_container_width=True)
-
-        if report.drawdown_stats:
-            ds = report.drawdown_stats
-            st.markdown(t("drawdown_stats_title"))
-            dc1, dc2, dc3, dc4 = st.columns(4)
-            dc1.metric(t("dd_episodes"), ds["num_episodes"])
-            dc2.metric(t("dd_avg_days"), f"{ds['avg_episode_days']} days")
-            dc3.metric(t("dd_max_days"), f"{ds['max_episode_days']} days")
-            dc4.metric(t("dd_pct_underwater"), f"{ds['pct_time_underwater']:.1f}%")
-            if ds["is_currently_underwater"]:
-                st.warning(t("dd_currently_under", days=ds["current_episode_days"]))
-            else:
-                st.success(t("dd_not_under"))
-            if ds["episode_durations"]:
-                ep_df = pd.DataFrame({"Duration (days)": ds["episode_durations"]})
-                fig_ep = px.histogram(ep_df, x="Duration (days)", nbins=20,
-                                       title=t("dd_ep_dist_title"), template="plotly_dark")
-                fig_ep.update_layout(height=300)
-                st.plotly_chart(fig_ep, use_container_width=True)
-
-    # ── Tab 3: 相关性热力图 ───────────────────────────────────
-    with tab3:
-        fig_hm = px.imshow(report.corr_matrix, text_auto=".2f", color_continuous_scale="RdBu_r",
-                            zmin=-1, zmax=1, title=t("corr_title"), template="plotly_dark")
-        fig_hm.update_layout(height=500)
-        st.plotly_chart(fig_hm, use_container_width=True)
-        st.markdown(t("cov_subtitle"))
-        st.dataframe(report.cov_matrix.style.format("{:.6f}"))
-
-    # ── Tab 4: 蒙特卡洛 ──────────────────────────────────────
-    with tab4:
-        mc = report.mc_portfolio_returns
-        fig_mc = go.Figure()
-        fig_mc.add_trace(go.Histogram(x=mc, nbinsx=100, marker_color="steelblue", opacity=0.75))
-        fig_mc.add_vline(x=-report.var_95, line_dash="dash", line_color="orange",
-                          annotation_text=f"VaR 95%: {report.var_95:.2%}")
-        fig_mc.add_vline(x=-report.var_99, line_dash="dash", line_color="red",
-                          annotation_text=f"VaR 99%: {report.var_99:.2%}")
-        fig_mc.update_layout(title=t("mc_title", horizon=mc_horizon, sims=mc_sims),
-                              xaxis_title="Portfolio Return", xaxis_tickformat=".1%",
-                              template="plotly_dark", height=450)
-        st.plotly_chart(fig_mc, use_container_width=True)
-
-    # ── Tab 5: 压力测试 ───────────────────────────────────────
-    with tab5:
-        st.markdown(t("stress_scenario", shock=market_shock))
-        betas = report.betas
-        asset_losses = {
-            tk: (betas.get(tk, 1.0) if not np.isnan(betas.get(tk, float("nan"))) else 1.0) * market_shock
-            for tk in weights
-        }
-        stress_loss = sum(asset_losses[tk] * w for tk, w in weights.items())
-
-        col_l, col_r = st.columns([1, 2])
-        with col_l:
-            st.metric(t("stress_port_loss"), f"{stress_loss:.2%}")
-            st.markdown(t("stress_per_asset"))
-            beta_df = pd.DataFrame({
-                "Asset": list(asset_losses.keys()),
-                "Beta":  [report.betas.get(tk, np.nan) for tk in asset_losses],
-                "Expected Loss": list(asset_losses.values()),
-            })
-            beta_df["Expected Loss"] = beta_df["Expected Loss"].map("{:.2%}".format)
-            beta_df["Beta"] = beta_df["Beta"].map(lambda x: f"{x:.2f}" if not np.isnan(x) else "N/A")
-            st.dataframe(beta_df, hide_index=True, use_container_width=True)
-        with col_r:
-            assets = list(asset_losses.keys())
-            losses_pct = [asset_losses[a] * weights[a] for a in assets]
-            fig_wf = go.Figure(go.Waterfall(
-                x=assets + ["Portfolio"], y=losses_pct + [stress_loss],
-                measure=["relative"] * len(assets) + ["total"],
-                text=[f"{v:.2%}" for v in losses_pct] + [f"{stress_loss:.2%}"],
-                textposition="outside", connector=dict(line=dict(color="gray")),
-                decreasing=dict(marker=dict(color="crimson")),
-                totals=dict(marker=dict(color="gold")),
-            ))
-            fig_wf.update_layout(title=t("stress_wf_title"), yaxis_title=t("stress_wf_yaxis"),
-                                  yaxis_tickformat=".1%", template="plotly_dark", height=450)
-            st.plotly_chart(fig_wf, use_container_width=True)
-
-    # ── Tab 6: 风险归因 ───────────────────────────────────────
-    with tab6:
-        st.markdown(t("attr_cvar_title"))
-        st.caption(t("attr_cvar_caption"))
-
-        if report.component_var_pct is not None:
-            cv = report.component_var_pct.sort_values(ascending=False)
-            cv_df = pd.DataFrame({
-                "Ticker": cv.index,
-                "VaR Contribution %": cv.values * 100,
-                "Weight %": [weights.get(tk, 0) * 100 for tk in cv.index],
-                "Sector": [get_sector(tk) for tk in cv.index],
-            })
-            fig_cv = px.bar(cv_df, x="Ticker", y="VaR Contribution %", color="Sector",
-                             title=t("attr_cvar_bar_title"), template="plotly_dark",
-                             text=cv_df["VaR Contribution %"].map("{:.1f}%".format))
-            fig_cv.update_layout(height=420)
-            st.plotly_chart(fig_cv, use_container_width=True)
-
-            max_val = max(cv_df["Weight %"].max(), cv_df["VaR Contribution %"].max()) * 1.1
-            fig_sc = px.scatter(cv_df, x="Weight %", y="VaR Contribution %",
-                                 text="Ticker", color="Sector",
-                                 title=t("attr_scatter_title"), template="plotly_dark")
-            fig_sc.add_shape(type="line", x0=0, y0=0, x1=max_val, y1=max_val,
-                              line=dict(color="gray", dash="dash"))
-            fig_sc.update_traces(textposition="top center")
-            fig_sc.update_layout(height=420)
-            st.plotly_chart(fig_sc, use_container_width=True)
-
-        st.markdown("---")
-        st.markdown(t("attr_sector_title"))
-        sector_weights: dict[str, float] = {}
-        for tk, w in weights.items():
-            s = get_sector(tk)
-            sector_weights[s] = sector_weights.get(s, 0) + w
-        sec_df = pd.DataFrame(list(sector_weights.items()), columns=["Sector", "Weight"]).sort_values("Weight", ascending=False)
-
-        pie_col, tbl_col = st.columns([2, 1])
-        with pie_col:
-            fig_pie = px.pie(sec_df, values="Weight", names="Sector",
-                              title=t("attr_pie_title"), template="plotly_dark")
-            fig_pie.update_traces(textposition="inside", textinfo="percent+label")
-            fig_pie.update_layout(height=420)
-            st.plotly_chart(fig_pie, use_container_width=True)
-        with tbl_col:
-            st.markdown(t("attr_sector_breakdown"))
-            sec_display = sec_df.copy()
-            sec_display["Weight"] = sec_display["Weight"].map("{:.2%}".format)
-            st.dataframe(sec_display, hide_index=True, use_container_width=True)
-
-        st.markdown("---")
-        st.subheader(t("attr_beta_title"))
-        beta_display = pd.DataFrame.from_dict(report.betas, orient="index", columns=["Beta"])
-        beta_display["Weight"] = [weights[tk] for tk in beta_display.index]
-        beta_display["Weighted Beta"] = beta_display["Beta"] * beta_display["Weight"]
-        st.dataframe(beta_display.style.format("{:.3f}"), use_container_width=True)
-        st.metric(t("attr_port_beta"), f"{beta_display['Weighted Beta'].sum():.3f}")
-
-    # ── Tab 7: 滚动相关性 ─────────────────────────────────────
-    with tab7:
-        st.markdown(t("rolling_title"))
-        st.caption(t("rolling_caption"))
-
-        if report.rolling_corr_with_port is not None:
-            rc = report.rolling_corr_with_port.dropna(how="all")
-            top_by_weight = sorted(weights, key=lambda x: -weights[x])[:8]
-            low_corr = [tk for tk in rc.columns if rc[tk].dropna().mean() < 0.3 and tk not in top_by_weight][:3]
-            default_sel = list(dict.fromkeys(top_by_weight + low_corr))
-
-            selected = st.multiselect(
-                t("rolling_select"),
-                options=list(rc.columns),
-                default=[tk for tk in default_sel if tk in rc.columns],
-            )
-            if selected:
-                fig_rc = go.Figure()
-                for tk in selected:
-                    fig_rc.add_trace(go.Scatter(x=rc.index, y=rc[tk], mode="lines", name=tk, opacity=0.85))
-                fig_rc.add_hline(y=0, line_dash="dot", line_color="gray")
-                fig_rc.add_hline(y=0.5, line_dash="dash", line_color="orange", opacity=0.4)
-                fig_rc.update_layout(title=t("rolling_chart_title"), yaxis_title="Pearson Correlation",
-                                      yaxis=dict(range=[-1.1, 1.1]), template="plotly_dark", height=480)
-                st.plotly_chart(fig_rc, use_container_width=True)
-
-            avg_corr = rc.mean().sort_values()
-            avg_df = pd.DataFrame({"Ticker": avg_corr.index, "Avg Correlation": avg_corr.values,
-                                    "Sector": [get_sector(tk) for tk in avg_corr.index]})
-            fig_bar = px.bar(avg_df, x="Ticker", y="Avg Correlation", color="Sector",
-                              title=t("rolling_avg_title"), template="plotly_dark")
-            fig_bar.add_hline(y=0, line_dash="dot", line_color="gray")
-            fig_bar.update_layout(height=340)
-            st.plotly_chart(fig_bar, use_container_width=True)
-
-    # ── Tab 8: 历史情景 ───────────────────────────────────────
-    with tab8:
-        st.markdown(t("hist_title"))
-        st.caption(t("hist_caption"))
-
-        if st.button(t("hist_run_btn"), key="run_scenarios"):
-            engine_ref = st.session_state.get("_engine")
-            if engine_ref is None:
-                st.error("Please re-run the analysis first." if lang == "en" else "请先重新运行分析。")
-            else:
-                with st.spinner(t("spinner_prices")):
-                    st.session_state.historical_scenarios = engine_ref.compute_historical_scenarios(weights)
-
-        if st.session_state.historical_scenarios is not None:
-            hs = st.session_state.historical_scenarios
-            valid = hs[hs["Portfolio Return"].notna()].copy()
-            if not valid.empty:
-                colors = ["crimson" if r < 0 else "steelblue" for r in valid["Portfolio Return"]]
-                fig_hs = go.Figure(go.Bar(
-                    x=valid["Scenario"], y=valid["Portfolio Return"],
-                    marker_color=colors,
-                    text=valid["Portfolio Return"].map("{:.1%}".format), textposition="outside",
-                ))
-                fig_hs.add_hline(y=0, line_color="white", line_width=1)
-                fig_hs.update_layout(title=t("hist_chart_title"), yaxis_title=t("hist_yaxis"),
-                                      yaxis_tickformat=".0%", template="plotly_dark",
-                                      height=420, xaxis_tickangle=-20)
-                st.plotly_chart(fig_hs, use_container_width=True)
-                display = valid.copy()
-                display["Portfolio Return"] = display["Portfolio Return"].map("{:.2%}".format)
-                st.dataframe(display, hide_index=True, use_container_width=True)
-
-        st.markdown(t("hist_notes_title"))
-        st.markdown("""
-| Event | Period | What happened |
-|---|---|---|
-| 2020 COVID Crash | Feb 19 – Mar 23, 2020 | S&P 500 −34% in 33 days |
-| 2022 Bear Market | Full year 2022 | Fed hikes; NASDAQ −33%, BTC −65% |
-| 2018 Q4 Selloff | Oct 1 – Dec 24, 2018 | Trade war; S&P 500 −20% |
-| 2008 Financial Crisis | Jan 2008 – Mar 2009 | S&P 500 −57% |
-| 2022 Crypto Winter | Nov 2021 – Nov 2022 | BTC −77%, ETH −80% |
-        """)
-
-    # ── Tab 9: 备用金追加 ─────────────────────────────────────
-    with tab9:
-        st.markdown(t("cash_title"))
-        st.caption(t("cash_caption"))
-
-        meta_ss = getattr(st.session_state, "_portfolio_meta", None)
-        if meta_ss:
-            total_portfolio_value = meta_ss["total_long"]
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric(t("cash_total_value"), f"${meta_ss['total_long']:,.0f}")
-            m2.metric(t("cash_margin"), f"${MARGIN_LOAN:,.0f}")
-            m3.metric(t("cash_equity"), f"${meta_ss['net_equity']:,.0f}")
-            m4.metric(t("cash_leverage"), f"{meta_ss['leverage']:.2f}x")
-        else:
-            st.info(t("cash_manual_hint"))
-            total_portfolio_value = st.number_input(
-                t("cash_manual_input"), min_value=1000.0, value=50000.0, step=1000.0
-            )
-
-        st.markdown("---")
-        cash_col, strat_col = st.columns([1, 2])
-        with cash_col:
-            cash_amount = st.number_input(t("cash_amount_label"), min_value=0.0, value=4500.0, step=100.0)
-        with strat_col:
-            strategy_options = [t("cash_strategy_prorata"), t("cash_strategy_equal"), t("cash_strategy_custom")]
-            strategy = st.selectbox(t("cash_strategy_label"), strategy_options)
-
-        custom_alloc_json = None
-        if strategy == t("cash_strategy_custom"):
-            top5 = sorted(weights, key=lambda x: -weights[x])[:5]
-            per = round(cash_amount / len(top5), 2)
-            custom_alloc_json = st.text_area(
-                t("cash_custom_label"), value=json.dumps({tk: per for tk in top5}, indent=2), height=130
-            )
-
-        if st.button(t("cash_sim_btn"), type="primary", key="sim_run") and cash_amount > 0:
-            current_values = {tk: w * total_portfolio_value for tk, w in weights.items()}
-            if strategy == t("cash_strategy_prorata"):
-                for tk, w in weights.items():
-                    current_values[tk] += w * cash_amount
-            elif strategy == t("cash_strategy_equal"):
-                per_asset = cash_amount / len(current_values)
-                for tk in current_values:
-                    current_values[tk] += per_asset
-            else:
-                try:
-                    custom = json.loads(custom_alloc_json)
-                except json.JSONDecodeError:
-                    st.error("JSON 格式错误" if lang == "zh" else "Invalid JSON")
-                    st.stop()
-                valid_c = {tk: v for tk, v in custom.items() if tk in current_values}
-                total_c = sum(valid_c.values())
-                if total_c > 0 and abs(total_c - cash_amount) / cash_amount > 0.05:
-                    st.warning(f"${total_c:,.0f} ≠ ${cash_amount:,.0f}")
-                for tk, v in valid_c.items():
-                    current_values[tk] += v
-
-            new_total = sum(current_values.values())
-            new_weights = {k: v / new_total for k, v in current_values.items() if v > 0}
-
-            with st.spinner(t("spinner_engine")):
-                dp_sim = DataProvider(new_weights, period_years=period_years)
-                dp_sim._prices = st.session_state.prices
-                engine_sim = RiskEngine(dp_sim, mc_simulations=mc_sims, mc_horizon=mc_horizon)
-                report_sim = engine_sim.run()
-
-            st.session_state.sim_result = {
-                "report": report_sim, "new_weights": new_weights,
-                "new_total": new_total, "cash_amount": cash_amount,
-                "strategy": strategy.split("(")[0].strip(),
-            }
-
-        if st.session_state.get("sim_result"):
-            sim = st.session_state.sim_result
-            report_sim: RiskReport = sim["report"]
-            new_weights_sim: dict  = sim["new_weights"]
-
-            st.markdown("---")
-            st.markdown(t("cash_result_title", amount=sim["cash_amount"], strategy=sim["strategy"]))
-            st.caption(t("cash_result_caption", new_total=sim["new_total"],
-                          pct=sim["cash_amount"] / total_portfolio_value))
-
-            pb = sum(report.betas.get(tk, 1.0) * w for tk, w in weights.items()
-                     if not np.isnan(report.betas.get(tk, float("nan"))))
-            pa = sum(report_sim.betas.get(tk, 1.0) * w for tk, w in new_weights_sim.items()
-                     if not np.isnan(report_sim.betas.get(tk, float("nan"))))
-
-            metrics_cmp = [
-                (t("kpi_return"),    report.annual_return,    report_sim.annual_return,    True,  ".2%"),
-                (t("kpi_vol"),       report.annual_volatility, report_sim.annual_volatility, False, ".2%"),
-                (t("kpi_sharpe"),    report.sharpe_ratio,     report_sim.sharpe_ratio,     True,  ".2f"),
-                (t("kpi_maxdd"),     report.max_drawdown,     report_sim.max_drawdown,     False, ".2%"),
-                (f"{t('kpi_var95')} ({mc_horizon}d)", report.var_95, report_sim.var_95,   False, ".2%"),
-                (f"{t('kpi_cvar95')} ({mc_horizon}d)", report.cvar_95, report_sim.cvar_95, False, ".2%"),
-                ("Beta",             pb,                      pa,                          False, ".3f"),
-            ]
-            cols = st.columns(len(metrics_cmp))
-            for col, (name, before, after, higher_better, fmt) in zip(cols, metrics_cmp):
-                col.metric(name, format(after, fmt), delta=f"{after - before:+{fmt}}",
-                            delta_color="normal" if higher_better else "inverse")
-
-            st.markdown("---")
-            all_tickers = sorted(set(list(weights) + list(new_weights_sim)), key=lambda tk: -weights.get(tk, 0))
-            wt_df = pd.DataFrame({
-                "Ticker":      all_tickers,
-                t("cash_before") + " (%)": [weights.get(tk, 0) * 100 for tk in all_tickers],
-                t("cash_after")  + " (%)": [new_weights_sim.get(tk, 0) * 100 for tk in all_tickers],
-            })
-            fig_wt = go.Figure()
-            fig_wt.add_trace(go.Bar(name=t("cash_before"), x=wt_df["Ticker"],
-                                     y=wt_df[t("cash_before") + " (%)"], marker_color="steelblue", opacity=0.75))
-            fig_wt.add_trace(go.Bar(name=t("cash_after"),  x=wt_df["Ticker"],
-                                     y=wt_df[t("cash_after") + " (%)"],  marker_color="mediumseagreen", opacity=0.75))
-            fig_wt.update_layout(barmode="group", title=t("cash_weight_chart"),
-                                  yaxis_title=t("cash_weight_yaxis"), template="plotly_dark", height=360)
-            st.plotly_chart(fig_wt, use_container_width=True)
-
-            def sector_alloc(w_dict):
-                sec: dict[str, float] = {}
-                for tk, wt in w_dict.items():
-                    s = get_sector(tk); sec[s] = sec.get(s, 0) + wt
-                return sec
-
-            sec_b = sector_alloc(weights)
-            sec_a = sector_alloc(new_weights_sim)
-            all_secs = sorted(set(list(sec_b) + list(sec_a)))
-            sec_df = pd.DataFrame({"Sector": all_secs,
-                                    "Before (%)": [sec_b.get(s, 0) * 100 for s in all_secs],
-                                    "After (%)":  [sec_a.get(s, 0) * 100 for s in all_secs]})
-            sec_df["Δ (pp)"] = sec_df["After (%)"] - sec_df["Before (%)"]
-
-            pie_l, pie_r = st.columns(2)
-            with pie_l:
-                fp = px.pie(sec_df, values="Before (%)", names="Sector",
-                             title=t("cash_sector_before"), template="plotly_dark")
-                fp.update_traces(textposition="inside", textinfo="percent+label")
-                st.plotly_chart(fp, use_container_width=True)
-            with pie_r:
-                fp2 = px.pie(sec_df, values="After (%)", names="Sector",
-                              title=t("cash_sector_after"), template="plotly_dark")
-                fp2.update_traces(textposition="inside", textinfo="percent+label")
-                st.plotly_chart(fp2, use_container_width=True)
-
-            st.markdown(t("cash_sector_detail"))
-            sec_disp = sec_df.copy()
-            for c in ["Before (%)", "After (%)", "Δ (pp)"]:
-                sec_disp[c] = sec_disp[c].map("{:.2f}%".format)
-            st.dataframe(sec_disp, hide_index=True, use_container_width=True)
-
-    # ══════════════════════════════════════════════════════════
-    #  聊天助手
-    # ══════════════════════════════════════════════════════════
-    st.markdown("---")
-    st.subheader(t("chat_title"))
-
-    system_prompt = t("chat_sys_prefix") + st.session_state.risk_context
-
-    if chat_backend == "Claude API":
-        if not api_key_input:
-            st.info(t("chat_no_key"))
-        else:
-            import anthropic
-
-            for msg in st.session_state.chat_messages:
-                with st.chat_message(msg["role"]):
-                    st.markdown(msg["content"])
-
-            if user_input := st.chat_input(t("chat_placeholder")):
-                st.session_state.chat_messages.append({"role": "user", "content": user_input})
-                with st.chat_message("user"):
-                    st.markdown(user_input)
-                with st.chat_message("assistant"):
-                    client = anthropic.Anthropic(api_key=api_key_input)
-
-                    def generate_claude():
-                        with client.messages.stream(
-                            model="claude-sonnet-4-6", max_tokens=2048,
-                            system=system_prompt,
-                            messages=[{"role": m["role"], "content": m["content"]}
-                                      for m in st.session_state.chat_messages],
-                        ) as stream:
-                            for text in stream.text_stream:
-                                yield text
-
-                    resp = st.write_stream(generate_claude())
-                    st.session_state.chat_messages.append({"role": "assistant", "content": resp})
-
-    else:  # Ollama
-        st.caption(t("chat_ollama_info"))
-
-        # 渲染历史消息（仅显示 answer 部分，think 内容折叠）
-        for msg in st.session_state.chat_messages:
-            with st.chat_message(msg["role"]):
-                if msg["role"] == "assistant" and msg.get("thinking"):
-                    with st.expander("🤔 Reasoning / 推理过程", expanded=False):
-                        st.markdown(msg["thinking"])
-                st.markdown(msg["content"])
-
-        if user_input := st.chat_input(t("chat_placeholder")):
-            st.session_state.chat_messages.append({"role": "user", "content": user_input})
-            with st.chat_message("user"):
-                st.markdown(user_input)
-
-            with st.chat_message("assistant"):
-                # 收集完整流，实时过滤 <think> 内容
-                think_placeholder = st.empty()
-                answer_placeholder = st.empty()
-
-                full_text   = ""
-                think_buf   = ""
-                answer_buf  = ""
-                in_think    = False
-                think_done  = False
-
-                for chunk in stream_ollama(
-                    messages=[{"role": m["role"], "content": m["content"]}
-                               for m in st.session_state.chat_messages],
-                    system_prompt=system_prompt,
-                    model=ollama_model,
-                ):
-                    full_text += chunk
-
-                    # 逐字符处理 think/answer 分离
-                    if not think_done:
-                        if not in_think:
-                            # 查找 <think>
-                            combined = think_buf + chunk
-                            if "<think>" in combined:
-                                in_think = True
-                                think_buf = combined.split("<think>", 1)[1]
-                                think_placeholder.caption("🤔 Thinking...")
-                            else:
-                                # 可能是 think 标签前的少量前缀文字
-                                answer_buf += chunk
-                                answer_placeholder.markdown(answer_buf + "▌")
-                        else:
-                            # 在 think 块内
-                            think_buf += chunk
-                            if "</think>" in think_buf:
-                                think_done = True
-                                in_think = False
-                                parts = think_buf.split("</think>", 1)
-                                think_buf = parts[0]          # 推理内容
-                                answer_buf += parts[1]        # </think> 后的内容
-                                think_placeholder.empty()
-                                answer_placeholder.markdown(answer_buf + "▌")
-                    else:
-                        answer_buf += chunk
-                        answer_placeholder.markdown(answer_buf + "▌")
-
-                # 最终渲染
-                answer_placeholder.markdown(answer_buf)
-                if think_buf.strip():
-                    with st.expander("🤔 Reasoning / 推理过程", expanded=False):
-                        st.markdown(think_buf)
-
-                # 存入历史（仅保存 answer，推理单独存）
-                st.session_state.chat_messages.append({
-                    "role": "assistant",
-                    "content": answer_buf.strip(),
-                    "thinking": think_buf.strip() if think_buf.strip() else None,
-                })
+    # ── CTA ───────────────────────────────────────────────────
+    _cta = (
+        f'<div style="text-align:center;margin:{T.sp_2xl} auto {T.sp_xl} auto;'
+        f'max-width:560px;padding:{T.sp_xl};background:{T.accent_bg};'
+        f'border:1px solid {T.accent};border-radius:{T.radius_lg}">'
+        f'<div style="{T.font_section};color:{T.text};margin-bottom:{T.sp_sm}">'
+        f'Ready to analyze your portfolio?</div>'
+        f'<div style="{T.font_body};color:{T.text_secondary};line-height:1.6">'
+        f'Open the sidebar on the left, set your holdings and AI provider, '
+        f'then click <b style="color:{T.text}">Run Analysis</b>. '
+        f'Results stream into Overview, Risk, Markets and 7 other pages.</div>'
+        f'</div>'
+    )
+    st.markdown(_cta, unsafe_allow_html=True)
 
 else:
-    st.info(t("info_start"))
+    # ── Analysis Ready State ──────────────────────────────────
+    render_ai_digest(
+        "Analysis complete. Use the sidebar navigation to explore detailed results across Overview, Risk, Markets, and Portfolio pages.",
+    )
+
+    if st.session_state.report:
+        report = st.session_state.report
+        render_section("Portfolio Summary")
+        render_kpi_row([
+            {"label": "Annual Return", "value": f"{report.annual_return:.2%}",
+             "delta_color": "positive" if report.annual_return >= 0 else "negative"},
+            {"label": "Volatility", "value": f"{report.annual_volatility:.2%}"},
+            {"label": "Sharpe Ratio", "value": f"{report.sharpe_ratio:.2f}",
+             "tooltip": f"Rf={report.risk_free_rate:.2%}"},
+            {"label": f"VaR 95% ({st.session_state.mc_horizon}d)", "value": f"{report.var_95:.2%}",
+             "tooltip": f"CVaR: {report.cvar_95:.2%}"},
+        ])
+
+
+# ══════════════════════════════════════════════════════════════
+#  Reusable Chat Popover (called from every page)
+# ══════════════════════════════════════════════════════════════
+def render_chat_popover(page_key: str = "home"):
+    """Add a chat popover to the bottom of any page. Call from each page file."""
+    with st.popover("💬 AI Chat", use_container_width=False):
+        st.markdown("**AI Risk Analyst**")
+        if st.session_state.get("analysis_ready"):
+            _input = st.text_input(
+                "Ask about your portfolio...",
+                key=f"quick_chat_{page_key}",
+                label_visibility="collapsed",
+            )
+            if _input:
+                try:
+                    with st.spinner("AI分析中..."):
+                        _resp = call_llm(
+                            prompt=_input,
+                            system="You are a concise portfolio risk analyst. Answer in 2-3 sentences max. Be specific with numbers.",
+                            max_tokens=300,
+                        )
+                    st.markdown(_resp)
+                except ConnectionError as _e:
+                    show_error(
+                        _e,
+                        title="AI服务连接失败",
+                        error_type="connection_error",
+                    )
+                    logger.error("ui.chat.connection_error", error=str(_e))
+                except TimeoutError as _e:
+                    show_warning(
+                        "AI响应超时，请稍后重试",
+                        title="请求超时",
+                        suggestions=[
+                            "检查网络连接",
+                            "确保本地Ollama服务正常运行（如果使用）",
+                            "尝试切换到其他AI提供商",
+                        ],
+                    )
+                    logger.warning("ui.chat.timeout", error=str(_e))
+                except ValueError as _e:
+                    show_error(
+                        _e,
+                        title="AI配置错误",
+                        error_type="value_error",
+                    )
+                    logger.error("ui.chat.config_error", error=str(_e))
+                except Exception as _e:
+                    show_error(
+                        _e,
+                        title="AI分析失败",
+                    )
+                    logger.error("ui.chat.error", error=str(_e), exc_info=True)
+        else:
+            st.caption("运行分析以启用AI聊天")
+
+# ══════════════════════════════════════════════════════════════
+#  Floating AI Assistant (Always Visible - Replaces Chat Popover)
+# ══════════════════════════════════════════════════════════════
+try:
+    from ui.floating_chat import render_floating_ai_chat
+    render_floating_ai_chat()
+except Exception as e:
+    # Silently fail if floating chat has issues
+    logger.warning("floating_chat.render_failed", error=str(e))

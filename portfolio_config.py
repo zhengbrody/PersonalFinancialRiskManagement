@@ -6,12 +6,12 @@ portfolio_config.py
 PORTFOLIO_HOLDINGS = {
     'NVDA':  {'shares': 25.00},
     'GOOGL': {'shares': 12.41},
-    'META':  {'shares': 6.31},
-    'MSFT':  {'shares': 9.06},
-    'TSLA':  {'shares': 8.00},
+    'META':  {'shares': 6.46},
+    'MSFT':  {'shares': 9.19},
+    'TSLA':  {'shares': 9.00},
     'TSM':   {'shares': 5.39},
     'NFLX':  {'shares': 17.01},
-    'AVGO':  {'shares': 4.31},
+    'AVGO':  {'shares': 4.65},
     'AXP':   {'shares': 5.00},
     'INTU':  {'shares': 3.00},
     'MU':    {'shares': 0.77},
@@ -21,13 +21,11 @@ PORTFOLIO_HOLDINGS = {
     'HOOD':  {'shares': 10.00},
     'ONDS':  {'shares': 30.00},
     'CPNG':  {'shares': 10.00},
-    'SMMT':  {'shares': 15.00},
-    'S':     {'shares': 13.00},
+    'S':     {'shares': 15.00},
     'COPX':  {'shares': 5.00},
     'AA':    {'shares': 7.01},
-    'TQQQ':  {'shares': 7.00},
-    'QQQ':   {'shares': 2.16},
-    'SPY':   {'shares': 1.97},
+    'QQQ':   {'shares': 2.24},
+    'SPY':   {'shares': 2.03},
     'GLD':   {'shares': 2.53},
     # 加密货币
     'BTC-USD':  {'shares': 0.038},
@@ -38,4 +36,32 @@ PORTFOLIO_HOLDINGS = {
     'LINK-USD': {'shares': 16.00},
 }
 
-MARGIN_LOAN = 16772.11
+MARGIN_LOAN = 16792
+
+# 本金（总投入成本），可随时修改
+TOTAL_COST_BASIS = 19700
+
+
+# Canonical sector classification used across app.py, performance_attribution.py,
+# and any page that needs sector breakdowns. Single source of truth.
+SECTOR_MAP = {
+    "NVDA": "Semiconductors", "AVGO": "Semiconductors", "TSM": "Semiconductors",
+    "MU": "Semiconductors", "INTC": "Semiconductors", "AMD": "Semiconductors",
+    "QCOM": "Semiconductors", "TXN": "Semiconductors",
+    "GOOGL": "Big Tech", "GOOG": "Big Tech", "MSFT": "Big Tech",
+    "META": "Big Tech", "AAPL": "Big Tech", "AMZN": "Big Tech",
+    "INTU": "Software", "CRM": "Software", "SNOW": "Software", "NOW": "Software",
+    "TSLA": "EV / Auto", "CPNG": "E-commerce", "BABA": "E-commerce",
+    "NFLX": "Streaming / Media", "DIS": "Streaming / Media",
+    "AXP": "Financials", "JPM": "Financials", "GS": "Financials",
+    "SOFI": "Fintech", "HOOD": "Fintech", "PYPL": "Fintech", "SQ": "Fintech",
+    "S": "Cybersecurity", "CRWD": "Cybersecurity", "PANW": "Cybersecurity",
+    "SMMT": "Biotech", "ONDS": "Technology / IoT",
+    "AA": "Materials", "COPX": "Mining ETF", "VST": "Utilities",
+    "COST": "Consumer Staples", "WMT": "Consumer Staples",
+    "TQQQ": "Leveraged ETF", "QQQ": "Tech ETF",
+    "SPY": "Broad Market ETF", "GLD": "Gold / Commodities", "SLV": "Gold / Commodities",
+    "BTC-USD": "Crypto", "ETH-USD": "Crypto", "XRP-USD": "Crypto",
+    "ADA-USD": "Crypto", "SOL-USD": "Crypto", "LINK-USD": "Crypto",
+    "DOGE-USD": "Crypto", "BNB-USD": "Crypto",
+}
