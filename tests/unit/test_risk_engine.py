@@ -34,6 +34,11 @@ def mock_dp():
     }
     dp.start_date = pd.Timestamp("2022-01-01")
     dp.end_date = pd.Timestamp("2023-12-31")
+    # Default stubs for external-data methods (degraded path).
+    # Individual tests override these to inject specific benchmark/macro data.
+    dp.get_risk_free_rate.return_value = 0.045
+    dp.get_benchmark_returns.return_value = pd.DataFrame()
+    dp.get_historical_scenario_prices.return_value = None
     return dp
 
 
@@ -670,55 +675,22 @@ class TestEWMACovariance:
 
 
 class TestFetchRiskFreeRate:
+    """Risk-free fetching is now delegated to DataProvider; we only verify
+    that RiskEngine forwards correctly and falls back on errors. The
+    validation/parsing logic lives in DataProvider and is tested there."""
 
-    @patch("yfinance.download")
-    def test_successful_fetch(self, mock_yf, engine):
-        # ^IRX returns in percentage points (e.g. 4.5 means 4.5%)
-        mock_yf.return_value = pd.DataFrame(
-            {"Close": [4.5, 4.6, 4.55]},
-            index=pd.date_range("2023-01-01", periods=3),
-        )
+    def test_delegates_to_data_provider(self, engine):
+        engine.dp.get_risk_free_rate.return_value = 0.042
         rate = engine._fetch_risk_free_rate()
-        # 4.55 / 100 = 0.0455
-        assert abs(rate - 0.0455) < 1e-6
+        assert rate == 0.042
+        engine.dp.get_risk_free_rate.assert_called_once_with(
+            engine.risk_free_rate_fallback
+        )
 
-    @patch("yfinance.download")
-    def test_fallback_on_failure(self, mock_yf, engine):
-        mock_yf.side_effect = Exception("Network error")
+    def test_fallback_when_provider_raises(self, engine):
+        engine.dp.get_risk_free_rate.side_effect = Exception("boom")
         rate = engine._fetch_risk_free_rate()
         assert rate == engine.risk_free_rate_fallback
-
-    @patch("yfinance.download")
-    def test_fallback_on_unreasonable_rate(self, mock_yf, engine):
-        # Rate of 20% should be rejected (> 0.15)
-        mock_yf.return_value = pd.DataFrame(
-            {"Close": [20.0]},
-            index=pd.date_range("2023-01-01", periods=1),
-        )
-        rate = engine._fetch_risk_free_rate()
-        assert rate == engine.risk_free_rate_fallback
-
-    @patch("yfinance.download")
-    def test_fallback_on_negative_rate(self, mock_yf, engine):
-        mock_yf.return_value = pd.DataFrame(
-            {"Close": [-1.0]},
-            index=pd.date_range("2023-01-01", periods=1),
-        )
-        rate = engine._fetch_risk_free_rate()
-        assert rate == engine.risk_free_rate_fallback
-
-    @patch("yfinance.download")
-    def test_multiindex_columns(self, mock_yf, engine):
-        """Handle yfinance returning MultiIndex columns."""
-        dates = pd.date_range("2023-01-01", periods=3)
-        data = pd.DataFrame(
-            [[4.5], [4.6], [4.55]],
-            index=dates,
-            columns=pd.MultiIndex.from_tuples([("Close", "^IRX")]),
-        )
-        mock_yf.return_value = data
-        rate = engine._fetch_risk_free_rate()
-        assert abs(rate - 0.0455) < 1e-6
 
 
 # ══════════════════════════════════════════════════════════════
@@ -728,18 +700,16 @@ class TestFetchRiskFreeRate:
 
 class TestComputeBetas:
 
-    @patch("yfinance.download")
-    def test_known_beta(self, mock_yf, engine, sample_returns):
-        """Inject a benchmark whose returns are known, compute betas."""
+    def test_known_beta(self, engine, sample_returns):
+        """Inject a benchmark return series via dp.get_benchmark_returns."""
         dates = sample_returns.index
         np.random.seed(99)
-        bench_prices = pd.Series(
-            np.exp(np.cumsum(np.random.randn(len(dates)) * 0.01)) * 100,
+        bench_ret = pd.Series(
+            np.random.randn(len(dates)) * 0.01,
             index=dates,
+            name="SPY",
         )
-        mock_yf.return_value = pd.DataFrame({"Close": bench_prices})
-        engine.dp.start_date = dates[0]
-        engine.dp.end_date = dates[-1]
+        engine.dp.get_benchmark_returns.return_value = pd.DataFrame({"SPY": bench_ret})
 
         betas = engine._compute_betas(sample_returns, "SPY")
         assert isinstance(betas, dict)
@@ -747,14 +717,11 @@ class TestComputeBetas:
         for val in betas.values():
             assert isinstance(val, float)
 
-    @patch("yfinance.download")
-    def test_beta_download_failure(self, mock_yf, engine, sample_returns):
-        mock_yf.side_effect = Exception("Network error")
-        engine.dp.start_date = sample_returns.index[0]
-        engine.dp.end_date = sample_returns.index[-1]
+    def test_beta_provider_empty(self, engine, sample_returns):
+        """Empty benchmark data from provider -> all NaN (degraded mode)."""
+        engine.dp.get_benchmark_returns.return_value = pd.DataFrame()
 
         betas = engine._compute_betas(sample_returns, "SPY")
-        # All betas should be NaN
         for val in betas.values():
             assert np.isnan(val)
 
@@ -762,11 +729,12 @@ class TestComputeBetas:
     def test_insufficient_data(self, mock_yf, engine, sample_returns):
         """When benchmark has fewer than 30 aligned points, beta should be NaN."""
         dates = sample_returns.index[:10]
-        bench_prices = pd.Series(
-            np.exp(np.cumsum(np.random.randn(10) * 0.01)) * 100,
+        bench_ret = pd.Series(
+            np.random.randn(10) * 0.01,
             index=dates,
+            name="SPY",
         )
-        mock_yf.return_value = pd.DataFrame({"Close": bench_prices})
+        engine.dp.get_benchmark_returns.return_value = pd.DataFrame({"SPY": bench_ret})
         engine.dp.start_date = dates[0]
         engine.dp.end_date = dates[-1]
 
@@ -1123,8 +1091,7 @@ class TestPresetScenarios:
 
 class TestRunPipeline:
 
-    @patch("yfinance.download")
-    def test_run_returns_risk_report(self, mock_yf, engine, sample_returns, sample_weights):
+    def test_run_returns_risk_report(self, engine, sample_returns, sample_weights):
         """Test that run() returns a fully populated RiskReport."""
         engine.dp.get_daily_returns.return_value = sample_returns
         engine.dp.get_weight_array.return_value = sample_weights
@@ -1133,32 +1100,20 @@ class TestRunPipeline:
         engine.dp.start_date = dates[0]
         engine.dp.end_date = dates[-1]
 
+        # Stub benchmark/factor returns from DataProvider instead of yfinance.
         np.random.seed(42)
-        bench_prices = pd.Series(
-            np.exp(np.cumsum(np.random.randn(len(dates)) * 0.01)) * 100,
+        benchmark_factors = ["SPY", "QQQ", "GLD", "TLT", "IWM", "VTV"]
+        bench_df = pd.DataFrame(
+            {tk: np.random.randn(len(dates)) * 0.01 for tk in benchmark_factors},
             index=dates,
         )
 
-        def mock_download(tickers_arg, **kwargs):
-            if tickers_arg == "^IRX":
-                return pd.DataFrame(
-                    {"Close": [4.5, 4.6, 4.55]},
-                    index=pd.date_range("2023-01-01", periods=3),
-                )
-            elif isinstance(tickers_arg, str):
-                return pd.DataFrame({"Close": bench_prices})
-            else:
-                factor_prices_data = {}
-                for ft in tickers_arg:
-                    factor_prices_data[ft] = pd.Series(
-                        np.exp(np.cumsum(np.random.randn(len(dates)) * 0.01)) * 100,
-                        index=dates,
-                    )
-                df = pd.DataFrame(factor_prices_data)
-                df.columns = pd.MultiIndex.from_product([["Close"], df.columns])
-                return df
+        def _bench_stub(tickers, start=None, end=None):
+            cols = [t for t in tickers if t in bench_df.columns]
+            return bench_df[cols] if cols else pd.DataFrame()
 
-        mock_yf.side_effect = mock_download
+        engine.dp.get_benchmark_returns.side_effect = _bench_stub
+        engine.dp.get_risk_free_rate.return_value = 0.045
 
         macro_ret = pd.DataFrame(
             {
@@ -1200,29 +1155,24 @@ class TestRunPipeline:
         assert report.macro_betas is not None
         assert report.liquidity_risk is not None
 
-    @patch("yfinance.download")
-    def test_run_caches_result(self, mock_yf, engine, sample_returns, sample_weights):
+    def test_run_caches_result(self, engine, sample_returns, sample_weights):
         """Second call to run() should return cached report."""
         engine.dp.get_daily_returns.return_value = sample_returns
         engine.dp.get_weight_array.return_value = sample_weights
         engine.dp.start_date = sample_returns.index[0]
         engine.dp.end_date = sample_returns.index[-1]
 
-        def mock_download(tickers_arg, **kwargs):
-            dates = sample_returns.index
-            if isinstance(tickers_arg, str):
-                return pd.DataFrame(
-                    {"Close": pd.Series(np.ones(len(dates)) * 100, index=dates)}
-                )
-            else:
-                data = {}
-                for t in tickers_arg:
-                    data[t] = pd.Series(np.ones(len(dates)) * 100, index=dates)
-                df = pd.DataFrame(data)
-                df.columns = pd.MultiIndex.from_product([["Close"], df.columns])
-                return df
+        # Zero-return benchmarks via DataProvider stub
+        zero_bench = pd.DataFrame(
+            {tk: np.zeros(len(sample_returns)) for tk in ["SPY", "QQQ", "GLD", "TLT", "IWM", "VTV"]},
+            index=sample_returns.index,
+        )
 
-        mock_yf.side_effect = mock_download
+        def _bench_stub(tickers, start=None, end=None):
+            cols = [t for t in tickers if t in zero_bench.columns]
+            return zero_bench[cols] if cols else pd.DataFrame()
+
+        engine.dp.get_benchmark_returns.side_effect = _bench_stub
 
         macro_ret = pd.DataFrame(
             {
@@ -1240,9 +1190,8 @@ class TestRunPipeline:
         report2 = engine.run()
         assert report1 is report2
 
-    @patch("yfinance.download")
     def test_run_ewma_corr_matrix_diagonal_is_one(
-        self, mock_yf, engine, sample_returns, sample_weights
+        self, engine, sample_returns, sample_weights
     ):
         """EWMA correlation matrix diagonal should be 1."""
         engine.dp.get_daily_returns.return_value = sample_returns
@@ -1250,27 +1199,18 @@ class TestRunPipeline:
         engine.dp.start_date = sample_returns.index[0]
         engine.dp.end_date = sample_returns.index[-1]
 
-        def mock_download(tickers_arg, **kwargs):
-            dates = sample_returns.index
-            if isinstance(tickers_arg, str):
-                return pd.DataFrame(
-                    {"Close": pd.Series(
-                        np.exp(np.cumsum(np.random.randn(len(dates)) * 0.01)) * 100,
-                        index=dates,
-                    )}
-                )
-            else:
-                data = {}
-                for t in tickers_arg:
-                    data[t] = pd.Series(
-                        np.exp(np.cumsum(np.random.randn(len(dates)) * 0.01)) * 100,
-                        index=dates,
-                    )
-                df = pd.DataFrame(data)
-                df.columns = pd.MultiIndex.from_product([["Close"], df.columns])
-                return df
+        np.random.seed(42)
+        bench_df = pd.DataFrame(
+            {tk: np.random.randn(len(sample_returns)) * 0.01
+             for tk in ["SPY", "QQQ", "GLD", "TLT", "IWM", "VTV"]},
+            index=sample_returns.index,
+        )
 
-        mock_yf.side_effect = mock_download
+        def _bench_stub(tickers, start=None, end=None):
+            cols = [t for t in tickers if t in bench_df.columns]
+            return bench_df[cols] if cols else pd.DataFrame()
+
+        engine.dp.get_benchmark_returns.side_effect = _bench_stub
         np.random.seed(42)
         macro_ret = pd.DataFrame(
             {

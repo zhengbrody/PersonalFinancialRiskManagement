@@ -640,19 +640,24 @@ class DataProvider:
 
     def get_daily_returns(self, winsorize: bool = False) -> pd.DataFrame:
         """
-        计算对数日收益率
+        计算简单日收益率 (simple/arithmetic returns).
+
+        Project-wide convention: SIMPLE returns, (P_t / P_{t-1}) - 1.
+        Rationale: retail UX familiarity, backtest_engine uses simple, and
+        (1+r).cumprod() compounding stays correct across risk_engine /
+        performance_attribution / drawdown.
 
         Args:
             winsorize: 是否应用Winsorization处理极端值 (默认False)
 
         Returns:
-            DataFrame: 日收益率 (date × ticker)
+            DataFrame: 日简单收益率 (date × ticker)
         """
         if self._returns is not None:
             return self._returns
 
         prices = self.fetch_prices()
-        returns = np.log(prices / prices.shift(1)).dropna()
+        returns = prices.pct_change().dropna()
 
         if winsorize:
             # 对每个ticker应用winsorization
@@ -790,12 +795,142 @@ class DataProvider:
         return self._macro_prices
 
     def get_macro_returns(self) -> pd.DataFrame:
-        """宏观因子的对数日收益率。"""
+        """宏观因子的简单日收益率 (project-wide convention)."""
         if self._macro_returns is not None:
             return self._macro_returns
         prices = self.fetch_macro_prices()
-        self._macro_returns = np.log(prices / prices.shift(1)).dropna()
+        self._macro_returns = prices.pct_change().dropna()
         return self._macro_returns
+
+    # ══════════════════════════════════════════════════════════
+    #  Benchmark / factor / risk-free providers (replace direct
+    #  yfinance calls from risk_engine so the engine stays pure)
+    # ══════════════════════════════════════════════════════════
+
+    def get_benchmark_returns(
+        self,
+        benchmarks: list,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+    ) -> pd.DataFrame:
+        """
+        Fetch simple daily returns for one or more benchmark/factor tickers.
+        Returns an empty DataFrame (columns = benchmarks) on full failure.
+
+        Used by RiskEngine for single-factor and multi-factor beta fits.
+        Aligned to project's SIMPLE-return convention.
+        """
+        if not benchmarks:
+            return pd.DataFrame()
+
+        start_str = start or (self.end_date - timedelta(days=int(self.period_years * 365) + 10)).strftime("%Y-%m-%d")
+        end_str = end or self.end_date.strftime("%Y-%m-%d")
+
+        try:
+            raw = yf.download(
+                benchmarks,
+                start=start_str,
+                end=end_str,
+                auto_adjust=True,
+                progress=False,
+                threads=False,
+            )
+        except Exception as exc:
+            logger.warning("data.benchmark.download_failed", benchmarks=list(benchmarks), error=str(exc))
+            return pd.DataFrame(columns=benchmarks)
+
+        if raw is None or raw.empty:
+            return pd.DataFrame(columns=benchmarks)
+
+        # Normalize to a flat DataFrame of Close prices
+        if isinstance(raw.columns, pd.MultiIndex):
+            if "Close" in raw.columns.get_level_values(0):
+                close = raw["Close"]
+            elif "Adj Close" in raw.columns.get_level_values(0):
+                close = raw["Adj Close"]
+            else:
+                return pd.DataFrame(columns=benchmarks)
+        else:
+            # Single-ticker request: columns are fields
+            if "Close" in raw.columns:
+                close = raw[["Close"]].rename(columns={"Close": benchmarks[0]})
+            else:
+                return pd.DataFrame(columns=benchmarks)
+
+        close = close.ffill().dropna(how="all")
+        if close.empty:
+            return pd.DataFrame(columns=benchmarks)
+
+        return close.pct_change().dropna(how="all")
+
+    def get_risk_free_rate(self, fallback: float = 0.045) -> float:
+        """
+        Fetch latest 13-week Treasury yield (^IRX, in %) and convert to decimal.
+        Returns the supplied fallback on any failure so callers never crash.
+        """
+        try:
+            raw = yf.download("^IRX", period="5d", auto_adjust=True, progress=False, threads=False)
+        except Exception as exc:
+            logger.warning("data.risk_free.download_failed", error=str(exc))
+            return fallback
+
+        if raw is None or raw.empty:
+            return fallback
+        try:
+            if isinstance(raw.columns, pd.MultiIndex):
+                close = raw["Close"]["^IRX"] if "^IRX" in raw["Close"].columns else raw["Close"].iloc[:, 0]
+            else:
+                close = raw["Close"] if "Close" in raw.columns else raw.iloc[:, 0]
+            latest = float(close.dropna().iloc[-1])
+            # ^IRX is quoted in percent; convert to decimal. Sanity-clip to [0, 0.20].
+            rate = max(0.0, min(0.20, latest / 100.0))
+            return rate
+        except Exception as exc:
+            logger.warning("data.risk_free.parse_failed", error=str(exc))
+            return fallback
+
+    def get_historical_scenario_prices(
+        self,
+        tickers: list,
+        start: str,
+        end: str,
+    ) -> Optional[pd.DataFrame]:
+        """
+        Fetch close prices for a historical backtest scenario window.
+        Returns None (not an empty DF) on full failure so callers can
+        distinguish "no data" from "zero-length window".
+        """
+        if not tickers:
+            return None
+        try:
+            raw = yf.download(
+                tickers,
+                start=start,
+                end=end,
+                auto_adjust=True,
+                progress=False,
+                threads=False,
+            )
+        except Exception as exc:
+            logger.warning(
+                "data.scenario.download_failed",
+                tickers=list(tickers), start=start, end=end, error=str(exc),
+            )
+            return None
+
+        if raw is None or raw.empty:
+            return None
+
+        if isinstance(raw.columns, pd.MultiIndex):
+            if "Close" in raw.columns.get_level_values(0):
+                return raw["Close"].ffill().dropna(how="all")
+            if "Adj Close" in raw.columns.get_level_values(0):
+                return raw["Adj Close"].ffill().dropna(how="all")
+            return None
+        # Single ticker path
+        if "Close" in raw.columns:
+            return raw[["Close"]].rename(columns={"Close": tickers[0]}).ffill()
+        return None
 
     # ══════════════════════════════════════════════════════════
     #  成交量数据（30 日）（改进版：健壮下载）

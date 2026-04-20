@@ -1260,13 +1260,47 @@ if run_btn:
     # Convert weights to JSON for cache key (hashable)
     weights_json = json.dumps(weights, sort_keys=True)
 
-    # Check if weights changed (cache hit detection)
-    weights_changed = weights_json != st.session_state.last_weights_json
-    using_cache = not weights_changed and st.session_state.analysis_ready
+    # Comprehensive cache-hit detection: any risk-analysis parameter change
+    # must invalidate the cache. Previously only weights were checked, which
+    # gave a misleading "using cache" banner when mc_sims / mc_horizon /
+    # market_shock / period_years / risk_free actually changed.
+    _cache_key = (
+        weights_json,
+        period_years,
+        mc_sims,
+        mc_horizon,
+        round(float(risk_free_fallback), 6),
+        round(float(market_shock), 6),
+    )
+    last_cache_key = st.session_state.get("_last_cache_key")
+    force_refresh_requested = bool(st.session_state.pop("_force_refresh", False))
+    using_cache = (
+        (not force_refresh_requested)
+        and (last_cache_key == _cache_key)
+        and st.session_state.get("analysis_ready")
+    )
+
+    # Stale-data banner: show when cached analysis is older than threshold.
+    STALE_THRESHOLD_SEC = 30 * 60  # 30 minutes
+    last_ts = st.session_state.get("_last_analysis_ts")
+    if using_cache and last_ts:
+        age_sec = time.time() - last_ts
+        if age_sec > STALE_THRESHOLD_SEC:
+            age_min = int(age_sec // 60)
+            st.warning(
+                f"⚠️ Analysis is {age_min} minutes old. Click Force Refresh for fresh data."
+                if lang == "en" else
+                f"⚠️ 分析结果已 {age_min} 分钟未更新。点击 Force Refresh 重新计算。"
+            )
 
     if using_cache:
-        st.info("Using cached analysis results (weights unchanged)" if lang == "en" else "使用缓存的分析结果（权重未变化）")
-        logger.info("ui.analysis.cache_hit", weights_hash=hash(weights_json))
+        age_min = int((time.time() - last_ts) // 60) if last_ts else 0
+        st.info(
+            f"Using cached analysis ({age_min}m old). Click Force Refresh to recompute."
+            if lang == "en" else
+            f"使用缓存的分析结果（{age_min} 分钟前计算）。点击 Force Refresh 重新计算。"
+        )
+        logger.info("ui.analysis.cache_hit", age_min=age_min)
     else:
         analysis_start = time.time()
 
@@ -1346,6 +1380,8 @@ if run_btn:
             chat_messages=[], historical_scenarios=None, sim_result=None,
             sentiment_data=None, _ef_result=None,
             last_weights_json=weights_json,
+            _last_cache_key=_cache_key,
+            _last_analysis_ts=time.time(),
         ))
 
         # Display performance metrics

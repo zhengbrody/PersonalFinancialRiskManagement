@@ -133,9 +133,10 @@ def test_beta_significance_edge_cases():
 # ══════════════════════════════════════════════════════════════
 
 @pytest.mark.integration
-@patch('yfinance.download')
-def test_multi_factor_betas_with_significance(mock_yf_download):
-    """集成测试：多因子beta计算及显著性检验"""
+def test_multi_factor_betas_with_significance():
+    """集成测试：多因子beta计算及显著性检验。
+    Benchmark data now flows through DataProvider.get_benchmark_returns,
+    not yfinance directly, so we stub the provider method."""
     # 创建模拟数据
     dates = pd.date_range('2023-01-01', periods=252, freq='D')
 
@@ -146,30 +147,27 @@ def test_multi_factor_betas_with_significance(mock_yf_download):
         'TSLA': np.random.randn(252) * 0.03,
     }, index=dates)
 
-    # 模拟因子收益率（SPY, QQQ等）
-    factor_prices = {
-        'SPY': pd.Series(np.cumsum(np.random.randn(252) * 0.01) + 100, index=dates),
-        'QQQ': pd.Series(np.cumsum(np.random.randn(252) * 0.015) + 100, index=dates),
-        'GLD': pd.Series(np.cumsum(np.random.randn(252) * 0.008) + 100, index=dates),
-        'TLT': pd.Series(np.cumsum(np.random.randn(252) * 0.01) + 100, index=dates),
-        'IWM': pd.Series(np.cumsum(np.random.randn(252) * 0.012) + 100, index=dates),
-        'VTV': pd.Series(np.cumsum(np.random.randn(252) * 0.009) + 100, index=dates),
-    }
+    # 模拟因子收益率（SPY, QQQ 等） — 直接提供 simple return 级别
+    np.random.seed(7)
+    factor_ret = pd.DataFrame({
+        'SPY': np.random.randn(252) * 0.01,
+        'QQQ': np.random.randn(252) * 0.015,
+        'GLD': np.random.randn(252) * 0.008,
+        'TLT': np.random.randn(252) * 0.01,
+        'IWM': np.random.randn(252) * 0.012,
+        'VTV': np.random.randn(252) * 0.009,
+    }, index=dates)
 
-    # 创建MultiIndex DataFrame（模拟yfinance输出）
-    factor_data = pd.DataFrame(factor_prices)
-    factor_data.columns = pd.MultiIndex.from_product([['Close'], factor_data.columns])
-
-    mock_yf_download.return_value = factor_data
-
-    # 创建mock DataProvider
+    # Mock DataProvider: benchmark returns are now provider-sourced
     mock_dp = Mock(spec=DataProvider)
     mock_dp.start_date = dates[0]
     mock_dp.end_date = dates[-1]
+    mock_dp.get_benchmark_returns.return_value = factor_ret
+    mock_dp.get_risk_free_rate.return_value = 0.045
 
     engine = RiskEngine(mock_dp)
 
-    # 调用多因子beta计算
+    # 调用多因子 beta 计算
     result = engine._compute_multi_factor_betas(asset_returns)
 
     # 验证返回结构

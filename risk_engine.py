@@ -13,7 +13,6 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 from scipy.optimize import minimize
 import time
-import yfinance as yf
 
 from data_provider import DataProvider
 from logging_config import get_logger
@@ -423,16 +422,9 @@ class RiskEngine:
         results = []
         for name, start, end in scenarios:
             try:
-                raw = yf.download(tickers, start=start, end=end,
-                                  auto_adjust=True, progress=False)
-                if isinstance(raw.columns, pd.MultiIndex):
-                    prices = raw["Close"]
-                    if isinstance(prices.columns, pd.MultiIndex):
-                        prices = prices.droplevel(0, axis=1)
-                elif len(tickers) == 1:
-                    prices = raw[["Close"]].rename(columns={"Close": tickers[0]})
-                else:
-                    prices = raw
+                prices = self.dp.get_historical_scenario_prices(tickers, start, end)
+                if prices is None or prices.empty:
+                    raise ValueError("No price data from provider")
                 available = [t for t in tickers if t in prices.columns]
                 if not available:
                     raise ValueError("No tickers available")
@@ -464,19 +456,16 @@ class RiskEngine:
 
     # ── 无风险利率 ────────────────────────────────────────────
     def _fetch_risk_free_rate(self) -> float:
+        # Delegated to DataProvider so risk_engine has no direct yfinance calls.
+        # DataProvider.get_risk_free_rate() returns fallback on any failure.
         try:
-            irx = yf.download("^IRX", period="5d", auto_adjust=True, progress=False)
-            if isinstance(irx.columns, pd.MultiIndex):
-                close = irx["Close"].squeeze()
-            else:
-                close = irx["Close"]
-            rate = float(close.dropna().iloc[-1]) / 100
-            if 0 < rate < 0.15:
-                return rate
+            return self.dp.get_risk_free_rate(self.risk_free_rate_fallback)
         except Exception as e:
-            logger.info("Failed to fetch risk-free rate from ^IRX, using fallback",
-                       error=str(e), fallback=self.risk_free_rate_fallback)
-        return self.risk_free_rate_fallback
+            logger.info(
+                "risk.rf.delegate_failed",
+                error=str(e), fallback=self.risk_free_rate_fallback,
+            )
+            return self.risk_free_rate_fallback
 
     # ── EWMA 协方差 ──────────────────────────────────────────
     def _ewma_covariance(self, returns: pd.DataFrame) -> np.ndarray:
@@ -573,21 +562,16 @@ class RiskEngine:
         logger.info("risk.beta.start", benchmark=benchmark)
         start_time = time.time()
 
-        try:
-            bench_data = yf.download(
-                benchmark,
-                start=self.dp.start_date.strftime("%Y-%m-%d"),
-                end=self.dp.end_date.strftime("%Y-%m-%d"),
-                auto_adjust=True, progress=False,
+        # Delegate benchmark fetch to DataProvider (project-wide simple returns).
+        bench_df = self.dp.get_benchmark_returns([benchmark])
+        if bench_df is None or bench_df.empty or benchmark not in bench_df.columns:
+            logger.warning(
+                "risk.beta.benchmark_unavailable",
+                benchmark=benchmark,
+                reason="no_data_from_provider",
             )
-            if isinstance(bench_data.columns, pd.MultiIndex):
-                bench_close = bench_data["Close"].squeeze()
-            else:
-                bench_close = bench_data["Close"]
-            bench_ret = np.log(bench_close / bench_close.shift(1)).dropna()
-        except Exception as e:
-            logger.warning("risk.beta.benchmark_failed", benchmark=benchmark, error=str(e))
             return {t: np.nan for t in returns.columns}
+        bench_ret = bench_df[benchmark].dropna()
 
         betas = {}
         for ticker in returns.columns:
@@ -721,25 +705,14 @@ class RiskEngine:
             }
         """
         factor_tickers = list(self.FACTOR_TICKERS.keys())
-        try:
-            factor_data = yf.download(
-                factor_tickers,
-                start=self.dp.start_date.strftime("%Y-%m-%d"),
-                end=self.dp.end_date.strftime("%Y-%m-%d"),
-                auto_adjust=True, progress=False,
+        # Delegate factor-benchmark fetch to DataProvider (simple returns).
+        factor_ret = self.dp.get_benchmark_returns(factor_tickers)
+        if factor_ret is None or factor_ret.empty:
+            logger.warning(
+                "risk.factor_beta.benchmarks_unavailable",
+                factors=factor_tickers,
+                reason="no_data_from_provider",
             )
-            if isinstance(factor_data.columns, pd.MultiIndex):
-                factor_prices = factor_data["Close"]
-                if isinstance(factor_prices.columns, pd.MultiIndex):
-                    factor_prices = factor_prices.droplevel(0, axis=1)
-            else:
-                factor_prices = factor_data[["Close"]].rename(
-                    columns={"Close": factor_tickers[0]}
-                )
-            factor_ret = np.log(factor_prices / factor_prices.shift(1)).dropna()
-        except Exception as e:
-            logger.error("Failed to download factor data for beta calculation",
-                        error=str(e), factors=factor_tickers)
             empty_df = pd.DataFrame(
                 np.nan, index=returns.columns,
                 columns=[self.FACTOR_TICKERS[f] for f in factor_tickers],
@@ -849,19 +822,9 @@ class RiskEngine:
         factor_names = [f"Factor {i+1}" for i in range(n_factors)]
         try:
             benchmark_tickers = list(self.FACTOR_TICKERS.keys())[:4]  # SPY, QQQ, GLD, TLT
-            bench_data = yf.download(
-                benchmark_tickers,
-                start=returns.index[0].strftime("%Y-%m-%d"),
-                end=returns.index[-1].strftime("%Y-%m-%d"),
-                auto_adjust=True, progress=False,
-            )
-            if isinstance(bench_data.columns, pd.MultiIndex):
-                bench_close = bench_data["Close"]
-                if isinstance(bench_close.columns, pd.MultiIndex):
-                    bench_close = bench_close.droplevel(0, axis=1)
-            else:
-                bench_close = bench_data
-            bench_ret = np.log(bench_close / bench_close.shift(1)).dropna()
+            bench_ret = self.dp.get_benchmark_returns(benchmark_tickers)
+            if bench_ret is None or bench_ret.empty:
+                raise ValueError("benchmark data unavailable from provider")
 
             # Align dates
             common_idx = returns.index.intersection(bench_ret.index)
@@ -876,7 +839,7 @@ class RiskEngine:
                 }
                 used_factors = set()
                 for j, btk in enumerate(benchmark_tickers):
-                    if btk not in bench_close.columns or j >= bench_aligned.shape[1]:
+                    if btk not in bench_ret.columns or j >= bench_aligned.shape[1]:
                         continue
                     best_corr = 0
                     best_k = -1
@@ -891,9 +854,11 @@ class RiskEngine:
                         factor_names[best_k] = label_map.get(btk, btk)
                         used_factors.add(best_k)
         except Exception as e:
-            logger.info("Failed to label PCA factors using benchmarks, keeping generic names",
-                       error=str(e))
-            # keep generic names
+            logger.info(
+                "risk.pca.factor_label_skipped",
+                error=str(e),
+                reason="benchmark data unavailable; keeping generic factor names",
+            )
 
         # Rename remaining unlabeled
         for i in range(n_factors):
@@ -1137,6 +1102,10 @@ class RiskEngine:
         except Exception as e:
             logger.error("Failed to fetch macro returns data",
                         error=str(e))
+            return self._empty_macro_result()
+
+        # Degraded path: empty macro data (e.g. offline / provider failure)
+        if macro_ret is None or macro_ret.empty:
             return self._empty_macro_result()
 
         # 组合日收益率

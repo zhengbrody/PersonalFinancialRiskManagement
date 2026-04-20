@@ -151,6 +151,24 @@ def render_shared_sidebar():
             st.session_state._run_trigger = True
             st.rerun()
 
+        # Force Refresh — bypasses cache regardless of whether any param changed.
+        # Useful when prices may have moved but analysis params haven't, or when
+        # user explicitly wants a fresh Monte Carlo roll.
+        _force_label = "🔄 Force Refresh" if current_lang == "en" else "🔄 强制刷新"
+        if st.button(
+            _force_label,
+            use_container_width=True,
+            key="force_refresh_btn",
+            help=(
+                "Invalidate the analysis cache and recompute from scratch."
+                if current_lang == "en" else
+                "清除分析缓存并重新计算。"
+            ),
+        ):
+            st.session_state._force_refresh = True
+            st.session_state._run_trigger = True
+            st.rerun()
+
         # Portfolio Metadata (if available)
         if meta := getattr(st.session_state, "_portfolio_meta", None):
             st.caption(f"💰 Net Equity: ${meta.get('net_equity', meta['total_long']):,.0f}")

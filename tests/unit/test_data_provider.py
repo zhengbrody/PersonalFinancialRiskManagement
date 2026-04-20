@@ -351,8 +351,23 @@ class TestDataProviderIntegration:
         # 验证长度（应该比价格少1行）
         assert len(returns) == len(prices) - 1
 
-        # 验证是对数收益率
-        assert returns['AAPL'].iloc[0] == np.log(101 / 100)
+        # 验证是简单收益率（project-wide convention）
+        assert returns['AAPL'].iloc[0] == pytest.approx((101 - 100) / 100, rel=1e-9)
+
+    def test_cumulative_return_matches_price_derived(self):
+        """累计收益（由返回序列推导）必须与（终价/起价 - 1）一致。"""
+        dp = DataProvider({'AAPL': 1.0}, period_years=2)
+        dates = pd.date_range('2024-01-01', periods=60, freq='D')
+        prices = pd.DataFrame({
+            'AAPL': [100.0 * (1.001 ** i) for i in range(60)]
+        }, index=dates)
+        dp._prices = prices
+
+        returns = dp.get_daily_returns()
+        cumret_from_returns = (1 + returns['AAPL']).prod() - 1
+        cumret_from_prices = prices['AAPL'].iloc[-1] / prices['AAPL'].iloc[0] - 1
+
+        assert cumret_from_returns == pytest.approx(cumret_from_prices, rel=1e-10)
 
 
 class TestCacheIntegration:
