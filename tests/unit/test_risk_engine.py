@@ -318,23 +318,31 @@ class TestCheckTradeCompliance:
 
 
 class TestAdjustWeightsForCompliance:
+    """
+    After the 2026-04-19 projection refactor, the corrector no longer
+    blindly renormalizes to 1.0 (that reintroduces cap violations).
+    Instead it projects onto the feasible set; any residual from
+    binding caps is treated as implicit cash. Invariant: sum <= 1.0,
+    no single weight or sector exceeds its cap.
+    """
 
     def test_already_compliant_unchanged(self, engine):
         weights = {"A": 0.10, "B": 0.10, "C": 0.10, "D": 0.10}
         sector = {"A": "S1", "B": "S2", "C": "S3", "D": "S4"}
         adjusted = engine.adjust_weights_for_compliance(weights, sector)
-        # Already compliant, should be similar (but renormalized to 1)
-        total = sum(adjusted.values())
-        assert abs(total - 1.0) < 1e-6
+        # All already under cap; corrector may grow them up to max_stock=0.15
+        # but must never exceed it and never introduce sector violations.
+        assert engine.check_trade_compliance(adjusted, sector) == []
+        assert sum(adjusted.values()) <= 1.0 + 1e-6
 
     def test_single_stock_clipping(self, engine):
         weights = {"AAPL": 0.60, "GOOGL": 0.20, "MSFT": 0.20}
         sector_map = {"AAPL": "S1", "GOOGL": "S2", "MSFT": "S3"}
         adjusted = engine.adjust_weights_for_compliance(weights, sector_map)
-        # After clipping, AAPL should be reduced from 0.60
-        assert adjusted["AAPL"] < 0.60
-        # Total should still sum to 1
-        assert abs(sum(adjusted.values()) - 1.0) < 1e-6
+        # AAPL must be clipped to max_stock (default 0.15)
+        assert adjusted["AAPL"] <= engine.DEFAULT_RISK_LIMITS["max_single_stock_weight"] + 1e-6
+        assert engine.check_trade_compliance(adjusted, sector_map) == []
+        assert sum(adjusted.values()) <= 1.0 + 1e-6
 
     def test_sector_clipping(self, engine):
         weights = {"AAPL": 0.15, "GOOGL": 0.15, "MSFT": 0.15, "AMZN": 0.55}
@@ -342,14 +350,19 @@ class TestAdjustWeightsForCompliance:
             "AAPL": "Tech", "GOOGL": "Tech", "MSFT": "Tech", "AMZN": "Retail"
         }
         adjusted = engine.adjust_weights_for_compliance(weights, sector_map)
-        # Total should sum to 1
-        assert abs(sum(adjusted.values()) - 1.0) < 1e-6
+        # Tech sector must be clipped to max_sector (default 0.30)
+        tech_weight = sum(adjusted[t] for t in ("AAPL", "GOOGL", "MSFT"))
+        assert tech_weight <= engine.DEFAULT_RISK_LIMITS["max_sector_weight"] + 1e-6
+        assert engine.check_trade_compliance(adjusted, sector_map) == []
+        assert sum(adjusted.values()) <= 1.0 + 1e-6
 
-    def test_output_sums_to_one(self, engine):
+    def test_output_respects_feasibility(self, engine):
+        """Final output must satisfy all caps; sum <= 1.0 (residual = cash)."""
         weights = {"A": 0.50, "B": 0.30, "C": 0.20}
         sector_map = {"A": "X", "B": "X", "C": "Y"}
         adjusted = engine.adjust_weights_for_compliance(weights, sector_map)
-        assert abs(sum(adjusted.values()) - 1.0) < 1e-6
+        assert engine.check_trade_compliance(adjusted, sector_map) == []
+        assert sum(adjusted.values()) <= 1.0 + 1e-6
 
 
 # ══════════════════════════════════════════════════════════════

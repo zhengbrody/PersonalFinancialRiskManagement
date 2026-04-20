@@ -104,24 +104,62 @@ render_kpi_row([
     },
 ])
 
-# Cost Basis & Total P&L (if configured)
-if meta_kpi and meta_kpi.get("cost_basis") and meta_kpi["cost_basis"] > 0:
-    _cb = meta_kpi["cost_basis"]
-    _total_pnl = meta_kpi.get("total_pnl", 0)
-    _total_pnl_pct = meta_kpi.get("total_pnl_pct", 0)
-    _pnl_c = "positive" if _total_pnl >= 0 else "negative"
+# Contributed Capital & Return on Capital (account-level P&L, net of margin)
+if meta_kpi and meta_kpi.get("contributed_capital", meta_kpi.get("cost_basis", 0)) > 0:
+    _cc = meta_kpi.get("contributed_capital", meta_kpi.get("cost_basis"))
+    _roc_dollar = meta_kpi.get("return_on_capital_dollar", meta_kpi.get("total_pnl", 0))
+    _roc_pct = meta_kpi.get("return_on_capital_pct", meta_kpi.get("total_pnl_pct", 0))
+    _pnl_c = "positive" if _roc_dollar and _roc_dollar >= 0 else "negative"
     render_kpi_row([
-        {"label": "Cost Basis" if lang == "en" else "本金",
-         "value": f"${_cb:,.0f}"},
-        {"label": "Total P&L" if lang == "en" else "总盈亏",
-         "value": f"${_total_pnl:+,.0f}",
-         "delta": f"{_total_pnl_pct:+.1%}",
-         "delta_color": _pnl_c},
+        {"label": "Contributed Capital" if lang == "en" else "自有本金",
+         "value": f"${_cc:,.0f}",
+         "tooltip": "Self-funded principal (excludes margin draws)"
+                    if lang == "en" else "自有资金投入（不含融资借款）"},
+        {"label": "Return on Capital" if lang == "en" else "本金收益",
+         "value": f"${_roc_dollar:+,.0f}" if _roc_dollar is not None else "--",
+         "delta": f"{_roc_pct:+.1%}" if _roc_pct is not None else None,
+         "delta_color": _pnl_c,
+         "tooltip": "Net-equity change vs contributed capital. Includes margin cost."
+                    if lang == "en" else "净资产相对自有本金的变化，已反映融资成本"},
         {"label": "Net Equity" if lang == "en" else "净资产",
          "value": f"${meta_kpi['net_equity']:,.0f}"},
         {"label": "Margin Loan" if lang == "en" else "保证金贷款",
          "value": f"${meta_kpi.get('margin_loan', 0):,.0f}"},
     ])
+
+    # Second P&L row: Position P&L (gross, margin-independent). Only shows
+    # if the user has populated avg_cost on holdings. Otherwise display a
+    # hint banner so the user knows how to unlock this metric.
+    _pos_pnl = meta_kpi.get("position_pnl_dollar")
+    _pos_pnl_pct = meta_kpi.get("position_pnl_pct")
+    _pos_info = meta_kpi.get("position_cost_info")
+    if _pos_pnl is not None and _pos_info:
+        _pc_c = "positive" if _pos_pnl >= 0 else "negative"
+        cov = _pos_info.get("coverage_pct", 0)
+        render_kpi_row([
+            {"label": "Position Cost" if lang == "en" else "持仓成本",
+             "value": f"${_pos_info['total_position_cost']:,.0f}",
+             "tooltip": f"Σ(shares × avg_cost) across {len(_pos_info['tickers_with_cost'])} tickers"},
+            {"label": "Position P&L" if lang == "en" else "持仓盈亏",
+             "value": f"${_pos_pnl:+,.0f}",
+             "delta": f"{_pos_pnl_pct:+.1%}" if _pos_pnl_pct is not None else None,
+             "delta_color": _pc_c,
+             "tooltip": "Unrealized gain/loss on positions (excludes margin cost)"
+                        if lang == "en" else "持仓浮动盈亏（不含融资成本）"},
+            {"label": "Cost Coverage" if lang == "en" else "成本覆盖",
+             "value": f"{cov:.0%}",
+             "tooltip": f"{len(_pos_info['tickers_missing_cost'])} tickers missing avg_cost"},
+            {"label": " ", "value": " "},  # alignment spacer
+        ])
+    elif _pos_info and _pos_info.get("tickers_missing_cost"):
+        # Friendly hint — user can add avg_cost to holdings to unlock metric B
+        st.caption(
+            "💡 Add `avg_cost` to holdings in portfolio_config.py for Position P&L "
+            "(margin-independent). Current Return on Capital includes margin effects."
+            if lang == "en" else
+            "💡 在 portfolio_config.py 为持仓添加 `avg_cost` 可显示持仓盈亏（不含融资影响）。"
+            "当前「本金收益」反映的是净资产相对本金变化，已包含融资成本。"
+        )
 
 # Margin Warning Banner
 if report.margin_call_info and report.margin_call_info.get("has_margin"):

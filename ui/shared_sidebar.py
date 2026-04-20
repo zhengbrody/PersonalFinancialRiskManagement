@@ -121,16 +121,59 @@ def render_shared_sidebar():
                 else:
                     live_weights = {t: v / total_value for t, v in values.items() if v > 0}
                     net_equity = total_value - MARGIN_LOAN
-                    cost_basis = getattr(_pc, "TOTAL_COST_BASIS", 0)
+                    contributed_capital = getattr(
+                        _pc, "CONTRIBUTED_CAPITAL",
+                        getattr(_pc, "TOTAL_COST_BASIS", 0),
+                    )
+                    return_on_capital_dollar = (
+                        net_equity - contributed_capital if contributed_capital > 0 else None
+                    )
+                    return_on_capital_pct = (
+                        (net_equity - contributed_capital) / contributed_capital
+                        if contributed_capital > 0 else None
+                    )
+
+                    # Optional position P&L (only if avg_cost set on holdings)
+                    position_pnl_dollar = None
+                    position_pnl_pct = None
+                    position_cost_info = None
+                    try:
+                        pc_info = _pc.position_cost_summary() if hasattr(_pc, "position_cost_summary") else None
+                        if pc_info and pc_info["total_position_cost"] > 0:
+                            position_cost_info = pc_info
+                            known = set(pc_info["tickers_with_cost"])
+                            covered_long = sum(v for tk, v in values.items() if tk in known)
+                            position_pnl_dollar = covered_long - pc_info["total_position_cost"]
+                            position_pnl_pct = position_pnl_dollar / pc_info["total_position_cost"]
+                    except Exception:
+                        pass
+
+                    # Per-account breakdown
+                    account_breakdown = {}
+                    try:
+                        if hasattr(_pc, "ACCOUNTS") and hasattr(_pc, "account_summary"):
+                            for acct_name in _pc.ACCOUNTS:
+                                account_breakdown[acct_name] = _pc.account_summary(acct_name, values)
+                    except Exception:
+                        pass
+
                     meta = {
                         "total_long": total_value,
                         "net_equity": net_equity,
                         "margin_loan": MARGIN_LOAN,
                         "leverage": total_value / net_equity if net_equity > 0 else float("inf"),
                         "missing": [t for t in tickers if t not in current_prices],
-                        "cost_basis": cost_basis,
-                        "total_pnl": net_equity - cost_basis if cost_basis > 0 else None,
-                        "total_pnl_pct": (net_equity - cost_basis) / cost_basis if cost_basis > 0 else None,
+                        "contributed_capital": contributed_capital,
+                        "return_on_capital_dollar": return_on_capital_dollar,
+                        "return_on_capital_pct": return_on_capital_pct,
+                        "position_pnl_dollar": position_pnl_dollar,
+                        "position_pnl_pct": position_pnl_pct,
+                        "position_cost_info": position_cost_info,
+                        "account_breakdown": account_breakdown,
+                        # Back-compat aliases
+                        "cost_basis": contributed_capital,
+                        "total_pnl": return_on_capital_dollar,
+                        "total_pnl_pct": return_on_capital_pct,
                     }
 
                     st.session_state.weights_json = json.dumps(live_weights, indent=2)
@@ -175,12 +218,54 @@ def render_shared_sidebar():
             st.caption(f"📈 Total Long: ${meta['total_long']:,.0f}")
             st.caption(f"🏦 Margin: ${meta.get('margin_loan', 0):,.0f}")
             st.caption(f"⚖️ Leverage: {meta['leverage']:.2f}x")
-            if meta.get("cost_basis") and meta["cost_basis"] > 0:
-                _pnl = meta.get("total_pnl", 0)
-                _pnl_pct = meta.get("total_pnl_pct", 0)
-                _pnl_icon = "🟢" if _pnl >= 0 else "🔴"
-                st.caption(f"💵 Cost Basis: ${meta['cost_basis']:,.0f}")
-                st.caption(f"{_pnl_icon} P&L: ${_pnl:+,.0f} ({_pnl_pct:+.1%})")
+
+            # Capital & P&L (new metric names; back-compat aliases kept)
+            _cc = meta.get("contributed_capital", meta.get("cost_basis", 0))
+            _roc_d = meta.get("return_on_capital_dollar", meta.get("total_pnl"))
+            _roc_p = meta.get("return_on_capital_pct", meta.get("total_pnl_pct"))
+            if _cc and _cc > 0 and _roc_d is not None:
+                _icon = "🟢" if _roc_d >= 0 else "🔴"
+                st.caption(f"💵 Contributed Capital: ${_cc:,.0f}")
+                st.caption(f"{_icon} Return on Capital: ${_roc_d:+,.0f} ({_roc_p:+.1%})")
+            # Optional position P&L (only if avg_cost populated)
+            _pos_pnl = meta.get("position_pnl_dollar")
+            _pos_pnl_pct = meta.get("position_pnl_pct")
+            if _pos_pnl is not None and _pos_pnl_pct is not None:
+                _icon2 = "🟢" if _pos_pnl >= 0 else "🔴"
+                st.caption(f"{_icon2} Position P&L: ${_pos_pnl:+,.0f} ({_pos_pnl_pct:+.1%})")
+
+            # Per-account breakdown (compact)
+            acct_break = meta.get("account_breakdown") or {}
+            if acct_break and len(acct_break) > 1:
+                with st.expander("Per-account view", expanded=False):
+                    for name, info in acct_break.items():
+                        if info.get("total_long", 0) <= 0:
+                            continue
+                        lev = info.get("leverage", 1.0)
+                        lev_str = f"{lev:.2f}x" if lev != float("inf") else "∞"
+                        st.caption(
+                            f"**{name}** ({info.get('type','?')}): "
+                            f"long=${info['total_long']:,.0f} · "
+                            f"loan=${info['margin_loan']:,.0f} · "
+                            f"equity=${info['net_equity']:,.0f} · "
+                            f"lev={lev_str}"
+                        )
+
+        # Config validation warnings — one-shot on first render this session.
+        if not st.session_state.get("_portfolio_config_checked"):
+            try:
+                import portfolio_config as _pc
+                _issues = _pc.validate_portfolio_config() if hasattr(_pc, "validate_portfolio_config") else []
+                st.session_state._portfolio_config_issues = _issues
+                st.session_state._portfolio_config_checked = True
+            except Exception:
+                st.session_state._portfolio_config_issues = []
+                st.session_state._portfolio_config_checked = True
+        _cfg_issues = st.session_state.get("_portfolio_config_issues") or []
+        if _cfg_issues:
+            with st.expander(f"⚠️ Portfolio config: {len(_cfg_issues)} warning(s)", expanded=False):
+                for _iss in _cfg_issues:
+                    st.caption(f"• {_iss}")
 
         # Initialize weights_json if not exists
         if "weights_json" not in st.session_state:

@@ -289,16 +289,71 @@ def fetch_live_weights() -> tuple[dict, dict]:
     total_long = sum(values.values())
     net_equity = total_long - _pc.MARGIN_LOAN
     weights = {k: round(v / total_long, 6) for k, v in values.items()}
-    cost_basis = getattr(_pc, "TOTAL_COST_BASIS", 0)
+
+    # ── Capital / P&L metrics ────────────────────────────────────────────
+    # CONTRIBUTED_CAPITAL = self-funded principal (excludes margin draws).
+    # Old name TOTAL_COST_BASIS preserved as alias for backward compat.
+    contributed_capital = getattr(
+        _pc, "CONTRIBUTED_CAPITAL",
+        getattr(_pc, "TOTAL_COST_BASIS", 0),
+    )
+
+    # Metric A: Return on Contributed Capital — "how did MY money do?"
+    # net_equity already excludes the margin loan, so this is the right
+    # thing to compare against contributed_capital.
+    return_on_capital_dollar = (
+        net_equity - contributed_capital if contributed_capital > 0 else None
+    )
+    return_on_capital_pct = (
+        (net_equity - contributed_capital) / contributed_capital
+        if contributed_capital > 0 else None
+    )
+
+    # Metric B: Position P&L — "how did the positions themselves do?"
+    # Independent of margin. Only available if avg_cost is set on holdings.
+    position_cost_info = None
+    position_pnl_dollar = None
+    position_pnl_pct = None
+    try:
+        pc_info = _pc.position_cost_summary() if hasattr(_pc, "position_cost_summary") else None
+        if pc_info and pc_info["total_position_cost"] > 0:
+            position_cost_info = pc_info
+            # Sum market value of the tickers with known cost only
+            known = set(pc_info["tickers_with_cost"])
+            covered_long = sum(v for tk, v in values.items() if tk in known)
+            position_pnl_dollar = covered_long - pc_info["total_position_cost"]
+            position_pnl_pct = position_pnl_dollar / pc_info["total_position_cost"]
+    except Exception:
+        pass
+
+    # Per-account summary (margin vs crypto — separate leverage per account)
+    account_breakdown = {}
+    try:
+        if hasattr(_pc, "ACCOUNTS") and hasattr(_pc, "account_summary"):
+            for acct_name in _pc.ACCOUNTS:
+                account_breakdown[acct_name] = _pc.account_summary(acct_name, values)
+    except Exception:
+        pass
+
     meta = {
         "total_long": total_long,
         "net_equity": net_equity,
         "margin_loan": _pc.MARGIN_LOAN,
         "leverage": total_long / net_equity if net_equity > 0 else float("inf"),
         "missing": [tk for tk in tickers if tk not in values],
-        "cost_basis": cost_basis,
-        "total_pnl": net_equity - cost_basis if cost_basis > 0 else None,
-        "total_pnl_pct": (net_equity - cost_basis) / cost_basis if cost_basis > 0 else None,
+        # Capital / P&L (new, clearer names — old keys kept for backward compat)
+        "contributed_capital": contributed_capital,
+        "return_on_capital_dollar": return_on_capital_dollar,
+        "return_on_capital_pct": return_on_capital_pct,
+        "position_pnl_dollar": position_pnl_dollar,
+        "position_pnl_pct": position_pnl_pct,
+        "position_cost_info": position_cost_info,
+        # Back-compat aliases (legacy readers)
+        "cost_basis": contributed_capital,
+        "total_pnl": return_on_capital_dollar,
+        "total_pnl_pct": return_on_capital_pct,
+        # Per-account view
+        "account_breakdown": account_breakdown,
     }
     return weights, meta
 

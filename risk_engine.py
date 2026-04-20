@@ -321,14 +321,22 @@ class RiskEngine:
         sector_map: Dict[str, str],
         limits: Optional[Dict[str, float]] = None,
     ) -> List[dict]:
-        """Check proposed weights against risk limits. Returns list of violations."""
+        """
+        Check proposed weights against risk limits. Returns list of violations.
+
+        A floating-point tolerance (1e-6) is applied: a weight of
+        0.6000000000000001 is NOT reported as violating a 0.6 limit. Users
+        can't meaningfully act on sub-millionth-percent violations and they
+        only ever arise from numerical rounding in the auto-corrector.
+        """
         rules = limits or self.DEFAULT_RISK_LIMITS
+        tol = 1e-6
         violations = []
 
         # Single stock limit
         max_stock = rules.get("max_single_stock_weight", 0.15)
         for tk, w in proposed_weights.items():
-            if w > max_stock:
+            if w > max_stock + tol:
                 violations.append({
                     "rule": "max_single_stock_weight",
                     "limit": max_stock,
@@ -344,7 +352,7 @@ class RiskEngine:
             s = sector_map.get(tk, "Other")
             sector_weights[s] = sector_weights.get(s, 0) + w
         for sector, w in sector_weights.items():
-            if w > max_sector:
+            if w > max_sector + tol:
                 violations.append({
                     "rule": "max_sector_weight",
                     "limit": max_sector,
@@ -361,52 +369,79 @@ class RiskEngine:
         sector_map: Dict[str, str],
         limits: Optional[Dict[str, float]] = None,
     ) -> Dict[str, float]:
-        """Auto-adjust weights to satisfy limits via iterative clipping."""
+        """
+        Project weights onto the feasible set defined by
+        {max_single_stock, max_sector, sum <= 1.0}.
+
+        Algorithm: alternating projection.
+          - Clip each stock to max_stock
+          - Scale down any sector exceeding max_sector
+          - Renormalize only the NON-capped weights to absorb the remainder,
+            preserving their relative proportions
+          - Repeat until stable (default 20 iterations) or convergence.
+
+        If the feasible region is tighter than 1.0 sum (e.g. many stocks
+        all hit the per-stock cap), the final sum may be < 1.0 and the
+        residual is effectively "cash". We do NOT blindly renormalize to
+        1.0 since that would violate the caps we just enforced.
+        """
         rules = limits or self.DEFAULT_RISK_LIMITS
         max_stock = rules.get("max_single_stock_weight", 0.15)
         max_sector = rules.get("max_sector_weight", 0.30)
+        tol = 1e-9
 
         adjusted = dict(proposed_weights)
 
-        for _ in range(3):  # max 3 iterations
-            # Clip single stocks
-            excess = 0.0
-            non_capped = []
-            for tk in adjusted:
-                if adjusted[tk] > max_stock:
-                    excess += adjusted[tk] - max_stock
-                    adjusted[tk] = max_stock
-                else:
-                    non_capped.append(tk)
-            # Redistribute excess proportionally
-            if excess > 0 and non_capped:
-                total_non_capped = sum(adjusted[tk] for tk in non_capped)
-                if total_non_capped > 0:
-                    for tk in non_capped:
-                        adjusted[tk] += excess * (adjusted[tk] / total_non_capped)
+        for _ in range(20):
+            changed = False
 
-            # Clip sectors
-            sector_w = {}
-            sector_tickers = {}
+            # ── Stock cap: clip to max_stock and redistribute slack
+            capped, uncapped = [], []
             for tk, w in adjusted.items():
-                s = sector_map.get(tk, "Other")
-                sector_w[s] = sector_w.get(s, 0) + w
-                sector_tickers.setdefault(s, []).append(tk)
+                if w > max_stock + tol:
+                    adjusted[tk] = max_stock
+                    capped.append(tk)
+                    changed = True
+                else:
+                    uncapped.append(tk)
 
-            for sector, sw in sector_w.items():
-                if sw > max_sector:
+            # Absorb slack (1.0 - sum) into uncapped weights in proportion
+            s = sum(adjusted.values())
+            slack = 1.0 - s
+            if slack > tol and uncapped:
+                uncap_sum = sum(adjusted[tk] for tk in uncapped)
+                if uncap_sum > 0:
+                    for tk in uncapped:
+                        addable = max_stock - adjusted[tk]
+                        if addable <= 0:
+                            continue
+                        share = slack * (adjusted[tk] / uncap_sum)
+                        grant = min(share, addable)
+                        adjusted[tk] += grant
+                        changed = True
+
+            # ── Sector cap: scale every ticker in over-cap sectors proportionally
+            sector_w: Dict[str, float] = {}
+            sector_tickers: Dict[str, list] = {}
+            for tk, w in adjusted.items():
+                sec = sector_map.get(tk, "Other")
+                sector_w[sec] = sector_w.get(sec, 0.0) + w
+                sector_tickers.setdefault(sec, []).append(tk)
+            for sec, sw in sector_w.items():
+                if sw > max_sector + tol:
                     scale = max_sector / sw
-                    for tk in sector_tickers[sector]:
+                    for tk in sector_tickers[sec]:
                         adjusted[tk] *= scale
+                    changed = True
 
-            # Renormalize
-            total = sum(adjusted.values())
-            if total > 0:
-                adjusted = {tk: v / total for tk, v in adjusted.items()}
-
-            # Check if compliant
-            if not self.check_trade_compliance(adjusted, sector_map, limits):
+            # Converged?
+            violations = self.check_trade_compliance(adjusted, sector_map, limits)
+            if not violations and not changed:
                 break
+
+        # Final safety clip (bounds the output regardless of convergence)
+        for tk in list(adjusted):
+            adjusted[tk] = max(0.0, min(adjusted[tk], max_stock))
 
         return adjusted
 

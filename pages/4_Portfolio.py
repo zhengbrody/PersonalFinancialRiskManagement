@@ -158,12 +158,18 @@ if ef:
     engine_ref = st.session_state.get("_engine")
     target_weights = adj_weights if adj_weights else msw
     if engine_ref:
-        violations = engine_ref.check_trade_compliance(target_weights, SECTOR_MAP, limits=st.session_state.get("_risk_limits"))
+        _user_limits = st.session_state.get("_risk_limits")
+        violations = engine_ref.check_trade_compliance(target_weights, SECTOR_MAP, limits=_user_limits)
         if violations:
             for v in violations:
                 tk_or_sec = v.get("ticker", v.get("sector", ""))
                 st.error(f"Violation: **{tk_or_sec}** ({v['actual']:.1%}) > limit ({v['limit']:.0%})")
-            corrected = engine_ref.adjust_weights_for_compliance(target_weights, SECTOR_MAP)
+            # BUG FIX: previously defaulted to DEFAULT_RISK_LIMITS here — checker
+            # and auto-corrector used different rules, producing trades that
+            # satisfied the CHECKED limits but violated the CORRECTED limits.
+            corrected = engine_ref.adjust_weights_for_compliance(
+                target_weights, SECTOR_MAP, limits=_user_limits,
+            )
             st.caption(t("compliance_corrected"))
             target_weights = corrected
         else:
