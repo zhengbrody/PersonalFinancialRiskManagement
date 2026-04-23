@@ -13,7 +13,8 @@ from app import (get_sector, SECTOR_MAP, CLR_ACCENT, CLR_WARN,
                  create_excel_report, _fetch_daily_pnl, call_llm)
 from i18n import get_translator
 from ui.components import (render_kpi_row, render_section,
-                           render_chart, render_ai_digest, render_metric_list)
+                           render_chart, render_ai_digest, render_metric_list,
+                           render_empty_state)
 
 # Render shared sidebar
 from ui.shared_sidebar import render_shared_sidebar
@@ -21,7 +22,18 @@ render_shared_sidebar()
 
 # Guard
 if not st.session_state.get("analysis_ready"):
-    st.info("Run analysis from the sidebar first.")
+    _lang = st.session_state.get("_lang", "en")
+    render_empty_state(
+        title="No analysis yet" if _lang == "en" else "暂无分析数据",
+        description=(
+            "Overview shows portfolio KPIs, cumulative returns, drawdown and cost-basis P&L. "
+            "Configure your portfolio in the sidebar and click Run Analysis to populate this page."
+            if _lang == "en" else
+            "概览页展示组合 KPI、累计收益、回撤和本金盈亏。请在侧边栏配置持仓并点击 Run Analysis 加载数据。"
+        ),
+        action_hint="Takes ~5-10 seconds (first run) / <3s (cached)"
+                   if _lang == "en" else "首次约 5-10 秒 · 缓存命中约 3 秒内",
+    )
     st.stop()
 
 lang = st.session_state.get("_lang", "en")
@@ -228,6 +240,88 @@ fig.update_layout(
     hovermode="closest",
 )
 render_chart(fig, insight="Portfolio cumulative return tracks the weighted sum of all holdings over the analysis period.")
+
+
+# ── Historical Portfolio Value (dollar time series) ─────────────────────
+# Derived from the cumulative-return series by projecting it onto the
+# user's contributed capital. Gives a dollar-denominated view of how the
+# portfolio would have evolved if the current weights had been held over
+# the analysis period.
+if meta_kpi and cumret is not None and len(cumret) > 1:
+    _base = meta_kpi.get("contributed_capital") or meta_kpi.get("cost_basis")
+    if _base and _base > 0:
+        render_section(
+            "Portfolio Value History (simulated)"
+            if lang == "en" else
+            "组合净值历史（模拟）"
+        )
+        port_value = _base * (1 + cumret)
+        peak = port_value.cummax()
+        drawdown_dollar = port_value - peak
+
+        fig_hist = go.Figure()
+        fig_hist.add_trace(go.Scatter(
+            x=port_value.index, y=port_value.values,
+            mode="lines", name="Portfolio Value",
+            line=dict(width=2.5, color=CLR_ACCENT),
+            hovertemplate="%{x|%Y-%m-%d}<br>$%{y:,.0f}<extra></extra>",
+        ))
+        fig_hist.add_trace(go.Scatter(
+            x=peak.index, y=peak.values,
+            mode="lines", name="Peak",
+            line=dict(width=1, color="#8B949E", dash="dot"),
+            hovertemplate="Peak<br>%{x|%Y-%m-%d}<br>$%{y:,.0f}<extra></extra>",
+        ))
+        fig_hist.add_hline(
+            y=_base, line_dash="dash", line_color="#64748B",
+            annotation_text=f"Contributed Capital ${_base:,.0f}",
+            annotation_position="bottom right",
+        )
+        fig_hist.update_layout(
+            yaxis_title="Portfolio $" if lang == "en" else "组合金额 $",
+            xaxis_title="",
+            height=340,
+            hovermode="x unified",
+            legend=dict(orientation="h", y=1.05, x=1, xanchor="right"),
+        )
+        render_chart(
+            fig_hist,
+            insight=(
+                f"Simulated value if current weights had been held since "
+                f"{port_value.index[0].date()}. Dashed line is contributed capital."
+                if lang == "en" else
+                f"以当前权重在 {port_value.index[0].date()} 回溯模拟的净值曲线。"
+                f"虚线为自有本金。"
+            ),
+        )
+
+        # Drawdown dollar series in a second compact chart
+        if drawdown_dollar.min() < 0:
+            fig_dd = go.Figure(go.Scatter(
+                x=drawdown_dollar.index, y=drawdown_dollar.values,
+                fill="tozeroy", mode="lines",
+                line=dict(color="#DA3633", width=1),
+                fillcolor="rgba(218, 54, 51, 0.15)",
+                hovertemplate="%{x|%Y-%m-%d}<br>-$%{customdata:,.0f}<extra></extra>",
+                customdata=-drawdown_dollar.values,
+            ))
+            fig_dd.update_layout(
+                yaxis_title="Dollar Drawdown" if lang == "en" else "美元回撤",
+                xaxis_title="",
+                height=200,
+                showlegend=False,
+                hovermode="x unified",
+            )
+            render_chart(
+                fig_dd,
+                insight=(
+                    f"Worst drawdown: ${drawdown_dollar.min():,.0f} "
+                    f"({drawdown_dollar.min() / _base:.1%} of capital)"
+                    if lang == "en" else
+                    f"最大回撤：${drawdown_dollar.min():,.0f}"
+                    f"（占本金 {drawdown_dollar.min() / _base:.1%}）"
+                ),
+            )
 
 
 # Top Risk Contributors + Sector Exposure

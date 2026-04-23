@@ -15,7 +15,7 @@ from app import (get_sector, SECTOR_MAP, CLR_ACCENT, CLR_WARN,
                  score_reddit_fomo, build_risk_context,
                  render_sentiment_tear_sheet, _safe_get_secret)
 from i18n import get_translator
-from ui.components import render_section, render_chart, render_metric_list
+from ui.components import render_section, render_chart, render_metric_list, render_empty_state
 from market_intelligence import (
     get_vix_current, fetch_vix_data, fetch_yield_curve, fetch_fear_greed,
     get_all_macro_news, fetch_fundamentals, format_fundamentals_for_display,
@@ -29,7 +29,19 @@ render_shared_sidebar()
 
 # ── Guard ────────────────────────────────────────────────────
 if not st.session_state.get("analysis_ready"):
-    st.info("Run analysis from the sidebar first.")
+    _lang = st.session_state.get("_lang", "en")
+    render_empty_state(
+        title="Markets need a portfolio to contextualize" if _lang == "en" else "市场页面需要组合数据",
+        description=(
+            "VIX, Fear & Greed, yield curve, macro news, AI sentiment and earnings call AI. "
+            "Sentiment scoring uses your holdings — run analysis to start."
+            if _lang == "en" else
+            "VIX、恐贪指数、收益率曲线、宏观新闻、AI 情绪分析、财报电话会 AI。"
+            "情绪分析基于你的持仓 — 请先运行分析。"
+        ),
+        action_hint="Crypto + equity coverage · ~30 tickers scored per run"
+                   if _lang == "en" else "覆盖加密货币 + 股票 · 每次约 30 只",
+    )
     st.stop()
 
 lang = st.session_state.get("_lang", "en")

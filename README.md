@@ -29,6 +29,26 @@
 
 ---
 
+## 📸 Screenshots
+
+<div align="center">
+
+![Landing Page](docs/screenshots/01_landing.png)
+*Landing · feature grid · personas · tech badges*
+
+![TradingView Page](docs/screenshots/02_tradingview.png)
+*Page 5 — Embedded TradingView charts + technical analysis*
+
+![Ticker Research Page](docs/screenshots/03_ticker_research.png)
+*Page 10 — Standalone any-ticker deep dive with AI recommendation*
+
+![Trading Floor Page](docs/screenshots/04_trading_floor.png)
+*Page 7 — Bloomberg-style market monitor*
+
+</div>
+
+---
+
 ## 🎯 Core Capabilities
 
 | Domain | Highlights |

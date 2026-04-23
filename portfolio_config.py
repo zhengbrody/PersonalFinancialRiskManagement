@@ -33,34 +33,34 @@ from typing import Dict, List, Any
 #   margin_eligible  default True for equity/etf, False for crypto/inverse_etf
 
 PORTFOLIO_HOLDINGS: Dict[str, Dict[str, Any]] = {
-    # Equities — margin account
-    'NVDA':  {'shares': 25.00,  'account': 'margin', 'asset_type': 'equity'},
-    'GOOGL': {'shares': 12.41,  'account': 'margin', 'asset_type': 'equity'},
-    'META':  {'shares': 6.46,   'account': 'margin', 'asset_type': 'equity'},
-    'MSFT':  {'shares': 9.19,   'account': 'margin', 'asset_type': 'equity'},
-    'TSLA':  {'shares': 9.00,   'account': 'margin', 'asset_type': 'equity'},
-    'TSM':   {'shares': 5.39,   'account': 'margin', 'asset_type': 'equity'},
-    'NFLX':  {'shares': 17.01,  'account': 'margin', 'asset_type': 'equity'},
-    'AVGO':  {'shares': 4.02,   'account': 'margin', 'asset_type': 'equity'},
-    'AXP':   {'shares': 5.00,   'account': 'margin', 'asset_type': 'equity'},
-    'INTU':  {'shares': 3.00,   'account': 'margin', 'asset_type': 'equity'},
-    'MU':    {'shares': 0.77,   'account': 'margin', 'asset_type': 'equity'},
-    'SOFI':  {'shares': 45.00,  'account': 'margin', 'asset_type': 'equity'},
-    'VST':   {'shares': 4.01,   'account': 'margin', 'asset_type': 'equity'},
-    'COST':  {'shares': 0.55,   'account': 'margin', 'asset_type': 'equity'},
-    'HOOD':  {'shares': 10.00,  'account': 'margin', 'asset_type': 'equity'},
-    'ONDS':  {'shares': 30.00,  'account': 'margin', 'asset_type': 'equity'},
-    'COPX':  {'shares': 5.00,   'account': 'margin', 'asset_type': 'etf'},
-    'AA':    {'shares': 7.01,   'account': 'margin', 'asset_type': 'equity'},
-    'QQQ':   {'shares': 2.24,   'account': 'margin', 'asset_type': 'etf'},
-    'SPY':   {'shares': 2.03,   'account': 'margin', 'asset_type': 'etf'},
-    'GLD':   {'shares': 2.53,   'account': 'margin', 'asset_type': 'etf'},
-    # Inverse leveraged ETFs — hedging instruments, NOT margin eligible
+    # Equities — margin account (avg_cost populated where user tracks entry price)
+    'NVDA':  {'shares': 25.00,  'avg_cost': 139.27, 'account': 'margin', 'asset_type': 'equity'},
+    'GOOGL': {'shares': 12.41,  'avg_cost': 170.23, 'account': 'margin', 'asset_type': 'equity'},
+    'META':  {'shares': 6.46,   'avg_cost': 592.18, 'account': 'margin', 'asset_type': 'equity'},
+    'MSFT':  {'shares': 9.19,   'avg_cost': 393.57, 'account': 'margin', 'asset_type': 'equity'},
+    'TSLA':  {'shares': 9.00,   'avg_cost': 277.74, 'account': 'margin', 'asset_type': 'equity'},
+    'TSM':   {'shares': 5.39,   'avg_cost': 181.45, 'account': 'margin', 'asset_type': 'equity'},
+    'NFLX':  {'shares': 17.01,  'avg_cost': 95.03,  'account': 'margin', 'asset_type': 'equity'},
+    'AVGO':  {'shares': 4.02,   'avg_cost': 324.19, 'account': 'margin', 'asset_type': 'equity'},
+    'AXP':   {'shares': 5.00,   'account': 'margin', 'asset_type': 'equity'},   # avg_cost not tracked
+    'INTU':  {'shares': 3.00,   'avg_cost': 476.38, 'account': 'margin', 'asset_type': 'equity'},
+    'MU':    {'shares': 0.77,   'account': 'margin', 'asset_type': 'equity'},   # avg_cost not tracked
+    'SOFI':  {'shares': 45.00,  'avg_cost': 13.80,  'account': 'margin', 'asset_type': 'equity'},
+    'VST':   {'shares': 4.01,   'avg_cost': 155.28, 'account': 'margin', 'asset_type': 'equity'},
+    'COST':  {'shares': 0.55,   'avg_cost': 918.56, 'account': 'margin', 'asset_type': 'equity'},
+    'HOOD':  {'shares': 10.00,  'avg_cost': 72.60,  'account': 'margin', 'asset_type': 'equity'},
+    'ONDS':  {'shares': 30.00,  'avg_cost': 12.09,  'account': 'margin', 'asset_type': 'equity'},
+    'COPX':  {'shares': 5.00,   'avg_cost': 79.13,  'account': 'margin', 'asset_type': 'etf'},
+    'AA':    {'shares': 7.01,   'avg_cost': 59.88,  'account': 'margin', 'asset_type': 'equity'},
+    'QQQ':   {'shares': 2.24,   'avg_cost': 557.43, 'account': 'margin', 'asset_type': 'etf'},
+    'SPY':   {'shares': 2.03,   'avg_cost': 622.08, 'account': 'margin', 'asset_type': 'etf'},
+    'GLD':   {'shares': 2.53,   'avg_cost': 345.52, 'account': 'margin', 'asset_type': 'etf'},
+    # Inverse leveraged ETFs — hedging instruments, NOT margin eligible (avg_cost not tracked)
     'SQQQ':  {'shares': 13.00,  'account': 'margin', 'asset_type': 'inverse_etf', 'margin_eligible': False},
     'SOXS':  {'shares': 10.00,  'account': 'margin', 'asset_type': 'inverse_etf', 'margin_eligible': False},
     'SPXS':  {'shares': 5.00,   'account': 'margin', 'asset_type': 'inverse_etf', 'margin_eligible': False},
 
-    # Crypto — separate wallet, never margin
+    # Crypto — separate wallet, never margin (avg_cost not tracked)
     'BTC-USD':  {'shares': 0.038, 'account': 'crypto', 'asset_type': 'crypto', 'margin_eligible': False},
     'ETH-USD':  {'shares': 0.60,  'account': 'crypto', 'asset_type': 'crypto', 'margin_eligible': False},
     'XRP-USD':  {'shares': 236,   'account': 'crypto', 'asset_type': 'crypto', 'margin_eligible': False},

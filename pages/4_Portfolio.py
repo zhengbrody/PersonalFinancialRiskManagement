@@ -21,7 +21,8 @@ from data_provider import DataProvider
 from portfolio_config import MARGIN_LOAN
 from risk_engine import RiskEngine, RiskReport
 from market_intelligence import build_ai_risk_briefing
-from ui.components import render_section, render_chart, render_ai_digest, render_kpi_row, render_metric_list
+from ui.components import (render_section, render_chart, render_ai_digest,
+                           render_kpi_row, render_metric_list, render_empty_state)
 from ui.tokens import T
 
 # Render shared sidebar
@@ -30,7 +31,20 @@ render_shared_sidebar()
 
 # ── Guard ────────────────────────────────────────────────────
 if not st.session_state.get("analysis_ready"):
-    st.info("Run analysis from the sidebar first.")
+    _lang = st.session_state.get("_lang", "en")
+    render_empty_state(
+        title="Portfolio tools need analysis data" if _lang == "en" else "组合工具需要分析数据",
+        description=(
+            "Efficient frontier, scenario simulator (-30% to +30%), compliance "
+            "auto-correction, margin monitor, and trade blotter — all driven "
+            "by your portfolio's risk profile. Run analysis from the sidebar."
+            if _lang == "en" else
+            "有效前沿、情景模拟器（-30% 至 +30%）、合规自动纠正、保证金监控、"
+            "交易下单单 — 均依赖组合风险画像。请从侧边栏运行分析。"
+        ),
+        action_hint="Markowitz optimization · per-ticker impact waterfall"
+                   if _lang == "en" else "Markowitz 优化 · 单券影响瀑布图",
+    )
     st.stop()
 
 lang = st.session_state.get("_lang", "en")
