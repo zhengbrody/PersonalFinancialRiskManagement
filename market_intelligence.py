@@ -18,12 +18,43 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+
+# ══════════════════════════════════════════════════════════════
+#  Shared HTTP session with automatic retry + backoff
+# ──────────────────────────────────────────────────────────────
+#  Used by every FMP/external call in this module. Exponential
+#  backoff on 429 (rate limit) and transient 5xx — so the user
+#  no longer sees "too many requests" bubble up on a single
+#  unlucky request. Connection pooling also saves ~50ms/call.
+# ══════════════════════════════════════════════════════════════
+
+def _build_http_session() -> requests.Session:
+    s = requests.Session()
+    retry = Retry(
+        total=3,
+        backoff_factor=1.5,  # 0 → 1.5s → 3s → 6s
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET", "HEAD"],
+        respect_retry_after_header=True,
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retry, pool_connections=10, pool_maxsize=20)
+    s.mount("https://", adapter)
+    s.mount("http://", adapter)
+    s.headers.update({"User-Agent": "MindMarketAI/1.0"})
+    return s
+
+
+_http_session = _build_http_session()
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1313,7 +1344,7 @@ def fetch_stock_news_fmp(
             results[tk] = []
             continue
         try:
-            resp = requests.get(
+            resp = _http_session.get(
                 f"{FMP_BASE}/news/stock",
                 params={
                     "symbols": tk.upper(),
@@ -1321,7 +1352,6 @@ def fetch_stock_news_fmp(
                     "apikey": fmp_key,
                 },
                 timeout=10,
-                headers={"User-Agent": "MindMarketAI/1.0"},
             )
             if resp.status_code != 200:
                 # 402 = premium-required on free tier. Fail silently so the
@@ -1388,11 +1418,10 @@ def fetch_latest_transcript_fmp(ticker: str, fmp_key: str) -> Dict:
     results: List[Dict] = []
     try:
         for yr, qt in candidates:
-            resp = requests.get(
+            resp = _http_session.get(
                 url,
                 params={"symbol": ticker.upper(), "year": yr, "quarter": qt, "apikey": fmp_key},
                 timeout=15,
-                headers={"User-Agent": "MindMarketAI/1.0"},
             )
             if resp.status_code == 402:
                 return {"error": (
@@ -1578,11 +1607,10 @@ def fetch_price_targets_fmp(ticker: str, fmp_key: str) -> Dict:
     if not fmp_key:
         return {}
     try:
-        resp = requests.get(
+        resp = _http_session.get(
             f"{FMP_BASE}/price-target-consensus",
             params={"symbol": ticker.upper(), "apikey": fmp_key},
             timeout=10,
-            headers={"User-Agent": "MindMarketAI/1.0"},
         )
         if resp.status_code != 200:
             return {}
@@ -1958,8 +1986,7 @@ def _fmp_get(path: str, fmp_key: str, params: Optional[Dict] = None, timeout: in
     try:
         url = f"{FMP_BASE}{path}"
         qs = {"apikey": fmp_key, **(params or {})}
-        resp = requests.get(url, params=qs, timeout=timeout,
-                            headers={"User-Agent": "MindMarketAI/1.0"})
+        resp = _http_session.get(url, params=qs, timeout=timeout)
         if resp.status_code == 200:
             return resp.json()
         # Classify the failure so diagnostics aren't silent
@@ -1989,11 +2016,10 @@ def fmp_validate_key(fmp_key: str) -> Dict:
     if not fmp_key:
         return {"ok": False, "error": "FMP_API_KEY not configured", "status": 0}
     try:
-        resp = requests.get(
+        resp = _http_session.get(
             f"{FMP_BASE}/profile",
             params={"symbol": "AAPL", "apikey": fmp_key},
             timeout=8,
-            headers={"User-Agent": "MindMarketAI/1.0"},
         )
         if resp.status_code == 200:
             return {"ok": True, "error": None, "status": 200}

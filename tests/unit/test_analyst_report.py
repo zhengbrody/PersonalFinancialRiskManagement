@@ -99,7 +99,7 @@ def test_fetch_analyst_report_data_assembles_structure(monkeypatch):
             ])
         return _mock_fmp_response([])
 
-    monkeypatch.setattr("market_intelligence.requests.get", fake_get)
+    monkeypatch.setattr("market_intelligence._http_session.get", fake_get)
     data = fetch_analyst_report_data("NVDA", fmp_key="dummy")
 
     assert data["ticker"] == "NVDA"
@@ -125,7 +125,7 @@ def test_fetch_analyst_report_data_handles_http_error(monkeypatch):
     def always_500(*a, **kw):
         return _mock_fmp_response({"error": "server error"}, status=500)
 
-    monkeypatch.setattr("market_intelligence.requests.get", always_500)
+    monkeypatch.setattr("market_intelligence._http_session.get", always_500)
     data = fetch_analyst_report_data("NVDA", fmp_key="dummy")
     assert data["profile"] == {}
     assert data["income_statement"] == []
@@ -222,7 +222,7 @@ def test_generate_report_returns_parsed_json(monkeypatch):
             return _mock_fmp_response([{"price": 950}])
         return _mock_fmp_response([])
 
-    monkeypatch.setattr("market_intelligence.requests.get", fake_get)
+    monkeypatch.setattr("market_intelligence._http_session.get", fake_get)
 
     # Mock Anthropic client
     class _FakeResp:
@@ -270,7 +270,7 @@ def test_generate_report_handles_fenced_json(monkeypatch):
             return _mock_fmp_response([{"price": 100}])
         return _mock_fmp_response([])
 
-    monkeypatch.setattr("market_intelligence.requests.get", fake_get)
+    monkeypatch.setattr("market_intelligence._http_session.get", fake_get)
 
     fenced = "```json\n" + json.dumps(_valid_report_json()) + "\n```"
 

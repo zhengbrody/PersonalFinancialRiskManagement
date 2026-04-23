@@ -20,7 +20,6 @@ from market_intelligence import (
     get_vix_current, fetch_vix_data, fetch_yield_curve, fetch_fear_greed,
     get_all_macro_news, fetch_fundamentals, format_fundamentals_for_display,
     fetch_reddit_sentiment_apify, format_reddit_for_llm,
-    fetch_latest_transcript_fmp, analyze_transcript_with_claude,
 )
 
 # Render shared sidebar
@@ -282,16 +281,38 @@ else:
             pass
         selected = _all_by_weight  # ALL holdings
         progress_bar = st.progress(0, text=f"Fetching news for {len(selected)} tickers...")
-        with st.spinner(f"Scoring {len(selected)} tickers with LLM..."):
-            sentiment_results = {}
-            news_data = fetch_asset_news(tuple(selected))
-            for i, tk in enumerate(selected):
-                progress_bar.progress((i + 1) / len(selected), text=f"Scoring {tk} ({i+1}/{len(selected)})...")
-                scored = score_sentiment_ollama(tk, news_data.get(tk, []), ollama_model)
-                scored["headlines"] = news_data.get(tk, [])
-                scored["weight"] = weights[tk]
-                sentiment_results[tk] = scored
-            progress_bar.empty()
+        news_data = fetch_asset_news(tuple(selected))
+
+        # Parallelize LLM scoring — each call is ~2-5s; serial means 10 tickers
+        # takes 30s+. ThreadPoolExecutor cuts that to ~6-8s. Cap workers at 5
+        # to avoid tripping provider rate limits (Claude/DeepSeek) or local
+        # Ollama's single-GPU bottleneck.
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        sentiment_results: dict = {}
+        completed = 0
+        with st.spinner(f"Scoring {len(selected)} tickers in parallel (max 5 at once)..."):
+            with ThreadPoolExecutor(max_workers=5) as ex:
+                future_to_tk = {
+                    ex.submit(score_sentiment_ollama, tk, news_data.get(tk, []), ollama_model): tk
+                    for tk in selected
+                }
+                for fut in as_completed(future_to_tk):
+                    tk = future_to_tk[fut]
+                    try:
+                        scored = fut.result()
+                    except Exception as e:
+                        scored = {
+                            "retail_sentiment_score": 5.0, "sentiment_label": "Error",
+                            "key_narrative": f"Scoring failed: {e}",
+                            "score": 5, "confidence": "Low",
+                        }
+                    scored["headlines"] = news_data.get(tk, [])
+                    scored["weight"] = weights[tk]
+                    sentiment_results[tk] = scored
+                    completed += 1
+                    progress_bar.progress(completed / len(selected),
+                                          text=f"Scored {completed}/{len(selected)}")
+        progress_bar.empty()
 
         st.session_state.sentiment_data = sentiment_results
         st.session_state.sentiment_last_run = datetime.now() if False else __import__("time").time()
@@ -331,18 +352,10 @@ else:
                 fomo_results[tk] = fomo
             st.session_state.reddit_fomo_data = fomo_results
 
-    # Show sentiment for selected ticker
     sent = st.session_state.get("sentiment_data")
-    if sent and selected_ticker in sent:
-        render_sentiment_tear_sheet(selected_ticker, sent[selected_ticker], sent[selected_ticker].get("weight", weights.get(selected_ticker, 0)), lang)
-    elif sent:
-        st.caption(
-            f"{selected_ticker} not in latest sentiment run ({len(sent)} tickers scored). Click Run Sentiment to refresh."
-            if lang == "en" else
-            f"{selected_ticker} 不在最新分析中（共评分 {len(sent)} 只）。点击 Run Sentiment 刷新。"
-        )
 
-    # Score overview bar chart
+    # Score overview bar chart — primary view: ALL holdings at a glance.
+    # Individual tear sheet moved below as a drill-down.
     if sent:
         st.markdown("")
         sent_df = pd.DataFrame([
@@ -392,72 +405,29 @@ else:
             height=min(400, 40 + 35 * len(_rows)),
         )
 
+        # ── Drill-down tear sheet for selected ticker ──────────────
+        # The selector above the sentiment table lets users deep-dive one
+        # holding; the table above is the primary cross-portfolio view.
+        if selected_ticker in sent:
+            st.markdown("")
+            render_section(
+                f"Detail — {selected_ticker}" if lang == "en" else f"明细 — {selected_ticker}",
+                collapsed=True,
+            )
+            render_sentiment_tear_sheet(
+                selected_ticker, sent[selected_ticker],
+                sent[selected_ticker].get("weight", weights.get(selected_ticker, 0)), lang,
+            )
 
-# ══════════════════════════════════════════════════════════════
-#  6. Earnings Call AI (if FMP key available)
-# ══════════════════════════════════════════════════════════════
-_fmp_key = os.environ.get("FMP_API_KEY", "") or _safe_get_secret("FMP_API_KEY")
 
-if _fmp_key and api_key_input and selected_ticker:
-    st.markdown("---")
-    render_section("Earnings Call AI" if lang == "en" else "财报电话会 AI")
-
-    if st.button("Analyze Earnings" if lang == "en" else "分析财报", key="run_transcript", type="primary"):
-        with st.spinner(f"Fetching transcript for {selected_ticker}..."):
-            transcript = fetch_latest_transcript_fmp(selected_ticker, _fmp_key)
-
-        if transcript.get("error"):
-            st.error(transcript["error"])
-        else:
-            _claude_key = api_key_input or _safe_get_secret("ANTHROPIC_API_KEY")
-            if _claude_key:
-                with st.spinner(f"Analyzing {selected_ticker} transcript..."):
-                    analysis = analyze_transcript_with_claude(selected_ticker, transcript, _claude_key)
-                if not analysis.get("error"):
-                    st.session_state._transcript_analysis = {
-                        "ticker": selected_ticker, "transcript": transcript, "analysis": analysis,
-                    }
-
-    _cached = st.session_state.get("_transcript_analysis")
-    if _cached and isinstance(_cached, dict) and _cached.get("ticker") == selected_ticker:
-        _an = _cached["analysis"]
-        _tr = _cached["transcript"]
-        st.markdown(f"**{selected_ticker}** Q{_tr.get('quarter','?')} {_tr.get('year','?')}")
-
-        _gc1, _gc2 = st.columns(2)
-        with _gc1:
-            st.metric("Management Tone", _an.get("management_tone", "N/A"))
-            st.markdown(f"**Forward Guidance:** {_an.get('forward_guidance', 'N/A')}")
-        with _gc2:
-            st.markdown(f"**CAPEX & Margins:** {_an.get('capex_and_margins', 'N/A')}")
-            st.markdown(f"**Key Risks:** {_an.get('key_risks', 'N/A')}")
-
-        # ── QoQ Sentiment Delta (if 2 quarters available) ──
-        _deltas = _an.get("sentiment_deltas", [])
-        if _deltas:
-            from ui.components import render_sentiment_deltas
-            _prev_label = f"Q{_tr.get('prev_quarter','?')} {_tr.get('prev_year','?')}"
-            _curr_label = f"Q{_tr.get('quarter','?')} {_tr.get('year','?')}"
-            render_sentiment_deltas(_deltas, prev_label=_prev_label, curr_label=_curr_label)
-        elif _an.get("has_qoq") is False and _tr.get("prev_content"):
-            st.caption("QoQ analysis requested but no marginal changes detected by Claude.")
-
-        # Q&A Highlights
-        _qa = _an.get("qa_highlights", [])
-        if _qa:
-            with render_section("Q&A Highlights" if lang == "en" else "Q&A 亮点", collapsed=True):
-                for qa in _qa[:3]:
-                    if isinstance(qa, dict):
-                        st.markdown(f"**Q:** {qa.get('question', '')}")
-                        st.markdown(f"**A:** {qa.get('response', '')}")
-                        st.markdown("---")
-
-        with render_section("Full Transcript" if lang == "en" else "完整逐字稿", collapsed=True):
-            st.text(_tr.get("content", "")[:5000])
+# Earnings Call AI used to live here; it now lives (as the full Institutional
+# Analyst Report) on the Ticker Research page alongside fundamentals, peer
+# comps, and analyst ratings. Keeping it here duplicated work and split the
+# data flow across two pages.
 
 
 # ══════════════════════════════════════════════════════════════
-#  7. Reddit FOMO Panel (Expander)
+#  6. Reddit FOMO Panel (Expander)
 # ══════════════════════════════════════════════════════════════
 reddit_fomo = st.session_state.get("reddit_fomo_data")
 if reddit_fomo:

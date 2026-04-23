@@ -101,6 +101,16 @@ with tab_chain:
     if spot > 0:
         st.caption(f"Current Price: **${spot:,.2f}**")
 
+    # yfinance sources option chain data from Yahoo Finance's public endpoint,
+    # which serves end-of-previous-session snapshots. Volume resets intraday
+    # but OI updates only once per day after settlement. Users comparing to
+    # their broker's real-time feed will see divergence — this is a data
+    # source limitation, not a bug in the app.
+    st.caption(
+        "⚠️ Volume & Open Interest are from yfinance end-of-previous-session snapshots. "
+        "For real-time intraday V/OI, use your broker or a paid feed (Polygon / Tradier)."
+    )
+
     if selected_exp:
         with st.spinner("Loading chain with Greeks..."):
             try:

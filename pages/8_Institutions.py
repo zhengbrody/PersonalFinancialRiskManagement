@@ -470,6 +470,11 @@ with tab_options:
         subtitle="Put/call ratios, unusual volume, and large premium trades for portfolio holdings",
     )
 
+    st.caption(
+        "⚠️ Volume & Open Interest come from yfinance end-of-previous-session snapshots. "
+        "Intraday real-time flow requires a paid feed (Polygon, Tradier, CBOE)."
+    )
+
     try:
         from options_flow import (
             get_put_call_ratio,
