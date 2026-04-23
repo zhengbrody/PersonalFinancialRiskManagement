@@ -133,12 +133,16 @@ def render_shared_sidebar():
                         if contributed_capital > 0 else None
                     )
 
-                    # Optional position P&L (only if avg_cost set on holdings)
+                    # Optional position P&L (only if avg_cost set on holdings).
+                    # Coverage computed by market value, not ticker count.
                     position_pnl_dollar = None
                     position_pnl_pct = None
                     position_cost_info = None
                     try:
-                        pc_info = _pc.position_cost_summary() if hasattr(_pc, "position_cost_summary") else None
+                        pc_info = (
+                            _pc.position_cost_summary(market_values=values)
+                            if hasattr(_pc, "position_cost_summary") else None
+                        )
                         if pc_info and pc_info["total_position_cost"] > 0:
                             position_cost_info = pc_info
                             known = set(pc_info["tickers_with_cost"])

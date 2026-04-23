@@ -147,22 +147,48 @@ if meta_kpi and meta_kpi.get("contributed_capital", meta_kpi.get("cost_basis", 0
     _pos_info = meta_kpi.get("position_cost_info")
     if _pos_pnl is not None and _pos_info:
         _pc_c = "positive" if _pos_pnl >= 0 else "negative"
-        cov = _pos_info.get("coverage_pct", 0)
+        # Prefer MV-weighted coverage (primary UX metric); fall back to
+        # ticker-count ratio if market values weren't passed in.
+        cov_mv = _pos_info.get("coverage_by_mv_pct")
+        cov_ct = _pos_info.get("coverage_by_count_pct", _pos_info.get("coverage_pct", 0))
+        cov_display = cov_mv if cov_mv is not None else cov_ct
+        missing_n = len(_pos_info.get("tickers_missing_cost", []))
+        n_known = len(_pos_info.get("tickers_with_cost", []))
+
         render_kpi_row([
             {"label": "Position Cost" if lang == "en" else "持仓成本",
              "value": f"${_pos_info['total_position_cost']:,.0f}",
-             "tooltip": f"Σ(shares × avg_cost) across {len(_pos_info['tickers_with_cost'])} tickers"},
+             "tooltip": f"Σ(shares × avg_cost) across {n_known} tickers"},
             {"label": "Position P&L" if lang == "en" else "持仓盈亏",
              "value": f"${_pos_pnl:+,.0f}",
              "delta": f"{_pos_pnl_pct:+.1%}" if _pos_pnl_pct is not None else None,
              "delta_color": _pc_c,
              "tooltip": "Unrealized gain/loss on positions (excludes margin cost)"
                         if lang == "en" else "持仓浮动盈亏（不含融资成本）"},
-            {"label": "Cost Coverage" if lang == "en" else "成本覆盖",
-             "value": f"{cov:.0%}",
-             "tooltip": f"{len(_pos_info['tickers_missing_cost'])} tickers missing avg_cost"},
+            {"label": "Coverage (by $)" if lang == "en" else "成本覆盖（按市值）",
+             "value": f"{cov_display:.0%}" if cov_display is not None else "—",
+             "tooltip": (
+                 f"{n_known} of {n_known + missing_n} tickers tracked by market value. "
+                 f"Ticker count: {cov_ct:.0%}."
+                 if lang == "en" else
+                 f"按市值权重 {n_known}/{n_known + missing_n} 已追踪。"
+                 f"按 ticker 计数: {cov_ct:.0%}"
+             )},
             {"label": " ", "value": " "},  # alignment spacer
         ])
+
+        # Always surface the missing list when anything is missing, so the
+        # user can see exactly which tickers to backfill.
+        if missing_n > 0:
+            _missing = _pos_info.get("tickers_missing_cost", [])
+            st.caption(
+                f"🔍 Missing `avg_cost` for **{missing_n}** ticker(s): "
+                f"{', '.join(f'`{t}`' for t in _missing)}. "
+                f"Add them in portfolio_config.py to raise coverage."
+                if lang == "en" else
+                f"🔍 有 **{missing_n}** 只持仓缺少 `avg_cost`：{', '.join(f'`{t}`' for t in _missing)}。"
+                f"在 portfolio_config.py 补齐以提高覆盖率。"
+            )
     elif _pos_info and _pos_info.get("tickers_missing_cost"):
         # Friendly hint — user can add avg_cost to holdings to unlock metric B
         st.caption(
@@ -243,10 +269,9 @@ render_chart(fig, insight="Portfolio cumulative return tracks the weighted sum o
 
 
 # ── Historical Portfolio Value (dollar time series) ─────────────────────
-# Derived from the cumulative-return series by projecting it onto the
-# user's contributed capital. Gives a dollar-denominated view of how the
-# portfolio would have evolved if the current weights had been held over
-# the analysis period.
+# cumret from data_provider is ALREADY a normalized value index
+# (1 + daily_return).cumprod() starting around 1.0 — NOT a return rate.
+# So dollar-denominated value = base_capital * cumret  (not base*(1+cumret)).
 if meta_kpi and cumret is not None and len(cumret) > 1:
     _base = meta_kpi.get("contributed_capital") or meta_kpi.get("cost_basis")
     if _base and _base > 0:
@@ -255,7 +280,8 @@ if meta_kpi and cumret is not None and len(cumret) > 1:
             if lang == "en" else
             "组合净值历史（模拟）"
         )
-        port_value = _base * (1 + cumret)
+        # cumret IS the value multiplier; direct projection onto base capital.
+        port_value = _base * cumret
         peak = port_value.cummax()
         drawdown_dollar = port_value - peak
 

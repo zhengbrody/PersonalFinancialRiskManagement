@@ -9,7 +9,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.30%2B-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)](https://streamlit.io)
 [![Claude](https://img.shields.io/badge/AI-Claude_%7C_DeepSeek_%7C_Ollama-blueviolet?style=flat-square&logo=anthropic)](https://anthropic.com)
-[![Tests](https://img.shields.io/badge/Tests-522_passing-brightgreen?style=flat-square)]()
+[![CI](https://github.com/zhengbrody/PersonalFinancialRiskManagement/actions/workflows/ci.yml/badge.svg)](https://github.com/zhengbrody/PersonalFinancialRiskManagement/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker&logoColor=white)]()
 
@@ -56,7 +56,7 @@
 | 🛡️ **Risk Engine** | Monte Carlo VaR/CVaR · EWMA covariance (λ=0.94) · Component VaR · Stress testing · Margin-call distance |
 | 📈 **Factor Models** | 6-factor OLS with t-statistics · Macro sensitivities (rates/USD/oil) · Barra PCA attribution |
 | 🎲 **Options Lab** | Black-Scholes + full Greeks · Newton-Raphson IV · 10 strategy builders · 3D IV surface |
-| 🏛️ **Institutional Intel** | SEC 13F parser (31 filers) · Smart-money overlap · Crowding detection · Unusual options flow |
+| 🏛️ **Institutional Intel** | SEC 13F parser (top ~30 filers) · Smart-money overlap · Crowding detection · Unusual options flow |
 | 🔄 **Regime & Backtest** | HMM (Gaussian mixture EM) · Vectorized backtesting · Brinson-Hood-Beebower attribution |
 | 🤖 **AI Digests** | Narrative summaries on every page (Claude / DeepSeek / Ollama with auto-detection) |
 | 🌏 **Bilingual UI** | 500+ labels across EN/中文 · dark-mode design system |
@@ -169,7 +169,7 @@ FMP_API_KEY       = "..."
 | **Quant** | NumPy · pandas · SciPy (`optimize`, `stats`) |
 | **Data** | yfinance · SEC EDGAR · FMP API · CNN Fear & Greed · RSS feeds |
 | **AI** | Anthropic Claude · DeepSeek · Ollama (local) |
-| **Testing** | pytest (522 tests) · pytest-cov · pytest-asyncio |
+| **Testing** | pytest · pytest-cov · pytest-asyncio (unit · integration · performance) |
 | **Quality** | black · ruff · mypy · pre-commit · GitHub Actions CI |
 | **Logging** | structlog · python-json-logger |
 | **Deploy** | Docker · docker-compose · Streamlit Cloud |
@@ -189,7 +189,7 @@ python -m pytest tests/ --no-cov
 python -m pytest tests/unit/test_risk_engine.py -v
 ```
 
-**522 tests** across unit / integration / performance suites.
+Unit / integration / performance suites. Count the current suite with `python -m pytest tests/ --collect-only -q | tail -1`.
 
 ---
 
@@ -221,7 +221,7 @@ MindMarket AI/
 │   ├── floating_chat.py            # Persistent AI chat
 │   └── tradingview.py              # TradingView widget integration
 │
-├── tests/                          # 522 tests
+├── tests/                          # unit · integration · performance
 │   ├── unit/ · integration/ · performance/
 │
 ├── docs/
@@ -273,7 +273,7 @@ MIT. See [LICENSE](LICENSE).
 | 🛡️ **风险引擎** | 蒙特卡洛 VaR/CVaR · EWMA 协方差（λ=0.94）· 边际 VaR · 压力测试 · 保证金追缴距离 |
 | 📈 **因子模型** | 6 因子 OLS（带 t 统计量）· 宏观敏感度（利率/美元/原油）· Barra PCA 归因 |
 | 🎲 **期权实验室** | Black-Scholes + 希腊字母 · Newton-Raphson IV · 10 种策略构建器 · 3D 隐波曲面 |
-| 🏛️ **机构情报** | SEC 13F 解析器（31 家机构）· Smart money 重合 · 拥挤度检测 · 异常期权流 |
+| 🏛️ **机构情报** | SEC 13F 解析器（约 30 家头部机构）· Smart money 重合 · 拥挤度检测 · 异常期权流 |
 | 🔄 **状态识别 & 回测** | HMM（高斯混合 EM）· 向量化回测 · Brinson-Hood-Beebower 归因 |
 | 🤖 **AI 摘要** | 每页独立的 AI 叙述（Claude / DeepSeek / Ollama 自动检测） |
 | 🌏 **双语 UI** | 500+ 标签覆盖英文/中文 · 暗色主题设计系统 |
@@ -322,7 +322,7 @@ Fork → 连接到 [share.streamlit.io](https://share.streamlit.io) → 配置 s
 python -m pytest tests/ -v
 ```
 
-**522 个测试** 覆盖单元 / 集成 / 性能。
+覆盖单元 / 集成 / 性能测试套件。使用 `python -m pytest tests/ --collect-only -q | tail -1` 查询当前测试数量。
 
 ---
 

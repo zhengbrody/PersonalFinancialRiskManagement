@@ -88,6 +88,70 @@ def test_position_cost_summary_without_avg_cost():
         assert info["coverage_pct"] == 0.0
 
 
+def test_position_cost_summary_mv_coverage(monkeypatch):
+    """coverage_by_mv_pct should weight by market value, not ticker count."""
+    test_holdings = {
+        "BIG1": {"shares": 10, "avg_cost": 100.0, "account": "margin"},   # known
+        "BIG2": {"shares": 5,  "avg_cost": 200.0, "account": "margin"},   # known
+        "SMALL": {"shares": 1, "account": "margin"},                       # unknown
+    }
+    monkeypatch.setattr(_pc, "PORTFOLIO_HOLDINGS", test_holdings)
+    market_values = {
+        "BIG1": 1000.0,   # covered
+        "BIG2": 1000.0,   # covered
+        "SMALL": 10.0,    # missing avg_cost
+    }
+    info = _pc.position_cost_summary(market_values=market_values)
+
+    # 2 of 3 tickers have avg_cost -> count coverage = 66.7%
+    assert info["coverage_by_count_pct"] == pytest.approx(2 / 3)
+
+    # But BIG1+BIG2 are 99.5% of MV ($2000 of $2010)
+    assert info["coverage_by_mv_pct"] == pytest.approx(2000.0 / 2010.0, rel=1e-9)
+    assert info["mv_covered"] == pytest.approx(2000.0)
+    assert info["mv_total"] == pytest.approx(2010.0)
+
+    # Missing list correctness
+    assert info["tickers_missing_cost"] == ["SMALL"]
+    assert set(info["tickers_with_cost"]) == {"BIG1", "BIG2"}
+
+
+def test_position_cost_summary_mv_none_without_market_values():
+    """coverage_by_mv_pct must be None (not 0) when market_values not provided."""
+    info = _pc.position_cost_summary()  # no market_values
+    assert info["coverage_by_mv_pct"] is None
+    assert info["mv_covered"] is None
+    assert info["mv_total"] is None
+    # Legacy field still present
+    assert "coverage_pct" in info
+
+
+def test_position_cost_summary_mv_coverage_exposes_small_tracked_tickers(monkeypatch):
+    """
+    The key finding: if a small position has avg_cost but huge positions don't,
+    ticker-count coverage looks healthy while MV coverage exposes the gap.
+    """
+    test_holdings = {
+        "HUGE_UNTRACKED": {"shares": 100, "account": "margin"},           # no avg_cost
+        "TINY_TRACKED1": {"shares": 1, "avg_cost": 10.0, "account": "margin"},
+        "TINY_TRACKED2": {"shares": 1, "avg_cost": 10.0, "account": "margin"},
+    }
+    monkeypatch.setattr(_pc, "PORTFOLIO_HOLDINGS", test_holdings)
+    market_values = {
+        "HUGE_UNTRACKED": 100_000.0,
+        "TINY_TRACKED1": 50.0,
+        "TINY_TRACKED2": 50.0,
+    }
+    info = _pc.position_cost_summary(market_values=market_values)
+
+    # Ticker count: 2/3 = 66% — looks fine
+    assert info["coverage_by_count_pct"] == pytest.approx(2 / 3)
+
+    # But by MV: 100 / 100100 = 0.1% — exposes that we're missing the whale
+    assert info["coverage_by_mv_pct"] == pytest.approx(100.0 / 100_100.0, rel=1e-9)
+    assert info["coverage_by_mv_pct"] < 0.01  # under 1% — prompts the user
+
+
 def test_position_cost_summary_with_partial_avg_cost(monkeypatch):
     """When some holdings have avg_cost, summary must aggregate correctly."""
     test_holdings = {

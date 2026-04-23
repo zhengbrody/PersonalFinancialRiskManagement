@@ -311,14 +311,17 @@ def fetch_live_weights() -> tuple[dict, dict]:
 
     # Metric B: Position P&L — "how did the positions themselves do?"
     # Independent of margin. Only available if avg_cost is set on holdings.
+    # Coverage now computed by market value (primary), not ticker count.
     position_cost_info = None
     position_pnl_dollar = None
     position_pnl_pct = None
     try:
-        pc_info = _pc.position_cost_summary() if hasattr(_pc, "position_cost_summary") else None
+        pc_info = (
+            _pc.position_cost_summary(market_values=values)
+            if hasattr(_pc, "position_cost_summary") else None
+        )
         if pc_info and pc_info["total_position_cost"] > 0:
             position_cost_info = pc_info
-            # Sum market value of the tickers with known cost only
             known = set(pc_info["tickers_with_cost"])
             covered_long = sum(v for tk, v in values.items() if tk in known)
             position_pnl_dollar = covered_long - pc_info["total_position_cost"]
@@ -395,6 +398,7 @@ def run_portfolio_analysis(
     mc_sims: int,
     mc_horizon: int,
     risk_free_rate_fallback: float,
+    market_shock: float = -0.10,
 ) -> tuple[RiskReport, pd.DataFrame, pd.Series]:
     """
     Run complete portfolio risk analysis with caching.
@@ -405,6 +409,9 @@ def run_portfolio_analysis(
         mc_sims: Number of Monte Carlo simulations
         mc_horizon: Horizon in days for MC
         risk_free_rate_fallback: Risk-free rate
+        market_shock: Stress-test benchmark shock (e.g. -0.10 = -10%).
+                      Propagated into RiskEngine so report.stress_loss
+                      matches what the UI / AI / export show the user.
 
     Returns:
         Tuple of (RiskReport, prices DataFrame, cumulative returns Series)
@@ -442,6 +449,7 @@ def run_portfolio_analysis(
             mc_simulations=mc_sims,
             mc_horizon=mc_horizon,
             risk_free_rate_fallback=risk_free_rate_fallback,
+            market_shock=market_shock,
         )
         report = engine.run()
 
@@ -484,16 +492,19 @@ def build_engine_ref(
     mc_horizon: int,
     risk_free_rate_fallback: float,
     prices: pd.DataFrame,
+    market_shock: float = -0.10,
 ) -> RiskEngine:
     """Reconstruct a RiskEngine from cached price data for downstream operations."""
     dp = DataProvider(weights, period_years=period_years, holdings=_pc.PORTFOLIO_HOLDINGS)
     dp._prices = prices.copy()
-    dp._returns = np.log(dp._prices / dp._prices.shift(1)).dropna()
+    # Use SIMPLE returns (project-wide convention), not log.
+    dp._returns = dp._prices.pct_change().dropna()
     return RiskEngine(
         dp,
         mc_simulations=mc_sims,
         mc_horizon=mc_horizon,
         risk_free_rate_fallback=risk_free_rate_fallback,
+        market_shock=market_shock,
     )
 
 
@@ -1363,7 +1374,8 @@ if run_btn:
         try:
             with st.spinner("正在下载市场数据（可能需要30-60秒）..."):
                 report, prices, cumret = run_portfolio_analysis(
-                    weights_json, period_years, mc_sims, mc_horizon, risk_free_fallback,
+                    weights_json, period_years, mc_sims, mc_horizon,
+                    risk_free_fallback, market_shock,
                 )
             show_success(
                 f"成功加载 {len(prices.columns)} 个ticker的数据",
@@ -1397,7 +1409,8 @@ if run_btn:
         try:
             with st.spinner("正在构建风险引擎..."):
                 engine = build_engine_ref(
-                    weights, period_years, mc_sims, mc_horizon, risk_free_fallback, prices,
+                    weights, period_years, mc_sims, mc_horizon,
+                    risk_free_fallback, prices, market_shock,
                 )
                 st.session_state._engine = engine
 

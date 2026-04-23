@@ -51,6 +51,9 @@ class RiskReport:
     # 压力测试
     stress_loss: float = 0.0
     stress_asset_losses: Dict[str, float] = field(default_factory=dict)
+    # Actual market_shock used when computing stress_loss (so UI/AI/exports
+    # report the same number the engine used, not a mismatched default).
+    stress_market_shock: float = -0.10
     # 回撤序列
     drawdown_series: Optional[pd.Series] = None
     # 成分VaR贡献度
@@ -102,12 +105,17 @@ class RiskEngine:
         mc_simulations: int = 10_000,
         mc_horizon: int = 21,
         risk_free_rate_fallback: float = 0.045,
+        market_shock: float = -0.10,
     ):
         self.dp = data_provider
         self.benchmark_ticker = benchmark_ticker
         self.mc_simulations = mc_simulations
         self.mc_horizon = mc_horizon
         self.risk_free_rate_fallback = max(float(risk_free_rate_fallback), 0.0)
+        # Stress-test shock applied to the benchmark when deriving per-asset
+        # losses (asset_loss = beta * market_shock). Sidebar-configurable.
+        # Clamped to [-0.90, 0.0] — positive shocks aren't stress scenarios.
+        self.market_shock = max(-0.90, min(0.0, float(market_shock)))
         self._report: Optional[RiskReport] = None
 
     # ══════════════════════════════════════════════════════════
@@ -182,10 +190,15 @@ class RiskEngine:
         report.factor_betas = factor_result['betas']
         report.factor_betas_significance = factor_result['significance']
 
-        # ── 压力测试 ─────────────────────────────────────────
-        stress_loss, asset_losses = self._stress_test(returns, weights)
+        # ── 压力测试 (uses user-configured market_shock, not default) ───
+        stress_loss, asset_losses = self._stress_test(
+            returns, weights, market_shock=self.market_shock,
+        )
         report.stress_loss = stress_loss
         report.stress_asset_losses = asset_losses
+        # Record the shock actually used so downstream UI/AI/exports
+        # can reference the same number.
+        report.stress_market_shock = self.market_shock
 
         # ── 成分 VaR ─────────────────────────────────────────
         report.component_var_pct = self._component_var(ewma_cov_daily, weights, returns.columns)

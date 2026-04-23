@@ -17,7 +17,7 @@ Position metadata is optional — minimum requirement is `shares`. Call
 Run `validate_portfolio_config()` at app start for a list of issues.
 """
 
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -163,27 +163,60 @@ def get_holding(ticker: str) -> Dict[str, Any]:
     }
 
 
-def position_cost_summary() -> Dict[str, Any]:
+def position_cost_summary(market_values: Optional[Dict[str, float]] = None) -> Dict[str, Any]:
     """
-    Aggregate per-position cost (shares * avg_cost) across tickers that have
-    `avg_cost` set. Tickers without avg_cost are listed separately so the UI
-    can tell the user which need backfilling for real P&L.
+    Aggregate per-position cost (shares * avg_cost) across tickers with avg_cost.
+    Tickers without avg_cost are listed separately so the UI can prompt the
+    user to backfill them.
+
+    Coverage metrics (two flavors — UI should prefer by-MV):
+      - coverage_by_count_pct : ticker-count ratio (legacy; misleading when
+                                a few big positions have no avg_cost).
+      - coverage_by_mv_pct    : market-value-weighted coverage, using the
+                                caller-supplied `market_values` dict.
+                                Computed as Σ(MV of known) / Σ(MV of all).
+                                Only meaningful when market_values is provided.
+
+    Parameters
+    ----------
+    market_values : dict[str, float] or None
+        Ticker -> current market value (price × shares). When omitted,
+        coverage_by_mv_pct is None.
     """
-    total = 0.0
+    total_cost = 0.0
     known, unknown = [], []
     for tk, h in PORTFOLIO_HOLDINGS.items():
         avg = h.get("avg_cost")
         shares = h.get("shares", 0)
         if avg is not None and avg > 0 and shares > 0:
-            total += float(shares) * float(avg)
+            total_cost += float(shares) * float(avg)
             known.append(tk)
         else:
             unknown.append(tk)
+
+    total = max(len(PORTFOLIO_HOLDINGS), 1)
+    coverage_by_count_pct = len(known) / total
+
+    coverage_by_mv_pct = None
+    mv_known = None
+    mv_total = None
+    if market_values:
+        mv_known = sum(float(market_values.get(tk, 0.0)) for tk in known)
+        mv_total = sum(float(v) for v in market_values.values() if v)
+        if mv_total > 0:
+            coverage_by_mv_pct = mv_known / mv_total
+
     return {
-        "total_position_cost": total,
+        "total_position_cost": total_cost,
         "tickers_with_cost": known,
         "tickers_missing_cost": unknown,
-        "coverage_pct": len(known) / max(len(PORTFOLIO_HOLDINGS), 1),
+        # MV-weighted coverage (primary UX metric)
+        "coverage_by_mv_pct": coverage_by_mv_pct,
+        "mv_covered": mv_known,
+        "mv_total": mv_total,
+        # Ticker-count coverage (kept for back-compat, de-emphasized)
+        "coverage_by_count_pct": coverage_by_count_pct,
+        "coverage_pct": coverage_by_count_pct,  # legacy alias
     }
 
 
