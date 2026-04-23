@@ -119,7 +119,7 @@ class TestDataProviderPipeline:
 class TestFullRiskPipeline:
     """DataProvider → RiskEngine.run() 完整管道"""
 
-    @patch("risk_engine.yf.download", side_effect=_mock_yf_download)
+    @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     def test_run_produces_valid_report(self, mock_dp, mock_re, weights):
         dp = DataProvider(weights, period_years=2)
@@ -140,7 +140,7 @@ class TestFullRiskPipeline:
         # Max drawdown should be negative
         assert report.max_drawdown <= 0
 
-    @patch("risk_engine.yf.download", side_effect=_mock_yf_download)
+    @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     def test_report_contains_all_fields(self, mock_dp, mock_re, weights):
         dp = DataProvider(weights, period_years=2)
@@ -156,7 +156,7 @@ class TestFullRiskPipeline:
         assert isinstance(report.betas, dict)
         assert isinstance(report.stress_asset_losses, dict)
 
-    @patch("risk_engine.yf.download", side_effect=_mock_yf_download)
+    @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     def test_report_caching(self, mock_dp, mock_re, weights):
         """run() called twice should return the cached report."""
@@ -170,7 +170,7 @@ class TestFullRiskPipeline:
 class TestMarginCall:
     """保证金预警计算"""
 
-    @patch("risk_engine.yf.download", side_effect=_mock_yf_download)
+    @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     def test_no_margin(self, mock_dp, mock_re, weights):
         dp = DataProvider(weights)
@@ -180,7 +180,7 @@ class TestMarginCall:
         assert result["leverage"] == 1.0
         assert result["distance_to_call_pct"] == float("inf")
 
-    @patch("risk_engine.yf.download", side_effect=_mock_yf_download)
+    @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     def test_with_margin(self, mock_dp, mock_re, weights):
         dp = DataProvider(weights)
@@ -195,7 +195,7 @@ class TestMarginCall:
 class TestComplianceWorkflow:
     """风控合规检查集成测试"""
 
-    @patch("risk_engine.yf.download", side_effect=_mock_yf_download)
+    @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     def test_violation_detected(self, mock_dp, mock_re, weights):
         dp = DataProvider(weights)
@@ -207,7 +207,7 @@ class TestComplianceWorkflow:
         assert len(violations) > 0
         assert any(v["ticker"] == "NVDA" for v in violations)
 
-    @patch("risk_engine.yf.download", side_effect=_mock_yf_download)
+    @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     def test_sector_violation(self, mock_dp, mock_re):
         weights = {"NVDA": 0.15, "AVGO": 0.15, "TSM": 0.15, "SPY": 0.55}
@@ -218,24 +218,31 @@ class TestComplianceWorkflow:
         sector_violations = [v for v in violations if v["rule"] == "max_sector_weight"]
         assert len(sector_violations) > 0
 
-    @patch("risk_engine.yf.download", side_effect=_mock_yf_download)
+    @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     def test_adjust_weights(self, mock_dp, mock_re):
+        # With max_single_stock=0.15 and max_sector=0.30 (the defaults), the
+        # input below has every position over the per-stock cap — the
+        # feasible solution caps all three at 0.15 and leaves the 0.55
+        # residual as implicit cash. We explicitly do NOT renormalize back
+        # to 1.0 since that would re-violate the caps we just enforced.
         weights = {"NVDA": 0.50, "SPY": 0.30, "GLD": 0.20}
         dp = DataProvider(weights)
         engine = RiskEngine(dp, mc_simulations=1000)
         sector_map = {"NVDA": "Tech", "SPY": "ETF", "GLD": "Commodity"}
         adjusted = engine.adjust_weights_for_compliance(weights, sector_map)
-        # After adjustment, weights should sum to ~1
-        assert abs(sum(adjusted.values()) - 1.0) < 0.01
-        # NVDA should have been reduced from 0.50
+        # Every position respects the per-stock cap
+        assert all(w <= 0.15 + 1e-9 for w in adjusted.values())
+        # NVDA was reduced from 0.50
         assert adjusted["NVDA"] < 0.50
+        # Feasibility: sum stays ≤ 1 (residual is cash, not an error)
+        assert sum(adjusted.values()) <= 1.0 + 1e-9
 
 
 class TestEfficientFrontier:
     """有效前沿计算"""
 
-    @patch("risk_engine.yf.download", side_effect=_mock_yf_download)
+    @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     def test_frontier_structure(self, mock_dp, mock_re, weights):
         dp = DataProvider(weights, period_years=2)
