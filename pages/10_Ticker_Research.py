@@ -843,6 +843,111 @@ CONFIDENCE: [High / Medium / Low]"""
             else "数据不足，无法生成 AI 分析。"
         )
 
+    # ══════════════════════════════════════════════════════════
+    #  10. Institutional Analyst Report — full IB-grade research note
+    # ══════════════════════════════════════════════════════════
+    from ui.components import render_analyst_report, render_unified_error
+    from ui.shared_sidebar import _safe_get_secret
+
+    st.markdown("---")
+    render_section(
+        "🏛️ Institutional Analyst Report" if lang == "en" else "🏛️ 投行分析报告",
+        subtitle=(
+            "Comprehensive equity research note combining earnings, financials, "
+            "valuation methods, peer comparison, and top-bank views."
+            if lang == "en" else
+            "综合研报：财报电话会、财务报表、估值方法、同业对比、顶级投行观点。"
+        ),
+    )
+
+    # Resolve both keys (FMP required for data, Anthropic required for analysis)
+    _anth_key = (
+        st.session_state.get("_api_key_input")
+        or _safe_get_secret("ANTHROPIC_API_KEY")
+        or os.environ.get("ANTHROPIC_API_KEY", "")
+    )
+    _fmp_key_for_report = (
+        fmp_key
+        or _safe_get_secret("FMP_API_KEY")
+        or os.environ.get("FMP_API_KEY", "")
+    )
+    _can_generate = bool(_anth_key) and bool(_fmp_key_for_report)
+
+    if not _can_generate:
+        missing = []
+        if not _fmp_key_for_report: missing.append("FMP_API_KEY")
+        if not _anth_key: missing.append("ANTHROPIC_API_KEY")
+        st.info(
+            f"🔑 Configure {' + '.join(missing)} in the sidebar or secrets.toml "
+            f"to unlock the institutional analyst report."
+            if lang == "en" else
+            f"🔑 在侧边栏或 secrets.toml 中配置 {' + '.join(missing)} 以解锁投行分析报告。"
+        )
+    else:
+        report_key = f"_analyst_report_{ticker.upper()}"
+        cached_report = st.session_state.get(report_key)
+
+        bcol1, bcol2 = st.columns([1, 3])
+        with bcol1:
+            _btn_label = (
+                ("Regenerate Report" if cached_report else "Generate Report")
+                if lang == "en" else
+                ("重新生成报告" if cached_report else "生成分析报告")
+            )
+            gen_clicked = st.button(
+                _btn_label, key="generate_analyst_report", type="primary",
+                use_container_width=True,
+            )
+        with bcol2:
+            st.caption(
+                "~30-60s. Fetches 4Q of statements, peer comps, analyst actions, earnings call + sends to Claude."
+                if lang == "en" else
+                "约 30-60 秒。获取 4 个季度财务报表、同业对比、分析师评级变更、财报电话会，并发送给 Claude。"
+            )
+
+        if gen_clicked:
+            from market_intelligence import generate_analyst_report
+            with st.spinner(
+                f"📊 Aggregating institutional data for {ticker.upper()}..."
+                if lang == "en" else
+                f"📊 正在聚合 {ticker.upper()} 的机构级数据..."
+            ):
+                result = generate_analyst_report(
+                    ticker=ticker.upper(),
+                    fmp_key=_fmp_key_for_report,
+                    anthropic_key=_anth_key,
+                    claude_model="claude-sonnet-4-5",
+                )
+            if result.get("error"):
+                render_unified_error(
+                    message="Analyst report generation failed"
+                            if lang == "en" else
+                            "分析报告生成失败",
+                    detail=result.get("error"),
+                    suggestion=(
+                        "Check that both FMP and Anthropic API keys are valid, "
+                        "and that the ticker exists in FMP's database."
+                        if lang == "en" else
+                        "确认 FMP 和 Anthropic API key 有效，且该 ticker 存在于 FMP 数据库中。"
+                    ),
+                )
+            else:
+                st.session_state[report_key] = result["report"]
+                st.success(
+                    "Report generated successfully."
+                    if lang == "en" else
+                    "报告生成成功。"
+                )
+                cached_report = result["report"]
+
+        if cached_report:
+            cur_px = None
+            try:
+                cur_px = float(research.get("fundamentals", {}).get("price", 0)) or None
+            except Exception:
+                pass
+            render_analyst_report(cached_report, ticker.upper(), current_price=cur_px)
+
 except Exception as e:
     st.error(
         f"An error occurred while rendering research for **{ticker}**: {str(e)}"

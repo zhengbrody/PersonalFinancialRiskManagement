@@ -1886,3 +1886,356 @@ def fetch_ticker_research(ticker: str, fmp_key: str = "") -> Dict:
         result["summary_context"] = f"Research data for {ticker} (summary generation failed)"
 
     return result
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  10. Institutional Analyst Report
+#      Aggregates FMP financial-statement + ratio + peer data and asks Claude
+#      to produce a structured investment-banking equity research note.
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _fmp_get(path: str, fmp_key: str, params: Optional[Dict] = None, timeout: int = 12):
+    """Thin GET wrapper that swallows all exceptions and returns None."""
+    if not fmp_key:
+        return None
+    try:
+        url = f"{FMP_BASE}{path}"
+        qs = {"apikey": fmp_key, **(params or {})}
+        resp = requests.get(url, params=qs, timeout=timeout,
+                            headers={"User-Agent": "MindMarketAI/1.0"})
+        if resp.status_code != 200:
+            return None
+        return resp.json()
+    except Exception as e:
+        logger.info("fmp.get_failed", path=path, error=str(e))
+        return None
+
+
+def fetch_analyst_report_data(ticker: str, fmp_key: str) -> Dict:
+    """
+    Pull everything needed for an institutional analyst report from FMP.
+    All calls are best-effort; missing fields return None so the prompt
+    can still be constructed with partial coverage.
+
+    Returns a dict ready to pass to build_analyst_report_prompt().
+    """
+    tk = ticker.upper().strip()
+    data: Dict = {"ticker": tk, "errors": []}
+
+    # Company profile + current quote
+    prof = _fmp_get(f"/profile/{tk}", fmp_key)
+    data["profile"] = prof[0] if isinstance(prof, list) and prof else {}
+    quote = _fmp_get(f"/quote/{tk}", fmp_key)
+    data["quote"] = quote[0] if isinstance(quote, list) and quote else {}
+
+    # Last 4 quarters of each statement
+    data["income_statement"] = _fmp_get(
+        f"/income-statement/{tk}", fmp_key, {"period": "quarter", "limit": 4}
+    ) or []
+    data["balance_sheet"] = _fmp_get(
+        f"/balance-sheet-statement/{tk}", fmp_key, {"period": "quarter", "limit": 4}
+    ) or []
+    data["cash_flow"] = _fmp_get(
+        f"/cash-flow-statement/{tk}", fmp_key, {"period": "quarter", "limit": 4}
+    ) or []
+
+    # Key ratios + metrics (quarterly, last 4)
+    data["ratios"] = _fmp_get(
+        f"/ratios/{tk}", fmp_key, {"period": "quarter", "limit": 4}
+    ) or []
+    data["key_metrics"] = _fmp_get(
+        f"/key-metrics/{tk}", fmp_key, {"period": "quarter", "limit": 4}
+    ) or []
+
+    # Street consensus + price target + rating movements
+    data["analyst_estimates"] = _fmp_get(
+        f"/analyst-estimates/{tk}", fmp_key, {"limit": 4}
+    ) or []
+    data["price_target_consensus"] = _fmp_get(
+        f"/price-target-consensus", fmp_key, {"symbol": tk}
+    ) or []
+    data["upgrades_downgrades"] = _fmp_get(
+        f"/upgrades-downgrades", fmp_key, {"symbol": tk, "limit": 10}
+    ) or []
+
+    # Peers
+    peers_resp = _fmp_get("/stock_peers", fmp_key, {"symbol": tk})
+    peers: List[str] = []
+    if isinstance(peers_resp, list) and peers_resp:
+        peers = peers_resp[0].get("peersList") or peers_resp[0].get("peers") or []
+    data["peers"] = peers[:5]
+
+    # Peer key metrics — best effort, one call per peer
+    peer_metrics = []
+    for peer_tk in data["peers"]:
+        km = _fmp_get(f"/key-metrics-ttm/{peer_tk}", fmp_key)
+        if isinstance(km, list) and km:
+            peer_metrics.append({"ticker": peer_tk, **km[0]})
+    data["peer_metrics"] = peer_metrics
+
+    # Latest transcript
+    transcript = fetch_latest_transcript_fmp(tk, fmp_key)
+    data["transcript"] = transcript if not transcript.get("error") else {}
+
+    return data
+
+
+def _safe_num(x, nd: int = 2) -> str:
+    """Format a number safely; return '-' on any issue."""
+    try:
+        if x is None:
+            return "-"
+        v = float(x)
+        if abs(v) >= 1e9:
+            return f"${v / 1e9:,.{nd}f}B"
+        if abs(v) >= 1e6:
+            return f"${v / 1e6:,.{nd}f}M"
+        if abs(v) >= 1e3:
+            return f"${v / 1e3:,.{nd}f}K"
+        return f"{v:,.{nd}f}"
+    except Exception:
+        return "-"
+
+
+def build_analyst_report_prompt(data: Dict) -> str:
+    """Turn the FMP data blob into a tight prompt for Claude."""
+    tk = data.get("ticker", "?")
+    prof = data.get("profile", {}) or {}
+    quote = data.get("quote", {}) or {}
+    name = prof.get("companyName", tk)
+    sector = prof.get("sector", "-")
+    industry = prof.get("industry", "-")
+    price = quote.get("price")
+    mcap = prof.get("mktCap") or quote.get("marketCap")
+
+    # Last 4 quarters of core income metrics
+    income = data.get("income_statement", []) or []
+    ratios = data.get("ratios", []) or []
+    metrics = data.get("key_metrics", []) or []
+    cashflow = data.get("cash_flow", []) or []
+
+    def _q(lst, field):
+        return [(r.get("date"), r.get(field)) for r in lst[:4]] if lst else []
+
+    rev_hist = _q(income, "revenue")
+    net_income_hist = _q(income, "netIncome")
+    gross_margin_hist = _q(ratios, "grossProfitMargin")
+    op_margin_hist = _q(ratios, "operatingProfitMargin")
+    net_margin_hist = _q(ratios, "netProfitMargin")
+    fcf_hist = _q(cashflow, "freeCashFlow")
+
+    # Latest key ratios
+    latest_r = ratios[0] if ratios else {}
+    latest_m = metrics[0] if metrics else {}
+
+    # Consensus
+    ptc = data.get("price_target_consensus", []) or []
+    pt_consensus = ptc[0] if ptc else {}
+    target_high = pt_consensus.get("targetHigh")
+    target_low = pt_consensus.get("targetLow")
+    target_consensus = pt_consensus.get("targetConsensus")
+    analyst_count = pt_consensus.get("analystsCount") or pt_consensus.get("numberOfAnalystOpinions")
+
+    # Upgrades / downgrades
+    ud = data.get("upgrades_downgrades", []) or []
+    recent_ratings = [
+        f"{r.get('publishedDate', '')[:10]} {r.get('gradingCompany','?')}: "
+        f"{r.get('previousGrade', '?')} -> {r.get('newGrade', '?')}"
+        for r in ud[:6]
+    ]
+
+    # Peers
+    peer_lines = []
+    for pm in data.get("peer_metrics", []) or []:
+        peer_lines.append(
+            f"  {pm.get('ticker', '?')}: P/E {pm.get('peRatioTTM', '-')}, "
+            f"EV/EBITDA {pm.get('enterpriseValueOverEBITDATTM', '-')}, "
+            f"ROE {pm.get('roeTTM', '-')}, "
+            f"Debt/Equity {pm.get('debtToEquityTTM', '-')}"
+        )
+
+    # Transcript excerpt (first 3000 chars — Claude can still reference)
+    transcript = data.get("transcript", {}) or {}
+    transcript_snippet = (transcript.get("content", "") or "")[:3000]
+    transcript_meta = (
+        f"Q{transcript.get('quarter','?')} {transcript.get('year','?')}"
+        if transcript else "N/A"
+    )
+
+    prompt = f"""You are a Managing Director of Equity Research at a top-tier
+investment bank (think Goldman Sachs / Morgan Stanley / JPM quality).
+Produce a complete institutional equity research note on {name} ({tk}).
+
+Your reader is a sophisticated buyside PM — be numeric, opinionated,
+back every claim with the data below. No filler, no disclaimers.
+
+═══ COMPANY CONTEXT ═══
+Name       : {name}
+Ticker     : {tk}
+Sector     : {sector}
+Industry   : {industry}
+Price      : ${price if price is not None else '-'}
+Market Cap : {_safe_num(mcap)}
+
+═══ FINANCIAL HISTORY (last 4 quarters, most recent first) ═══
+Revenue      : {rev_hist}
+Net Income   : {net_income_hist}
+Free CF      : {fcf_hist}
+Gross Margin : {gross_margin_hist}
+Op Margin    : {op_margin_hist}
+Net Margin   : {net_margin_hist}
+
+═══ LATEST KEY RATIOS (TTM / latest Q) ═══
+P/E (TTM)         : {latest_m.get('peRatio', latest_r.get('priceEarningsRatio'))}
+EV/EBITDA         : {latest_m.get('enterpriseValueOverEBITDA')}
+P/S               : {latest_r.get('priceToSalesRatio')}
+P/B               : {latest_r.get('priceToBookRatio')}
+ROE               : {latest_r.get('returnOnEquity')}
+ROIC              : {latest_r.get('returnOnCapitalEmployed')}
+Debt/Equity       : {latest_r.get('debtEquityRatio')}
+Current Ratio     : {latest_r.get('currentRatio')}
+Interest Coverage : {latest_r.get('interestCoverage')}
+
+═══ STREET CONSENSUS ═══
+Analyst count : {analyst_count}
+Target (low)  : ${target_low}
+Target (avg)  : ${target_consensus}
+Target (high) : ${target_high}
+
+Recent rating changes:
+{chr(10).join(recent_ratings) if recent_ratings else '  (no recent actions)'}
+
+═══ PEER COMPS (TTM) ═══
+{chr(10).join(peer_lines) if peer_lines else '  (peer data unavailable)'}
+
+═══ LATEST EARNINGS CALL ({transcript_meta}) ═══
+{transcript_snippet if transcript_snippet else '(transcript unavailable)'}
+
+═══ DELIVERABLE — return ONLY valid JSON ═══
+
+{{
+  "rating": "Strong Buy | Buy | Hold | Sell | Strong Sell",
+  "rating_rationale": "<1 sentence why>",
+  "price_target_12m": <float USD>,
+  "price_target_bull": <float>,
+  "price_target_base": <float>,
+  "price_target_bear": <float>,
+  "upside_pct_vs_current": <float, e.g. 0.18 for +18%>,
+  "executive_summary": "<4-6 sentences. Lead with thesis, back with 1-2 numbers, close with catalyst>",
+
+  "financial_highlights": [
+    {{"metric": "<name>", "value": "<formatted>", "yoy_change": "<+X.X% or N/A>", "commentary": "<1 short phrase>"}}
+    // 5-7 rows: revenue, revenue growth, gross margin, op margin, EPS, FCF, net cash/debt
+  ],
+
+  "valuation_table": [
+    {{"method": "DCF", "implied_price": <float>, "weight": <float 0-1>, "notes": "<1 line assumptions>"}},
+    {{"method": "P/E multiple", "implied_price": <float>, "weight": <float>, "notes": "<peer multiple used>"}},
+    {{"method": "EV/EBITDA", "implied_price": <float>, "weight": <float>, "notes": "..."}},
+    {{"method": "Street consensus", "implied_price": <float>, "weight": <float>, "notes": "..."}}
+  ],
+
+  "investment_thesis": {{
+    "bull": ["<3-4 bullets, each 1 sentence with a number>"],
+    "base": ["<3-4 bullets>"],
+    "bear": ["<3-4 bullets>"]
+  }},
+
+  "risk_factors": ["<4-6 risks, each 1 short sentence>"],
+
+  "peer_comparison_notes": "<2-3 sentences on how this name stacks up to peers on growth / margins / valuation>",
+
+  "street_consensus_diff": {{
+    "street_target": <float>,
+    "our_target": <float>,
+    "direction": "above_street | inline | below_street",
+    "differentiation": "<1 sentence on where our view differs from consensus>"
+  }},
+
+  "catalysts_next_12m": ["<3-5 concrete upcoming events: earnings, launches, FDA, etc.>"],
+
+  "top_bank_views": [
+    // Synthesize what the major houses (Goldman, MS, JPM, BofA, etc.) have
+    // likely said based on the upgrades/downgrades above. Be realistic —
+    // if data is missing say "not disclosed". Never fabricate.
+    {{"bank": "<e.g. Goldman Sachs>", "rating": "<Buy/Neutral/Sell>", "target": <float or null>, "stance": "<1 line>"}}
+  ]
+}}
+
+Rules:
+- Every numeric field must be a JSON number (not a string), use null if unknown.
+- No commentary outside the JSON block.
+- If a field cannot be computed from the data, use reasonable industry defaults
+  and state that explicitly in the relevant `notes` field.
+"""
+    return prompt
+
+
+def generate_analyst_report(
+    ticker: str,
+    fmp_key: str,
+    anthropic_key: str,
+    claude_model: str = "claude-sonnet-4-5",
+) -> Dict:
+    """
+    End-to-end: fetch data + prompt Claude + parse structured JSON output.
+
+    Returns {
+        "report": {<structured report dict>},
+        "raw_data": {<FMP data blob>},
+        "error": Optional[str],
+    }
+    On any critical failure, `error` is set and `report` is None.
+    """
+    if not fmp_key:
+        return {"report": None, "raw_data": None, "error": "FMP_API_KEY not configured"}
+    if not anthropic_key:
+        return {"report": None, "raw_data": None, "error": "ANTHROPIC_API_KEY not configured"}
+
+    # 1. Aggregate data
+    data = fetch_analyst_report_data(ticker, fmp_key)
+    if not data.get("profile") and not data.get("quote"):
+        return {"report": None, "raw_data": data, "error": f"No FMP data found for {ticker}"}
+
+    # 2. Build prompt
+    prompt = build_analyst_report_prompt(data)
+
+    # 3. Call Claude
+    try:
+        from anthropic import Anthropic
+        client = Anthropic(api_key=anthropic_key)
+        resp = client.messages.create(
+            model=claude_model,
+            max_tokens=6000,
+            temperature=0.3,
+            system=(
+                "You are a veteran sell-side equity research MD. You produce "
+                "concise, numeric, opinionated investment notes for institutional "
+                "clients. Output strict JSON only."
+            ),
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = resp.content[0].text if resp.content else ""
+    except Exception as e:
+        logger.error("analyst_report.claude_call_failed", ticker=ticker, error=str(e))
+        return {"report": None, "raw_data": data, "error": f"Claude call failed: {e}"}
+
+    # 4. Parse JSON (tolerate fence blocks / trailing text)
+    cleaned = re.sub(r"```(?:json)?\s*", "", raw)
+    cleaned = re.sub(r"```\s*$", "", cleaned)
+    report = None
+    try:
+        import json as _json
+        report = _json.loads(cleaned)
+    except Exception:
+        # Try to extract first {...} block
+        m = re.search(r"\{.*\}", cleaned, re.DOTALL)
+        if m:
+            try:
+                report = _json.loads(m.group(0))
+            except Exception as e:
+                return {"report": None, "raw_data": data, "error": f"JSON parse failed: {e}", "raw_response": raw}
+
+    if not report:
+        return {"report": None, "raw_data": data, "error": "Could not parse Claude output", "raw_response": raw}
+
+    return {"report": report, "raw_data": data, "error": None}

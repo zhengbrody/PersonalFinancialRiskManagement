@@ -436,6 +436,33 @@ def render_shared_sidebar():
         st.session_state._model_provider = model_provider
         st.session_state._llm_configured = _key_ok
 
+        # ── FMP API key (separate from LLM — powers earnings data, price targets,
+        #     analyst reports, news supplement). Independent of provider choice.
+        _existing_fmp = (
+            os.environ.get("FMP_API_KEY", "")
+            or _safe_get_secret("FMP_API_KEY")
+            or st.session_state.get("_fmp_key", "")
+        )
+        fmp_key_input = st.text_input(
+            "FMP API Key (optional)",
+            type="password",
+            value=_existing_fmp,
+            placeholder="your FMP key",
+            key="fmp_api_key_sidebar",
+            help=(
+                "Powers earnings transcripts, analyst price targets, and the "
+                "Institutional Analyst Report on the Ticker Research page. "
+                "Get a free key at https://site.financialmodelingprep.com/"
+            ),
+        )
+        if fmp_key_input:
+            st.session_state._fmp_key = fmp_key_input
+            # Propagate to os.environ so every page that reads env picks it up
+            os.environ["FMP_API_KEY"] = fmp_key_input
+            st.caption("✅ FMP 已配置（解锁投行分析报告 + 财报深度分析）")
+        else:
+            st.caption("ℹ️ FMP 未配置（投行分析报告 / 财报 AI 将不可用）")
+
         st.markdown("---")
 
         # Store current parameters in session state for app.py to access

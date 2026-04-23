@@ -803,3 +803,256 @@ def render_unified_error(message: str, detail: str = None, suggestion: str = Non
         f'</div>'
     )
     st.markdown(html, unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════
+#  Institutional Analyst Report renderer
+# ══════════════════════════════════════════════════════════════
+
+def _rating_color(rating: str) -> str:
+    """Map rating string to a T.* token."""
+    r = (rating or "").lower()
+    if "strong buy" in r or "buy" in r:
+        return T.positive
+    if "sell" in r:
+        return T.negative
+    return T.warning
+
+
+def render_analyst_report(report: dict, ticker: str, current_price: float = None):
+    """
+    Render a structured institutional-grade analyst report produced by
+    market_intelligence.generate_analyst_report(). Layout: rating banner,
+    exec summary card, valuation + financial tables, bull/base/bear thesis,
+    peer notes, top-bank views, catalysts, risks.
+    """
+    import pandas as pd
+    import streamlit as st
+
+    if not report:
+        render_unified_error(
+            "Analyst report unavailable",
+            detail="Could not generate report for this ticker.",
+            suggestion="Verify FMP_API_KEY + ANTHROPIC_API_KEY are configured.",
+        )
+        return
+
+    rating = report.get("rating", "N/A")
+    pt_12m = report.get("price_target_12m")
+    pt_bull = report.get("price_target_bull")
+    pt_base = report.get("price_target_base")
+    pt_bear = report.get("price_target_bear")
+    upside = report.get("upside_pct_vs_current")
+    rc = _rating_color(rating)
+
+    # ── Rating banner ─────────────────────────────────────────
+    upside_str = f"{upside:+.1%}" if isinstance(upside, (int, float)) else "—"
+    pt_str = f"${pt_12m:,.2f}" if isinstance(pt_12m, (int, float)) else "—"
+    banner = (
+        f'<div style="background:{T.surface};border:1px solid {rc};'
+        f'border-left:4px solid {rc};border-radius:{T.radius};'
+        f'padding:{T.sp_lg} {T.sp_xl};margin:{T.sp_md} 0;'
+        f'display:flex;justify-content:space-between;align-items:center">'
+        f'<div>'
+        f'<div style="{T.font_overline};color:{rc};margin-bottom:4px">RATING</div>'
+        f'<div style="font-size:22px;font-weight:700;color:{T.text}">{rating}</div>'
+        f'<div style="{T.font_caption};color:{T.text_secondary};margin-top:4px">'
+        f'{report.get("rating_rationale","")}'
+        f'</div>'
+        f'</div>'
+        f'<div style="text-align:right">'
+        f'<div style="{T.font_overline};color:{T.text_secondary}">12M PRICE TARGET</div>'
+        f'<div style="font-size:28px;font-weight:700;color:{T.text}">{pt_str}</div>'
+        f'<div style="{T.font_caption};color:{rc};margin-top:2px">{upside_str} upside</div>'
+        f'</div>'
+        f'</div>'
+    )
+    st.markdown(banner, unsafe_allow_html=True)
+
+    # ── Bull / Base / Bear target row ─────────────────────────
+    def _fmt(p):
+        return f"${p:,.2f}" if isinstance(p, (int, float)) else "—"
+
+    tgt_cols = st.columns(3)
+    tgt_data = [
+        (tgt_cols[0], "BEAR CASE", pt_bear, T.negative),
+        (tgt_cols[1], "BASE CASE", pt_base, T.accent),
+        (tgt_cols[2], "BULL CASE", pt_bull, T.positive),
+    ]
+    for col, lbl, val, color in tgt_data:
+        with col:
+            card = (
+                f'<div style="background:{T.surface};border:1px solid {T.border_subtle};'
+                f'border-top:2px solid {color};border-radius:{T.radius};'
+                f'padding:{T.sp_md} {T.sp_lg};text-align:center">'
+                f'<div style="{T.font_overline};color:{color}">{lbl}</div>'
+                f'<div style="font-size:20px;font-weight:600;color:{T.text};'
+                f'margin-top:6px">{_fmt(val)}</div>'
+                f'</div>'
+            )
+            st.markdown(card, unsafe_allow_html=True)
+
+    # ── Executive summary ────────────────────────────────────
+    exec_sum = report.get("executive_summary", "")
+    if exec_sum:
+        summary_html = (
+            f'<div style="background:{T.accent_bg};border-left:3px solid {T.accent};'
+            f'border-radius:{T.radius};padding:{T.sp_lg} {T.sp_xl};margin:{T.sp_md} 0">'
+            f'<div style="{T.font_overline};color:{T.accent};margin-bottom:{T.sp_sm}">EXECUTIVE SUMMARY</div>'
+            f'<div style="{T.font_body};color:{T.text};line-height:1.7">{exec_sum}</div>'
+            f'</div>'
+        )
+        st.markdown(summary_html, unsafe_allow_html=True)
+
+    # ── Financial highlights ─────────────────────────────────
+    fh = report.get("financial_highlights") or []
+    if fh:
+        render_section("Financial Highlights")
+        df = pd.DataFrame(fh)
+        # Standardize expected columns
+        for c in ("metric", "value", "yoy_change", "commentary"):
+            if c not in df.columns:
+                df[c] = "-"
+        st.dataframe(
+            df[["metric", "value", "yoy_change", "commentary"]]
+                .rename(columns={
+                    "metric": "Metric", "value": "Latest",
+                    "yoy_change": "YoY", "commentary": "Commentary",
+                }),
+            hide_index=True, use_container_width=True,
+        )
+
+    # ── Valuation table ──────────────────────────────────────
+    val = report.get("valuation_table") or []
+    if val:
+        render_section("Valuation Methodology")
+        vdf = pd.DataFrame(val)
+        for c in ("method", "implied_price", "weight", "notes"):
+            if c not in vdf.columns:
+                vdf[c] = "-"
+        # Pretty format
+        display = vdf.copy()
+        display["implied_price"] = display["implied_price"].apply(
+            lambda x: f"${float(x):,.2f}" if isinstance(x, (int, float)) else str(x)
+        )
+        display["weight"] = display["weight"].apply(
+            lambda x: f"{float(x):.0%}" if isinstance(x, (int, float)) else str(x)
+        )
+        st.dataframe(
+            display[["method", "implied_price", "weight", "notes"]]
+                .rename(columns={
+                    "method": "Method", "implied_price": "Implied Price",
+                    "weight": "Weight", "notes": "Assumptions",
+                }),
+            hide_index=True, use_container_width=True,
+        )
+
+    # ── Investment thesis (bull/base/bear) ────────────────────
+    thesis = report.get("investment_thesis") or {}
+    if thesis:
+        render_section("Investment Thesis")
+        th_cols = st.columns(3)
+        for col, key, color, label in [
+            (th_cols[0], "bear", T.negative, "BEAR"),
+            (th_cols[1], "base", T.accent,   "BASE"),
+            (th_cols[2], "bull", T.positive, "BULL"),
+        ]:
+            bullets = thesis.get(key) or []
+            items_html = "".join([
+                f'<li style="margin-bottom:{T.sp_sm};color:{T.text_secondary};'
+                f'{T.font_body};line-height:1.6">{b}</li>'
+                for b in bullets
+            ])
+            with col:
+                card = (
+                    f'<div style="background:{T.surface};border:1px solid {T.border_subtle};'
+                    f'border-top:2px solid {color};border-radius:{T.radius};'
+                    f'padding:{T.sp_lg};height:100%">'
+                    f'<div style="{T.font_overline};color:{color};margin-bottom:{T.sp_md}">{label}</div>'
+                    f'<ul style="list-style:disc;padding-left:18px;margin:0">{items_html}</ul>'
+                    f'</div>'
+                )
+                st.markdown(card, unsafe_allow_html=True)
+
+    # ── Peer comparison notes ────────────────────────────────
+    pc_notes = report.get("peer_comparison_notes", "")
+    if pc_notes:
+        render_section("Peer Positioning")
+        st.markdown(
+            f'<div style="{T.font_body};color:{T.text_secondary};line-height:1.7;'
+            f'padding:{T.sp_md} 0">{pc_notes}</div>',
+            unsafe_allow_html=True,
+        )
+
+    # ── Top bank views ───────────────────────────────────────
+    banks = report.get("top_bank_views") or []
+    if banks:
+        render_section("Top Investment Bank Views")
+        bdf = pd.DataFrame(banks)
+        for c in ("bank", "rating", "target", "stance"):
+            if c not in bdf.columns:
+                bdf[c] = "-"
+        display = bdf.copy()
+        display["target"] = display["target"].apply(
+            lambda x: f"${float(x):,.2f}" if isinstance(x, (int, float)) else "—"
+        )
+        st.dataframe(
+            display[["bank", "rating", "target", "stance"]]
+                .rename(columns={
+                    "bank": "Bank", "rating": "Rating",
+                    "target": "Target", "stance": "Stance",
+                }),
+            hide_index=True, use_container_width=True,
+        )
+
+    # ── Street consensus diff ────────────────────────────────
+    scd = report.get("street_consensus_diff") or {}
+    if scd:
+        street = scd.get("street_target")
+        ours = scd.get("our_target")
+        direction = scd.get("direction", "inline")
+        diff_c = {"above_street": T.positive, "below_street": T.negative}.get(direction, T.text_secondary)
+        render_section("Our Call vs Street")
+        scd_html = (
+            f'<div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:{T.sp_md};'
+            f'background:{T.surface};border:1px solid {T.border_subtle};'
+            f'border-radius:{T.radius};padding:{T.sp_lg};margin:{T.sp_md} 0">'
+            f'<div><div style="{T.font_overline};color:{T.text_secondary}">STREET TARGET</div>'
+            f'<div style="font-size:20px;font-weight:600;color:{T.text}">'
+            f'{"$" + f"{street:,.2f}" if isinstance(street,(int,float)) else "—"}</div></div>'
+            f'<div><div style="{T.font_overline};color:{T.text_secondary}">OUR TARGET</div>'
+            f'<div style="font-size:20px;font-weight:600;color:{diff_c}">'
+            f'{"$" + f"{ours:,.2f}" if isinstance(ours,(int,float)) else "—"}</div></div>'
+            f'<div><div style="{T.font_overline};color:{diff_c}">{direction.replace("_"," ").upper()}</div>'
+            f'<div style="{T.font_body};color:{T.text_secondary};margin-top:4px;line-height:1.5">'
+            f'{scd.get("differentiation","")}</div></div>'
+            f'</div>'
+        )
+        st.markdown(scd_html, unsafe_allow_html=True)
+
+    # ── Catalysts ────────────────────────────────────────────
+    cats = report.get("catalysts_next_12m") or []
+    if cats:
+        render_section("Catalysts (next 12 months)")
+        cat_html = "".join([
+            f'<li style="margin-bottom:{T.sp_sm};color:{T.text_secondary};{T.font_body};line-height:1.6">{c}</li>'
+            for c in cats
+        ])
+        st.markdown(
+            f'<ul style="list-style:disc;padding-left:{T.sp_xl};margin:{T.sp_sm} 0">{cat_html}</ul>',
+            unsafe_allow_html=True,
+        )
+
+    # ── Risk factors ─────────────────────────────────────────
+    risks = report.get("risk_factors") or []
+    if risks:
+        render_section("Risk Factors")
+        risk_html = "".join([
+            f'<li style="margin-bottom:{T.sp_sm};color:{T.text_secondary};'
+            f'{T.font_body};line-height:1.6">{r}</li>'
+            for r in risks
+        ])
+        st.markdown(
+            f'<ul style="list-style:disc;padding-left:{T.sp_xl};margin:{T.sp_sm} 0">{risk_html}</ul>',
+            unsafe_allow_html=True,
+        )
