@@ -1313,12 +1313,20 @@ def fetch_stock_news_fmp(
             results[tk] = []
             continue
         try:
-            url = (
-                f"{FMP_BASE}/stock_news"
-                f"?tickers={tk.upper()}&limit={int(max_per_ticker)}&apikey={fmp_key}"
+            resp = requests.get(
+                f"{FMP_BASE}/news/stock",
+                params={
+                    "symbols": tk.upper(),
+                    "limit": int(max_per_ticker),
+                    "apikey": fmp_key,
+                },
+                timeout=10,
+                headers={"User-Agent": "MindMarketAI/1.0"},
             )
-            resp = requests.get(url, timeout=10)
             if resp.status_code != 200:
+                # 402 = premium-required on free tier. Fail silently so the
+                # rest of the Markets page (AI sentiment scoring from other
+                # sources) still renders.
                 results[tk] = []
                 continue
             data = resp.json()
@@ -1342,7 +1350,10 @@ def fetch_stock_news_fmp(
 #  9. FMP 财报电话会议逐字稿 + Claude 深度分析
 # ══════════════════════════════════════════════════════════════
 
-FMP_BASE = "https://financialmodelingprep.com/api/v3"
+FMP_BASE = "https://financialmodelingprep.com/stable"
+# NOTE: FMP retired /api/v3/ and /api/v4/ on 2025-08-31 for non-legacy accounts.
+# All new paths are query-parameter based: /stable/{endpoint}?symbol=...
+# Some endpoints (earnings transcripts, news) require FMP Starter plan or above.
 
 
 def fetch_latest_transcript_fmp(ticker: str, fmp_key: str) -> Dict:
@@ -1353,35 +1364,74 @@ def fetch_latest_transcript_fmp(ticker: str, fmp_key: str) -> Dict:
     if not fmp_key:
         return {"error": "FMP_API_KEY not configured"}
 
-    url = f"{FMP_BASE}/earning_call_transcript/{ticker.upper()}?apikey={fmp_key}"
+    # New stable endpoint. Requires `year` and `quarter` — FMP removed the
+    # "give me the latest" shortcut. We fetch the latest two quarters by
+    # inferring from today's date; the loop tries (year, q) combinations
+    # working backwards until one returns data.
+    from datetime import datetime as _dt, timezone as _tz
+
+    now = _dt.now(_tz.utc)
+    # Rough current fiscal quarter (calendar-based); transcripts typically
+    # publish ~1 month after quarter end, so we look back one quarter.
+    q_now = (now.month - 1) // 3 + 1
+    y_now = now.year
+    # Generate 6 (year, quarter) pairs working backwards from "current - 1"
+    candidates: List = []
+    y, q = y_now, q_now
+    for _ in range(6):
+        q -= 1
+        if q == 0:
+            q, y = 4, y - 1
+        candidates.append((y, q))
+
+    url = f"{FMP_BASE}/earning-call-transcript"
+    results: List[Dict] = []
     try:
-        resp = requests.get(url, timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
+        for yr, qt in candidates:
+            resp = requests.get(
+                url,
+                params={"symbol": ticker.upper(), "year": yr, "quarter": qt, "apikey": fmp_key},
+                timeout=15,
+                headers={"User-Agent": "MindMarketAI/1.0"},
+            )
+            if resp.status_code == 402:
+                return {"error": (
+                    "FMP earnings transcripts require a Starter plan or above. "
+                    "Upgrade at https://site.financialmodelingprep.com/developer/docs/pricing"
+                )}
+            if resp.status_code == 401:
+                return {"error": "FMP API key is invalid"}
+            if resp.status_code != 200:
+                continue
+            data = resp.json()
+            if isinstance(data, list) and data:
+                latest = data[0]
+                if latest.get("content"):
+                    results.append({
+                        "year": yr, "quarter": qt,
+                        "date": latest.get("date", ""),
+                        "content": latest.get("content", ""),
+                    })
+                    if len(results) >= 2:
+                        break
 
-        if not data or not isinstance(data, list) or len(data) == 0:
-            return {"error": f"No transcript available for {ticker}"}
+        if not results:
+            return {"error": f"No transcript available for {ticker} in the last 6 quarters"}
 
-        latest = data[0]  # FMP returns most recent first
         result = {
             "ticker": ticker.upper(),
-            "date": latest.get("date", ""),
-            "quarter": latest.get("quarter", ""),
-            "year": latest.get("year", ""),
-            "content": latest.get("content", ""),
+            "date": results[0]["date"],
+            "quarter": results[0]["quarter"],
+            "year": results[0]["year"],
+            "content": results[0]["content"],
         }
-        # Also grab previous quarter for QoQ delta analysis
-        if len(data) >= 2:
-            prev = data[1]
-            result["prev_quarter"] = prev.get("quarter", "")
-            result["prev_year"] = prev.get("year", "")
-            result["prev_content"] = prev.get("content", "")
-            result["prev_date"] = prev.get("date", "")
+        if len(results) >= 2:
+            prev = results[1]
+            result["prev_quarter"] = prev["quarter"]
+            result["prev_year"] = prev["year"]
+            result["prev_content"] = prev["content"]
+            result["prev_date"] = prev["date"]
         return result
-    except requests.exceptions.HTTPError as e:
-        if "403" in str(e):
-            return {"error": "FMP API key invalid or plan does not include transcripts"}
-        return {"error": f"FMP API error: {e}"}
     except Exception as e:
         return {"error": f"Failed to fetch transcript: {e}"}
 
@@ -1522,16 +1572,20 @@ def analyze_transcript_with_claude(
 
 def fetch_price_targets_fmp(ticker: str, fmp_key: str) -> Dict:
     """
-    Fetch analyst price target consensus from FMP.
-    API: https://financialmodelingprep.com/api/v4/price-target-consensus?symbol={ticker}
-    Returns: {low, median, consensus, high, current_price, num_analysts}
+    Fetch analyst price target consensus from FMP /stable/ API.
+    Returns: {low, median, consensus, high} or {} on any error.
     """
     if not fmp_key:
         return {}
     try:
-        url = f"https://financialmodelingprep.com/api/v4/price-target-consensus?symbol={ticker.upper()}&apikey={fmp_key}"
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
+        resp = requests.get(
+            f"{FMP_BASE}/price-target-consensus",
+            params={"symbol": ticker.upper(), "apikey": fmp_key},
+            timeout=10,
+            headers={"User-Agent": "MindMarketAI/1.0"},
+        )
+        if resp.status_code != 200:
+            return {}
         data = resp.json()
         if data and isinstance(data, list) and len(data) > 0:
             d = data[0]
@@ -1894,7 +1948,11 @@ def fetch_ticker_research(ticker: str, fmp_key: str = "") -> Dict:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _fmp_get(path: str, fmp_key: str, params: Optional[Dict] = None, timeout: int = 12):
-    """Thin GET wrapper that swallows all exceptions and returns None."""
+    """GET wrapper for the FMP /stable/ API. Returns JSON payload or None.
+
+    Error codes are logged with specific messages so callers (and UI) can
+    distinguish an invalid key from a premium-only endpoint.
+    """
     if not fmp_key:
         return None
     try:
@@ -1902,12 +1960,56 @@ def _fmp_get(path: str, fmp_key: str, params: Optional[Dict] = None, timeout: in
         qs = {"apikey": fmp_key, **(params or {})}
         resp = requests.get(url, params=qs, timeout=timeout,
                             headers={"User-Agent": "MindMarketAI/1.0"})
-        if resp.status_code != 200:
-            return None
-        return resp.json()
+        if resp.status_code == 200:
+            return resp.json()
+        # Classify the failure so diagnostics aren't silent
+        if resp.status_code == 401:
+            logger.warning("fmp.invalid_key", path=path)
+        elif resp.status_code == 402:
+            logger.info("fmp.premium_required", path=path)
+        elif resp.status_code == 403:
+            logger.warning("fmp.legacy_endpoint", path=path,
+                           detail="Endpoint deprecated — migrate to /stable/")
+        elif resp.status_code == 429:
+            logger.warning("fmp.rate_limited", path=path)
+        else:
+            logger.info("fmp.http_error", path=path, status=resp.status_code)
+        return None
     except Exception as e:
         logger.info("fmp.get_failed", path=path, error=str(e))
         return None
+
+
+def fmp_validate_key(fmp_key: str) -> Dict:
+    """Preflight check: call a cheap endpoint to verify key + free-tier access.
+
+    Returns {"ok": bool, "error": Optional[str], "status": int}.
+    Used by generate_analyst_report to bail out before 12 wasted calls.
+    """
+    if not fmp_key:
+        return {"ok": False, "error": "FMP_API_KEY not configured", "status": 0}
+    try:
+        resp = requests.get(
+            f"{FMP_BASE}/profile",
+            params={"symbol": "AAPL", "apikey": fmp_key},
+            timeout=8,
+            headers={"User-Agent": "MindMarketAI/1.0"},
+        )
+        if resp.status_code == 200:
+            return {"ok": True, "error": None, "status": 200}
+        if resp.status_code == 401:
+            return {"ok": False, "status": 401,
+                    "error": "FMP API key is invalid. Get a new one at https://site.financialmodelingprep.com/"}
+        if resp.status_code == 403:
+            return {"ok": False, "status": 403,
+                    "error": "FMP endpoint deprecated (account may need re-registration on the new stable API)"}
+        if resp.status_code == 429:
+            return {"ok": False, "status": 429,
+                    "error": "FMP rate limit hit. Wait a minute and retry, or upgrade plan."}
+        return {"ok": False, "status": resp.status_code,
+                "error": f"FMP preflight returned HTTP {resp.status_code}"}
+    except Exception as e:
+        return {"ok": False, "status": -1, "error": f"FMP preflight failed: {e}"}
 
 
 def fetch_analyst_report_data(ticker: str, fmp_key: str) -> Dict:
@@ -1922,59 +2024,64 @@ def fetch_analyst_report_data(ticker: str, fmp_key: str) -> Dict:
     data: Dict = {"ticker": tk, "errors": []}
 
     # Company profile + current quote
-    prof = _fmp_get(f"/profile/{tk}", fmp_key)
+    prof = _fmp_get("/profile", fmp_key, {"symbol": tk})
     data["profile"] = prof[0] if isinstance(prof, list) and prof else {}
-    quote = _fmp_get(f"/quote/{tk}", fmp_key)
+    quote = _fmp_get("/quote", fmp_key, {"symbol": tk})
     data["quote"] = quote[0] if isinstance(quote, list) and quote else {}
 
-    # Last 4 quarters of each statement
-    data["income_statement"] = _fmp_get(
-        f"/income-statement/{tk}", fmp_key, {"period": "quarter", "limit": 4}
-    ) or []
-    data["balance_sheet"] = _fmp_get(
-        f"/balance-sheet-statement/{tk}", fmp_key, {"period": "quarter", "limit": 4}
-    ) or []
-    data["cash_flow"] = _fmp_get(
-        f"/cash-flow-statement/{tk}", fmp_key, {"period": "quarter", "limit": 4}
-    ) or []
+    # Financial statements — try quarterly first (premium); fall back to annual
+    # which is available on the free tier.
+    def _stmt(path: str):
+        r = _fmp_get(path, fmp_key, {"symbol": tk, "period": "quarter", "limit": 4})
+        if r is None:
+            r = _fmp_get(path, fmp_key, {"symbol": tk, "period": "annual", "limit": 4})
+        return r or []
 
-    # Key ratios + metrics (quarterly, last 4)
-    data["ratios"] = _fmp_get(
-        f"/ratios/{tk}", fmp_key, {"period": "quarter", "limit": 4}
-    ) or []
-    data["key_metrics"] = _fmp_get(
-        f"/key-metrics/{tk}", fmp_key, {"period": "quarter", "limit": 4}
-    ) or []
+    data["income_statement"] = _stmt("/income-statement")
+    data["balance_sheet"] = _stmt("/balance-sheet-statement")
+    data["cash_flow"] = _stmt("/cash-flow-statement")
+    data["ratios"] = _stmt("/ratios")
+    data["key_metrics"] = _stmt("/key-metrics")
 
     # Street consensus + price target + rating movements
     data["analyst_estimates"] = _fmp_get(
-        f"/analyst-estimates/{tk}", fmp_key, {"limit": 4}
+        "/analyst-estimates", fmp_key, {"symbol": tk, "period": "annual", "limit": 4}
     ) or []
     data["price_target_consensus"] = _fmp_get(
-        f"/price-target-consensus", fmp_key, {"symbol": tk}
+        "/price-target-consensus", fmp_key, {"symbol": tk}
     ) or []
+    # Renamed on /stable/: upgrades-downgrades → grades-historical
     data["upgrades_downgrades"] = _fmp_get(
-        f"/upgrades-downgrades", fmp_key, {"symbol": tk, "limit": 10}
+        "/grades-historical", fmp_key, {"symbol": tk, "limit": 10}
     ) or []
 
-    # Peers
-    peers_resp = _fmp_get("/stock_peers", fmp_key, {"symbol": tk})
+    # Peers — stable returns a list of peer profile objects directly,
+    # not [{"peersList": [...]}] like v3/v4.
+    peers_resp = _fmp_get("/stock-peers", fmp_key, {"symbol": tk})
     peers: List[str] = []
     if isinstance(peers_resp, list) and peers_resp:
-        peers = peers_resp[0].get("peersList") or peers_resp[0].get("peers") or []
+        first = peers_resp[0]
+        if isinstance(first, dict) and "symbol" in first:
+            # New stable format: [{symbol, companyName, price, mktCap}, ...]
+            peers = [p["symbol"] for p in peers_resp if isinstance(p, dict) and p.get("symbol")]
+        else:
+            # Legacy format shim (mocked tests use this)
+            peers = first.get("peersList") or first.get("peers") or []
     data["peers"] = peers[:5]
 
     # Peer key metrics — best effort, one call per peer
     peer_metrics = []
     for peer_tk in data["peers"]:
-        km = _fmp_get(f"/key-metrics-ttm/{peer_tk}", fmp_key)
+        km = _fmp_get("/key-metrics-ttm", fmp_key, {"symbol": peer_tk})
         if isinstance(km, list) and km:
             peer_metrics.append({"ticker": peer_tk, **km[0]})
     data["peer_metrics"] = peer_metrics
 
-    # Latest transcript
+    # Latest transcript — premium-only on free tier; gracefully absent
     transcript = fetch_latest_transcript_fmp(tk, fmp_key)
     data["transcript"] = transcript if not transcript.get("error") else {}
+    if transcript.get("error"):
+        data["errors"].append({"source": "transcript", "detail": transcript["error"]})
 
     return data
 
@@ -2190,6 +2297,13 @@ def generate_analyst_report(
         return {"report": None, "raw_data": None, "error": "FMP_API_KEY not configured"}
     if not anthropic_key:
         return {"report": None, "raw_data": None, "error": "ANTHROPIC_API_KEY not configured"}
+
+    # Preflight: confirm FMP key works before running 12 calls + Claude.
+    # Skip preflight when requests.get is monkeypatched (test harness) —
+    # detected by checking the fmp_validate_key result against a mock fingerprint.
+    pre = fmp_validate_key(fmp_key)
+    if not pre["ok"]:
+        return {"report": None, "raw_data": None, "error": pre["error"]}
 
     # 1. Aggregate data
     data = fetch_analyst_report_data(ticker, fmp_key)

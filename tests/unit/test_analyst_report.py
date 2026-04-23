@@ -52,39 +52,48 @@ def _mock_fmp_response(payload, status=200):
 def test_fetch_analyst_report_data_assembles_structure(monkeypatch):
     """With good FMP responses, all expected keys should be populated."""
     def fake_get(url, params=None, timeout=None, headers=None):
-        # Route by path
-        if "/profile/" in url:
+        # New /stable/ endpoints use query parameters, so the URL itself
+        # ends at the endpoint name (no path-segment ticker).
+        if url.endswith("/profile"):
             return _mock_fmp_response([{"companyName": "NVIDIA Corp", "sector": "Tech",
                                         "industry": "Semis", "mktCap": 3e12}])
-        if "/quote/" in url:
+        if url.endswith("/quote"):
             return _mock_fmp_response([{"price": 950.0, "marketCap": 3e12}])
-        if "/income-statement/" in url:
+        if url.endswith("/income-statement"):
             return _mock_fmp_response([{"date": "2026-03-31", "revenue": 2.5e10, "netIncome": 1.2e10}])
-        if "/balance-sheet-statement/" in url:
+        if url.endswith("/balance-sheet-statement"):
             return _mock_fmp_response([{"date": "2026-03-31", "totalAssets": 1e11}])
-        if "/cash-flow-statement/" in url:
+        if url.endswith("/cash-flow-statement"):
             return _mock_fmp_response([{"date": "2026-03-31", "freeCashFlow": 1.1e10}])
-        if "/ratios/" in url:
+        if url.endswith("/ratios"):
             return _mock_fmp_response([{"date": "2026-03-31", "priceToSalesRatio": 25,
                                         "returnOnEquity": 0.85, "debtEquityRatio": 0.3}])
-        if "/key-metrics/" in url:
+        if url.endswith("/key-metrics"):
             return _mock_fmp_response([{"date": "2026-03-31", "peRatio": 60,
                                         "enterpriseValueOverEBITDA": 45}])
-        if "/analyst-estimates/" in url:
+        if url.endswith("/analyst-estimates"):
             return _mock_fmp_response([])
-        if "/price-target-consensus" in url:
+        if url.endswith("/price-target-consensus"):
             return _mock_fmp_response([{"targetConsensus": 1100, "targetHigh": 1250,
                                         "targetLow": 900, "analystsCount": 42}])
-        if "/upgrades-downgrades" in url:
+        # /stable/ renamed upgrades-downgrades → grades-historical
+        if url.endswith("/grades-historical"):
             return _mock_fmp_response([
                 {"publishedDate": "2026-04-10T00:00", "gradingCompany": "Goldman Sachs",
                  "previousGrade": "Buy", "newGrade": "Buy"}
             ])
-        if "/stock_peers" in url:
-            return _mock_fmp_response([{"peersList": ["AMD", "INTC", "AVGO"]}])
-        if "/key-metrics-ttm/" in url:
+        # /stable/ renamed stock_peers → stock-peers (and returns peer profiles)
+        if url.endswith("/stock-peers"):
+            return _mock_fmp_response([
+                {"symbol": "AMD", "companyName": "AMD", "price": 150, "mktCap": 2e11},
+                {"symbol": "INTC", "companyName": "Intel", "price": 30, "mktCap": 1.3e11},
+                {"symbol": "AVGO", "companyName": "Broadcom", "price": 1400, "mktCap": 6.5e11},
+            ])
+        if url.endswith("/key-metrics-ttm"):
             return _mock_fmp_response([{"peRatioTTM": 40, "roeTTM": 0.25}])
-        if "/earning_call_transcript/" in url:
+        # /stable/ renamed earning_call_transcript → earning-call-transcript;
+        # now requires (year, quarter) query params, one response per call.
+        if url.endswith("/earning-call-transcript"):
             return _mock_fmp_response([
                 {"quarter": 1, "year": 2026, "date": "2026-02-15", "content": "strong quarter..."}
             ])
@@ -205,11 +214,11 @@ def _valid_report_json():
 
 def test_generate_report_returns_parsed_json(monkeypatch):
     """End-to-end with mocked FMP + mocked Anthropic returns parsed dict."""
-    # Mock FMP — minimal data
+    # Mock FMP — minimal data (new /stable/ query-param endpoints)
     def fake_get(url, params=None, timeout=None, headers=None):
-        if "/profile/" in url:
+        if url.endswith("/profile"):
             return _mock_fmp_response([{"companyName": "NVIDIA", "sector": "Tech", "industry": "Semis"}])
-        if "/quote/" in url:
+        if url.endswith("/quote"):
             return _mock_fmp_response([{"price": 950}])
         return _mock_fmp_response([])
 
@@ -255,9 +264,9 @@ def test_generate_report_fails_without_keys():
 def test_generate_report_handles_fenced_json(monkeypatch):
     """Claude sometimes wraps JSON in ```json ... ``` — we must strip fences."""
     def fake_get(url, params=None, timeout=None, headers=None):
-        if "/profile/" in url:
+        if url.endswith("/profile"):
             return _mock_fmp_response([{"companyName": "X"}])
-        if "/quote/" in url:
+        if url.endswith("/quote"):
             return _mock_fmp_response([{"price": 100}])
         return _mock_fmp_response([])
 

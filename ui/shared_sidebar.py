@@ -463,7 +463,21 @@ def render_shared_sidebar():
             st.session_state._fmp_key = fmp_key_input
             # Propagate to os.environ so every page that reads env picks it up
             os.environ["FMP_API_KEY"] = fmp_key_input
-            st.caption("✅ FMP 已配置（解锁投行分析报告 + 财报深度分析）")
+            # Flag keys that clearly belong to another service — a common
+            # paste mistake. FMP keys are 32-char alphanumeric tokens.
+            _looks_wrong = (
+                fmp_key_input.startswith("apify_")
+                or fmp_key_input.startswith("sk-")
+                or fmp_key_input.startswith("sk-ant-")
+                or len(fmp_key_input) < 20
+            )
+            if _looks_wrong:
+                st.caption(
+                    "⚠️ 这不像 FMP key(可能粘错了 Apify / OpenAI / Claude key)。"
+                    "FMP key 一般是 32 位字母数字字符串。"
+                )
+            else:
+                st.caption("✅ FMP 已配置（解锁投行分析报告 + 财报深度分析）")
         else:
             st.caption("ℹ️ FMP 未配置（投行分析报告 / 财报 AI 将不可用）")
 
