@@ -9,9 +9,11 @@ market_shock, etc. actually changed.
 We don't boot the full Streamlit runtime — we reconstruct the tuple the
 app uses to identify a cache hit and assert its equality semantics.
 """
+
 from __future__ import annotations
 
 import json
+
 import pytest
 
 

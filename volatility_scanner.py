@@ -11,14 +11,13 @@ to avoid hammering the API on repeated dashboard refreshes.
 Dependencies: yfinance, numpy, pandas (all in requirements.txt)
 """
 
+import hashlib
 import json
 import os
 import time
-import hashlib
-import warnings
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -37,39 +36,135 @@ CACHE_MAX_AGE_SECONDS = 3600  # 1 hour
 
 # Top ~100 most liquid S&P 500 stocks (by market cap / trading volume)
 SP500_LIQUID_100 = [
-    "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "BRK-B",
-    "LLY", "AVGO", "JPM", "V", "UNH", "MA", "XOM", "JNJ", "COST",
-    "HD", "PG", "ABBV", "MRK", "NFLX", "CRM", "AMD", "BAC", "CVX",
-    "KO", "PEP", "WMT", "LIN", "ADBE", "TMO", "MCD", "CSCO", "ACN",
-    "ABT", "ORCL", "DHR", "INTC", "QCOM", "CMCSA", "VZ", "TXN", "PM",
-    "NEE", "LOW", "UNP", "RTX", "INTU", "AMGN", "MS", "GS", "HON",
-    "T", "PFE", "BMY", "SCHW", "ISRG", "DE", "BLK", "GE", "C",
-    "SYK", "ADP", "ELV", "AMAT", "GILD", "BKNG", "MDLZ", "ADI",
-    "LRCX", "REGN", "CB", "VRTX", "MMC", "CI", "ZTS", "PYPL", "SO",
-    "DUK", "CME", "CL", "SNPS", "CDNS", "MO", "EOG", "PGR", "WM",
-    "SLB", "APD", "MCK", "USB", "FDX", "KLAC", "AJG", "PANW", "NOW",
-    "ICE", "PLD", "ABNB", "MELI", "CRWD", "FTNT", "UBER", "COIN",
-    "PLTR", "DASH", "ARM",
+    "AAPL",
+    "MSFT",
+    "NVDA",
+    "GOOGL",
+    "AMZN",
+    "META",
+    "TSLA",
+    "BRK-B",
+    "LLY",
+    "AVGO",
+    "JPM",
+    "V",
+    "UNH",
+    "MA",
+    "XOM",
+    "JNJ",
+    "COST",
+    "HD",
+    "PG",
+    "ABBV",
+    "MRK",
+    "NFLX",
+    "CRM",
+    "AMD",
+    "BAC",
+    "CVX",
+    "KO",
+    "PEP",
+    "WMT",
+    "LIN",
+    "ADBE",
+    "TMO",
+    "MCD",
+    "CSCO",
+    "ACN",
+    "ABT",
+    "ORCL",
+    "DHR",
+    "INTC",
+    "QCOM",
+    "CMCSA",
+    "VZ",
+    "TXN",
+    "PM",
+    "NEE",
+    "LOW",
+    "UNP",
+    "RTX",
+    "INTU",
+    "AMGN",
+    "MS",
+    "GS",
+    "HON",
+    "T",
+    "PFE",
+    "BMY",
+    "SCHW",
+    "ISRG",
+    "DE",
+    "BLK",
+    "GE",
+    "C",
+    "SYK",
+    "ADP",
+    "ELV",
+    "AMAT",
+    "GILD",
+    "BKNG",
+    "MDLZ",
+    "ADI",
+    "LRCX",
+    "REGN",
+    "CB",
+    "VRTX",
+    "MMC",
+    "CI",
+    "ZTS",
+    "PYPL",
+    "SO",
+    "DUK",
+    "CME",
+    "CL",
+    "SNPS",
+    "CDNS",
+    "MO",
+    "EOG",
+    "PGR",
+    "WM",
+    "SLB",
+    "APD",
+    "MCK",
+    "USB",
+    "FDX",
+    "KLAC",
+    "AJG",
+    "PANW",
+    "NOW",
+    "ICE",
+    "PLD",
+    "ABNB",
+    "MELI",
+    "CRWD",
+    "FTNT",
+    "UBER",
+    "COIN",
+    "PLTR",
+    "DASH",
+    "ARM",
 ]
 
 SECTOR_ETFS = {
-    "Technology":           "XLK",
-    "Financials":           "XLF",
-    "Energy":               "XLE",
-    "Healthcare":           "XLV",
-    "Industrials":          "XLI",
-    "Communication Svcs":   "XLC",
-    "Consumer Disc":        "XLY",
-    "Consumer Staples":     "XLP",
-    "Utilities":            "XLU",
-    "Real Estate":          "XLRE",
-    "Materials":            "XLB",
+    "Technology": "XLK",
+    "Financials": "XLF",
+    "Energy": "XLE",
+    "Healthcare": "XLV",
+    "Industrials": "XLI",
+    "Communication Svcs": "XLC",
+    "Consumer Disc": "XLY",
+    "Consumer Staples": "XLP",
+    "Utilities": "XLU",
+    "Real Estate": "XLRE",
+    "Materials": "XLB",
 }
 
 
 # ══════════════════════════════════════════════════════════════
 #  File-based Cache
 # ══════════════════════════════════════════════════════════════
+
 
 def _ensure_cache_dir():
     """Create cache directory if it does not exist."""
@@ -110,6 +205,7 @@ def _write_cache(path: str, data: dict):
 # ══════════════════════════════════════════════════════════════
 #  Internal helpers
 # ══════════════════════════════════════════════════════════════
+
 
 def _safe_float(val) -> Optional[float]:
     """Convert a value to float, returning None on failure."""
@@ -190,6 +286,7 @@ def _batch_fetch_movers(tickers: List[str], max_workers: int = 10) -> List[Dict]
 #  1. S&P 500 Mover Scan
 # ══════════════════════════════════════════════════════════════
 
+
 def scan_sp500_movers(top_n: int = 20) -> Dict:
     """
     Scan the top ~100 most-liquid S&P 500 stocks and return today's
@@ -239,14 +336,19 @@ def scan_sp500_movers(top_n: int = 20) -> Dict:
     }
 
     _write_cache(cache_path, result)
-    logger.info("scan_sp500_movers_done", gainers=len(top_gainers), losers=len(top_losers),
-                unusual_vol=len(highest_volume))
+    logger.info(
+        "scan_sp500_movers_done",
+        gainers=len(top_gainers),
+        losers=len(top_losers),
+        unusual_vol=len(highest_volume),
+    )
     return result
 
 
 # ══════════════════════════════════════════════════════════════
 #  2. Portfolio Mover Scan
 # ══════════════════════════════════════════════════════════════
+
 
 def scan_portfolio_movers(tickers: List[str], top_n: int = 10) -> Dict:
     """
@@ -301,6 +403,7 @@ def scan_portfolio_movers(tickers: List[str], top_n: int = 10) -> Dict:
 #  3. IV Movers (IV Rank & IV Percentile)
 # ══════════════════════════════════════════════════════════════
 
+
 def _compute_near_atm_iv(ticker: str) -> Optional[Dict]:
     """
     For a single ticker, fetch near-ATM implied volatility from the
@@ -346,7 +449,9 @@ def _compute_near_atm_iv(ticker: str) -> Optional[Dict]:
 
         # Find near-ATM: strike closest to spot
         all_strikes = pd.concat([calls[["strike"]], puts[["strike"]]]).drop_duplicates()
-        atm_strike = all_strikes.iloc[(all_strikes["strike"] - spot).abs().argsort().iloc[0]]["strike"]
+        atm_strike = all_strikes.iloc[(all_strikes["strike"] - spot).abs().argsort().iloc[0]][
+            "strike"
+        ]
 
         # Average the call and put ATM IV
         call_iv = calls.loc[calls["strike"] == atm_strike, "impliedVolatility"]
@@ -476,6 +581,7 @@ def get_iv_movers(tickers: List[str]) -> List[Dict]:
 # ══════════════════════════════════════════════════════════════
 #  4. Market Regime Summary
 # ══════════════════════════════════════════════════════════════
+
 
 def get_market_regime_summary() -> Dict:
     """
@@ -614,6 +720,7 @@ def get_market_regime_summary() -> Dict:
 #  5. Sector Performance
 # ══════════════════════════════════════════════════════════════
 
+
 def _fetch_sector_etf(sector: str, ticker: str) -> Optional[Dict]:
     """Fetch daily and YTD performance for a single sector ETF."""
     try:
@@ -693,6 +800,7 @@ def get_sector_performance() -> List[Dict]:
 #  Convenience: Full Dashboard Snapshot
 # ══════════════════════════════════════════════════════════════
 
+
 def get_dashboard_snapshot(
     portfolio_tickers: Optional[List[str]] = None,
     sp500_top_n: int = 20,
@@ -765,24 +873,32 @@ if __name__ == "__main__":
 --- Sector Performance ---")
     sectors = get_sector_performance()
     for s in sectors:
-        print(f"  {s['sector']:20s}  {s['ticker']}  {s['change_pct']:+.2f}%  YTD: {s.get('ytd_return', 'N/A')}")
+        print(
+            f"  {s['sector']:20s}  {s['ticker']}  {s['change_pct']:+.2f}%  YTD: {s.get('ytd_return', 'N/A')}"
+        )
 
-    print(f"\
+    print("\
 --- S&P 500 Top Movers (top 5) ---")
     movers = scan_sp500_movers(top_n=5)
     print("Gainers:")
     for g in movers["top_gainers"]:
-        print(f"  {g['ticker']:6s}  {g['change_pct']:+.2f}%  ${g['close']:.2f}  vol ratio: {g.get('avg_volume_ratio', 'N/A')}")
+        print(
+            f"  {g['ticker']:6s}  {g['change_pct']:+.2f}%  ${g['close']:.2f}  vol ratio: {g.get('avg_volume_ratio', 'N/A')}"
+        )
     print("Losers:")
     for l in movers["top_losers"]:
-        print(f"  {l['ticker']:6s}  {l['change_pct']:+.2f}%  ${l['close']:.2f}  vol ratio: {l.get('avg_volume_ratio', 'N/A')}")
+        print(
+            f"  {l['ticker']:6s}  {l['change_pct']:+.2f}%  ${l['close']:.2f}  vol ratio: {l.get('avg_volume_ratio', 'N/A')}"
+        )
 
     print("\
 --- IV Movers (sample) ---")
     iv_data = get_iv_movers(["AAPL", "TSLA", "NVDA", "META", "AMZN"])
     for iv in iv_data:
-        print(f"  {iv['ticker']:6s}  IV: {iv['current_iv']:.1f}%  Rank: {iv.get('iv_rank', 'N/A')}  "
-              f"Pctile: {iv.get('iv_percentile', 'N/A')}  1d chg: {iv.get('iv_change_1d', 'N/A')}")
+        print(
+            f"  {iv['ticker']:6s}  IV: {iv['current_iv']:.1f}%  Rank: {iv.get('iv_rank', 'N/A')}  "
+            f"Pctile: {iv.get('iv_percentile', 'N/A')}  1d chg: {iv.get('iv_change_1d', 'N/A')}"
+        )
 
     print("\
 Done.")

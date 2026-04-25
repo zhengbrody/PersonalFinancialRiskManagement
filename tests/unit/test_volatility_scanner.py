@@ -3,38 +3,36 @@ tests/unit/test_volatility_scanner.py
 Comprehensive tests for volatility_scanner.py
 """
 
-import json
+import hashlib
 import os
 import time
-import hashlib
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import numpy as np
-import pandas as pd
 import pytest
 
 from volatility_scanner import (
-    _safe_float,
-    _cache_key,
-    _read_cache,
-    _write_cache,
-    _batch_fetch_movers,
-    scan_sp500_movers,
-    scan_portfolio_movers,
-    get_sector_performance,
     CACHE_DIR,
     CACHE_MAX_AGE_SECONDS,
-    SP500_LIQUID_100,
     SECTOR_ETFS,
+    SP500_LIQUID_100,
+    _cache_key,
+    _read_cache,
+    _safe_float,
+    _write_cache,
+    get_sector_performance,
+    scan_portfolio_movers,
+    scan_sp500_movers,
 )
-
 
 # ══════════════════════════════════════════════════════════════
 #  Helpers / Fixtures
 # ══════════════════════════════════════════════════════════════
 
-def _make_ticker_data(ticker, change_pct, close=100.0, volume=1_000_000,
-                      avg_volume_ratio=1.0, name=None):
+
+def _make_ticker_data(
+    ticker, change_pct, close=100.0, volume=1_000_000, avg_volume_ratio=1.0, name=None
+):
     """Build a dict matching _fetch_ticker_day_data return shape."""
     return {
         "ticker": ticker,
@@ -50,20 +48,21 @@ def _make_ticker_data(ticker, change_pct, close=100.0, volume=1_000_000,
 def sample_movers_data():
     """A list of mocked mover dicts with varied change_pct and volume ratios."""
     return [
-        _make_ticker_data("AAPL",  5.0,  close=180.0, avg_volume_ratio=1.2),
-        _make_ticker_data("MSFT", -3.5,  close=400.0, avg_volume_ratio=0.9),
-        _make_ticker_data("TSLA", 12.0,  close=250.0, avg_volume_ratio=3.5),
-        _make_ticker_data("NVDA",  8.0,  close=900.0, avg_volume_ratio=2.1),
-        _make_ticker_data("META", -7.0,  close=500.0, avg_volume_ratio=4.0),
-        _make_ticker_data("AMZN",  1.0,  close=185.0, avg_volume_ratio=0.5),
-        _make_ticker_data("GOOGL", 0.5,  close=170.0, avg_volume_ratio=1.0),
-        _make_ticker_data("JPM",  -1.0,  close=195.0, avg_volume_ratio=1.8),
+        _make_ticker_data("AAPL", 5.0, close=180.0, avg_volume_ratio=1.2),
+        _make_ticker_data("MSFT", -3.5, close=400.0, avg_volume_ratio=0.9),
+        _make_ticker_data("TSLA", 12.0, close=250.0, avg_volume_ratio=3.5),
+        _make_ticker_data("NVDA", 8.0, close=900.0, avg_volume_ratio=2.1),
+        _make_ticker_data("META", -7.0, close=500.0, avg_volume_ratio=4.0),
+        _make_ticker_data("AMZN", 1.0, close=185.0, avg_volume_ratio=0.5),
+        _make_ticker_data("GOOGL", 0.5, close=170.0, avg_volume_ratio=1.0),
+        _make_ticker_data("JPM", -1.0, close=195.0, avg_volume_ratio=1.8),
     ]
 
 
 # ══════════════════════════════════════════════════════════════
 #  1. _safe_float
 # ══════════════════════════════════════════════════════════════
+
 
 class TestSafeFloat:
     """Tests for _safe_float conversion helper."""
@@ -125,6 +124,7 @@ class TestSafeFloat:
 #  2. _cache_key
 # ══════════════════════════════════════════════════════════════
 
+
 class TestCacheKey:
     """Tests for _cache_key deterministic key generation."""
 
@@ -172,6 +172,7 @@ class TestCacheKey:
 #  3. _read_cache / _write_cache roundtrip
 # ══════════════════════════════════════════════════════════════
 
+
 class TestCacheReadWrite:
     """Tests for file-based JSON cache roundtrip."""
 
@@ -207,6 +208,7 @@ class TestCacheReadWrite:
     def test_write_handles_non_serializable_via_default_str(self, tmp_path):
         """json.dump uses default=str so datetime objects do not crash."""
         from datetime import datetime
+
         cache_file = str(tmp_path / "dt_cache.json")
 
         with patch("volatility_scanner.CACHE_DIR", str(tmp_path)):
@@ -229,6 +231,7 @@ class TestCacheReadWrite:
 # ══════════════════════════════════════════════════════════════
 #  4. Cache expiry
 # ══════════════════════════════════════════════════════════════
+
 
 class TestCacheExpiry:
     """Tests for TTL-based cache expiration."""
@@ -300,14 +303,14 @@ class TestCacheExpiry:
 #  5. scan_sp500_movers
 # ══════════════════════════════════════════════════════════════
 
+
 class TestScanSP500Movers:
     """Tests for scan_sp500_movers with mocked fetch layer."""
 
     @patch("volatility_scanner._read_cache", return_value=None)
     @patch("volatility_scanner._write_cache")
     @patch("volatility_scanner._batch_fetch_movers")
-    def test_returns_expected_keys(self, mock_fetch, mock_write, mock_read,
-                                   sample_movers_data):
+    def test_returns_expected_keys(self, mock_fetch, mock_write, mock_read, sample_movers_data):
         mock_fetch.return_value = sample_movers_data
 
         result = scan_sp500_movers(top_n=3)
@@ -320,8 +323,9 @@ class TestScanSP500Movers:
     @patch("volatility_scanner._read_cache", return_value=None)
     @patch("volatility_scanner._write_cache")
     @patch("volatility_scanner._batch_fetch_movers")
-    def test_calls_batch_fetch_with_sp500_list(self, mock_fetch, mock_write,
-                                                mock_read, sample_movers_data):
+    def test_calls_batch_fetch_with_sp500_list(
+        self, mock_fetch, mock_write, mock_read, sample_movers_data
+    ):
         mock_fetch.return_value = sample_movers_data
 
         scan_sp500_movers(top_n=3)
@@ -331,8 +335,7 @@ class TestScanSP500Movers:
     @patch("volatility_scanner._read_cache", return_value=None)
     @patch("volatility_scanner._write_cache")
     @patch("volatility_scanner._batch_fetch_movers")
-    def test_top_n_limits_results(self, mock_fetch, mock_write, mock_read,
-                                  sample_movers_data):
+    def test_top_n_limits_results(self, mock_fetch, mock_write, mock_read, sample_movers_data):
         mock_fetch.return_value = sample_movers_data
 
         result = scan_sp500_movers(top_n=2)
@@ -343,8 +346,7 @@ class TestScanSP500Movers:
     @patch("volatility_scanner._read_cache", return_value=None)
     @patch("volatility_scanner._write_cache")
     @patch("volatility_scanner._batch_fetch_movers")
-    def test_gainers_sorted_descending(self, mock_fetch, mock_write, mock_read,
-                                       sample_movers_data):
+    def test_gainers_sorted_descending(self, mock_fetch, mock_write, mock_read, sample_movers_data):
         mock_fetch.return_value = sample_movers_data
 
         result = scan_sp500_movers(top_n=3)
@@ -356,8 +358,7 @@ class TestScanSP500Movers:
     @patch("volatility_scanner._read_cache", return_value=None)
     @patch("volatility_scanner._write_cache")
     @patch("volatility_scanner._batch_fetch_movers")
-    def test_losers_sorted_ascending(self, mock_fetch, mock_write, mock_read,
-                                     sample_movers_data):
+    def test_losers_sorted_ascending(self, mock_fetch, mock_write, mock_read, sample_movers_data):
         """Top losers should have worst (most negative) first."""
         mock_fetch.return_value = sample_movers_data
 
@@ -371,8 +372,9 @@ class TestScanSP500Movers:
     @patch("volatility_scanner._read_cache", return_value=None)
     @patch("volatility_scanner._write_cache")
     @patch("volatility_scanner._batch_fetch_movers")
-    def test_highest_volume_filters_ratio_above_2(self, mock_fetch, mock_write,
-                                                   mock_read, sample_movers_data):
+    def test_highest_volume_filters_ratio_above_2(
+        self, mock_fetch, mock_write, mock_read, sample_movers_data
+    ):
         mock_fetch.return_value = sample_movers_data
 
         result = scan_sp500_movers(top_n=5)
@@ -389,8 +391,9 @@ class TestScanSP500Movers:
     @patch("volatility_scanner._read_cache", return_value=None)
     @patch("volatility_scanner._write_cache")
     @patch("volatility_scanner._batch_fetch_movers")
-    def test_highest_volume_sorted_descending(self, mock_fetch, mock_write,
-                                              mock_read, sample_movers_data):
+    def test_highest_volume_sorted_descending(
+        self, mock_fetch, mock_write, mock_read, sample_movers_data
+    ):
         mock_fetch.return_value = sample_movers_data
 
         result = scan_sp500_movers(top_n=5)
@@ -402,21 +405,20 @@ class TestScanSP500Movers:
     @patch("volatility_scanner._read_cache", return_value=None)
     @patch("volatility_scanner._write_cache")
     @patch("volatility_scanner._batch_fetch_movers")
-    def test_scan_date_format(self, mock_fetch, mock_write, mock_read,
-                              sample_movers_data):
+    def test_scan_date_format(self, mock_fetch, mock_write, mock_read, sample_movers_data):
         mock_fetch.return_value = sample_movers_data
 
         result = scan_sp500_movers(top_n=3)
 
         # scan_date should be YYYY-MM-DD format
         from datetime import datetime
+
         datetime.strptime(result["scan_date"], "%Y-%m-%d")
 
     @patch("volatility_scanner._read_cache", return_value=None)
     @patch("volatility_scanner._write_cache")
     @patch("volatility_scanner._batch_fetch_movers")
-    def test_writes_result_to_cache(self, mock_fetch, mock_write, mock_read,
-                                    sample_movers_data):
+    def test_writes_result_to_cache(self, mock_fetch, mock_write, mock_read, sample_movers_data):
         mock_fetch.return_value = sample_movers_data
 
         result = scan_sp500_movers(top_n=3)
@@ -428,8 +430,12 @@ class TestScanSP500Movers:
     @patch("volatility_scanner._read_cache")
     @patch("volatility_scanner._batch_fetch_movers")
     def test_returns_cached_data_on_hit(self, mock_fetch, mock_read):
-        cached = {"top_gainers": [], "top_losers": [], "highest_volume": [],
-                  "scan_date": "2026-04-07"}
+        cached = {
+            "top_gainers": [],
+            "top_losers": [],
+            "highest_volume": [],
+            "scan_date": "2026-04-07",
+        }
         mock_read.return_value = cached
 
         result = scan_sp500_movers(top_n=5)
@@ -455,14 +461,14 @@ class TestScanSP500Movers:
 #  6. scan_portfolio_movers
 # ══════════════════════════════════════════════════════════════
 
+
 class TestScanPortfolioMovers:
     """Tests for scan_portfolio_movers with mocked fetch layer."""
 
     @patch("volatility_scanner._read_cache", return_value=None)
     @patch("volatility_scanner._write_cache")
     @patch("volatility_scanner._batch_fetch_movers")
-    def test_returns_expected_keys(self, mock_fetch, mock_write, mock_read,
-                                   sample_movers_data):
+    def test_returns_expected_keys(self, mock_fetch, mock_write, mock_read, sample_movers_data):
         mock_fetch.return_value = sample_movers_data
 
         result = scan_portfolio_movers(["AAPL", "MSFT", "TSLA"], top_n=2)
@@ -475,8 +481,9 @@ class TestScanPortfolioMovers:
     @patch("volatility_scanner._read_cache", return_value=None)
     @patch("volatility_scanner._write_cache")
     @patch("volatility_scanner._batch_fetch_movers")
-    def test_calls_batch_fetch_with_user_tickers(self, mock_fetch, mock_write,
-                                                  mock_read, sample_movers_data):
+    def test_calls_batch_fetch_with_user_tickers(
+        self, mock_fetch, mock_write, mock_read, sample_movers_data
+    ):
         tickers = ["AAPL", "MSFT", "TSLA"]
         mock_fetch.return_value = sample_movers_data
 
@@ -487,8 +494,7 @@ class TestScanPortfolioMovers:
     @patch("volatility_scanner._read_cache", return_value=None)
     @patch("volatility_scanner._write_cache")
     @patch("volatility_scanner._batch_fetch_movers")
-    def test_top_n_limits_results(self, mock_fetch, mock_write, mock_read,
-                                  sample_movers_data):
+    def test_top_n_limits_results(self, mock_fetch, mock_write, mock_read, sample_movers_data):
         mock_fetch.return_value = sample_movers_data
 
         result = scan_portfolio_movers(["AAPL", "MSFT"], top_n=2)
@@ -499,8 +505,7 @@ class TestScanPortfolioMovers:
     @patch("volatility_scanner._read_cache", return_value=None)
     @patch("volatility_scanner._write_cache")
     @patch("volatility_scanner._batch_fetch_movers")
-    def test_gainers_sorted_descending(self, mock_fetch, mock_write, mock_read,
-                                       sample_movers_data):
+    def test_gainers_sorted_descending(self, mock_fetch, mock_write, mock_read, sample_movers_data):
         mock_fetch.return_value = sample_movers_data
 
         result = scan_portfolio_movers(["AAPL"], top_n=5)
@@ -512,8 +517,7 @@ class TestScanPortfolioMovers:
     @patch("volatility_scanner._read_cache", return_value=None)
     @patch("volatility_scanner._write_cache")
     @patch("volatility_scanner._batch_fetch_movers")
-    def test_losers_sorted_ascending(self, mock_fetch, mock_write, mock_read,
-                                     sample_movers_data):
+    def test_losers_sorted_ascending(self, mock_fetch, mock_write, mock_read, sample_movers_data):
         mock_fetch.return_value = sample_movers_data
 
         result = scan_portfolio_movers(["AAPL"], top_n=5)
@@ -525,8 +529,7 @@ class TestScanPortfolioMovers:
     @patch("volatility_scanner._read_cache", return_value=None)
     @patch("volatility_scanner._write_cache")
     @patch("volatility_scanner._batch_fetch_movers")
-    def test_unusual_volume_filtering(self, mock_fetch, mock_write, mock_read,
-                                      sample_movers_data):
+    def test_unusual_volume_filtering(self, mock_fetch, mock_write, mock_read, sample_movers_data):
         mock_fetch.return_value = sample_movers_data
 
         result = scan_portfolio_movers(["AAPL"], top_n=10)
@@ -538,8 +541,12 @@ class TestScanPortfolioMovers:
     @patch("volatility_scanner._read_cache")
     @patch("volatility_scanner._batch_fetch_movers")
     def test_returns_cached_data_on_hit(self, mock_fetch, mock_read):
-        cached = {"top_gainers": [], "top_losers": [], "highest_volume": [],
-                  "scan_date": "2026-04-07"}
+        cached = {
+            "top_gainers": [],
+            "top_losers": [],
+            "highest_volume": [],
+            "scan_date": "2026-04-07",
+        }
         mock_read.return_value = cached
 
         result = scan_portfolio_movers(["AAPL", "MSFT"], top_n=5)
@@ -550,8 +557,7 @@ class TestScanPortfolioMovers:
     @patch("volatility_scanner._read_cache", return_value=None)
     @patch("volatility_scanner._write_cache")
     @patch("volatility_scanner._batch_fetch_movers")
-    def test_cache_key_includes_sorted_tickers(self, mock_fetch, mock_write,
-                                                mock_read):
+    def test_cache_key_includes_sorted_tickers(self, mock_fetch, mock_write, mock_read):
         """Cache key should be based on sorted ticker list, so order doesn't matter."""
         mock_fetch.return_value = []
 
@@ -567,8 +573,9 @@ class TestScanPortfolioMovers:
     @patch("volatility_scanner._read_cache", return_value=None)
     @patch("volatility_scanner._write_cache")
     @patch("volatility_scanner._batch_fetch_movers")
-    def test_none_avg_volume_ratio_excluded_from_high_volume(self, mock_fetch,
-                                                              mock_write, mock_read):
+    def test_none_avg_volume_ratio_excluded_from_high_volume(
+        self, mock_fetch, mock_write, mock_read
+    ):
         """Items with avg_volume_ratio=None should not appear in highest_volume."""
         data = [
             _make_ticker_data("A", 1.0, avg_volume_ratio=None),
@@ -588,6 +595,7 @@ class TestScanPortfolioMovers:
 # ══════════════════════════════════════════════════════════════
 #  7. Sorting logic edge cases
 # ══════════════════════════════════════════════════════════════
+
 
 class TestSortingLogic:
     """Edge cases for the mover sorting logic."""
@@ -640,8 +648,7 @@ class TestSortingLogic:
     @patch("volatility_scanner._read_cache", return_value=None)
     @patch("volatility_scanner._write_cache")
     @patch("volatility_scanner._batch_fetch_movers")
-    def test_top_gainer_is_best(self, mock_fetch, mock_write, mock_read,
-                                sample_movers_data):
+    def test_top_gainer_is_best(self, mock_fetch, mock_write, mock_read, sample_movers_data):
         """The first gainer must be the one with the highest change_pct."""
         mock_fetch.return_value = sample_movers_data
 
@@ -654,8 +661,7 @@ class TestSortingLogic:
     @patch("volatility_scanner._read_cache", return_value=None)
     @patch("volatility_scanner._write_cache")
     @patch("volatility_scanner._batch_fetch_movers")
-    def test_top_loser_is_worst(self, mock_fetch, mock_write, mock_read,
-                                sample_movers_data):
+    def test_top_loser_is_worst(self, mock_fetch, mock_write, mock_read, sample_movers_data):
         """The first loser must be the one with the most negative change_pct."""
         mock_fetch.return_value = sample_movers_data
 
@@ -669,6 +675,7 @@ class TestSortingLogic:
 # ══════════════════════════════════════════════════════════════
 #  8. Unusual volume filtering edge cases
 # ══════════════════════════════════════════════════════════════
+
 
 class TestUnusualVolumeFiltering:
     """Tests for the highest_volume (avg_volume_ratio > 2.0) filter."""
@@ -716,11 +723,9 @@ class TestUnusualVolumeFiltering:
     @patch("volatility_scanner._read_cache", return_value=None)
     @patch("volatility_scanner._write_cache")
     @patch("volatility_scanner._batch_fetch_movers")
-    def test_high_volume_includes_all_above_threshold(self, mock_fetch, mock_write,
-                                                      mock_read):
+    def test_high_volume_includes_all_above_threshold(self, mock_fetch, mock_write, mock_read):
         """All items above 2.0 should be included, not just top_n."""
-        data = [_make_ticker_data(f"T{i}", 1.0, avg_volume_ratio=2.5 + i)
-                for i in range(10)]
+        data = [_make_ticker_data(f"T{i}", 1.0, avg_volume_ratio=2.5 + i) for i in range(10)]
         mock_fetch.return_value = data
 
         # top_n=3 limits gainers/losers but NOT highest_volume
@@ -734,6 +739,7 @@ class TestUnusualVolumeFiltering:
 #  9. get_sector_performance
 # ══════════════════════════════════════════════════════════════
 
+
 class TestGetSectorPerformance:
     """Tests for get_sector_performance with mocked sector ETF fetch."""
 
@@ -742,8 +748,10 @@ class TestGetSectorPerformance:
     @patch("volatility_scanner._fetch_sector_etf")
     def test_returns_list(self, mock_fetch_etf, mock_write, mock_read):
         mock_fetch_etf.return_value = {
-            "sector": "Technology", "ticker": "XLK",
-            "change_pct": 1.5, "ytd_return": 8.0,
+            "sector": "Technology",
+            "ticker": "XLK",
+            "change_pct": 1.5,
+            "ytd_return": 8.0,
         }
 
         with patch("volatility_scanner.ThreadPoolExecutor") as mock_pool_cls:
@@ -754,15 +762,17 @@ class TestGetSectorPerformance:
 
             mock_future = MagicMock()
             mock_future.result.return_value = {
-                "sector": "Technology", "ticker": "XLK",
-                "change_pct": 1.5, "ytd_return": 8.0,
+                "sector": "Technology",
+                "ticker": "XLK",
+                "change_pct": 1.5,
+                "ytd_return": 8.0,
             }
 
             mock_pool.submit.return_value = mock_future
 
-            from concurrent.futures import as_completed as real_as_completed
-            with patch("volatility_scanner.as_completed",
-                       return_value=[mock_future] * len(SECTOR_ETFS)):
+            with patch(
+                "volatility_scanner.as_completed", return_value=[mock_future] * len(SECTOR_ETFS)
+            ):
                 result = get_sector_performance()
 
         assert isinstance(result, list)
@@ -780,6 +790,7 @@ class TestGetSectorPerformance:
 # ══════════════════════════════════════════════════════════════
 #  10. Constants sanity checks
 # ══════════════════════════════════════════════════════════════
+
 
 class TestConstants:
     """Basic sanity checks on module constants."""

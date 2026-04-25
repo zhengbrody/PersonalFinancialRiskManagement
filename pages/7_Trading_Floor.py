@@ -8,15 +8,15 @@ REFACTORED: All raw HTML tables/grids replaced with Streamlit-native components
 """
 
 import json
-import streamlit as st
-import numpy as np
-import pandas as pd
 from datetime import datetime
 
-from ui.shared_sidebar import render_shared_sidebar
-from ui.components import render_section, render_kpi_row, render_ai_digest
-from i18n import get_translator
+import pandas as pd
+import streamlit as st
+
 from app import call_llm
+from i18n import get_translator
+from ui.components import render_ai_digest, render_kpi_row, render_section
+from ui.shared_sidebar import render_shared_sidebar
 
 # ── Shared sidebar ─────────────────────────────────────────
 render_shared_sidebar()
@@ -29,7 +29,8 @@ t = get_translator(lang)
 #  Bloomberg Terminal CSS (simple styling only -- no tables/grids)
 # ════════════════════════════════════════════════════════════
 
-st.markdown("""
+st.markdown(
+    """
 <style>
 /* ── Trading Floor: global overrides ────────────────────── */
 .trading-floor {
@@ -67,12 +68,15 @@ st.markdown("""
     margin: 16px 0 8px 0;
 }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 
 # ════════════════════════════════════════════════════════════
 #  Helper functions
 # ════════════════════════════════════════════════════════════
+
 
 def _fmt_pct(val, decimals=2):
     """Format a float as a signed percentage string."""
@@ -115,10 +119,10 @@ def _signal_emoji(signal_str):
     """Return emoji indicator for signal."""
     s = (signal_str or "").upper()
     if s in ("BULLISH", "STRONGLY_BULLISH", "BULL"):
-        return "\U0001F7E2"  # green circle
+        return "\U0001f7e2"  # green circle
     if s in ("BEARISH", "STRONGLY_BEARISH", "BEAR"):
-        return "\U0001F534"  # red circle
-    return "\U0001F7E1"  # yellow circle
+        return "\U0001f534"  # red circle
+    return "\U0001f7e1"  # yellow circle
 
 
 def _get_portfolio_tickers():
@@ -163,8 +167,8 @@ st.markdown(
 if not st.session_state.get("weights"):
     st.caption(
         "Showing default market watchlist. Load your portfolio in the sidebar for personalized positioning."
-        if lang == "en" else
-        "显示默认市场监控列表。在侧边栏加载投资组合以查看个性化持仓视角。"
+        if lang == "en"
+        else "显示默认市场监控列表。在侧边栏加载投资组合以查看个性化持仓视角。"
     )
 
 
@@ -175,7 +179,7 @@ if not st.session_state.get("weights"):
 load_col, status_col = st.columns([1, 3])
 with load_col:
     load_data = st.button(
-        "LOAD MARKET DATA" if lang == "en" else "\u52A0\u8F7D\u5E02\u573A\u6570\u636E",
+        "LOAD MARKET DATA" if lang == "en" else "\u52a0\u8f7d\u5e02\u573a\u6570\u636e",
         type="primary",
         key="tf_load_data",
         use_container_width=True,
@@ -185,6 +189,7 @@ if load_data:
     with st.spinner("Scanning markets..."):
         try:
             from regime_detector import get_regime_summary
+
             st.session_state._tf_regime = get_regime_summary()
         except Exception as exc:
             st.session_state._tf_regime = None
@@ -192,27 +197,31 @@ if load_data:
 
         try:
             from volatility_scanner import get_sector_performance
+
             st.session_state._tf_sectors = get_sector_performance()
-        except Exception as exc:
+        except Exception:
             st.session_state._tf_sectors = None
 
         try:
             from volatility_scanner import scan_sp500_movers
+
             st.session_state._tf_movers = scan_sp500_movers(top_n=10)
-        except Exception as exc:
+        except Exception:
             st.session_state._tf_movers = None
 
         try:
             from volatility_scanner import get_market_regime_summary
+
             st.session_state._tf_market_regime = get_market_regime_summary()
-        except Exception as exc:
+        except Exception:
             st.session_state._tf_market_regime = None
 
         try:
             tickers = _get_portfolio_tickers()
             from options_flow import get_options_flow_summary
+
             st.session_state._tf_options_flow = get_options_flow_summary(tickers)
-        except Exception as exc:
+        except Exception:
             st.session_state._tf_options_flow = None
 
     st.success("Market data loaded.")
@@ -266,17 +275,56 @@ if market_data:
 render_section("Market Regime")
 
 regime_kpis = [
-    {"label": "Regime", "value": regime_label, "delta": f"Conf: {confidence_pct}", "delta_color": "neutral"},
-    {"label": "VIX", "value": vix_level_str, "delta": vix_change_str,
-     "delta_color": "negative" if vix_val is not None and vix_val >= 30 else ("neutral" if vix_val is not None and vix_val >= 20 else "positive")},
-    {"label": "S&P 500", "value": sp500_change_str,
-     "delta_color": "positive" if sp_val is not None and sp_val > 0 else ("negative" if sp_val is not None and sp_val < 0 else "neutral")},
-    {"label": "10Y Yield", "value": f"{market_data.get('tnx_yield', '--')}%" if market_data else "--",
-     "delta": _fmt_num(market_data.get('tnx_change'), 3) if market_data and market_data.get('tnx_change') is not None else None,
-     "delta_color": "neutral"},
-    {"label": "USD Index", "value": str(market_data.get('usd_index', '--')) if market_data else "--"},
-    {"label": "P/C Ratio", "value": str(market_data.get('put_call_ratio', '--')) if market_data else "--",
-     "delta_color": "negative" if market_data and market_data.get('put_call_ratio') is not None and market_data['put_call_ratio'] > 1.0 else "positive"},
+    {
+        "label": "Regime",
+        "value": regime_label,
+        "delta": f"Conf: {confidence_pct}",
+        "delta_color": "neutral",
+    },
+    {
+        "label": "VIX",
+        "value": vix_level_str,
+        "delta": vix_change_str,
+        "delta_color": (
+            "negative"
+            if vix_val is not None and vix_val >= 30
+            else ("neutral" if vix_val is not None and vix_val >= 20 else "positive")
+        ),
+    },
+    {
+        "label": "S&P 500",
+        "value": sp500_change_str,
+        "delta_color": (
+            "positive"
+            if sp_val is not None and sp_val > 0
+            else ("negative" if sp_val is not None and sp_val < 0 else "neutral")
+        ),
+    },
+    {
+        "label": "10Y Yield",
+        "value": f"{market_data.get('tnx_yield', '--')}%" if market_data else "--",
+        "delta": (
+            _fmt_num(market_data.get("tnx_change"), 3)
+            if market_data and market_data.get("tnx_change") is not None
+            else None
+        ),
+        "delta_color": "neutral",
+    },
+    {
+        "label": "USD Index",
+        "value": str(market_data.get("usd_index", "--")) if market_data else "--",
+    },
+    {
+        "label": "P/C Ratio",
+        "value": str(market_data.get("put_call_ratio", "--")) if market_data else "--",
+        "delta_color": (
+            "negative"
+            if market_data
+            and market_data.get("put_call_ratio") is not None
+            and market_data["put_call_ratio"] > 1.0
+            else "positive"
+        ),
+    },
 ]
 render_kpi_row(regime_kpis)
 
@@ -305,7 +353,9 @@ What should traders watch for today? Comment on volatility regime and positionin
 #  SECTION 2: Sector Heatmap + Top Movers  (side by side)
 # ════════════════════════════════════════════════════════════
 
-st.markdown('<div class="tf-section-hdr">SECTOR HEATMAP &amp; TOP MOVERS</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="tf-section-hdr">SECTOR HEATMAP &amp; TOP MOVERS</div>', unsafe_allow_html=True
+)
 
 col_sectors, col_movers = st.columns([1, 1])
 
@@ -318,11 +368,13 @@ with col_sectors:
             pct = s.get("change_pct", 0) or 0
             ytd = s.get("ytd_return")
             name = s.get("sector", "??")
-            sector_rows.append({
-                "Sector": name,
-                "Change %": pct,
-                "YTD %": ytd if ytd is not None else float("nan"),
-            })
+            sector_rows.append(
+                {
+                    "Sector": name,
+                    "Change %": pct,
+                    "YTD %": ytd if ytd is not None else float("nan"),
+                }
+            )
         sector_df = pd.DataFrame(sector_rows)
 
         def _color_change(val):
@@ -334,10 +386,12 @@ with col_sectors:
                 return "color: #FF4444"
             return "color: #8B949E"
 
-        styled_sector = sector_df.style.format({
-            "Change %": "{:+.2f}%",
-            "YTD %": lambda x: f"{x:+.1f}%" if not pd.isna(x) else "--",
-        }).map(_color_change, subset=["Change %", "YTD %"])
+        styled_sector = sector_df.style.format(
+            {
+                "Change %": "{:+.2f}%",
+                "YTD %": lambda x: f"{x:+.1f}%" if not pd.isna(x) else "--",
+            }
+        ).map(_color_change, subset=["Change %", "YTD %"])
 
         st.dataframe(styled_sector, hide_index=True, use_container_width=True)
     else:
@@ -354,21 +408,25 @@ with col_movers:
         for g in gainers:
             g_pct = g.get("change_pct", 0)
             g_vol = g.get("avg_volume_ratio")
-            movers_rows.append({
-                "Ticker": g.get("ticker", "??"),
-                "Change %": g_pct,
-                "Vol Ratio": f"{g_vol:.1f}x" if g_vol else "--",
-                "Signal": "\U0001F7E2 BULL",
-            })
+            movers_rows.append(
+                {
+                    "Ticker": g.get("ticker", "??"),
+                    "Change %": g_pct,
+                    "Vol Ratio": f"{g_vol:.1f}x" if g_vol else "--",
+                    "Signal": "\U0001f7e2 BULL",
+                }
+            )
         for lo in losers:
             l_pct = lo.get("change_pct", 0)
             l_vol = lo.get("avg_volume_ratio")
-            movers_rows.append({
-                "Ticker": lo.get("ticker", "??"),
-                "Change %": l_pct,
-                "Vol Ratio": f"{l_vol:.1f}x" if l_vol else "--",
-                "Signal": "\U0001F534 BEAR",
-            })
+            movers_rows.append(
+                {
+                    "Ticker": lo.get("ticker", "??"),
+                    "Change %": l_pct,
+                    "Vol Ratio": f"{l_vol:.1f}x" if l_vol else "--",
+                    "Signal": "\U0001f534 BEAR",
+                }
+            )
 
         if movers_rows:
             movers_df = pd.DataFrame(movers_rows)
@@ -384,9 +442,11 @@ with col_movers:
                     pass
                 return ""
 
-            styled_movers = movers_df.style.format({
-                "Change %": "{:+.2f}%",
-            }).map(_color_movers, subset=["Change %"])
+            styled_movers = movers_df.style.format(
+                {
+                    "Change %": "{:+.2f}%",
+                }
+            ).map(_color_movers, subset=["Change %"])
 
             st.dataframe(styled_movers, hide_index=True, use_container_width=True)
     else:
@@ -421,24 +481,36 @@ if report and isinstance(report, dict):
         sharpe_dc = "neutral"
 
     risk_kpis = [
-        {"label": "Ann. Return",
-         "value": _fmt_pct(ann_ret * 100, 1) if ann_ret is not None else "--",
-         "delta_color": "positive" if ann_ret is not None and ann_ret > 0 else "negative"},
-        {"label": "VaR 95%",
-         "value": _fmt_pct(var95 * 100, 2) if var95 is not None else "--",
-         "delta_color": "negative"},
-        {"label": "VaR 99%",
-         "value": _fmt_pct(var99 * 100, 2) if var99 is not None else "--",
-         "delta_color": "negative"},
-        {"label": "Sharpe",
-         "value": f"{sharpe:.2f}" if sharpe is not None else "--",
-         "delta_color": sharpe_dc},
-        {"label": "Max DD",
-         "value": _fmt_pct(max_dd * 100, 1) if max_dd is not None else "--",
-         "delta_color": "negative"},
-        {"label": "Ann. Vol",
-         "value": _fmt_pct(ann_vol * 100, 1) if ann_vol is not None else "--",
-         "delta_color": "neutral"},
+        {
+            "label": "Ann. Return",
+            "value": _fmt_pct(ann_ret * 100, 1) if ann_ret is not None else "--",
+            "delta_color": "positive" if ann_ret is not None and ann_ret > 0 else "negative",
+        },
+        {
+            "label": "VaR 95%",
+            "value": _fmt_pct(var95 * 100, 2) if var95 is not None else "--",
+            "delta_color": "negative",
+        },
+        {
+            "label": "VaR 99%",
+            "value": _fmt_pct(var99 * 100, 2) if var99 is not None else "--",
+            "delta_color": "negative",
+        },
+        {
+            "label": "Sharpe",
+            "value": f"{sharpe:.2f}" if sharpe is not None else "--",
+            "delta_color": sharpe_dc,
+        },
+        {
+            "label": "Max DD",
+            "value": _fmt_pct(max_dd * 100, 1) if max_dd is not None else "--",
+            "delta_color": "negative",
+        },
+        {
+            "label": "Ann. Vol",
+            "value": _fmt_pct(ann_vol * 100, 1) if ann_vol is not None else "--",
+            "delta_color": "neutral",
+        },
     ]
     render_kpi_row(risk_kpis)
 
@@ -456,7 +528,9 @@ if report and isinstance(report, dict):
             margin_kpis.append({"label": "Margin", "value": f"${margin:,.0f}"})
         if leverage is not None:
             lev_dc = "positive" if leverage < 1.5 else ("neutral" if leverage < 2.0 else "negative")
-            margin_kpis.append({"label": "Leverage", "value": f"{leverage:.2f}x", "delta_color": lev_dc})
+            margin_kpis.append(
+                {"label": "Leverage", "value": f"{leverage:.2f}x", "delta_color": lev_dc}
+            )
         if margin_kpis:
             render_kpi_row(margin_kpis)
 
@@ -488,22 +562,33 @@ if flow and isinstance(flow, dict):
 
     sent_dc = "positive" if sentiment > 15 else ("negative" if sentiment < -15 else "neutral")
 
-    render_kpi_row([
-        {"label": "Put/Call Ratio", "value": pc_str, "delta_color": pc_dc},
-        {"label": "Sentiment", "value": f"{sentiment:+d}", "delta": sentiment_label, "delta_color": sent_dc},
-        {"label": "Call Volume", "value": f"{call_vol:,}", "delta_color": "positive"},
-        {"label": "Put Volume", "value": f"{put_vol:,}", "delta_color": "negative"},
-    ])
+    render_kpi_row(
+        [
+            {"label": "Put/Call Ratio", "value": pc_str, "delta_color": pc_dc},
+            {
+                "label": "Sentiment",
+                "value": f"{sentiment:+d}",
+                "delta": sentiment_label,
+                "delta_color": sent_dc,
+            },
+            {"label": "Call Volume", "value": f"{call_vol:,}", "delta_color": "positive"},
+            {"label": "Put Volume", "value": f"{put_vol:,}", "delta_color": "negative"},
+        ]
+    )
 
     st.caption(
         "For detailed options flow analysis (unusual volume, large premiums, per-ticker signals), "
         "see the **Institutions** page → Options Flow tab."
-        if lang == "en" else
-        "如需详细期权流分析（异常成交量、大额期权、逐股信号），请查看 **机构** 页面 → 期权流选项卡。"
+        if lang == "en"
+        else "如需详细期权流分析（异常成交量、大额期权、逐股信号），请查看 **机构** 页面 → 期权流选项卡。"
     )
 
 else:
-    st.info("Click 'Load Market Data' above to scan options flow." if lang == "en" else "点击上方「加载市场数据」以扫描期权流。")
+    st.info(
+        "Click 'Load Market Data' above to scan options flow."
+        if lang == "en"
+        else "点击上方「加载市场数据」以扫描期权流。"
+    )
 
 
 # ════════════════════════════════════════════════════════════
@@ -513,15 +598,16 @@ else:
 st.markdown(
     f'<div style="margin-top:24px;padding-top:8px;border-top:1px solid rgba(139,148,158,0.1);'
     f'font-family:monospace;font-size:9px;color:#484F58;">'
-    f'MINDMARKET AI TRADING FLOOR v1.0 &nbsp;|&nbsp; '
-    f'DATA CACHED 1HR &nbsp;|&nbsp; OPTIONS CACHED 30MIN &nbsp;|&nbsp; REGIME CACHED 4HR'
-    f' &nbsp;|&nbsp; {now_str}</div>',
+    f"MINDMARKET AI TRADING FLOOR v1.0 &nbsp;|&nbsp; "
+    f"DATA CACHED 1HR &nbsp;|&nbsp; OPTIONS CACHED 30MIN &nbsp;|&nbsp; REGIME CACHED 4HR"
+    f" &nbsp;|&nbsp; {now_str}</div>",
     unsafe_allow_html=True,
 )
 
 # Floating AI Assistant
 try:
     from ui.floating_chat import render_floating_ai_chat
+
     render_floating_ai_chat()
 except Exception:
     pass

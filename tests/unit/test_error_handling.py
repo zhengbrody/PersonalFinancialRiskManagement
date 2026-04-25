@@ -4,11 +4,13 @@ test_error_handling.py
 测试JSON解析、权重验证、ticker验证等
 """
 
-import pytest
 import json
+
+import pytest
+
 from error_handler import (
-    validate_weights, validate_tickers, handle_json_error,
-    show_error, show_warning, show_success
+    validate_tickers,
+    validate_weights,
 )
 
 
@@ -166,7 +168,7 @@ class TestJSONParsing:
 
     def test_json_array_instead_of_object(self):
         """测试数组而不是对象"""
-        json_str = '[0.5, 0.5]'
+        json_str = "[0.5, 0.5]"
         try:
             result = json.loads(json_str)
             # JSON有效，但不是字典，应该在其他地方处理
@@ -236,9 +238,9 @@ class TestErrorMessages:
             json.loads(json_str)
         except json.JSONDecodeError as e:
             # 错误对象应该包含行号和列号
-            assert hasattr(e, 'lineno')
-            assert hasattr(e, 'colno')
-            assert hasattr(e, 'msg')
+            assert hasattr(e, "lineno")
+            assert hasattr(e, "colno")
+            assert hasattr(e, "msg")
 
     def test_weight_validation_message_detail(self):
         """测试权重验证错误消息的详细程度"""

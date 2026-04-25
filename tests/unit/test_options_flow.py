@@ -7,36 +7,33 @@ Covers: _safe_float, _classify_moneyness, _process_chain_for_unusual_volume,
 """
 
 import json
-import math
 import os
 import time
-import tempfile
-import shutil
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 import pytest
-from unittest.mock import patch, MagicMock
-from types import SimpleNamespace
 
 from options_flow import (
-    _safe_float,
-    _classify_moneyness,
-    _process_chain_for_unusual_volume,
-    get_put_call_ratio,
-    scan_unusual_volume,
-    scan_large_premium,
-    _cache_key,
-    _read_cache,
-    _write_cache,
     CACHE_DIR,
     CACHE_MAX_AGE_SECONDS,
+    _cache_key,
+    _classify_moneyness,
+    _process_chain_for_unusual_volume,
+    _read_cache,
+    _safe_float,
+    _write_cache,
+    get_put_call_ratio,
+    scan_large_premium,
+    scan_unusual_volume,
 )
-
 
 # ======================================================================
 #  Helpers
 # ======================================================================
+
 
 def _make_chain(calls_data: list, puts_data: list):
     """Build a mock option chain object with .calls and .puts DataFrames."""
@@ -49,6 +46,7 @@ def _make_chain(calls_data: list, puts_data: list):
 # ======================================================================
 #  _safe_float
 # ======================================================================
+
 
 class TestSafeFloat:
     """Tests for the _safe_float helper."""
@@ -115,6 +113,7 @@ class TestSafeFloat:
 # ======================================================================
 #  _classify_moneyness
 # ======================================================================
+
 
 class TestClassifyMoneyness:
     """Tests for moneyness classification with 2% ATM threshold."""
@@ -202,6 +201,7 @@ class TestClassifyMoneyness:
 #  _process_chain_for_unusual_volume
 # ======================================================================
 
+
 class TestProcessChainForUnusualVolume:
     """Tests for processing option chains and flagging unusual volume."""
 
@@ -215,8 +215,11 @@ class TestProcessChainForUnusualVolume:
             puts_data=[],
         )
         results = _process_chain_for_unusual_volume(
-            ticker="AAPL", expiry="2026-04-17", chain=chain,
-            spot=155.0, min_vol_oi_ratio=2.0,
+            ticker="AAPL",
+            expiry="2026-04-17",
+            chain=chain,
+            spot=155.0,
+            min_vol_oi_ratio=2.0,
         )
         assert len(results) == 1
         entry = results[0]
@@ -239,8 +242,11 @@ class TestProcessChainForUnusualVolume:
             ],
         )
         results = _process_chain_for_unusual_volume(
-            ticker="TSLA", expiry="2026-05-15", chain=chain,
-            spot=155.0, min_vol_oi_ratio=2.0,
+            ticker="TSLA",
+            expiry="2026-05-15",
+            chain=chain,
+            spot=155.0,
+            min_vol_oi_ratio=2.0,
         )
         assert len(results) == 1
         entry = results[0]
@@ -257,8 +263,11 @@ class TestProcessChainForUnusualVolume:
             puts_data=[],
         )
         results = _process_chain_for_unusual_volume(
-            ticker="AAPL", expiry="2026-04-17", chain=chain,
-            spot=155.0, min_vol_oi_ratio=2.0,
+            ticker="AAPL",
+            expiry="2026-04-17",
+            chain=chain,
+            spot=155.0,
+            min_vol_oi_ratio=2.0,
         )
         assert len(results) == 0
 
@@ -272,8 +281,11 @@ class TestProcessChainForUnusualVolume:
             puts_data=[],
         )
         results = _process_chain_for_unusual_volume(
-            ticker="AAPL", expiry="2026-04-17", chain=chain,
-            spot=155.0, min_vol_oi_ratio=10.0,
+            ticker="AAPL",
+            expiry="2026-04-17",
+            chain=chain,
+            spot=155.0,
+            min_vol_oi_ratio=10.0,
         )
         assert len(results) == 1
         assert results[0]["vol_oi_ratio"] == 6.0
@@ -287,8 +299,11 @@ class TestProcessChainForUnusualVolume:
             puts_data=[],
         )
         results = _process_chain_for_unusual_volume(
-            ticker="AAPL", expiry="2026-04-17", chain=chain,
-            spot=155.0, min_vol_oi_ratio=2.0,
+            ticker="AAPL",
+            expiry="2026-04-17",
+            chain=chain,
+            spot=155.0,
+            min_vol_oi_ratio=2.0,
         )
         assert len(results) == 1
         assert results[0]["vol_oi_ratio"] == 100.0  # 100/1
@@ -303,8 +318,11 @@ class TestProcessChainForUnusualVolume:
             puts_data=[],
         )
         results = _process_chain_for_unusual_volume(
-            ticker="AAPL", expiry="2026-04-17", chain=chain,
-            spot=155.0, min_vol_oi_ratio=2.0,
+            ticker="AAPL",
+            expiry="2026-04-17",
+            chain=chain,
+            spot=155.0,
+            min_vol_oi_ratio=2.0,
         )
         assert len(results) == 1
         assert results[0]["vol_oi_ratio"] == 100.0
@@ -319,8 +337,11 @@ class TestProcessChainForUnusualVolume:
             puts_data=[],
         )
         results = _process_chain_for_unusual_volume(
-            ticker="AAPL", expiry="2026-04-17", chain=chain,
-            spot=155.0, min_vol_oi_ratio=2.0,
+            ticker="AAPL",
+            expiry="2026-04-17",
+            chain=chain,
+            spot=155.0,
+            min_vol_oi_ratio=2.0,
         )
         assert len(results) == 1
         # premium = 3.0 * 1000 * 100 = 300,000
@@ -328,20 +349,27 @@ class TestProcessChainForUnusualVolume:
 
     def test_premium_estimation_ask_only(self):
         """When bid is None/missing, fall back to ask * volume * 100."""
-        chain_data = pd.DataFrame([{
-            "strike": 150.0,
-            "volume": 200,
-            "openInterest": 10,
-            "bid": float("nan"),
-            "ask": 5.0,
-        }])
+        chain_data = pd.DataFrame(
+            [
+                {
+                    "strike": 150.0,
+                    "volume": 200,
+                    "openInterest": 10,
+                    "bid": float("nan"),
+                    "ask": 5.0,
+                }
+            ]
+        )
         chain = SimpleNamespace(
             calls=chain_data,
             puts=pd.DataFrame(columns=["strike", "volume", "openInterest", "bid", "ask"]),
         )
         results = _process_chain_for_unusual_volume(
-            ticker="AAPL", expiry="2026-04-17", chain=chain,
-            spot=155.0, min_vol_oi_ratio=2.0,
+            ticker="AAPL",
+            expiry="2026-04-17",
+            chain=chain,
+            spot=155.0,
+            min_vol_oi_ratio=2.0,
         )
         assert len(results) == 1
         # premium = 5.0 * 200 * 100 = 100,000
@@ -349,20 +377,27 @@ class TestProcessChainForUnusualVolume:
 
     def test_premium_zero_when_no_bid_no_ask(self):
         """When both bid and ask are NaN, premium should be 0."""
-        chain_data = pd.DataFrame([{
-            "strike": 150.0,
-            "volume": 200,
-            "openInterest": 10,
-            "bid": float("nan"),
-            "ask": float("nan"),
-        }])
+        chain_data = pd.DataFrame(
+            [
+                {
+                    "strike": 150.0,
+                    "volume": 200,
+                    "openInterest": 10,
+                    "bid": float("nan"),
+                    "ask": float("nan"),
+                }
+            ]
+        )
         chain = SimpleNamespace(
             calls=chain_data,
             puts=pd.DataFrame(columns=["strike", "volume", "openInterest", "bid", "ask"]),
         )
         results = _process_chain_for_unusual_volume(
-            ticker="AAPL", expiry="2026-04-17", chain=chain,
-            spot=155.0, min_vol_oi_ratio=2.0,
+            ticker="AAPL",
+            expiry="2026-04-17",
+            chain=chain,
+            spot=155.0,
+            min_vol_oi_ratio=2.0,
         )
         assert len(results) == 1
         assert results[0]["premium_est"] == 0.0
@@ -376,8 +411,11 @@ class TestProcessChainForUnusualVolume:
             puts_data=[],
         )
         results = _process_chain_for_unusual_volume(
-            ticker="AAPL", expiry="2026-04-17", chain=chain,
-            spot=155.0, min_vol_oi_ratio=2.0,
+            ticker="AAPL",
+            expiry="2026-04-17",
+            chain=chain,
+            spot=155.0,
+            min_vol_oi_ratio=2.0,
         )
         assert len(results) == 0
 
@@ -390,8 +428,11 @@ class TestProcessChainForUnusualVolume:
             puts_data=[],
         )
         results = _process_chain_for_unusual_volume(
-            ticker="AAPL", expiry="2026-04-17", chain=chain,
-            spot=155.0, min_vol_oi_ratio=2.0,
+            ticker="AAPL",
+            expiry="2026-04-17",
+            chain=chain,
+            spot=155.0,
+            min_vol_oi_ratio=2.0,
         )
         assert len(results) == 0
 
@@ -404,8 +445,11 @@ class TestProcessChainForUnusualVolume:
             puts_data=[],
         )
         results = _process_chain_for_unusual_volume(
-            ticker="AAPL", expiry="2026-04-17", chain=chain,
-            spot=155.0, min_vol_oi_ratio=2.0,
+            ticker="AAPL",
+            expiry="2026-04-17",
+            chain=chain,
+            spot=155.0,
+            min_vol_oi_ratio=2.0,
         )
         assert len(results) == 0
 
@@ -420,8 +464,11 @@ class TestProcessChainForUnusualVolume:
             ],
         )
         results = _process_chain_for_unusual_volume(
-            ticker="AAPL", expiry="2026-04-17", chain=chain,
-            spot=155.0, min_vol_oi_ratio=2.0,
+            ticker="AAPL",
+            expiry="2026-04-17",
+            chain=chain,
+            spot=155.0,
+            min_vol_oi_ratio=2.0,
         )
         assert len(results) == 2
         types = {r["type"] for r in results}
@@ -431,8 +478,11 @@ class TestProcessChainForUnusualVolume:
         """Empty calls and puts produce no results."""
         chain = _make_chain(calls_data=[], puts_data=[])
         results = _process_chain_for_unusual_volume(
-            ticker="AAPL", expiry="2026-04-17", chain=chain,
-            spot=155.0, min_vol_oi_ratio=2.0,
+            ticker="AAPL",
+            expiry="2026-04-17",
+            chain=chain,
+            spot=155.0,
+            min_vol_oi_ratio=2.0,
         )
         assert len(results) == 0
 
@@ -440,15 +490,18 @@ class TestProcessChainForUnusualVolume:
         """Only options meeting criteria are flagged; others are excluded."""
         chain = _make_chain(
             calls_data=[
-                [140.0, 500, 100, 2.0, 2.5],   # vol/oi=5.0 -> flagged
-                [145.0, 50, 200, 1.0, 1.5],     # vol/oi=0.25, 50 < 5*200 -> not flagged
-                [155.0, 1000, 100, 5.0, 5.5],   # vol/oi=10.0 -> flagged
+                [140.0, 500, 100, 2.0, 2.5],  # vol/oi=5.0 -> flagged
+                [145.0, 50, 200, 1.0, 1.5],  # vol/oi=0.25, 50 < 5*200 -> not flagged
+                [155.0, 1000, 100, 5.0, 5.5],  # vol/oi=10.0 -> flagged
             ],
             puts_data=[],
         )
         results = _process_chain_for_unusual_volume(
-            ticker="AAPL", expiry="2026-04-17", chain=chain,
-            spot=150.0, min_vol_oi_ratio=2.0,
+            ticker="AAPL",
+            expiry="2026-04-17",
+            chain=chain,
+            spot=150.0,
+            min_vol_oi_ratio=2.0,
         )
         assert len(results) == 2
         strikes = {r["strike"] for r in results}
@@ -458,6 +511,7 @@ class TestProcessChainForUnusualVolume:
 # ======================================================================
 #  get_put_call_ratio
 # ======================================================================
+
 
 class TestGetPutCallRatio:
     """Tests for put/call ratio calculation and signal classification."""
@@ -621,8 +675,14 @@ class TestGetPutCallRatio:
         }
         result = get_put_call_ratio("MSFT")
         expected_keys = {
-            "ticker", "volume_pc_ratio", "oi_pc_ratio", "signal",
-            "call_volume", "put_volume", "call_oi", "put_oi",
+            "ticker",
+            "volume_pc_ratio",
+            "oi_pc_ratio",
+            "signal",
+            "call_volume",
+            "put_volume",
+            "call_oi",
+            "put_oi",
         }
         assert set(result.keys()) == expected_keys
 
@@ -648,6 +708,7 @@ class TestGetPutCallRatio:
 #  scan_unusual_volume
 # ======================================================================
 
+
 class TestScanUnusualVolume:
     """Tests for the parallel unusual volume scanner."""
 
@@ -656,12 +717,16 @@ class TestScanUnusualVolume:
     @patch("options_flow._scan_single_ticker_unusual_volume")
     def test_results_sorted_by_vol_oi_ratio_desc(self, mock_scan, mock_write, mock_read):
         """Results should be sorted by vol_oi_ratio in descending order."""
-        mock_scan.side_effect = lambda t, r: [
-            {"ticker": t, "vol_oi_ratio": 3.0, "type": "call"},
-            {"ticker": t, "vol_oi_ratio": 8.0, "type": "put"},
-        ] if t == "AAPL" else [
-            {"ticker": t, "vol_oi_ratio": 5.0, "type": "call"},
-        ]
+        mock_scan.side_effect = lambda t, r: (
+            [
+                {"ticker": t, "vol_oi_ratio": 3.0, "type": "call"},
+                {"ticker": t, "vol_oi_ratio": 8.0, "type": "put"},
+            ]
+            if t == "AAPL"
+            else [
+                {"ticker": t, "vol_oi_ratio": 5.0, "type": "call"},
+            ]
+        )
 
         results = scan_unusual_volume(["AAPL", "TSLA"], min_vol_oi_ratio=2.0)
         ratios = [r["vol_oi_ratio"] for r in results]
@@ -702,6 +767,7 @@ class TestScanUnusualVolume:
 #  scan_large_premium
 # ======================================================================
 
+
 class TestScanLargePremium:
     """Tests for the large premium scanner."""
 
@@ -710,12 +776,16 @@ class TestScanLargePremium:
     @patch("options_flow._scan_single_ticker_large_premium")
     def test_results_sorted_by_premium_desc(self, mock_scan, mock_write, mock_read):
         """Results should be sorted by premium_est in descending order."""
-        mock_scan.side_effect = lambda t, p: [
-            {"ticker": t, "premium_est": 100000},
-            {"ticker": t, "premium_est": 500000},
-        ] if t == "AAPL" else [
-            {"ticker": t, "premium_est": 250000},
-        ]
+        mock_scan.side_effect = lambda t, p: (
+            [
+                {"ticker": t, "premium_est": 100000},
+                {"ticker": t, "premium_est": 500000},
+            ]
+            if t == "AAPL"
+            else [
+                {"ticker": t, "premium_est": 250000},
+            ]
+        )
 
         results = scan_large_premium(["AAPL", "TSLA"], min_premium=50000)
         premiums = [r["premium_est"] for r in results]
@@ -742,6 +812,7 @@ class TestScanLargePremium:
 # ======================================================================
 #  Cache helpers
 # ======================================================================
+
 
 class TestCacheHelpers:
     """Tests for _cache_key, _read_cache, _write_cache."""
@@ -840,6 +911,7 @@ class TestCacheHelpers:
     def test_write_cache_handles_non_serializable_gracefully(self, tmp_path):
         """_write_cache uses default=str to handle non-JSON types."""
         from datetime import datetime as dt
+
         cache_file = str(tmp_path / "datetime_test.json")
 
         with patch("options_flow.CACHE_DIR", str(tmp_path)):

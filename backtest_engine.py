@@ -7,16 +7,17 @@ Supports static-weight, momentum, and equal-weight strategies
 with configurable rebalance frequency and benchmark comparison.
 """
 
-import numpy as np
-import pandas as pd
-import yfinance as yf
-import warnings
 import os
 import pickle
 import time
+import warnings
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple, Union
 from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+import pandas as pd
+import yfinance as yf
 
 from logging_config import get_logger
 
@@ -135,7 +136,9 @@ def _download_prices(
                             continue
 
                     if len(series) < 2:
-                        logger.warning("backtest.download.insufficient", ticker=tk, rows=len(series))
+                        logger.warning(
+                            "backtest.download.insufficient", ticker=tk, rows=len(series)
+                        )
                         continue
 
                     key = _cache_key(tk, start_date, end_date)
@@ -208,7 +211,7 @@ def _sortino_ratio(returns: pd.Series, rf: float = 0.045) -> float:
     excess = returns - daily_rf
     downside = excess[excess < 0]
     if len(downside) == 0:
-        return float('inf') if excess.mean() > 0 else 0.0
+        return float("inf") if excess.mean() > 0 else 0.0
     if downside.std() == 0:
         return 0.0
     return float(np.sqrt(TRADING_DAYS_PER_YEAR) * excess.mean() / downside.std())
@@ -457,7 +460,11 @@ def _build_result(
     n_years = len(equity_curve) / TRADING_DAYS_PER_YEAR
     total_ret = (equity_curve.iloc[-1] / equity_curve.iloc[0]) - 1.0
     annual_ret = (1.0 + total_ret) ** (1.0 / max(n_years, 1e-6)) - 1.0 if n_years > 0 else 0.0
-    annual_vol = float(daily_returns.std() * np.sqrt(TRADING_DAYS_PER_YEAR)) if len(daily_returns) > 1 else 0.0
+    annual_vol = (
+        float(daily_returns.std() * np.sqrt(TRADING_DAYS_PER_YEAR))
+        if len(daily_returns) > 1
+        else 0.0
+    )
     mdd = _max_drawdown(equity_curve)
     dd_series = _drawdown_series(equity_curve)
 
@@ -555,12 +562,18 @@ def run_backtest(
     # Keep only portfolio tickers that were successfully downloaded
     port_tickers = [t for t in weights if t in prices.columns]
     if not port_tickers:
-        raise ValueError(f"None of the portfolio tickers could be downloaded: {list(weights.keys())}")
+        raise ValueError(
+            f"None of the portfolio tickers could be downloaded: {list(weights.keys())}"
+        )
     port_prices = prices[port_tickers]
 
     # Re-normalize weights to downloaded tickers
     raw_sum = sum(weights[t] for t in port_tickers)
-    norm_weights = {t: weights[t] / raw_sum for t in port_tickers} if raw_sum > 0 else {t: 1.0 / len(port_tickers) for t in port_tickers}
+    norm_weights = (
+        {t: weights[t] / raw_sum for t in port_tickers}
+        if raw_sum > 0
+        else {t: 1.0 / len(port_tickers) for t in port_tickers}
+    )
 
     # Build weight schedule
     reb_dates = _rebalance_dates(port_prices.index, rebalance_freq)
@@ -832,7 +845,9 @@ def compare_strategies(
             "Num Trades": r.num_trades,
             "Start Date": r.start_date,
             "End Date": r.end_date,
-            "Benchmark Return": f"{r.benchmark_total_return:.2%}" if r.benchmark_total_return is not None else "N/A",
+            "Benchmark Return": (
+                f"{r.benchmark_total_return:.2%}" if r.benchmark_total_return is not None else "N/A"
+            ),
             "Alpha (ann.)": f"{r.alpha:.4f}",
             "Beta": f"{r.beta:.3f}",
         }

@@ -3,7 +3,6 @@ report_generator.py
 PDF 研报自动生成器 — 3 页机构风格报告
 """
 
-import io
 import os
 import tempfile
 from datetime import datetime
@@ -40,7 +39,14 @@ def generate_pdf_report(
             self.set_font("Helvetica", "B", 9)
             self.set_text_color(120, 130, 150)
             self.cell(0, 6, "Portfolio Risk Report", align="L")
-            self.cell(0, 6, datetime.now().strftime("%Y-%m-%d %H:%M"), align="R", new_x="LMARGIN", new_y="NEXT")
+            self.cell(
+                0,
+                6,
+                datetime.now().strftime("%Y-%m-%d %H:%M"),
+                align="R",
+                new_x="LMARGIN",
+                new_y="NEXT",
+            )
             self.set_draw_color(60, 70, 90)
             self.line(10, self.get_y(), 200, self.get_y())
             self.ln(3)
@@ -58,17 +64,16 @@ def generate_pdf_report(
     def _safe(text: str) -> str:
         """Replace Unicode characters unsupported by FPDF's default Helvetica."""
         return (
-            text
-            .replace("\u2014", "-")   # em-dash
-            .replace("\u2013", "-")   # en-dash
-            .replace("\u2018", "'")   # left single quote
-            .replace("\u2019", "'")   # right single quote
-            .replace("\u201c", '"')   # left double quote
-            .replace("\u201d", '"')   # right double quote
+            text.replace("\u2014", "-")  # em-dash
+            .replace("\u2013", "-")  # en-dash
+            .replace("\u2018", "'")  # left single quote
+            .replace("\u2019", "'")  # right single quote
+            .replace("\u201c", '"')  # left double quote
+            .replace("\u201d", '"')  # right double quote
             .replace("\u2026", "...")  # ellipsis
-            .replace("\u2022", "*")   # bullet
-            .replace("\u00d7", "x")   # multiplication sign
-            .replace("\u2248", "~")   # approx
+            .replace("\u2022", "*")  # bullet
+            .replace("\u00d7", "x")  # multiplication sign
+            .replace("\u2248", "~")  # approx
             .replace("\u03bb", "lambda")  # lambda
             .replace("\u2265", ">=")  # >=
             .replace("\u2264", "<=")  # <=
@@ -103,24 +108,29 @@ def generate_pdf_report(
     pdf.cell(0, 12, "Portfolio Risk Assessment", new_x="LMARGIN", new_y="NEXT")
     pdf.set_font("Helvetica", "", 10)
     pdf.set_text_color(100, 105, 120)
-    pdf.cell(0, 6, f"Generated: {datetime.now().strftime('%B %d, %Y')}  |  "
-             f"Holdings: {len(weights)} assets  |  "
-             f"MC Simulations: {report.mc_portfolio_returns.shape[0] if report.mc_portfolio_returns is not None else 'N/A'}",
-             new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(
+        0,
+        6,
+        f"Generated: {datetime.now().strftime('%B %d, %Y')}  |  "
+        f"Holdings: {len(weights)} assets  |  "
+        f"MC Simulations: {report.mc_portfolio_returns.shape[0] if report.mc_portfolio_returns is not None else 'N/A'}",
+        new_x="LMARGIN",
+        new_y="NEXT",
+    )
     pdf.ln(5)
 
     # Key Metrics
     section_title("Key Risk Metrics")
 
     metrics = [
-        ("Annual Return",                  f"{report.annual_return:.2%}"),
-        ("Annual Volatility (EWMA)",       f"{report.annual_volatility:.2%}"),
-        ("Sharpe Ratio",                   f"{report.sharpe_ratio:.2f}"),
+        ("Annual Return", f"{report.annual_return:.2%}"),
+        ("Annual Volatility (EWMA)", f"{report.annual_volatility:.2%}"),
+        ("Sharpe Ratio", f"{report.sharpe_ratio:.2f}"),
         ("Risk-Free Rate (^IRX / fallback)", f"{report.risk_free_rate:.2%}"),
-        ("Maximum Drawdown",               f"{report.max_drawdown:.2%}"),
-        (f"VaR 95% ({mc_horizon}d MC)",    f"{report.var_95:.2%}"),
-        (f"VaR 99% ({mc_horizon}d MC)",    f"{report.var_99:.2%}"),
-        (f"CVaR 95% ({mc_horizon}d MC)",   f"{report.cvar_95:.2%}"),
+        ("Maximum Drawdown", f"{report.max_drawdown:.2%}"),
+        (f"VaR 95% ({mc_horizon}d MC)", f"{report.var_95:.2%}"),
+        (f"VaR 99% ({mc_horizon}d MC)", f"{report.var_99:.2%}"),
+        (f"CVaR 95% ({mc_horizon}d MC)", f"{report.cvar_95:.2%}"),
         (f"Stress Loss ({market_shock:.0%} shock)", f"{report.stress_loss:.2%}"),
     ]
     for k, v in metrics:
@@ -155,7 +165,11 @@ def generate_pdf_report(
     for ticker, w in sorted_w:
         beta = report.betas.get(ticker, float("nan"))
         beta_s = f"{beta:.2f}" if not np.isnan(beta) else "N/A"
-        var_pct = float(report.component_var_pct.get(ticker, 0)) if report.component_var_pct is not None else 0
+        var_pct = (
+            float(report.component_var_pct.get(ticker, 0))
+            if report.component_var_pct is not None
+            else 0
+        )
         sector = sector_map.get(ticker, "Other")
 
         pdf.cell(widths[0], 4.5, _safe(ticker))
@@ -179,19 +193,26 @@ def generate_pdf_report(
         top5 = [t for t, _ in sorted_w[:5]]
         for col in top5:
             if col in norm.columns:
-                fig_cum.add_trace(go.Scatter(
-                    x=norm.index, y=norm[col], mode="lines", name=col, opacity=0.6
-                ))
+                fig_cum.add_trace(
+                    go.Scatter(x=norm.index, y=norm[col], mode="lines", name=col, opacity=0.6)
+                )
         # Portfolio cumulative
         ret = np.log(prices / prices.shift(1)).dropna()
         w_arr = np.array([weights.get(c, 0) for c in ret.columns])
         port_cum = (1 + ret.dot(w_arr)).cumprod()
-        fig_cum.add_trace(go.Scatter(
-            x=port_cum.index, y=port_cum.values,
-            mode="lines", name="Portfolio", line=dict(width=3, color="#005B96"),
-        ))
+        fig_cum.add_trace(
+            go.Scatter(
+                x=port_cum.index,
+                y=port_cum.values,
+                mode="lines",
+                name="Portfolio",
+                line=dict(width=3, color="#005B96"),
+            )
+        )
         fig_cum.update_layout(
-            template="plotly_white", height=300, margin=dict(l=40, r=20, t=30, b=30),  # plotly_white is OK for PDF (white background)
+            template="plotly_white",
+            height=300,
+            margin=dict(l=40, r=20, t=30, b=30),  # plotly_white is OK for PDF (white background)
             legend=dict(orientation="h", y=-0.15),
         )
         cum_bytes = _fig_to_png_bytes(fig_cum, width=700, height=280)
@@ -202,8 +223,13 @@ def generate_pdf_report(
         os.unlink(cum_path)
     except Exception:
         pdf.set_font("Helvetica", "I", 9)
-        pdf.cell(0, 6, "[Chart generation requires kaleido: pip install kaleido]",
-                 new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(
+            0,
+            6,
+            "[Chart generation requires kaleido: pip install kaleido]",
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
 
     pdf.ln(5)
 
@@ -211,12 +237,21 @@ def generate_pdf_report(
         # Drawdown chart
         dd = report.drawdown_series
         fig_dd = go.Figure()
-        fig_dd.add_trace(go.Scatter(
-            x=dd.index, y=dd.values, fill="tozeroy", mode="lines",
-            line=dict(color="#C23B22"), fillcolor="rgba(194, 59, 34, 0.16)", name="Drawdown",
-        ))
+        fig_dd.add_trace(
+            go.Scatter(
+                x=dd.index,
+                y=dd.values,
+                fill="tozeroy",
+                mode="lines",
+                line=dict(color="#C23B22"),
+                fillcolor="rgba(194, 59, 34, 0.16)",
+                name="Drawdown",
+            )
+        )
         fig_dd.update_layout(
-            template="plotly_white", height=250, margin=dict(l=40, r=20, t=30, b=30),
+            template="plotly_white",
+            height=250,
+            margin=dict(l=40, r=20, t=30, b=30),
             yaxis_tickformat=".1%",
         )
         dd_bytes = _fig_to_png_bytes(fig_dd, width=700, height=230)
@@ -227,8 +262,7 @@ def generate_pdf_report(
         os.unlink(dd_path)
     except Exception:
         pdf.set_font("Helvetica", "I", 9)
-        pdf.cell(0, 6, "[Drawdown chart generation failed]",
-                 new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 6, "[Drawdown chart generation failed]", new_x="LMARGIN", new_y="NEXT")
 
     # Drawdown stats
     if report.drawdown_stats:
@@ -275,8 +309,13 @@ def generate_pdf_report(
     pdf.ln(2)
     pdf.set_font("Helvetica", "B", 10)
     pdf.set_text_color(*ACCENT_RED)
-    pdf.cell(0, 6, f"Total Portfolio Stress Loss: {report.stress_loss:.2%}",
-             new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(
+        0,
+        6,
+        f"Total Portfolio Stress Loss: {report.stress_loss:.2%}",
+        new_x="LMARGIN",
+        new_y="NEXT",
+    )
 
     # Multi-factor betas
     if report.factor_betas is not None:
@@ -309,11 +348,15 @@ def generate_pdf_report(
     pdf.ln(8)
     pdf.set_font("Helvetica", "I", 7)
     pdf.set_text_color(140, 145, 160)
-    pdf.multi_cell(0, 3.5, _safe(
-        "Disclaimer: This report is for informational purposes only and does not constitute "
-        "investment advice. Past performance is not indicative of future results. "
-        "Monte Carlo simulations are based on historical data and may not reflect future market conditions. "
-        "VaR estimates may understate actual risk during extreme events."
-    ))
+    pdf.multi_cell(
+        0,
+        3.5,
+        _safe(
+            "Disclaimer: This report is for informational purposes only and does not constitute "
+            "investment advice. Past performance is not indicative of future results. "
+            "Monte Carlo simulations are based on historical data and may not reflect future market conditions. "
+            "VaR estimates may understate actual risk during extreme events."
+        ),
+    )
 
     return pdf.output()

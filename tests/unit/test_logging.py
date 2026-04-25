@@ -1,11 +1,14 @@
 """
 测试日志系统
 """
-import pytest
-import logging
+
 import json
+import logging
 from pathlib import Path
-from logging_config import setup_logging, get_logger
+
+import pytest
+
+from logging_config import get_logger, setup_logging
 
 
 @pytest.fixture(scope="module")
@@ -48,11 +51,7 @@ def test_log_with_context(setup_test_logging):
     logger = get_logger("test.context")
 
     logger.info(
-        "test_event",
-        ticker="AAPL",
-        price=150.0,
-        volume=1000000,
-        metadata={"source": "test"}
+        "test_event", ticker="AAPL", price=150.0, volume=1000000, metadata={"source": "test"}
     )
 
 
@@ -66,7 +65,7 @@ def test_json_log_format(setup_test_logging):
     log_file = Path("logs/app.log")
     assert log_file.exists(), "Log file should exist"
 
-    with open(log_file, 'r') as f:
+    with open(log_file, "r") as f:
         lines = f.readlines()
         if len(lines) > 0:
             last_line = lines[-1]
@@ -80,8 +79,9 @@ def test_log_rotation_config():
     """测试日志滚动配置"""
     # 验证配置了RotatingFileHandler
     root_logger = logging.getLogger()
-    handlers = [h for h in root_logger.handlers
-                if isinstance(h, logging.handlers.RotatingFileHandler)]
+    handlers = [
+        h for h in root_logger.handlers if isinstance(h, logging.handlers.RotatingFileHandler)
+    ]
 
     assert len(handlers) > 0, "Should have at least one RotatingFileHandler"
     assert handlers[0].maxBytes == 10 * 1024 * 1024, "Max bytes should be 10MB"
@@ -110,15 +110,12 @@ def test_performance_metrics(setup_test_logging):
     logger = get_logger("test.performance")
 
     import time
+
     start = time.time()
     time.sleep(0.01)  # 模拟操作
     duration_ms = (time.time() - start) * 1000
 
-    logger.info(
-        "operation.complete",
-        operation="test_operation",
-        duration_ms=round(duration_ms, 2)
-    )
+    logger.info("operation.complete", operation="test_operation", duration_ms=round(duration_ms, 2))
 
 
 def test_multiple_fields(setup_test_logging):
@@ -132,5 +129,5 @@ def test_multiple_fields(setup_test_logging):
         start_date="2023-01-01",
         end_date="2024-12-31",
         cached=True,
-        duration_ms=123.45
+        duration_ms=123.45,
     )

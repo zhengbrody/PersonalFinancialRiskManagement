@@ -3,9 +3,10 @@ ui/shared_sidebar.py
 Shared Sidebar Component - Displays consistently across all pages
 """
 
-import streamlit as st
 import json
-import os
+
+import streamlit as st
+
 from i18n import get_translator
 
 
@@ -32,6 +33,7 @@ def render_shared_sidebar():
     # resets automatically on every rerun.
     try:
         from streamlit.runtime.scriptrunner import get_script_run_ctx
+
         _ctx = get_script_run_ctx()
         if _ctx is not None:
             _run_id = _ctx.script_run_id
@@ -47,7 +49,8 @@ def render_shared_sidebar():
 
     with st.sidebar:
         # ── Logo and Title ────────────────────────────────────────
-        st.markdown("""
+        st.markdown(
+            """
         <div style="text-align: center; padding: 20px 0 10px 0;">
             <div style="font-size: 28px; font-weight: 800; color: #0B7285; letter-spacing: -0.5px;">
                 MindMarket AI
@@ -56,7 +59,9 @@ def render_shared_sidebar():
                 PORTFOLIO RISK ANALYTICS
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
         st.markdown("---")
 
@@ -66,7 +71,7 @@ def render_shared_sidebar():
             ["EN", "CN"],
             horizontal=True,
             label_visibility="collapsed",
-            key="lang_toggle_sidebar"
+            key="lang_toggle_sidebar",
         )
         new_lang = "zh" if _lang_choice == "CN" else "en"
         if new_lang != st.session_state.get("_lang", "en"):
@@ -79,12 +84,19 @@ def render_shared_sidebar():
         st.markdown("### 📊 Portfolio")
 
         # Combined Refresh + Run button (replaces separate Refresh and Run Analysis)
-        _run_label_live = "🚀 Refresh & Run Analysis" if current_lang == "en" else "🚀 刷新并运行分析"
-        if st.button(_run_label_live, type="primary", use_container_width=True, key="refresh_and_run"):
+        _run_label_live = (
+            "🚀 Refresh & Run Analysis" if current_lang == "en" else "🚀 刷新并运行分析"
+        )
+        if st.button(
+            _run_label_live, type="primary", use_container_width=True, key="refresh_and_run"
+        ):
             try:
                 import importlib
+
                 import yfinance as yf
+
                 import portfolio_config as _pc
+
                 importlib.reload(_pc)
                 PORTFOLIO_HOLDINGS = _pc.PORTFOLIO_HOLDINGS
                 MARGIN_LOAN = _pc.MARGIN_LOAN
@@ -95,20 +107,22 @@ def render_shared_sidebar():
 
                 def _shares(t):
                     h = PORTFOLIO_HOLDINGS[t]
-                    return h['shares'] if isinstance(h, dict) else h
+                    return h["shares"] if isinstance(h, dict) else h
 
-                with st.spinner("Fetching live prices..." if current_lang == "en" else "获取实时价格..."):
+                with st.spinner(
+                    "Fetching live prices..." if current_lang == "en" else "获取实时价格..."
+                ):
                     tickers = list(PORTFOLIO_HOLDINGS.keys())
                     data = yf.download(tickers, period="5d", progress=False)
                     current_prices = {}
                     for tk in tickers:
                         try:
-                            if isinstance(data.columns, __import__('pandas').MultiIndex):
-                                if tk in data['Close'].columns:
-                                    price = data['Close'][tk].dropna().iloc[-1]
+                            if isinstance(data.columns, __import__("pandas").MultiIndex):
+                                if tk in data["Close"].columns:
+                                    price = data["Close"][tk].dropna().iloc[-1]
                                     current_prices[tk] = float(price)
                             else:
-                                price = data['Close'].dropna().iloc[-1]
+                                price = data["Close"].dropna().iloc[-1]
                                 current_prices[tk] = float(price)
                         except Exception:
                             logger.warning("ui.refresh.price_missing", ticker=tk)
@@ -122,7 +136,8 @@ def render_shared_sidebar():
                     live_weights = {t: v / total_value for t, v in values.items() if v > 0}
                     net_equity = total_value - MARGIN_LOAN
                     contributed_capital = getattr(
-                        _pc, "CONTRIBUTED_CAPITAL",
+                        _pc,
+                        "CONTRIBUTED_CAPITAL",
                         getattr(_pc, "TOTAL_COST_BASIS", 0),
                     )
                     return_on_capital_dollar = (
@@ -130,7 +145,8 @@ def render_shared_sidebar():
                     )
                     return_on_capital_pct = (
                         (net_equity - contributed_capital) / contributed_capital
-                        if contributed_capital > 0 else None
+                        if contributed_capital > 0
+                        else None
                     )
 
                     # Optional position P&L (only if avg_cost set on holdings).
@@ -141,7 +157,8 @@ def render_shared_sidebar():
                     try:
                         pc_info = (
                             _pc.position_cost_summary(market_values=values)
-                            if hasattr(_pc, "position_cost_summary") else None
+                            if hasattr(_pc, "position_cost_summary")
+                            else None
                         )
                         if pc_info and pc_info["total_position_cost"] > 0:
                             position_cost_info = pc_info
@@ -157,7 +174,9 @@ def render_shared_sidebar():
                     try:
                         if hasattr(_pc, "ACCOUNTS") and hasattr(_pc, "account_summary"):
                             for acct_name in _pc.ACCOUNTS:
-                                account_breakdown[acct_name] = _pc.account_summary(acct_name, values)
+                                account_breakdown[acct_name] = _pc.account_summary(
+                                    acct_name, values
+                                )
                     except Exception:
                         pass
 
@@ -184,16 +203,20 @@ def render_shared_sidebar():
                     st.session_state._portfolio_meta = meta
                     st.session_state._run_trigger = True
                     st.session_state.last_weights_json = None
-                    logger.info("ui.refresh_and_run.success",
-                                ticker_count=len(live_weights),
-                                total_long=round(total_value, 2),
-                                net_equity=round(net_equity, 2))
+                    logger.info(
+                        "ui.refresh_and_run.success",
+                        ticker_count=len(live_weights),
+                        total_long=round(total_value, 2),
+                        net_equity=round(net_equity, 2),
+                    )
                     st.rerun()
             except Exception as e:
                 st.error(f"Failed: {str(e)}")
 
         # Secondary "Run with current weights" — for when user edits JSON manually
-        _run_label_current = "Run with Current Weights" if current_lang == "en" else "用当前权重运行"
+        _run_label_current = (
+            "Run with Current Weights" if current_lang == "en" else "用当前权重运行"
+        )
         if st.button(_run_label_current, use_container_width=True, key="run_current_only"):
             st.session_state._run_trigger = True
             st.rerun()
@@ -208,8 +231,8 @@ def render_shared_sidebar():
             key="force_refresh_btn",
             help=(
                 "Invalidate the analysis cache and recompute from scratch."
-                if current_lang == "en" else
-                "清除分析缓存并重新计算。"
+                if current_lang == "en"
+                else "清除分析缓存并重新计算。"
             ),
         ):
             st.session_state._force_refresh = True
@@ -259,7 +282,12 @@ def render_shared_sidebar():
         if not st.session_state.get("_portfolio_config_checked"):
             try:
                 import portfolio_config as _pc
-                _issues = _pc.validate_portfolio_config() if hasattr(_pc, "validate_portfolio_config") else []
+
+                _issues = (
+                    _pc.validate_portfolio_config()
+                    if hasattr(_pc, "validate_portfolio_config")
+                    else []
+                )
                 st.session_state._portfolio_config_issues = _issues
                 st.session_state._portfolio_config_checked = True
             except Exception:
@@ -273,11 +301,9 @@ def render_shared_sidebar():
 
         # Initialize weights_json if not exists
         if "weights_json" not in st.session_state:
-            st.session_state.weights_json = json.dumps({
-                "AAPL": 0.4,
-                "TSLA": 0.3,
-                "BTC-USD": 0.3
-            }, indent=2)
+            st.session_state.weights_json = json.dumps(
+                {"AAPL": 0.4, "TSLA": 0.3, "BTC-USD": 0.3}, indent=2
+            )
 
         # Handle example portfolio selection (from main page buttons)
         if "_example_portfolio" in st.session_state:
@@ -290,7 +316,7 @@ def render_shared_sidebar():
             "Portfolio Weights",
             value=st.session_state.weights_json,
             height=120,
-            label_visibility="collapsed"
+            label_visibility="collapsed",
         )
 
         st.markdown("---")
@@ -305,7 +331,7 @@ def render_shared_sidebar():
                 min_value=1,
                 max_value=5,
                 value=st.session_state.get("period_years", 2),
-                key="period_years_sidebar"
+                key="period_years_sidebar",
             )
 
         with col2:
@@ -313,7 +339,7 @@ def render_shared_sidebar():
                 "MC Sims",
                 options=[1000, 5000, 10000, 20000, 50000],
                 value=st.session_state.get("mc_sims", 10000),
-                key="mc_sims_sidebar"
+                key="mc_sims_sidebar",
             )
 
         col3, col4 = st.columns(2)
@@ -323,7 +349,7 @@ def render_shared_sidebar():
                 min_value=5,
                 max_value=63,
                 value=st.session_state.get("mc_horizon", 21),
-                key="mc_horizon_sidebar"
+                key="mc_horizon_sidebar",
             )
 
         with col4:
@@ -332,19 +358,22 @@ def render_shared_sidebar():
                 min_value=-30,
                 max_value=0,
                 value=int(st.session_state.get("market_shock", -0.10) * 100),
-                key="market_shock_sidebar"
+                key="market_shock_sidebar",
             )
             market_shock = market_shock_pct / 100
 
         # Risk-free rate
-        risk_free_rate = st.number_input(
-            "Risk-Free Rate (%)",
-            min_value=0.0,
-            max_value=15.0,
-            value=4.5,
-            step=0.1,
-            key="risk_free_rate_sidebar"
-        ) / 100
+        risk_free_rate = (
+            st.number_input(
+                "Risk-Free Rate (%)",
+                min_value=0.0,
+                max_value=15.0,
+                value=4.5,
+                step=0.1,
+                key="risk_free_rate_sidebar",
+            )
+            / 100
+        )
 
         st.markdown("---")
 
@@ -356,6 +385,7 @@ def render_shared_sidebar():
         if "_ollama_reachable" not in st.session_state:
             try:
                 import requests
+
                 r = requests.get("http://localhost:11434/api/tags", timeout=1.0)
                 st.session_state._ollama_reachable = r.status_code == 200
             except Exception:
@@ -376,7 +406,7 @@ def render_shared_sidebar():
                 "Provider",
                 _provider_options,
                 key="model_provider_sidebar",
-                label_visibility="collapsed"
+                label_visibility="collapsed",
             )
         else:
             # Selectbox + tiny recheck icon in a compact row
@@ -386,22 +416,27 @@ def render_shared_sidebar():
                     "Provider",
                     _provider_options,
                     key="model_provider_sidebar",
-                    label_visibility="collapsed"
+                    label_visibility="collapsed",
                 )
             with col_btn:
-                if st.button("🔄", key="recheck_ollama",
-                             help="重新检测本地 Ollama (启动 `ollama serve` 后点此)"):
+                if st.button(
+                    "🔄",
+                    key="recheck_ollama",
+                    help="重新检测本地 Ollama (启动 `ollama serve` 后点此)",
+                ):
                     st.session_state.pop("_ollama_reachable", None)
                     st.rerun()
 
         # API Key inputs based on provider
         import os
+
         _key_ok = False
         if model_provider == "Anthropic Claude":
             api_key = st.text_input(
                 "Claude API Key",
                 type="password",
-                value=os.environ.get("ANTHROPIC_API_KEY", "") or st.session_state.get("_api_key_input", ""),
+                value=os.environ.get("ANTHROPIC_API_KEY", "")
+                or st.session_state.get("_api_key_input", ""),
                 placeholder="sk-ant-...",
                 key="claude_api_key_sidebar",
                 help="从 https://console.anthropic.com/ 获取",
@@ -413,7 +448,8 @@ def render_shared_sidebar():
             deepseek_key = st.text_input(
                 "DeepSeek API Key",
                 type="password",
-                value=os.environ.get("DEEPSEEK_API_KEY", "") or st.session_state.get("_deepseek_key", ""),
+                value=os.environ.get("DEEPSEEK_API_KEY", "")
+                or st.session_state.get("_deepseek_key", ""),
                 placeholder="sk-...",
                 key="deepseek_api_key_sidebar",
                 help="从 https://platform.deepseek.com/ 获取",
@@ -425,7 +461,7 @@ def render_shared_sidebar():
             ollama_model = st.text_input(
                 "Ollama Model",
                 value=st.session_state.get("_ollama_model", "deepseek-r1:14b"),
-                key="ollama_model_sidebar"
+                key="ollama_model_sidebar",
             )
             st.session_state._ollama_model = ollama_model
             _key_ok = st.session_state.get("_ollama_reachable", False)
@@ -434,7 +470,7 @@ def render_shared_sidebar():
         if _key_ok:
             st.caption(f"✅ {model_provider} 已配置")
         else:
-            st.caption(f"⚠️ 请填写 API Key 以启用 AI 功能")
+            st.caption("⚠️ 请填写 API Key 以启用 AI 功能")
 
         # Store provider in session state
         st.session_state._model_provider = model_provider
@@ -503,7 +539,7 @@ def render_shared_sidebar():
                     max_value=50,
                     value=15,
                     step=1,
-                    key="max_stock_sidebar"
+                    key="max_stock_sidebar",
                 )
             with col_lim2:
                 max_sector = st.number_input(
@@ -512,7 +548,7 @@ def render_shared_sidebar():
                     max_value=100,
                     value=30,
                     step=5,
-                    key="max_sector_sidebar"
+                    key="max_sector_sidebar",
                 )
 
             st.session_state._risk_limits = {
@@ -522,9 +558,7 @@ def render_shared_sidebar():
 
             # Enable margin monitoring
             enable_margin = st.checkbox(
-                "Enable Margin Monitoring",
-                value=False,
-                key="enable_margin_sidebar"
+                "Enable Margin Monitoring", value=False, key="enable_margin_sidebar"
             )
             st.session_state._enable_margin = enable_margin
 
@@ -533,24 +567,23 @@ def render_shared_sidebar():
         # ── Quick Actions ─────────────────────────────────────────
         with st.expander("⚡ Quick Actions"):
             if st.button("📋 Load Tech Portfolio", use_container_width=True):
-                st.session_state.weights_json = json.dumps({
-                    "AAPL": 0.20,
-                    "GOOGL": 0.20,
-                    "MSFT": 0.20,
-                    "NVDA": 0.15,
-                    "META": 0.15,
-                    "TSLA": 0.10
-                }, indent=2)
+                st.session_state.weights_json = json.dumps(
+                    {
+                        "AAPL": 0.20,
+                        "GOOGL": 0.20,
+                        "MSFT": 0.20,
+                        "NVDA": 0.15,
+                        "META": 0.15,
+                        "TSLA": 0.10,
+                    },
+                    indent=2,
+                )
                 st.rerun()
 
             if st.button("🛡️ Load Balanced Portfolio", use_container_width=True):
-                st.session_state.weights_json = json.dumps({
-                    "SPY": 0.40,
-                    "TLT": 0.20,
-                    "GLD": 0.15,
-                    "QQQ": 0.15,
-                    "IWM": 0.10
-                }, indent=2)
+                st.session_state.weights_json = json.dumps(
+                    {"SPY": 0.40, "TLT": 0.20, "GLD": 0.15, "QQQ": 0.15, "IWM": 0.10}, indent=2
+                )
                 st.rerun()
 
             if st.button("🔥 Clear Cache", use_container_width=True):

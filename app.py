@@ -9,38 +9,28 @@ import io
 import json
 import os
 import re
-from datetime import datetime
 from typing import Optional
-
-import requests
-import yfinance as yf
 
 import numpy as np
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
+import requests
 import streamlit as st
+import yfinance as yf
 
-from data_provider import DataProvider
-from i18n import get_translator
-from market_intelligence import (
-    get_all_macro_news, fetch_fundamentals, format_fundamentals_for_display,
-    fetch_vix_data, get_vix_current, fetch_yield_curve, fetch_fear_greed,
-    build_ai_risk_briefing, build_market_intelligence_context,
-    compute_simple_dcf,
-    fetch_insider_signals, compute_technical_signals,
-    fetch_reddit_sentiment_apify, format_reddit_for_llm,
-    fetch_latest_transcript_fmp, analyze_transcript_with_claude,
-    fetch_price_targets_fmp,
-)
 import portfolio_config as _pc
-from risk_engine import RiskEngine, RiskReport
-from logging_config import setup_logging, get_logger
+from data_provider import DataProvider
 from error_handler import (
-    show_error, show_warning, show_success, handle_json_error,
-    handle_weight_error, handle_data_loading_error, handle_risk_calculation_error,
-    validate_weights, validate_tickers, safe_operation
+    handle_json_error,
+    show_error,
+    show_success,
+    show_warning,
+    validate_tickers,
+    validate_weights,
 )
+from i18n import get_translator
+from logging_config import get_logger, setup_logging
+from risk_engine import RiskEngine, RiskReport
 
 # Initialize logging system
 setup_logging()
@@ -50,19 +40,21 @@ logger = get_logger(__name__)
 def _reload_portfolio_config():
     """Reload portfolio_config module to pick up file edits without restarting."""
     import importlib
+
     importlib.reload(_pc)
     return _pc.PORTFOLIO_HOLDINGS, _pc.MARGIN_LOAN
+
 
 # ══════════════════════════════════════════════════════════════
 #  Color Constants (high-contrast, dark-mode compatible)
 # ══════════════════════════════════════════════════════════════
-CLR_ACCENT   = "#0B7285"
-CLR_WARN     = "#C77D00"
-CLR_DANGER   = "#C92A2A"
-CLR_GOOD     = "#2B8A3E"
-CLR_MUTED    = "#64748B"
-CLR_GRID     = "#94A3B8"
-CLR_GOLD     = "#B8860B"
+CLR_ACCENT = "#0B7285"
+CLR_WARN = "#C77D00"
+CLR_DANGER = "#C92A2A"
+CLR_GOOD = "#2B8A3E"
+CLR_MUTED = "#64748B"
+CLR_GRID = "#94A3B8"
+CLR_GOLD = "#B8860B"
 
 # ══════════════════════════════════════════════════════════════
 #  Sector Classification — canonical source lives in portfolio_config
@@ -83,7 +75,9 @@ def render_plotly(fig: go.Figure) -> None:
     )
     if fig.layout.polar and fig.layout.polar.bgcolor:
         fig.update_layout(polar=dict(bgcolor="rgba(0,0,0,0)"))
-    st.plotly_chart(fig, use_container_width=True, theme="streamlit", config={"displayModeBar": False})
+    st.plotly_chart(
+        fig, use_container_width=True, theme="streamlit", config={"displayModeBar": False}
+    )
 
 
 # ══════════════════════════════════════════════════════════════
@@ -96,7 +90,8 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-st.markdown("""
+st.markdown(
+    """
 <style>
     /* ── Import professional typeface ──────────────────── */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -245,7 +240,9 @@ st.markdown("""
 
 
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -282,7 +279,9 @@ def fetch_live_weights() -> tuple[dict, dict]:
         try:
             hist = yf.Ticker(ticker).history(period="5d", auto_adjust=True)
             if not hist.empty:
-                values[ticker] = float(hist["Close"].iloc[-1]) * _pc.PORTFOLIO_HOLDINGS[ticker]["shares"]
+                values[ticker] = (
+                    float(hist["Close"].iloc[-1]) * _pc.PORTFOLIO_HOLDINGS[ticker]["shares"]
+                )
         except Exception:
             pass
 
@@ -294,19 +293,19 @@ def fetch_live_weights() -> tuple[dict, dict]:
     # CONTRIBUTED_CAPITAL = self-funded principal (excludes margin draws).
     # Old name TOTAL_COST_BASIS preserved as alias for backward compat.
     contributed_capital = getattr(
-        _pc, "CONTRIBUTED_CAPITAL",
+        _pc,
+        "CONTRIBUTED_CAPITAL",
         getattr(_pc, "TOTAL_COST_BASIS", 0),
     )
 
     # Metric A: Return on Contributed Capital — "how did MY money do?"
     # net_equity already excludes the margin loan, so this is the right
     # thing to compare against contributed_capital.
-    return_on_capital_dollar = (
-        net_equity - contributed_capital if contributed_capital > 0 else None
-    )
+    return_on_capital_dollar = net_equity - contributed_capital if contributed_capital > 0 else None
     return_on_capital_pct = (
         (net_equity - contributed_capital) / contributed_capital
-        if contributed_capital > 0 else None
+        if contributed_capital > 0
+        else None
     )
 
     # Metric B: Position P&L — "how did the positions themselves do?"
@@ -318,7 +317,8 @@ def fetch_live_weights() -> tuple[dict, dict]:
     try:
         pc_info = (
             _pc.position_cost_summary(market_values=values)
-            if hasattr(_pc, "position_cost_summary") else None
+            if hasattr(_pc, "position_cost_summary")
+            else None
         )
         if pc_info and pc_info["total_position_cost"] > 0:
             position_cost_info = pc_info
@@ -375,6 +375,7 @@ def get_data_provider(weights_json: str, period_years: int):
         DataProvider instance with cached price data
     """
     import time
+
     t0 = time.time()
 
     weights = json.loads(weights_json)
@@ -386,7 +387,7 @@ def get_data_provider(weights_json: str, period_years: int):
         "cache.data_provider.created",
         tickers=list(weights.keys()),
         period_years=period_years,
-        duration_ms=round(duration_ms, 2)
+        duration_ms=round(duration_ms, 2),
     )
     return dp
 
@@ -425,7 +426,7 @@ def run_portfolio_analysis(
         tickers=list(weights.keys()),
         period_years=period_years,
         mc_sims=mc_sims,
-        mc_horizon=mc_horizon
+        mc_horizon=mc_horizon,
     )
     start_time = time.time()
 
@@ -437,8 +438,7 @@ def run_portfolio_analysis(
         failed_tickers = dp.get_failed_tickers()
         if failed_tickers and len(failed_tickers) == len(weights):
             raise ValueError(
-                f"无法下载所有ticker的数据。可能原因: "
-                f"网络不可用、股票代码无效或日期范围错误"
+                "无法下载所有ticker的数据。可能原因: " "网络不可用、股票代码无效或日期范围错误"
             )
 
         prices = dp.fetch_prices()
@@ -458,7 +458,7 @@ def run_portfolio_analysis(
             "ui.analysis.complete",
             duration_ms=round(duration_ms, 2),
             var_95=report.var_95,
-            sharpe_ratio=report.sharpe_ratio
+            sharpe_ratio=report.sharpe_ratio,
         )
 
         return report, prices, cumret
@@ -468,19 +468,13 @@ def run_portfolio_analysis(
             "ui.analysis.linalg_error",
             error=str(e),
             duration_ms=round(duration_ms, 2),
-            exc_info=True
+            exc_info=True,
         )
-        raise ValueError(
-            "协方差矩阵计算失败。可能原因: "
-            "资产高度相关、数据不足或数据质量问题"
-        )
+        raise ValueError("协方差矩阵计算失败。可能原因: " "资产高度相关、数据不足或数据质量问题")
     except Exception as e:
         duration_ms = (time.time() - start_time) * 1000
         logger.error(
-            "ui.analysis.failed",
-            error=str(e),
-            duration_ms=round(duration_ms, 2),
-            exc_info=True
+            "ui.analysis.failed", error=str(e), duration_ms=round(duration_ms, 2), exc_info=True
         )
         raise
 
@@ -526,6 +520,7 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
     try:
         if model_provider == "Anthropic Claude" and api_key_input:
             import anthropic
+
             client = anthropic.Anthropic(api_key=api_key_input)
             for attempt in range(3):
                 try:
@@ -547,6 +542,7 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
 
         elif model_provider == "DeepSeek API" and deepseek_key:
             from openai import OpenAI
+
             client = OpenAI(api_key=deepseek_key, base_url="https://api.deepseek.com/v1")
             messages = []
             if system:
@@ -579,9 +575,7 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
                 )
             except requests.exceptions.Timeout as e:
                 logger.error("llm.ollama.timeout", error=str(e))
-                raise TimeoutError(
-                    "Ollama 响应超时。请检查网络连接或稍后重试。"
-                )
+                raise TimeoutError("Ollama 响应超时。请检查网络连接或稍后重试。")
 
         raise ValueError("未配置LLM后端。请在侧边栏设置API密钥。")
 
@@ -606,7 +600,9 @@ def stream_ollama(messages: list, system_prompt: str, model: str):
         "stream": True,
     }
     try:
-        resp = requests.post("http://localhost:11434/api/chat", json=payload, stream=True, timeout=120)
+        resp = requests.post(
+            "http://localhost:11434/api/chat", json=payload, stream=True, timeout=120
+        )
         resp.raise_for_status()
         for line in resp.iter_lines():
             if line:
@@ -649,13 +645,15 @@ def fetch_asset_news(tickers: tuple[str, ...], max_per_ticker: int = 6) -> dict[
     fmp_key = _safe_get_secret("FMP_API_KEY") or os.environ.get("FMP_API_KEY", "")
     if fmp_key:
         thin_tickers = tuple(
-            tk for tk in tickers
-            if not tk.upper().endswith("-USD") and len(result.get(tk, [])) < 3
+            tk for tk in tickers if not tk.upper().endswith("-USD") and len(result.get(tk, [])) < 3
         )
         if thin_tickers:
             try:
                 from market_intelligence import fetch_stock_news_fmp
-                fmp_news = fetch_stock_news_fmp(thin_tickers, fmp_key, max_per_ticker=max_per_ticker)
+
+                fmp_news = fetch_stock_news_fmp(
+                    thin_tickers, fmp_key, max_per_ticker=max_per_ticker
+                )
                 for tk, extras in fmp_news.items():
                     existing = set(result.get(tk, []))
                     for title in extras:
@@ -682,20 +680,26 @@ def score_sentiment_ollama(ticker: str, headlines: list[str], model: str) -> dic
     """Send news headlines to the active LLM for sentiment analysis."""
     if not headlines:
         return {
-            "retail_sentiment_score": 5.0, "sentiment_label": "Neutral / No Data",
-            "retail_coverage": "Low", "coverage_text": "No recent headlines found.",
-            "bull_arguments": [], "bear_arguments": [],
+            "retail_sentiment_score": 5.0,
+            "sentiment_label": "Neutral / No Data",
+            "retail_coverage": "Low",
+            "coverage_text": "No recent headlines found.",
+            "bull_arguments": [],
+            "bear_arguments": [],
             "key_narrative": "No recent news available.",
-            "score": 5, "coverage": "Low",
+            "score": 5,
+            "coverage": "Low",
             "narrative_summary": "No recent news available.",
-            "summary": "No recent news available.", "raw": "",
-            "news_count": 0, "confidence": "Low",
+            "summary": "No recent news available.",
+            "raw": "",
+            "news_count": 0,
+            "confidence": "Low",
         }
 
     headlines_text = "\n".join(f"- {h}" for h in headlines)
 
     model_provider = st.session_state.get("_model_provider", "Ollama (Local)")
-    _is_ollama = (model_provider == "Ollama (Local)")
+    _is_ollama = model_provider == "Ollama (Local)"
     if _is_ollama:
         prompt = (
             f"Analyze these {ticker} news headlines. Rate sentiment 1-10 (1=bearish, 10=bullish).\n"
@@ -708,19 +712,19 @@ def score_sentiment_ollama(ticker: str, headlines: list[str], model: str) -> dic
         prompt = (
             f"You are a senior Wall Street equity research analyst writing a Sentiment Tear Sheet for {ticker}.\n"
             f"Analyze these headlines and return ONLY valid JSON:\n"
-            f'{{\n'
+            f"{{\n"
             f'  "retail_sentiment_score": <float 1.0-10.0>,\n'
             f'  "sentiment_label": "<2-3 word rating like Mixed / Cautious or Strong Bull>",\n'
             f'  "retail_coverage": "<High|Moderate|Low>",\n'
             f'  "coverage_text": "<1 sentence on news coverage depth>",\n'
             f'  "bull_arguments": [\n'
             f'    {{"title": "<short bold title>", "detail": "<1-2 sentence explanation>"}}\n'
-            f'  ],\n'
+            f"  ],\n"
             f'  "bear_arguments": [\n'
             f'    {{"title": "<short bold title>", "detail": "<1-2 sentence explanation>"}}\n'
-            f'  ],\n'
+            f"  ],\n"
             f'  "key_narrative": "<50-80 word synthesis of all signals>"\n'
-            f'}}\n\n'
+            f"}}\n\n"
             f"Headlines:\n{headlines_text}"
         )
 
@@ -747,7 +751,7 @@ def score_sentiment_ollama(ticker: str, headlines: list[str], model: str) -> dic
             brace_end = cleaned.rfind("}")
             if brace_start != -1 and brace_end > brace_start:
                 try:
-                    parsed = json.loads(cleaned[brace_start:brace_end + 1])
+                    parsed = json.loads(cleaned[brace_start : brace_end + 1])
                 except (json.JSONDecodeError, ValueError):
                     pass
 
@@ -784,9 +788,14 @@ def score_sentiment_ollama(ticker: str, headlines: list[str], model: str) -> dic
             else:
                 bear_arguments = []
 
-            key_narrative = parsed.get("key_narrative", parsed.get("narrative_summary", parsed.get("summary", cleaned[:120])))
+            key_narrative = parsed.get(
+                "key_narrative",
+                parsed.get("narrative_summary", parsed.get("summary", cleaned[:120])),
+            )
         else:
-            score_match = re.search(r'"?(?:retail_sentiment_)?score"?\s*:\s*([\d.]+)', cleaned, re.IGNORECASE)
+            score_match = re.search(
+                r'"?(?:retail_sentiment_)?score"?\s*:\s*([\d.]+)', cleaned, re.IGNORECASE
+            )
             retail_score = float(score_match.group(1)) if score_match else 5.0
             retail_score = max(1.0, min(10.0, retail_score))
             sentiment_label = "N/A"
@@ -794,11 +803,19 @@ def score_sentiment_ollama(ticker: str, headlines: list[str], model: str) -> dic
             coverage_text = ""
             bull_arguments = []
             bear_arguments = []
-            bull_match = re.search(r'"bull[_\s]*(?:arguments|logic)?"?\s*:\s*\[([^\]]*)\]', cleaned, re.IGNORECASE | re.DOTALL)
+            bull_match = re.search(
+                r'"bull[_\s]*(?:arguments|logic)?"?\s*:\s*\[([^\]]*)\]',
+                cleaned,
+                re.IGNORECASE | re.DOTALL,
+            )
             if bull_match:
                 for s in re.findall(r'"([^"]+)"', bull_match.group(1)):
                     bull_arguments.append({"title": s.strip(), "detail": ""})
-            bear_match = re.search(r'"bear[_\s]*(?:arguments|logic|risks)?"?\s*:\s*\[([^\]]*)\]', cleaned, re.IGNORECASE | re.DOTALL)
+            bear_match = re.search(
+                r'"bear[_\s]*(?:arguments|logic|risks)?"?\s*:\s*\[([^\]]*)\]',
+                cleaned,
+                re.IGNORECASE | re.DOTALL,
+            )
             if bear_match:
                 for s in re.findall(r'"([^"]+)"', bear_match.group(1)):
                     bear_arguments.append({"title": s.strip(), "detail": ""})
@@ -815,19 +832,25 @@ def score_sentiment_ollama(ticker: str, headlines: list[str], model: str) -> dic
             "score": int(round(retail_score)),
             "coverage": retail_coverage,
             "narrative_summary": key_narrative,
-            "summary": key_narrative, "raw": cleaned,
+            "summary": key_narrative,
+            "raw": cleaned,
             "news_count": len(headlines),
             "confidence": _confidence_from_count(len(headlines)),
         }
     except (ConnectionError, ValueError, Exception) as e:
         return {
-            "retail_sentiment_score": 5.0, "sentiment_label": "Error",
-            "retail_coverage": "Low", "coverage_text": "",
-            "score": 5, "coverage": "Low",
-            "bull_arguments": [], "bear_arguments": [],
+            "retail_sentiment_score": 5.0,
+            "sentiment_label": "Error",
+            "retail_coverage": "Low",
+            "coverage_text": "",
+            "score": 5,
+            "coverage": "Low",
+            "bull_arguments": [],
+            "bear_arguments": [],
             "key_narrative": str(e),
             "narrative_summary": str(e),
-            "summary": str(e), "raw": "",
+            "summary": str(e),
+            "raw": "",
             "news_count": len(headlines),
             "confidence": _confidence_from_count(len(headlines)),
         }
@@ -836,18 +859,23 @@ def score_sentiment_ollama(ticker: str, headlines: list[str], model: str) -> dic
 def score_reddit_fomo(ticker: str, reddit_text: str) -> dict:
     """Score Reddit retail FOMO sentiment using the active LLM."""
     if not reddit_text or reddit_text == "No Reddit posts found for this ticker.":
-        return {"fomo_score": 50, "retail_consensus": "No Reddit data", "bull_logic": "", "bear_logic": ""}
+        return {
+            "fomo_score": 50,
+            "retail_consensus": "No Reddit data",
+            "bull_logic": "",
+            "bear_logic": "",
+        }
 
     prompt = (
         f"You are analyzing Reddit retail investor sentiment for ${ticker} "
         f"from r/WallStreetBets and r/stocks.\n"
         f"Based on these posts, return ONLY valid JSON:\n"
-        f'{{\n'
+        f"{{\n"
         f'  "fomo_score": <integer 0-100, where 0=extreme panic, 50=neutral, 100=extreme FOMO/bullish>,\n'
         f'  "retail_consensus": "<one sentence summarizing retail mood>",\n'
         f'  "bull_logic": "<most popular bullish thesis from posts>",\n'
         f'  "bear_logic": "<biggest concern or bearish argument from posts>"\n'
-        f'}}\n\n'
+        f"}}\n\n"
         f"Reddit Posts:\n{reddit_text[:2000]}"
     )
 
@@ -863,7 +891,7 @@ def score_reddit_fomo(ticker: str, reddit_text: str) -> dict:
             brace_end = cleaned.rfind("}")
             if brace_start != -1 and brace_end > brace_start:
                 try:
-                    parsed = json.loads(cleaned[brace_start:brace_end + 1])
+                    parsed = json.loads(cleaned[brace_start : brace_end + 1])
                 except (json.JSONDecodeError, ValueError):
                     pass
 
@@ -874,26 +902,44 @@ def score_reddit_fomo(ticker: str, reddit_text: str) -> dict:
                 "bull_logic": parsed.get("bull_logic", ""),
                 "bear_logic": parsed.get("bear_logic", ""),
             }
-        return {"fomo_score": 50, "retail_consensus": "Parse error", "bull_logic": "", "bear_logic": ""}
+        return {
+            "fomo_score": 50,
+            "retail_consensus": "Parse error",
+            "bull_logic": "",
+            "bear_logic": "",
+        }
     except Exception as e:
-        return {"fomo_score": 50, "retail_consensus": f"Error: {e}", "bull_logic": "", "bear_logic": ""}
+        return {
+            "fomo_score": 50,
+            "retail_consensus": f"Error: {e}",
+            "bull_logic": "",
+            "bear_logic": "",
+        }
 
 
 def get_conviction_multiplier(score: int) -> tuple[float, str]:
     """Convert 1-10 sentiment score to conviction multiplier and label."""
-    if score >= 8: return 1.25, "Overweight"
-    if score >= 5: return 1.0, "Neutral"
-    if score >= 3: return 0.5, "Underweight"
+    if score >= 8:
+        return 1.25, "Overweight"
+    if score >= 5:
+        return 1.0, "Neutral"
+    if score >= 3:
+        return 0.5, "Underweight"
     return 0.0, "Avoid"
 
 
 def build_sentiment_context(sentiment: dict) -> str:
     if not sentiment:
         return ""
-    lines = ["", "## 16. AI Sentiment Scores (Latest News, LLM-scored)",
-             f"{'Ticker':<12} {'Score':>8}  {'Label':<22}  Coverage"]
+    lines = [
+        "",
+        "## 16. AI Sentiment Scores (Latest News, LLM-scored)",
+        f"{'Ticker':<12} {'Score':>8}  {'Label':<22}  Coverage",
+    ]
     lines.append("-" * 80)
-    for tk, data in sorted(sentiment.items(), key=lambda x: x[1].get("retail_sentiment_score", x[1].get("score", 5))):
+    for tk, data in sorted(
+        sentiment.items(), key=lambda x: x[1].get("retail_sentiment_score", x[1].get("score", 5))
+    ):
         score = data.get("retail_sentiment_score", data.get("score", 5))
         label = data.get("sentiment_label", "N/A")
         coverage = data.get("retail_coverage", data.get("coverage", "N/A"))
@@ -916,7 +962,9 @@ def build_sentiment_context(sentiment: dict) -> str:
                 else:
                     bear_parts.append(str(arg))
             lines.append(f"  Bear: {'; '.join(bear_parts)}")
-        narrative = data.get("key_narrative", data.get("narrative_summary", data.get("summary", "")))
+        narrative = data.get(
+            "key_narrative", data.get("narrative_summary", data.get("summary", ""))
+        )
         if narrative:
             lines.append(f"  Narrative: {narrative}")
         if data.get("headlines"):
@@ -941,67 +989,84 @@ def build_risk_context(
     _h = lines.append
     _b = lambda block: lines.extend(block)
 
-    _b([
-        "=" * 64,
-        "PORTFOLIO RISK REPORT  (v2 — EWMA - Multi-Factor - Margin-Aware)",
-        "=" * 64, "",
-        "## 1. Key Risk Metrics",
-        f"  Annual Return:            {report.annual_return:>10.2%}",
-        f"  Annual Volatility (EWMA): {report.annual_volatility:>10.2%}",
-        f"  Sharpe Ratio:             {report.sharpe_ratio:>10.2f}",
-        f"  Risk-Free Rate:           {report.risk_free_rate:>8.2%}",
-        f"  Max Drawdown:             {report.max_drawdown:>10.2%}",
-        f"  VaR  95% ({mc_horizon}d, MC EWMA): {report.var_95:>8.2%}",
-        f"  VaR  99% ({mc_horizon}d, MC EWMA): {report.var_99:>8.2%}",
-        f"  CVaR 95% ({mc_horizon}d, MC EWMA): {report.cvar_95:>8.2%}",
-        f"  Stress Loss ({market_shock:.0%} market shock): {report.stress_loss:.2%}",
-        "",
-    ])
+    _b(
+        [
+            "=" * 64,
+            "PORTFOLIO RISK REPORT  (v2 — EWMA - Multi-Factor - Margin-Aware)",
+            "=" * 64,
+            "",
+            "## 1. Key Risk Metrics",
+            f"  Annual Return:            {report.annual_return:>10.2%}",
+            f"  Annual Volatility (EWMA): {report.annual_volatility:>10.2%}",
+            f"  Sharpe Ratio:             {report.sharpe_ratio:>10.2f}",
+            f"  Risk-Free Rate:           {report.risk_free_rate:>8.2%}",
+            f"  Max Drawdown:             {report.max_drawdown:>10.2%}",
+            f"  VaR  95% ({mc_horizon}d, MC EWMA): {report.var_95:>8.2%}",
+            f"  VaR  99% ({mc_horizon}d, MC EWMA): {report.var_99:>8.2%}",
+            f"  CVaR 95% ({mc_horizon}d, MC EWMA): {report.cvar_95:>8.2%}",
+            f"  Stress Loss ({market_shock:.0%} market shock): {report.stress_loss:.2%}",
+            "",
+        ]
+    )
 
     if report.drawdown_stats:
         ds = report.drawdown_stats
-        _b([
-            "## 2. Drawdown Statistics",
-            f"  Total episodes:     {ds['num_episodes']}",
-            f"  Average duration:   {ds['avg_episode_days']} trading days",
-            f"  Longest duration:   {ds['max_episode_days']} trading days",
-            "",
-        ])
+        _b(
+            [
+                "## 2. Drawdown Statistics",
+                f"  Total episodes:     {ds['num_episodes']}",
+                f"  Average duration:   {ds['avg_episode_days']} trading days",
+                f"  Longest duration:   {ds['max_episode_days']} trading days",
+                "",
+            ]
+        )
 
-    _b(["## 3. Per-Asset Detail (sorted by weight descending)",
-        f"{'Ticker':<12} {'Weight':>8} {'Beta(SPY)':>10} {'VaR%':>8}  Sector",
-        "-" * 72])
+    _b(
+        [
+            "## 3. Per-Asset Detail (sorted by weight descending)",
+            f"{'Ticker':<12} {'Weight':>8} {'Beta(SPY)':>10} {'VaR%':>8}  Sector",
+            "-" * 72,
+        ]
+    )
     for ticker, w in sorted(weights.items(), key=lambda x: -x[1]):
         beta = report.betas.get(ticker, float("nan"))
         beta_s = f"{beta:.2f}" if not np.isnan(beta) else "  N/A"
-        var_pct = float(report.component_var_pct.get(ticker, 0)) if report.component_var_pct is not None else 0
+        var_pct = (
+            float(report.component_var_pct.get(ticker, 0))
+            if report.component_var_pct is not None
+            else 0
+        )
         sector = get_sector(ticker)
         _h(f"{ticker:<12} {w:>8.2%} {beta_s:>10} {var_pct:>8.1%}  {sector}")
     _h("")
 
     if report.margin_call_info and report.margin_call_info.get("has_margin"):
         mi = report.margin_call_info
-        _b([
-            "## 8. Margin & Leverage Analysis",
-            f"  Leverage:              {mi['leverage']:.2f}x",
-            f"  Distance to margin call: {mi['distance_to_call_pct']:.1%}",
-            "",
-        ])
+        _b(
+            [
+                "## 8. Margin & Leverage Analysis",
+                f"  Leverage:              {mi['leverage']:.2f}x",
+                f"  Distance to margin call: {mi['distance_to_call_pct']:.1%}",
+                "",
+            ]
+        )
 
     if report.mc_portfolio_returns is not None:
         mc = report.mc_portfolio_returns
-        _b([
-            f"## 10. Monte Carlo Summary ({len(mc):,} paths, {mc_horizon} days)",
-            f"  Mean return:   {np.mean(mc):.2%}",
-            f"  Prob of loss:  {(mc < 0).mean():.1%}",
-            "",
-        ])
+        _b(
+            [
+                f"## 10. Monte Carlo Summary ({len(mc):,} paths, {mc_horizon} days)",
+                f"  Mean return:   {np.mean(mc):.2%}",
+                f"  Prob of loss:  {(mc < 0).mean():.1%}",
+                "",
+            ]
+        )
 
     if sentiment:
         _h(build_sentiment_context(sentiment))
 
     if fund_data is not None and not fund_data.empty:
-        from market_intelligence import _fmt_market_cap
+
         _b(["", "## 17. Fundamentals"])
         top_tk = sorted(weights, key=lambda x: -weights[x])
         for tk in top_tk[:10]:
@@ -1016,34 +1081,66 @@ def build_risk_context(
     return "\n".join(lines)
 
 
-def create_excel_report(report: RiskReport, weights: dict, mc_horizon: int,
-                        market_shock: float, prices: pd.DataFrame) -> io.BytesIO:
+def create_excel_report(
+    report: RiskReport, weights: dict, mc_horizon: int, market_shock: float, prices: pd.DataFrame
+) -> io.BytesIO:
     buf = io.BytesIO()
-    port_beta = sum(report.betas.get(tk, 1.0) * w for tk, w in weights.items()
-                    if not np.isnan(report.betas.get(tk, float("nan"))))
+    port_beta = sum(
+        report.betas.get(tk, 1.0) * w
+        for tk, w in weights.items()
+        if not np.isnan(report.betas.get(tk, float("nan")))
+    )
     ds = report.drawdown_stats or {}
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-        summary = pd.DataFrame({"Metric": [
-            "Annual Return", "Annual Volatility (EWMA)", "Sharpe Ratio",
-            "Risk-Free Rate", "Max Drawdown",
-            f"VaR 95% ({mc_horizon}d)", f"VaR 99% ({mc_horizon}d)", f"CVaR 95% ({mc_horizon}d)",
-            f"Stress Loss ({market_shock:.0%})", "Portfolio Beta",
-        ], "Value": [
-            f"{report.annual_return:.4%}", f"{report.annual_volatility:.4%}",
-            f"{report.sharpe_ratio:.4f}", f"{report.risk_free_rate:.4%}",
-            f"{report.max_drawdown:.4%}",
-            f"{report.var_95:.4%}", f"{report.var_99:.4%}", f"{report.cvar_95:.4%}",
-            f"{report.stress_loss:.4%}", f"{port_beta:.4f}",
-        ]})
+        summary = pd.DataFrame(
+            {
+                "Metric": [
+                    "Annual Return",
+                    "Annual Volatility (EWMA)",
+                    "Sharpe Ratio",
+                    "Risk-Free Rate",
+                    "Max Drawdown",
+                    f"VaR 95% ({mc_horizon}d)",
+                    f"VaR 99% ({mc_horizon}d)",
+                    f"CVaR 95% ({mc_horizon}d)",
+                    f"Stress Loss ({market_shock:.0%})",
+                    "Portfolio Beta",
+                ],
+                "Value": [
+                    f"{report.annual_return:.4%}",
+                    f"{report.annual_volatility:.4%}",
+                    f"{report.sharpe_ratio:.4f}",
+                    f"{report.risk_free_rate:.4%}",
+                    f"{report.max_drawdown:.4%}",
+                    f"{report.var_95:.4%}",
+                    f"{report.var_99:.4%}",
+                    f"{report.cvar_95:.4%}",
+                    f"{report.stress_loss:.4%}",
+                    f"{port_beta:.4f}",
+                ],
+            }
+        )
         summary.to_excel(writer, sheet_name="Summary", index=False)
 
         asset_rows = []
         for ticker, w in sorted(weights.items(), key=lambda x: -x[1]):
             beta = report.betas.get(ticker, float("nan"))
             stress = beta * market_shock if not np.isnan(beta) else float("nan")
-            var_pct = float(report.component_var_pct.get(ticker, 0)) if report.component_var_pct is not None else float("nan")
-            asset_rows.append({"Ticker": ticker, "Sector": get_sector(ticker), "Weight": w,
-                                "Beta": beta, "VaR Contribution %": var_pct, "Stress Loss": stress})
+            var_pct = (
+                float(report.component_var_pct.get(ticker, 0))
+                if report.component_var_pct is not None
+                else float("nan")
+            )
+            asset_rows.append(
+                {
+                    "Ticker": ticker,
+                    "Sector": get_sector(ticker),
+                    "Weight": w,
+                    "Beta": beta,
+                    "VaR Contribution %": var_pct,
+                    "Stress Loss": stress,
+                }
+            )
         pd.DataFrame(asset_rows).to_excel(writer, sheet_name="Asset Details", index=False)
 
         if report.factor_betas is not None:
@@ -1056,7 +1153,8 @@ def create_excel_report(report: RiskReport, weights: dict, mc_horizon: int,
             dd_df.to_excel(writer, sheet_name="Drawdown Series", index=False)
         if report.mc_portfolio_returns is not None:
             pd.DataFrame({"Simulated Return": report.mc_portfolio_returns[:5000]}).to_excel(
-                writer, sheet_name="Monte Carlo", index=False)
+                writer, sheet_name="Monte Carlo", index=False
+            )
         if prices is not None:
             prices.to_excel(writer, sheet_name="Price History")
     buf.seek(0)
@@ -1116,7 +1214,7 @@ def render_sentiment_tear_sheet(tk: str, data: dict, weight: float, lang: str = 
         f'padding:10px 20px;margin-top:16px;background:var(--secondary-background-color,rgba(0,0,0,0.02))">'
         f'<span style="font-size:15px;font-weight:800">{tk}</span>'
         f'<span style="font-size:12px;opacity:0.5;margin-left:10px">{weight:.1%} {_lbl_portfolio}</span>'
-        f'</div>',
+        f"</div>",
         unsafe_allow_html=True,
     )
 
@@ -1128,7 +1226,7 @@ def render_sentiment_tear_sheet(tk: str, data: dict, weight: float, lang: str = 
             f'<div style="font-size:9px;font-weight:600;letter-spacing:1.5px;opacity:0.4;margin-bottom:6px">{_lbl_score}</div>'
             f'<div style="font-size:52px;font-weight:900;color:{score_color};line-height:1">{score:.1f}</div>'
             f'<div style="font-size:14px;font-weight:700;color:{score_color};margin-top:4px">{label}</div>'
-            f'</div>',
+            f"</div>",
             unsafe_allow_html=True,
         )
         st.markdown('<hr style="margin:6px 0;opacity:0.15">', unsafe_allow_html=True)
@@ -1137,14 +1235,20 @@ def render_sentiment_tear_sheet(tk: str, data: dict, weight: float, lang: str = 
             f'<div style="font-size:9px;font-weight:600;letter-spacing:1.5px;opacity:0.4;margin-bottom:4px">{_lbl_coverage}</div>'
             f'<div style="font-size:20px;font-weight:800">{coverage}</div>'
             f'<div style="font-size:11px;opacity:0.45;margin-top:2px">{coverage_text}</div>'
-            f'</div>',
+            f"</div>",
             unsafe_allow_html=True,
         )
         if headlines:
             st.markdown('<hr style="margin:6px 0;opacity:0.15">', unsafe_allow_html=True)
-            st.markdown(f'<div style="font-size:9px;font-weight:600;letter-spacing:1px;opacity:0.4;margin-bottom:4px">{_lbl_headlines}</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="font-size:9px;font-weight:600;letter-spacing:1px;opacity:0.4;margin-bottom:4px">{_lbl_headlines}</div>',
+                unsafe_allow_html=True,
+            )
             for h in headlines[:4]:
-                st.markdown(f'<div style="font-size:10px;opacity:0.6;margin-bottom:3px;line-height:1.3">- {h[:80]}</div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div style="font-size:10px;opacity:0.6;margin-bottom:3px;line-height:1.3">- {h[:80]}</div>',
+                    unsafe_allow_html=True,
+                )
 
     with col_right:
         st.markdown(
@@ -1155,31 +1259,58 @@ def render_sentiment_tear_sheet(tk: str, data: dict, weight: float, lang: str = 
         bull_c, bear_c = st.columns(2)
 
         with bull_c:
-            st.markdown(f'<div style="font-size:12px;font-weight:700;color:{CLR_GOOD};margin-bottom:6px">{_lbl_bull}</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="font-size:12px;font-weight:700;color:{CLR_GOOD};margin-bottom:6px">{_lbl_bull}</div>',
+                unsafe_allow_html=True,
+            )
             if not bulls:
-                st.markdown(f'<span style="opacity:0.35;font-size:11px">{_lbl_no_bull}</span>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<span style="opacity:0.35;font-size:11px">{_lbl_no_bull}</span>',
+                    unsafe_allow_html=True,
+                )
             for arg in bulls[:3]:
                 if isinstance(arg, dict):
                     title = arg.get("title", "")
                     detail = arg.get("detail", "")
-                    st.markdown(f'<div style="margin-bottom:8px"><span style="color:{CLR_GOOD};font-weight:bold">&#9650;</span> <b>{title}</b><br><span style="font-size:12px;opacity:0.7">{detail}</span></div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div style="margin-bottom:8px"><span style="color:{CLR_GOOD};font-weight:bold">&#9650;</span> <b>{title}</b><br><span style="font-size:12px;opacity:0.7">{detail}</span></div>',
+                        unsafe_allow_html=True,
+                    )
                 else:
-                    st.markdown(f'<span style="color:{CLR_GOOD}">&#9650;</span> {arg}', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<span style="color:{CLR_GOOD}">&#9650;</span> {arg}',
+                        unsafe_allow_html=True,
+                    )
 
         with bear_c:
-            st.markdown(f'<div style="font-size:12px;font-weight:700;color:{CLR_DANGER};margin-bottom:6px">{_lbl_bear}</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="font-size:12px;font-weight:700;color:{CLR_DANGER};margin-bottom:6px">{_lbl_bear}</div>',
+                unsafe_allow_html=True,
+            )
             if not bears:
-                st.markdown(f'<span style="opacity:0.35;font-size:11px">{_lbl_no_bear}</span>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<span style="opacity:0.35;font-size:11px">{_lbl_no_bear}</span>',
+                    unsafe_allow_html=True,
+                )
             for arg in bears[:3]:
                 if isinstance(arg, dict):
                     title = arg.get("title", "")
                     detail = arg.get("detail", "")
-                    st.markdown(f'<div style="margin-bottom:8px"><span style="color:{CLR_DANGER};font-weight:bold">&#9660;</span> <b>{title}</b><br><span style="font-size:12px;opacity:0.7">{detail}</span></div>', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<div style="margin-bottom:8px"><span style="color:{CLR_DANGER};font-weight:bold">&#9660;</span> <b>{title}</b><br><span style="font-size:12px;opacity:0.7">{detail}</span></div>',
+                        unsafe_allow_html=True,
+                    )
                 else:
-                    st.markdown(f'<span style="color:{CLR_DANGER}">&#9660;</span> {arg}', unsafe_allow_html=True)
+                    st.markdown(
+                        f'<span style="color:{CLR_DANGER}">&#9660;</span> {arg}',
+                        unsafe_allow_html=True,
+                    )
 
         if narrative:
-            st.markdown('<hr style="margin:10px 0;opacity:0.12;border-style:dashed">', unsafe_allow_html=True)
+            st.markdown(
+                '<hr style="margin:10px 0;opacity:0.12;border-style:dashed">',
+                unsafe_allow_html=True,
+            )
             st.markdown(
                 f'<div style="font-size:9px;font-weight:600;letter-spacing:1.5px;opacity:0.4;margin-bottom:4px">{_lbl_narrative}</div>'
                 f'<div style="font-size:13px;line-height:1.5">{narrative}</div>',
@@ -1195,7 +1326,7 @@ def render_sentiment_tear_sheet(tk: str, data: dict, weight: float, lang: str = 
         f"**{tk} Quant Health: {_grade}** (Score: {score:.1f}/10)",
         f"- Valuation: {_val.title()} {'-- potential upside' if score >= 7 else '-- caution on entry' if score <= 4 else ''}",
         f"- Momentum: {_momentum.title()} {'-- trend supportive' if score >= 6 else '-- wait for confirmation' if score <= 4 else ''}",
-        f"- Liquidity: Excellent (institutional-grade, exits within 1 day)",
+        "- Liquidity: Excellent (institutional-grade, exits within 1 day)",
     ]
     if score >= 7:
         st.success("\n".join(_summary_lines))
@@ -1208,7 +1339,13 @@ def render_sentiment_tear_sheet(tk: str, data: dict, weight: float, lang: str = 
 # ══════════════════════════════════════════════════════════════
 #  Global Design System
 # ══════════════════════════════════════════════════════════════
-from ui.components import inject_global_css, render_kpi_row, render_section, render_chart, render_ai_digest
+from ui.components import (
+    inject_global_css,
+    render_ai_digest,
+    render_kpi_row,
+    render_section,
+)
+
 inject_global_css()
 
 # ══════════════════════════════════════════════════════════════
@@ -1240,9 +1377,7 @@ if "analysis_ready" not in st.session_state:
     st.session_state.technical_data = None
     st.session_state.reddit_fomo_data = None
     st.session_state.current_tab = "overview"
-    st.session_state.weights_json = json.dumps(
-        {"AAPL": 0.4, "TSLA": 0.3, "BTC-USD": 0.3}, indent=2
-    )
+    st.session_state.weights_json = json.dumps({"AAPL": 0.4, "TSLA": 0.3, "BTC-USD": 0.3}, indent=2)
     # Performance & Cache Tracking
     st.session_state.last_weights_json = None
     st.session_state.last_analysis_duration_ms = 0
@@ -1255,6 +1390,7 @@ if "analysis_ready" not in st.session_state:
 
 # Use the same shared sidebar component that pages use
 from ui.shared_sidebar import render_shared_sidebar
+
 lang, t = render_shared_sidebar()
 
 # Get values from session state (set by shared_sidebar)
@@ -1355,16 +1491,16 @@ if run_btn:
             age_min = int(age_sec // 60)
             st.warning(
                 f"⚠️ Analysis is {age_min} minutes old. Click Force Refresh for fresh data."
-                if lang == "en" else
-                f"⚠️ 分析结果已 {age_min} 分钟未更新。点击 Force Refresh 重新计算。"
+                if lang == "en"
+                else f"⚠️ 分析结果已 {age_min} 分钟未更新。点击 Force Refresh 重新计算。"
             )
 
     if using_cache:
         age_min = int((time.time() - last_ts) // 60) if last_ts else 0
         st.info(
             f"Using cached analysis ({age_min}m old). Click Force Refresh to recompute."
-            if lang == "en" else
-            f"使用缓存的分析结果（{age_min} 分钟前计算）。点击 Force Refresh 重新计算。"
+            if lang == "en"
+            else f"使用缓存的分析结果（{age_min} 分钟前计算）。点击 Force Refresh 重新计算。"
         )
         logger.info("ui.analysis.cache_hit", age_min=age_min)
     else:
@@ -1374,13 +1510,14 @@ if run_btn:
         try:
             with st.spinner("正在下载市场数据（可能需要30-60秒）..."):
                 report, prices, cumret = run_portfolio_analysis(
-                    weights_json, period_years, mc_sims, mc_horizon,
-                    risk_free_fallback, market_shock,
+                    weights_json,
+                    period_years,
+                    mc_sims,
+                    mc_horizon,
+                    risk_free_fallback,
+                    market_shock,
                 )
-            show_success(
-                f"成功加载 {len(prices.columns)} 个ticker的数据",
-                title="数据加载完成"
-            )
+            show_success(f"成功加载 {len(prices.columns)} 个ticker的数据", title="数据加载完成")
         except ValueError as e:
             show_error(
                 e,
@@ -1409,8 +1546,13 @@ if run_btn:
         try:
             with st.spinner("正在构建风险引擎..."):
                 engine = build_engine_ref(
-                    weights, period_years, mc_sims, mc_horizon,
-                    risk_free_fallback, prices, market_shock,
+                    weights,
+                    period_years,
+                    mc_sims,
+                    mc_horizon,
+                    risk_free_fallback,
+                    prices,
+                    market_shock,
                 )
                 st.session_state._engine = engine
 
@@ -1432,39 +1574,61 @@ if run_btn:
         st.session_state.last_analysis_duration_ms = analysis_duration_ms
         st.session_state.analysis_from_cache = False
 
-        st.session_state.update(dict(
-            analysis_ready=True, report=report, weights=weights,
-            prices=prices, cumret=cumret, mc_horizon=mc_horizon,
-            mc_sims=mc_sims, market_shock=market_shock,
-            period_years=period_years,
-            risk_free_fallback=risk_free_fallback,
-            risk_context=build_risk_context(
-                report, weights, mc_horizon, market_shock, prices,
-                sentiment=st.session_state.get("sentiment_data"),
-                fund_data=st.session_state.get("fundamentals_data"),
-                insider_data=st.session_state.get("insider_data"),
-                technical_data=st.session_state.get("technical_data"),
-            ),
-            chat_messages=[], historical_scenarios=None, sim_result=None,
-            sentiment_data=None, _ef_result=None,
-            last_weights_json=weights_json,
-            _last_cache_key=_cache_key,
-            _last_analysis_ts=time.time(),
-        ))
+        st.session_state.update(
+            dict(
+                analysis_ready=True,
+                report=report,
+                weights=weights,
+                prices=prices,
+                cumret=cumret,
+                mc_horizon=mc_horizon,
+                mc_sims=mc_sims,
+                market_shock=market_shock,
+                period_years=period_years,
+                risk_free_fallback=risk_free_fallback,
+                risk_context=build_risk_context(
+                    report,
+                    weights,
+                    mc_horizon,
+                    market_shock,
+                    prices,
+                    sentiment=st.session_state.get("sentiment_data"),
+                    fund_data=st.session_state.get("fundamentals_data"),
+                    insider_data=st.session_state.get("insider_data"),
+                    technical_data=st.session_state.get("technical_data"),
+                ),
+                chat_messages=[],
+                historical_scenarios=None,
+                sim_result=None,
+                sentiment_data=None,
+                _ef_result=None,
+                last_weights_json=weights_json,
+                _last_cache_key=_cache_key,
+                _last_analysis_ts=time.time(),
+            )
+        )
 
         # Display performance metrics
         perf_col1, perf_col2 = st.columns(2)
         with perf_col1:
-            st.caption(f"Computation time: {analysis_duration_ms:.0f}ms" if lang == "en" else f"计算耗时: {analysis_duration_ms:.0f}ms")
+            st.caption(
+                f"Computation time: {analysis_duration_ms:.0f}ms"
+                if lang == "en"
+                else f"计算耗时: {analysis_duration_ms:.0f}ms"
+            )
         with perf_col2:
             status_emoji = "✓" if analysis_duration_ms < 10000 else "⚠"
-            st.caption(f"{status_emoji} Target: <10s (cold), <3s (cached)" if lang == "en" else f"{status_emoji} 目标: <10秒(首次), <3秒(缓存)")
+            st.caption(
+                f"{status_emoji} Target: <10s (cold), <3s (cached)"
+                if lang == "en"
+                else f"{status_emoji} 目标: <10秒(首次), <3秒(缓存)"
+            )
 
         logger.info(
             "ui.analysis.complete_with_timing",
             duration_ms=round(analysis_duration_ms, 2),
             ticker_count=len(weights),
-            from_cache=False
+            from_cache=False,
         )
 
 
@@ -1478,18 +1642,18 @@ if not st.session_state.analysis_ready:
     _hero = (
         f'<div style="text-align:center;padding:56px 0 24px 0">'
         f'<div style="display:inline-block;padding:4px 12px;background:{T.accent_bg};'
-        f'border:1px solid {T.accent};border-radius:20px;{T.font_overline};'
+        f"border:1px solid {T.accent};border-radius:20px;{T.font_overline};"
         f'color:{T.accent};margin-bottom:20px">INSTITUTIONAL-GRADE ANALYTICS</div>'
         f'<h1 style="color:{T.text};font-size:56px;font-weight:800;letter-spacing:-1.5px;'
         f'margin:0 0 16px 0;line-height:1.1">MindMarket <span style="color:{T.accent}">AI</span></h1>'
         f'<p style="font-size:20px;font-weight:400;color:{T.text_secondary};'
         f'max-width:640px;margin:0 auto 8px auto;line-height:1.5">'
-        f'Professional portfolio risk analytics with AI-powered insights, '
-        f'built on the quantitative stack used at hedge funds.</p>'
+        f"Professional portfolio risk analytics with AI-powered insights, "
+        f"built on the quantitative stack used at hedge funds.</p>"
         f'<p style="{T.font_caption};color:{T.text_muted};margin-top:12px">'
-        f'Monte Carlo VaR &nbsp;·&nbsp; Multi-Factor Attribution &nbsp;·&nbsp; '
-        f'Options Greeks &nbsp;·&nbsp; 13F Smart Money &nbsp;·&nbsp; Regime Detection</p>'
-        f'</div>'
+        f"Monte Carlo VaR &nbsp;·&nbsp; Multi-Factor Attribution &nbsp;·&nbsp; "
+        f"Options Greeks &nbsp;·&nbsp; 13F Smart Money &nbsp;·&nbsp; Regime Detection</p>"
+        f"</div>"
     )
     st.markdown(_hero, unsafe_allow_html=True)
 
@@ -1505,76 +1669,107 @@ if not st.session_state.analysis_ready:
         with col:
             _card = (
                 f'<div style="text-align:center;background:{T.surface};'
-                f'border:1px solid {T.border_subtle};border-radius:{T.radius};'
+                f"border:1px solid {T.border_subtle};border-radius:{T.radius};"
                 f'padding:{T.sp_lg} {T.sp_md}">'
                 f'<div style="font-size:28px;font-weight:700;color:{T.accent};'
                 f'line-height:1;margin-bottom:6px">{num}</div>'
                 f'<div style="{T.font_caption};color:{T.text_secondary};'
                 f'text-transform:uppercase;letter-spacing:0.5px">{label}</div>'
-                f'</div>'
+                f"</div>"
             )
             st.markdown(_card, unsafe_allow_html=True)
 
     # ── Platform Capabilities (6-card grid) ───────────────────
-    render_section("Platform Capabilities", subtitle="Production-grade quantitative tools on a single dashboard")
+    render_section(
+        "Platform Capabilities",
+        subtitle="Production-grade quantitative tools on a single dashboard",
+    )
     _features = [
-        ("Risk Engine",
-         "Monte Carlo VaR/CVaR, EWMA covariance, Component VaR, stress testing, margin-call detection.",
-         "risk_engine.py · 1,301 lines"),
-        ("Options Lab",
-         "Black-Scholes pricing, full Greeks, IV surface, 10 strategy types, portfolio-level exposure.",
-         "options_engine.py · 1,227 lines"),
-        ("Factor Models",
-         "6-factor OLS with significance testing, macro sensitivities, Barra PCA attribution, rolling betas.",
-         "6 benchmark factors + 3 macro"),
-        ("Institutional Intel",
-         "SEC 13F parser for 31 top institutions, smart-money overlap scoring, crowding detection.",
-         "institutional_tracker.py · 1,358 lines"),
-        ("Regime & Backtest",
-         "HMM regime detection, vectorized backtesting, Brinson-Hood-Beebower attribution, tracking error.",
-         "regime_detector + backtest_engine"),
-        ("AI Digests",
-         "Narrative analysis on every page via Claude, DeepSeek, or local Ollama (auto-detected).",
-         "3 pluggable LLM backends"),
+        (
+            "Risk Engine",
+            "Monte Carlo VaR/CVaR, EWMA covariance, Component VaR, stress testing, margin-call detection.",
+            "risk_engine.py · 1,301 lines",
+        ),
+        (
+            "Options Lab",
+            "Black-Scholes pricing, full Greeks, IV surface, 10 strategy types, portfolio-level exposure.",
+            "options_engine.py · 1,227 lines",
+        ),
+        (
+            "Factor Models",
+            "6-factor OLS with significance testing, macro sensitivities, Barra PCA attribution, rolling betas.",
+            "6 benchmark factors + 3 macro",
+        ),
+        (
+            "Institutional Intel",
+            "SEC 13F parser for 31 top institutions, smart-money overlap scoring, crowding detection.",
+            "institutional_tracker.py · 1,358 lines",
+        ),
+        (
+            "Regime & Backtest",
+            "HMM regime detection, vectorized backtesting, Brinson-Hood-Beebower attribution, tracking error.",
+            "regime_detector + backtest_engine",
+        ),
+        (
+            "AI Digests",
+            "Narrative analysis on every page via Claude, DeepSeek, or local Ollama (auto-detected).",
+            "3 pluggable LLM backends",
+        ),
     ]
     for row_idx in range(0, 6, 3):
         cols = st.columns(3)
-        for col, (title, desc, meta) in zip(cols, _features[row_idx:row_idx + 3]):
+        for col, (title, desc, meta) in zip(cols, _features[row_idx : row_idx + 3]):
             with col:
                 _card = (
                     f'<div style="background:{T.surface};border:1px solid {T.border_subtle};'
-                    f'border-radius:{T.radius};padding:{T.sp_lg};height:100%;'
+                    f"border-radius:{T.radius};padding:{T.sp_lg};height:100%;"
                     f'min-height:160px;display:flex;flex-direction:column">'
                     f'<div style="{T.font_section};color:{T.text};margin-bottom:{T.sp_sm}">{title}</div>'
                     f'<div style="{T.font_body};color:{T.text_secondary};line-height:1.6;'
                     f'flex:1;margin-bottom:{T.sp_md}">{desc}</div>'
                     f'<div style="{T.font_caption};color:{T.text_muted};'
-                    f'border-top:1px solid {T.border_subtle};padding-top:{T.sp_sm};'
+                    f"border-top:1px solid {T.border_subtle};padding-top:{T.sp_sm};"
                     f'font-family:ui-monospace,SFMono-Regular,Consolas,monospace">{meta}</div>'
-                    f'</div>'
+                    f"</div>"
                 )
                 st.markdown(_card, unsafe_allow_html=True)
 
     # ── Use Cases ─────────────────────────────────────────────
     render_section("Who It's Built For")
     _personas = [
-        ("Active Investor",
-         "Track factor exposures, rebalance with the efficient frontier, stress-test scenarios before trading.",
-         ["Efficient frontier optimization", "Scenario simulator (-30% to +30%)", "AI risk digests"]),
-        ("Options Trader",
-         "Model complex strategies, monitor portfolio Greeks, scan unusual options flow from institutions.",
-         ["10 option strategies", "Live IV surface", "Smart-money options flow"]),
-        ("Long-Term Allocator",
-         "Understand true factor exposure across equities, crypto, and ETFs. Watch institutional crowding.",
-         ["6-factor + macro attribution", "Regime-aware rebalancing", "13F institutional overlap"]),
+        (
+            "Active Investor",
+            "Track factor exposures, rebalance with the efficient frontier, stress-test scenarios before trading.",
+            [
+                "Efficient frontier optimization",
+                "Scenario simulator (-30% to +30%)",
+                "AI risk digests",
+            ],
+        ),
+        (
+            "Options Trader",
+            "Model complex strategies, monitor portfolio Greeks, scan unusual options flow from institutions.",
+            ["10 option strategies", "Live IV surface", "Smart-money options flow"],
+        ),
+        (
+            "Long-Term Allocator",
+            "Understand true factor exposure across equities, crypto, and ETFs. Watch institutional crowding.",
+            [
+                "6-factor + macro attribution",
+                "Regime-aware rebalancing",
+                "13F institutional overlap",
+            ],
+        ),
     ]
     pcols = st.columns(3)
     for col, (name, desc, bullets) in zip(pcols, _personas):
         with col:
-            _bullets_html = ''.join([
-                f'<li style="margin-bottom:4px;color:{T.text_secondary};{T.font_body}">{b}</li>'
-                for b in bullets
-            ])
+            _bullets_html = "".join(
+                [
+                    f'<li style="margin-bottom:4px;color:{T.text_secondary};{T.font_body}">{b}</li>'
+                    for b in bullets
+                ]
+            )
             _card = (
                 f'<div style="background:{T.surface};border:1px solid {T.border_subtle};'
                 f'border-radius:{T.radius};padding:{T.sp_lg};height:100%">'
@@ -1584,7 +1779,7 @@ if not st.session_state.analysis_ready:
                 f'margin-bottom:{T.sp_md}">{desc}</div>'
                 f'<ul style="list-style:none;padding:0;margin:0;'
                 f'border-top:1px solid {T.border_subtle};padding-top:{T.sp_sm}">{_bullets_html}</ul>'
-                f'</div>'
+                f"</div>"
             )
             st.markdown(_card, unsafe_allow_html=True)
 
@@ -1592,12 +1787,21 @@ if not st.session_state.analysis_ready:
     render_section("How It Works")
     hw_cols = st.columns(3)
     _steps = [
-        ("01", "Configure",
-         "Enter portfolio weights in the sidebar, set Monte Carlo simulations, pick an AI provider."),
-        ("02", "Analyze",
-         "Click Run Analysis. The engine pulls prices, computes VaR, fits factors, and runs stress scenarios."),
-        ("03", "Explore",
-         "Navigate 10 pages of dashboards. AI digests summarize each section automatically."),
+        (
+            "01",
+            "Configure",
+            "Enter portfolio weights in the sidebar, set Monte Carlo simulations, pick an AI provider.",
+        ),
+        (
+            "02",
+            "Analyze",
+            "Click Run Analysis. The engine pulls prices, computes VaR, fits factors, and runs stress scenarios.",
+        ),
+        (
+            "03",
+            "Explore",
+            "Navigate 10 pages of dashboards. AI digests summarize each section automatically.",
+        ),
     ]
     for col, (num, step, desc) in zip(hw_cols, _steps):
         with col:
@@ -1608,23 +1812,32 @@ if not st.session_state.analysis_ready:
                 f'opacity:0.6;line-height:1;margin-bottom:{T.sp_sm}">{num}</div>'
                 f'<div style="{T.font_section};color:{T.text};margin-bottom:{T.sp_sm}">{step}</div>'
                 f'<div style="{T.font_body};color:{T.text_secondary};line-height:1.6">{desc}</div>'
-                f'</div>'
+                f"</div>"
             )
             st.markdown(_card, unsafe_allow_html=True)
 
     # ── Example Portfolios ────────────────────────────────────
-    render_section("Try a Sample Portfolio", subtitle="Click any preset to load it into the sidebar, then Run Analysis")
+    render_section(
+        "Try a Sample Portfolio",
+        subtitle="Click any preset to load it into the sidebar, then Run Analysis",
+    )
     col_ex1, col_ex2, col_ex3 = st.columns(3)
     _examples = [
-        ("Tech-Heavy",
-         {"AAPL": 0.20, "GOOGL": 0.20, "MSFT": 0.20, "NVDA": 0.15, "META": 0.15, "TSLA": 0.10},
-         "High growth, concentrated in Big Tech"),
-        ("Balanced",
-         {"SPY": 0.40, "TLT": 0.20, "GLD": 0.15, "QQQ": 0.15, "IWM": 0.10},
-         "Diversified across equities, bonds, commodities"),
-        ("Crypto-Enhanced",
-         {"SPY": 0.30, "BTC-USD": 0.25, "ETH-USD": 0.20, "AAPL": 0.15, "GLD": 0.10},
-         "Traditional assets blended with digital currencies"),
+        (
+            "Tech-Heavy",
+            {"AAPL": 0.20, "GOOGL": 0.20, "MSFT": 0.20, "NVDA": 0.15, "META": 0.15, "TSLA": 0.10},
+            "High growth, concentrated in Big Tech",
+        ),
+        (
+            "Balanced",
+            {"SPY": 0.40, "TLT": 0.20, "GLD": 0.15, "QQQ": 0.15, "IWM": 0.10},
+            "Diversified across equities, bonds, commodities",
+        ),
+        (
+            "Crypto-Enhanced",
+            {"SPY": 0.30, "BTC-USD": 0.25, "ETH-USD": 0.20, "AAPL": 0.15, "GLD": 0.10},
+            "Traditional assets blended with digital currencies",
+        ),
     ]
     for col, (name, pf, desc) in zip([col_ex1, col_ex2, col_ex3], _examples):
         with col:
@@ -1636,18 +1849,28 @@ if not st.session_state.analysis_ready:
     # ── Tech Credibility Strip ────────────────────────────────
     render_section("Under the Hood")
     _badges = [
-        "Monte Carlo VaR", "EWMA Covariance", "Black-Scholes",
-        "Newton-Raphson IV", "Gaussian Mixture HMM", "Brinson Attribution",
-        "SEC 13F Parser", "OLS Regression", "Markowitz Optimization",
-        "Structured Logging", "Pytest · 522 tests", "Python 3.10+",
+        "Monte Carlo VaR",
+        "EWMA Covariance",
+        "Black-Scholes",
+        "Newton-Raphson IV",
+        "Gaussian Mixture HMM",
+        "Brinson Attribution",
+        "SEC 13F Parser",
+        "OLS Regression",
+        "Markowitz Optimization",
+        "Structured Logging",
+        "Pytest · 522 tests",
+        "Python 3.10+",
     ]
-    _badge_html = ''.join([
-        f'<span style="display:inline-block;padding:6px 12px;margin:4px;'
-        f'background:{T.surface};border:1px solid {T.border_default};'
-        f'border-radius:20px;{T.font_caption};color:{T.text_secondary};'
-        f'font-family:ui-monospace,SFMono-Regular,Consolas,monospace">{b}</span>'
-        for b in _badges
-    ])
+    _badge_html = "".join(
+        [
+            f'<span style="display:inline-block;padding:6px 12px;margin:4px;'
+            f"background:{T.surface};border:1px solid {T.border_default};"
+            f"border-radius:20px;{T.font_caption};color:{T.text_secondary};"
+            f'font-family:ui-monospace,SFMono-Regular,Consolas,monospace">{b}</span>'
+            for b in _badges
+        ]
+    )
     st.markdown(
         f'<div style="text-align:center;padding:{T.sp_md} 0 {T.sp_xl} 0">{_badge_html}</div>',
         unsafe_allow_html=True,
@@ -1656,15 +1879,15 @@ if not st.session_state.analysis_ready:
     # ── CTA ───────────────────────────────────────────────────
     _cta = (
         f'<div style="text-align:center;margin:{T.sp_2xl} auto {T.sp_xl} auto;'
-        f'max-width:560px;padding:{T.sp_xl};background:{T.accent_bg};'
+        f"max-width:560px;padding:{T.sp_xl};background:{T.accent_bg};"
         f'border:1px solid {T.accent};border-radius:{T.radius_lg}">'
         f'<div style="{T.font_section};color:{T.text};margin-bottom:{T.sp_sm}">'
-        f'Ready to analyze your portfolio?</div>'
+        f"Ready to analyze your portfolio?</div>"
         f'<div style="{T.font_body};color:{T.text_secondary};line-height:1.6">'
-        f'Open the sidebar on the left, set your holdings and AI provider, '
+        f"Open the sidebar on the left, set your holdings and AI provider, "
         f'then click <b style="color:{T.text}">Run Analysis</b>. '
-        f'Results stream into Overview, Risk, Markets and 7 other pages.</div>'
-        f'</div>'
+        f"Results stream into Overview, Risk, Markets and 7 other pages.</div>"
+        f"</div>"
     )
     st.markdown(_cta, unsafe_allow_html=True)
 
@@ -1677,15 +1900,26 @@ else:
     if st.session_state.report:
         report = st.session_state.report
         render_section("Portfolio Summary")
-        render_kpi_row([
-            {"label": "Annual Return", "value": f"{report.annual_return:.2%}",
-             "delta_color": "positive" if report.annual_return >= 0 else "negative"},
-            {"label": "Volatility", "value": f"{report.annual_volatility:.2%}"},
-            {"label": "Sharpe Ratio", "value": f"{report.sharpe_ratio:.2f}",
-             "tooltip": f"Rf={report.risk_free_rate:.2%}"},
-            {"label": f"VaR 95% ({st.session_state.mc_horizon}d)", "value": f"{report.var_95:.2%}",
-             "tooltip": f"CVaR: {report.cvar_95:.2%}"},
-        ])
+        render_kpi_row(
+            [
+                {
+                    "label": "Annual Return",
+                    "value": f"{report.annual_return:.2%}",
+                    "delta_color": "positive" if report.annual_return >= 0 else "negative",
+                },
+                {"label": "Volatility", "value": f"{report.annual_volatility:.2%}"},
+                {
+                    "label": "Sharpe Ratio",
+                    "value": f"{report.sharpe_ratio:.2f}",
+                    "tooltip": f"Rf={report.risk_free_rate:.2%}",
+                },
+                {
+                    "label": f"VaR 95% ({st.session_state.mc_horizon}d)",
+                    "value": f"{report.var_95:.2%}",
+                    "tooltip": f"CVaR: {report.cvar_95:.2%}",
+                },
+            ]
+        )
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1744,11 +1978,13 @@ def render_chat_popover(page_key: str = "home"):
         else:
             st.caption("运行分析以启用AI聊天")
 
+
 # ══════════════════════════════════════════════════════════════
 #  Floating AI Assistant (Always Visible - Replaces Chat Popover)
 # ══════════════════════════════════════════════════════════════
 try:
     from ui.floating_chat import render_floating_ai_chat
+
     render_floating_ai_chat()
 except Exception as e:
     # Silently fail if floating chat has issues

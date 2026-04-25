@@ -3,14 +3,12 @@ tests/unit/test_i18n.py
 Unit tests for i18n.py — LABELS dictionary and get_translator() function.
 """
 
-import pytest
-
 from i18n import LABELS, get_translator
-
 
 # ══════════════════════════════════════════════════════════════
 #  LABELS structure tests
 # ══════════════════════════════════════════════════════════════
+
 
 class TestLabelsStructure:
     """Verify that the LABELS dict is well-formed."""
@@ -49,7 +47,9 @@ class TestLabelsStructure:
     def test_all_values_are_strings(self):
         """Every value in LABELS should be a string."""
         for lang in ("zh", "en"):
-            non_str = {k: type(v).__name__ for k, v in LABELS[lang].items() if not isinstance(v, str)}
+            non_str = {
+                k: type(v).__name__ for k, v in LABELS[lang].items() if not isinstance(v, str)
+            }
             assert non_str == {}, f"Non-string values in {lang}: {non_str}"
 
     def test_labels_have_substantial_content(self):
@@ -61,6 +61,7 @@ class TestLabelsStructure:
 # ══════════════════════════════════════════════════════════════
 #  get_translator() tests
 # ══════════════════════════════════════════════════════════════
+
 
 class TestGetTranslator:
     """Verify get_translator returns correct translations."""
@@ -74,8 +75,9 @@ class TestGetTranslator:
         result = t("main_title")
         assert result == LABELS["zh"]["main_title"]
         # Verify it actually contains Chinese characters
-        assert any("\u4e00" <= ch <= "\u9fff" for ch in result), \
-            "Expected Chinese characters in zh translation"
+        assert any(
+            "\u4e00" <= ch <= "\u9fff" for ch in result
+        ), "Expected Chinese characters in zh translation"
 
     def test_en_translator_returns_english(self):
         t = get_translator("en")
@@ -137,9 +139,17 @@ class TestGetTranslator:
         """Spot-check several well-known keys exist and translate."""
         t_en = get_translator("en")
         known_keys = [
-            "kpi_return", "kpi_vol", "kpi_sharpe", "kpi_maxdd",
-            "kpi_var95", "kpi_var99", "kpi_cvar95",
-            "tab_cumret", "tab_drawdown", "tab_corr", "tab_mc",
+            "kpi_return",
+            "kpi_vol",
+            "kpi_sharpe",
+            "kpi_maxdd",
+            "kpi_var95",
+            "kpi_var99",
+            "kpi_cvar95",
+            "tab_cumret",
+            "tab_drawdown",
+            "tab_corr",
+            "tab_mc",
         ]
         for key in known_keys:
             result = t_en(key)

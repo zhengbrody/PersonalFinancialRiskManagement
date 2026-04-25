@@ -16,14 +16,13 @@ Features
 Dependencies: yfinance, numpy, pandas (all in requirements.txt)
 """
 
+import hashlib
 import json
 import os
 import time
-import hashlib
-import warnings
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -44,6 +43,7 @@ CACHE_MAX_AGE_SECONDS = 1800  # 30 minutes
 # ======================================================================
 #  File-based Cache
 # ======================================================================
+
 
 def _ensure_cache_dir():
     """Create cache directory if it does not exist."""
@@ -84,6 +84,7 @@ def _write_cache(path: str, data):
 # ======================================================================
 #  Internal helpers
 # ======================================================================
+
 
 def _safe_float(val) -> Optional[float]:
     """Convert a value to float, returning None on failure."""
@@ -195,25 +196,25 @@ def _process_chain_for_unusual_volume(
 
             moneyness = _classify_moneyness(spot, strike, opt_type)
 
-            results.append({
-                "ticker": ticker,
-                "expiry": expiry,
-                "strike": strike,
-                "type": opt_type,
-                "volume": int(volume),
-                "oi": int(oi) if oi and oi > 0 else 0,
-                "vol_oi_ratio": vol_oi_ratio,
-                "premium_est": premium_est,
-                "sentiment": sentiment,
-                "moneyness": moneyness,
-            })
+            results.append(
+                {
+                    "ticker": ticker,
+                    "expiry": expiry,
+                    "strike": strike,
+                    "type": opt_type,
+                    "volume": int(volume),
+                    "oi": int(oi) if oi and oi > 0 else 0,
+                    "vol_oi_ratio": vol_oi_ratio,
+                    "premium_est": premium_est,
+                    "sentiment": sentiment,
+                    "moneyness": moneyness,
+                }
+            )
 
     return results
 
 
-def _scan_single_ticker_unusual_volume(
-    ticker: str, min_vol_oi_ratio: float
-) -> List[Dict]:
+def _scan_single_ticker_unusual_volume(ticker: str, min_vol_oi_ratio: float) -> List[Dict]:
     """Scan a single ticker for unusual options volume across nearest expirations."""
     try:
         tk = yf.Ticker(ticker)
@@ -249,9 +250,7 @@ def _scan_single_ticker_unusual_volume(
         return []
 
 
-def _scan_single_ticker_large_premium(
-    ticker: str, min_premium: float
-) -> List[Dict]:
+def _scan_single_ticker_large_premium(ticker: str, min_premium: float) -> List[Dict]:
     """Scan a single ticker for high-dollar premium options trades."""
     try:
         tk = yf.Ticker(ticker)
@@ -297,17 +296,19 @@ def _scan_single_ticker_large_premium(
 
                     moneyness = _classify_moneyness(spot, strike, opt_type)
 
-                    results.append({
-                        "ticker": ticker,
-                        "expiry": expiry,
-                        "strike": strike,
-                        "type": opt_type,
-                        "volume": int(volume),
-                        "oi": int(oi) if oi and oi > 0 else 0,
-                        "premium_est": premium_est,
-                        "moneyness": moneyness,
-                        "sentiment": "BULLISH" if opt_type == "call" else "BEARISH",
-                    })
+                    results.append(
+                        {
+                            "ticker": ticker,
+                            "expiry": expiry,
+                            "strike": strike,
+                            "type": opt_type,
+                            "volume": int(volume),
+                            "oi": int(oi) if oi and oi > 0 else 0,
+                            "premium_est": premium_est,
+                            "moneyness": moneyness,
+                            "sentiment": "BULLISH" if opt_type == "call" else "BEARISH",
+                        }
+                    )
 
         return results
 
@@ -370,6 +371,7 @@ def _get_all_chain_volumes(ticker: str) -> Optional[Dict]:
 #  1. Scan Unusual Volume
 # ======================================================================
 
+
 def scan_unusual_volume(
     tickers: List[str],
     min_vol_oi_ratio: float = 2.0,
@@ -404,14 +406,14 @@ def scan_unusual_volume(
         logger.info("scan_unusual_volume_cache_hit")
         return cached
 
-    logger.info("scan_unusual_volume_start", n_tickers=len(tickers),
-                min_vol_oi_ratio=min_vol_oi_ratio)
+    logger.info(
+        "scan_unusual_volume_start", n_tickers=len(tickers), min_vol_oi_ratio=min_vol_oi_ratio
+    )
 
     all_results = []
     with ThreadPoolExecutor(max_workers=5) as pool:
         futures = {
-            pool.submit(_scan_single_ticker_unusual_volume, t, min_vol_oi_ratio): t
-            for t in tickers
+            pool.submit(_scan_single_ticker_unusual_volume, t, min_vol_oi_ratio): t for t in tickers
         }
         for future in as_completed(futures):
             try:
@@ -419,8 +421,7 @@ def scan_unusual_volume(
                 all_results.extend(hits)
             except Exception as exc:
                 ticker = futures[future]
-                logger.warning("unusual_volume_future_failed",
-                               ticker=ticker, error=str(exc))
+                logger.warning("unusual_volume_future_failed", ticker=ticker, error=str(exc))
 
     # Sort by vol/oi ratio descending
     all_results.sort(key=lambda d: d.get("vol_oi_ratio", 0), reverse=True)
@@ -433,6 +434,7 @@ def scan_unusual_volume(
 # ======================================================================
 #  2. Put/Call Ratio
 # ======================================================================
+
 
 def get_put_call_ratio(ticker: str) -> Dict:
     """
@@ -519,6 +521,7 @@ def get_put_call_ratio(ticker: str) -> Dict:
 #  3. Scan Large Premium
 # ======================================================================
 
+
 def scan_large_premium(
     tickers: List[str],
     min_premium: float = 50000,
@@ -550,14 +553,12 @@ def scan_large_premium(
         logger.info("scan_large_premium_cache_hit")
         return cached
 
-    logger.info("scan_large_premium_start", n_tickers=len(tickers),
-                min_premium=min_premium)
+    logger.info("scan_large_premium_start", n_tickers=len(tickers), min_premium=min_premium)
 
     all_results = []
     with ThreadPoolExecutor(max_workers=5) as pool:
         futures = {
-            pool.submit(_scan_single_ticker_large_premium, t, min_premium): t
-            for t in tickers
+            pool.submit(_scan_single_ticker_large_premium, t, min_premium): t for t in tickers
         }
         for future in as_completed(futures):
             try:
@@ -565,8 +566,7 @@ def scan_large_premium(
                 all_results.extend(hits)
             except Exception as exc:
                 ticker = futures[future]
-                logger.warning("large_premium_future_failed",
-                               ticker=ticker, error=str(exc))
+                logger.warning("large_premium_future_failed", ticker=ticker, error=str(exc))
 
     # Sort by premium descending
     all_results.sort(key=lambda d: d.get("premium_est", 0), reverse=True)
@@ -579,6 +579,7 @@ def scan_large_premium(
 # ======================================================================
 #  4. Options Flow Summary (for Dashboard)
 # ======================================================================
+
 
 def get_options_flow_summary(tickers: List[str]) -> Dict:
     """
@@ -614,9 +615,7 @@ def get_options_flow_summary(tickers: List[str]) -> Dict:
     # 3) Large premium scan
     pc_ratios = []
     with ThreadPoolExecutor(max_workers=5) as pool:
-        pc_futures = {
-            pool.submit(get_put_call_ratio, t): t for t in tickers
-        }
+        pc_futures = {pool.submit(get_put_call_ratio, t): t for t in tickers}
         for future in as_completed(pc_futures):
             try:
                 pc_ratios.append(future.result())
@@ -663,14 +662,10 @@ def get_options_flow_summary(tickers: List[str]) -> Dict:
     # Factor 3: Large premium sentiment balance
     if large_premium:
         bullish_prem = sum(
-            lp.get("premium_est", 0)
-            for lp in large_premium
-            if lp.get("sentiment") == "BULLISH"
+            lp.get("premium_est", 0) for lp in large_premium if lp.get("sentiment") == "BULLISH"
         )
         bearish_prem = sum(
-            lp.get("premium_est", 0)
-            for lp in large_premium
-            if lp.get("sentiment") == "BEARISH"
+            lp.get("premium_est", 0) for lp in large_premium if lp.get("sentiment") == "BEARISH"
         )
         total_prem = bullish_prem + bearish_prem
         if total_prem > 0:
@@ -696,11 +691,13 @@ def get_options_flow_summary(tickers: List[str]) -> Dict:
     # Per-ticker signals
     ticker_signals = []
     for pc in pc_ratios:
-        ticker_signals.append({
-            "ticker": pc.get("ticker"),
-            "signal": pc.get("signal"),
-            "volume_pc_ratio": pc.get("volume_pc_ratio"),
-        })
+        ticker_signals.append(
+            {
+                "ticker": pc.get("ticker"),
+                "signal": pc.get("signal"),
+                "volume_pc_ratio": pc.get("volume_pc_ratio"),
+            }
+        )
     ticker_signals.sort(key=lambda d: d.get("ticker", ""))
 
     result = {
@@ -716,14 +713,18 @@ def get_options_flow_summary(tickers: List[str]) -> Dict:
     }
 
     _write_cache(cache_path, result)
-    logger.info("get_options_flow_summary_done",
-                sentiment_score=sentiment_score, sentiment_label=sentiment_label)
+    logger.info(
+        "get_options_flow_summary_done",
+        sentiment_score=sentiment_score,
+        sentiment_label=sentiment_label,
+    )
     return result
 
 
 # ======================================================================
 #  5. Portfolio-Specific Options Flow
 # ======================================================================
+
 
 def _scan_single_portfolio_ticker(ticker: str) -> Dict:
     """
@@ -819,29 +820,26 @@ def scan_portfolio_options_flow(portfolio_tickers: List[str]) -> List[Dict]:
         logger.info("scan_portfolio_options_flow_cache_hit")
         return cached
 
-    logger.info("scan_portfolio_options_flow_start",
-                n_tickers=len(portfolio_tickers))
+    logger.info("scan_portfolio_options_flow_start", n_tickers=len(portfolio_tickers))
 
     results = []
     with ThreadPoolExecutor(max_workers=5) as pool:
-        futures = {
-            pool.submit(_scan_single_portfolio_ticker, t): t
-            for t in portfolio_tickers
-        }
+        futures = {pool.submit(_scan_single_portfolio_ticker, t): t for t in portfolio_tickers}
         for future in as_completed(futures):
             try:
                 result = future.result()
                 results.append(result)
             except Exception as exc:
                 ticker = futures[future]
-                logger.warning("portfolio_flow_future_failed",
-                               ticker=ticker, error=str(exc))
-                results.append({
-                    "ticker": ticker,
-                    "has_unusual_activity": False,
-                    "top_signal": "ERROR",
-                    "details": {"error": str(exc)},
-                })
+                logger.warning("portfolio_flow_future_failed", ticker=ticker, error=str(exc))
+                results.append(
+                    {
+                        "ticker": ticker,
+                        "has_unusual_activity": False,
+                        "top_signal": "ERROR",
+                        "details": {"error": str(exc)},
+                    }
+                )
 
     # Sort: unusual activity first, then alphabetical
     results.sort(
@@ -849,9 +847,11 @@ def scan_portfolio_options_flow(portfolio_tickers: List[str]) -> List[Dict]:
     )
 
     _write_cache(cache_path, results)
-    logger.info("scan_portfolio_options_flow_done",
-                n_results=len(results),
-                n_unusual=sum(1 for r in results if r.get("has_unusual_activity")))
+    logger.info(
+        "scan_portfolio_options_flow_done",
+        n_results=len(results),
+        n_unusual=sum(1 for r in results if r.get("has_unusual_activity")),
+    )
     return results
 
 
@@ -860,7 +860,6 @@ def scan_portfolio_options_flow(portfolio_tickers: List[str]) -> List[Dict]:
 # ======================================================================
 
 if __name__ == "__main__":
-    import pprint
 
     TEST_TICKERS = ["AAPL", "TSLA", "NVDA", "META", "AMZN", "SPY", "QQQ"]
 
@@ -872,25 +871,31 @@ if __name__ == "__main__":
     unusual = scan_unusual_volume(TEST_TICKERS, min_vol_oi_ratio=2.0)
     print(f"Found {len(unusual)} unusual volume options")
     for u in unusual[:10]:
-        print(f"  {u['ticker']:6s} {u['expiry']}  ${u['strike']:<8.1f}  "
-              f"{u['type']:4s}  vol={u['volume']:>8,}  OI={u['oi']:>8,}  "
-              f"ratio={u['vol_oi_ratio']:.1f}  prem=${u['premium_est']:>12,.0f}  "
-              f"{u['sentiment']}")
+        print(
+            f"  {u['ticker']:6s} {u['expiry']}  ${u['strike']:<8.1f}  "
+            f"{u['type']:4s}  vol={u['volume']:>8,}  OI={u['oi']:>8,}  "
+            f"ratio={u['vol_oi_ratio']:.1f}  prem=${u['premium_est']:>12,.0f}  "
+            f"{u['sentiment']}"
+        )
 
     print("\n--- Put/Call Ratios ---")
     for t in ["AAPL", "TSLA", "SPY"]:
         pc = get_put_call_ratio(t)
-        print(f"  {pc['ticker']:6s}  Vol P/C={pc['volume_pc_ratio']}  "
-              f"OI P/C={pc['oi_pc_ratio']}  Signal={pc['signal']}")
+        print(
+            f"  {pc['ticker']:6s}  Vol P/C={pc['volume_pc_ratio']}  "
+            f"OI P/C={pc['oi_pc_ratio']}  Signal={pc['signal']}"
+        )
 
     print("\n--- Large Premium Scan ---")
     large = scan_large_premium(TEST_TICKERS, min_premium=50000)
     print(f"Found {len(large)} large premium options")
     for lp in large[:10]:
-        print(f"  {lp['ticker']:6s} {lp['expiry']}  ${lp['strike']:<8.1f}  "
-              f"{lp['type']:4s}  vol={lp['volume']:>8,}  "
-              f"prem=${lp['premium_est']:>12,.0f}  {lp['moneyness']}  "
-              f"{lp['sentiment']}")
+        print(
+            f"  {lp['ticker']:6s} {lp['expiry']}  ${lp['strike']:<8.1f}  "
+            f"{lp['type']:4s}  vol={lp['volume']:>8,}  "
+            f"prem=${lp['premium_est']:>12,.0f}  {lp['moneyness']}  "
+            f"{lp['sentiment']}"
+        )
 
     print("\n--- Flow Summary ---")
     summary = get_options_flow_summary(TEST_TICKERS)
@@ -907,8 +912,10 @@ if __name__ == "__main__":
         print(f"  {p['ticker']:6s}  signal={p['top_signal']:10s}{flag}")
         d = p["details"]
         if isinstance(d, dict) and "error" not in d:
-            print(f"         unusual_vol={d.get('unusual_volume_count', 0)}  "
-                  f"large_prem={d.get('large_premium_count', 0)}  "
-                  f"P/C={d.get('volume_pc_ratio')}")
+            print(
+                f"         unusual_vol={d.get('unusual_volume_count', 0)}  "
+                f"large_prem={d.get('large_premium_count', 0)}  "
+                f"P/C={d.get('volume_pc_ratio')}"
+            )
 
     print("\nDone.")

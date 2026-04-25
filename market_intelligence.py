@@ -14,16 +14,17 @@ market_intelligence.py
 """
 
 import logging
-import numpy as np
-import pandas as pd
-import yfinance as yf
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+import pandas as pd
+import requests
+import yfinance as yf
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ logger = logging.getLogger(__name__)
 #  no longer sees "too many requests" bubble up on a single
 #  unlucky request. Connection pooling also saves ~50ms/call.
 # ══════════════════════════════════════════════════════════════
+
 
 def _build_http_session() -> requests.Session:
     s = requests.Session()
@@ -63,21 +65,25 @@ _http_session = _build_http_session()
 
 # RSS 源列表：覆盖美联储、全球宏观、地缘政治
 MACRO_RSS_FEEDS = {
-    "Reuters Business":    "https://www.rss.app/feeds/v1.1/tgSjPfjTQYNME2cZ.json",
-    "CNBC Economy":        "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258",
-    "MarketWatch":         "https://feeds.marketwatch.com/marketwatch/topstories/",
-    "FT Markets":          "https://www.ft.com/rss/home",
-    "Bloomberg Markets":   "https://feeds.bloomberg.com/markets/news.rss",
+    "Reuters Business": "https://www.rss.app/feeds/v1.1/tgSjPfjTQYNME2cZ.json",
+    "CNBC Economy": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258",
+    "MarketWatch": "https://feeds.marketwatch.com/marketwatch/topstories/",
+    "FT Markets": "https://www.ft.com/rss/home",
+    "Bloomberg Markets": "https://feeds.bloomberg.com/markets/news.rss",
 }
 
 
-def _fetch_single_rss(source_name: str, url: str, per_source_limit: int, timeout: int) -> List[Dict]:
+def _fetch_single_rss(
+    source_name: str, url: str, per_source_limit: int, timeout: int
+) -> List[Dict]:
     """Fetch a single RSS feed. Called concurrently by fetch_macro_news_rss."""
     items_out = []
     try:
-        resp = requests.get(url, timeout=timeout, headers={
-            "User-Agent": "Mozilla/5.0 (compatible; PortfolioRisk/1.0)"
-        })
+        resp = requests.get(
+            url,
+            timeout=timeout,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; PortfolioRisk/1.0)"},
+        )
         if resp.status_code != 200:
             return items_out
 
@@ -88,13 +94,15 @@ def _fetch_single_rss(source_name: str, url: str, per_source_limit: int, timeout
             data = resp.json()
             items = data.get("items", [])
             for item in items[:per_source_limit]:
-                items_out.append({
-                    "source": source_name,
-                    "title": item.get("title", "").strip(),
-                    "link": item.get("url", item.get("link", "")),
-                    "published": item.get("date_published", item.get("pubDate", "")),
-                    "summary": (item.get("content_text", "") or item.get("summary", ""))[:200],
-                })
+                items_out.append(
+                    {
+                        "source": source_name,
+                        "title": item.get("title", "").strip(),
+                        "link": item.get("url", item.get("link", "")),
+                        "published": item.get("date_published", item.get("pubDate", "")),
+                        "summary": (item.get("content_text", "") or item.get("summary", ""))[:200],
+                    }
+                )
         else:
             # XML RSS 解析（轻量级，不依赖 feedparser）
             items = _parse_rss_xml(resp.text, per_source_limit)
@@ -119,7 +127,9 @@ def fetch_macro_news_rss(max_items: int = 30, timeout: int = 8) -> List[Dict]:
 
     with ThreadPoolExecutor(max_workers=5) as executor:
         futures = {
-            executor.submit(_fetch_single_rss, source_name, url, per_source_limit, timeout): source_name
+            executor.submit(
+                _fetch_single_rss, source_name, url, per_source_limit, timeout
+            ): source_name
             for source_name, url in MACRO_RSS_FEEDS.items()
         }
         for future in as_completed(futures):
@@ -137,11 +147,17 @@ def _parse_rss_xml(xml_text: str, max_items: int = 10) -> List[Dict]:
     """简单的 XML RSS 解析，不依赖外部库。"""
     items = []
     # 匹配 <item> 或 <entry> 块
-    item_pattern = re.compile(r'<(?:item|entry)>(.*?)</(?:item|entry)>', re.DOTALL)
-    title_pattern = re.compile(r'<title[^>]*>(.*?)</title>', re.DOTALL)
-    link_pattern = re.compile(r'<link[^>]*(?:href=["\']([^"\']+)["\'])?[^>]*>(.*?)</link>', re.DOTALL)
-    pub_pattern = re.compile(r'<(?:pubDate|published|updated)[^>]*>(.*?)</(?:pubDate|published|updated)>', re.DOTALL)
-    desc_pattern = re.compile(r'<(?:description|summary|content)[^>]*>(.*?)</(?:description|summary|content)>', re.DOTALL)
+    item_pattern = re.compile(r"<(?:item|entry)>(.*?)</(?:item|entry)>", re.DOTALL)
+    title_pattern = re.compile(r"<title[^>]*>(.*?)</title>", re.DOTALL)
+    link_pattern = re.compile(
+        r'<link[^>]*(?:href=["\']([^"\']+)["\'])?[^>]*>(.*?)</link>', re.DOTALL
+    )
+    pub_pattern = re.compile(
+        r"<(?:pubDate|published|updated)[^>]*>(.*?)</(?:pubDate|published|updated)>", re.DOTALL
+    )
+    desc_pattern = re.compile(
+        r"<(?:description|summary|content)[^>]*>(.*?)</(?:description|summary|content)>", re.DOTALL
+    )
 
     for match in item_pattern.finditer(xml_text)[:max_items]:
         block = match.group(1)
@@ -161,22 +177,24 @@ def _parse_rss_xml(xml_text: str, max_items: int = 10) -> List[Dict]:
         desc_m = desc_pattern.search(block)
         summary = _strip_cdata(desc_m.group(1))[:200] if desc_m else ""
         # 移除 HTML 标签
-        summary = re.sub(r'<[^>]+>', '', summary).strip()
+        summary = re.sub(r"<[^>]+>", "", summary).strip()
 
-        items.append({
-            "title": title,
-            "link": link,
-            "published": published,
-            "summary": summary,
-        })
+        items.append(
+            {
+                "title": title,
+                "link": link,
+                "published": published,
+                "summary": summary,
+            }
+        )
 
     return items
 
 
 def _strip_cdata(text: str) -> str:
     """移除 CDATA 包裹。"""
-    text = re.sub(r'<!\[CDATA\[', '', text)
-    text = re.sub(r'\]\]>', '', text)
+    text = re.sub(r"<!\[CDATA\[", "", text)
+    text = re.sub(r"\]\]>", "", text)
     return text.strip()
 
 
@@ -189,17 +207,19 @@ def fetch_yfinance_market_news(max_items: int = 10) -> List[Dict]:
         try:
             ticker = yf.Ticker(symbol)
             news = ticker.news or []
-            for n in news[:max_items // 3]:
+            for n in news[: max_items // 3]:
                 content = n.get("content", {})
                 title = content.get("title") or n.get("title", "")
                 if title:
-                    items.append({
-                        "source": f"Yahoo Finance ({symbol})",
-                        "title": title.strip(),
-                        "link": content.get("canonicalUrl", {}).get("url", ""),
-                        "published": content.get("pubDate", ""),
-                        "summary": content.get("summary", "")[:200],
-                    })
+                    items.append(
+                        {
+                            "source": f"Yahoo Finance ({symbol})",
+                            "title": title.strip(),
+                            "link": content.get("canonicalUrl", {}).get("url", ""),
+                            "published": content.get("pubDate", ""),
+                            "summary": content.get("summary", "")[:200],
+                        }
+                    )
         except Exception:
             continue
     return items
@@ -227,22 +247,22 @@ def get_all_macro_news(max_items: int = 30) -> List[Dict]:
 # ══════════════════════════════════════════════════════════════
 
 FUNDAMENTAL_FIELDS = {
-    "marketCap":         "Market Cap",
-    "trailingPE":        "P/E (TTM)",
-    "forwardPE":         "P/E (Fwd)",
-    "trailingEps":       "EPS (TTM)",
-    "forwardEps":        "EPS (Fwd)",
-    "dividendYield":     "Div Yield",
-    "revenueGrowth":     "Rev Growth",
-    "earningsGrowth":    "Earn Growth",
-    "profitMargins":     "Profit Margin",
-    "returnOnEquity":    "ROE",
-    "debtToEquity":      "D/E Ratio",
-    "currentRatio":      "Current Ratio",
-    "beta":              "Beta (5Y)",
-    "fiftyTwoWeekHigh":  "52W High",
-    "fiftyTwoWeekLow":   "52W Low",
-    "averageVolume":     "Avg Volume",
+    "marketCap": "Market Cap",
+    "trailingPE": "P/E (TTM)",
+    "forwardPE": "P/E (Fwd)",
+    "trailingEps": "EPS (TTM)",
+    "forwardEps": "EPS (Fwd)",
+    "dividendYield": "Div Yield",
+    "revenueGrowth": "Rev Growth",
+    "earningsGrowth": "Earn Growth",
+    "profitMargins": "Profit Margin",
+    "returnOnEquity": "ROE",
+    "debtToEquity": "D/E Ratio",
+    "currentRatio": "Current Ratio",
+    "beta": "Beta (5Y)",
+    "fiftyTwoWeekHigh": "52W High",
+    "fiftyTwoWeekLow": "52W Low",
+    "averageVolume": "Avg Volume",
 }
 
 
@@ -352,6 +372,7 @@ def _fmt_market_cap(val) -> str:
 #  3. VIX 恐慌指数 & 收益率曲线
 # ══════════════════════════════════════════════════════════════
 
+
 def fetch_vix_data(period: str = "1y") -> pd.DataFrame:
     """
     获取 VIX 恐慌指数历史数据。
@@ -363,11 +384,14 @@ def fetch_vix_data(period: str = "1y") -> pd.DataFrame:
             vix = vix.droplevel(1, axis=1) if vix.columns.nlevels > 1 else vix
         if "Close" not in vix.columns:
             # 可能列名为 ticker
-            vix.columns = ["Open", "High", "Low", "Close", "Volume"][:len(vix.columns)]
+            vix.columns = ["Open", "High", "Low", "Close", "Volume"][: len(vix.columns)]
 
-        df = pd.DataFrame({
-            "VIX": vix["Close"].values,
-        }, index=vix.index)
+        df = pd.DataFrame(
+            {
+                "VIX": vix["Close"].values,
+            },
+            index=vix.index,
+        )
 
         df["VIX_MA20"] = df["VIX"].rolling(20).mean()
         df["VIX_MA50"] = df["VIX"].rolling(50).mean()
@@ -429,18 +453,18 @@ def get_vix_current() -> Dict:
 
 # 美债收益率曲线关键期限
 YIELD_CURVE_TICKERS = {
-    "^IRX":  "3M",     # 3 个月 T-Bill
-    "^FVX":  "5Y",     # 5 年期
-    "^TNX":  "10Y",    # 10 年期
-    "^TYX":  "30Y",    # 30 年期
+    "^IRX": "3M",  # 3 个月 T-Bill
+    "^FVX": "5Y",  # 5 年期
+    "^TNX": "10Y",  # 10 年期
+    "^TYX": "30Y",  # 30 年期
 }
 
 # 更完整的收益率曲线（通过 FRED 或 yfinance）
 YIELD_TICKERS_FULL = {
-    "^IRX":  ("3M",  0.25),
-    "^FVX":  ("5Y",  5.0),
-    "^TNX":  ("10Y", 10.0),
-    "^TYX":  ("30Y", 30.0),
+    "^IRX": ("3M", 0.25),
+    "^FVX": ("5Y", 5.0),
+    "^TNX": ("10Y", 10.0),
+    "^TYX": ("30Y", 30.0),
 }
 
 
@@ -485,13 +509,15 @@ def fetch_yield_curve() -> Tuple[pd.DataFrame, Dict]:
         rows = []
         for tk, (label, years) in YIELD_TICKERS_FULL.items():
             if tk in current.index:
-                rows.append({
-                    "Maturity": label,
-                    "Years": years,
-                    "Current (%)": float(current.get(tk, np.nan)),
-                    "30d Ago (%)": float(month_ago.get(tk, np.nan)),
-                    "90d Ago (%)": float(quarter_ago.get(tk, np.nan)),
-                })
+                rows.append(
+                    {
+                        "Maturity": label,
+                        "Years": years,
+                        "Current (%)": float(current.get(tk, np.nan)),
+                        "30d Ago (%)": float(month_ago.get(tk, np.nan)),
+                        "90d Ago (%)": float(quarter_ago.get(tk, np.nan)),
+                    }
+                )
 
         curve_df = pd.DataFrame(rows)
 
@@ -538,9 +564,9 @@ FEAR_GREED_URL = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata
 
 FEAR_GREED_RATINGS = {
     "extreme fear": {"icon": "🔴", "color": "#C92A2A"},
-    "fear":         {"icon": "🟠", "color": "#E67700"},
-    "neutral":      {"icon": "🟡", "color": "#F59F00"},
-    "greed":        {"icon": "🟢", "color": "#37B24D"},
+    "fear": {"icon": "🟠", "color": "#E67700"},
+    "neutral": {"icon": "🟡", "color": "#F59F00"},
+    "greed": {"icon": "🟢", "color": "#37B24D"},
     "extreme greed": {"icon": "🟢", "color": "#2B8A3E"},
 }
 
@@ -621,6 +647,7 @@ def fetch_fear_greed(timeout: int = 10) -> Dict:
 #  4. AI 综合风险简报
 # ══════════════════════════════════════════════════════════════
 
+
 def build_ai_risk_briefing(
     report,
     weights: Dict[str, float],
@@ -693,8 +720,12 @@ def build_ai_risk_briefing(
 
     # ── D. 量化风险指标（简缩版）───────────────────────────────
     sections.append("## D. 核心量化风险指标")
-    sections.append(f"  VaR 95%: {report.var_95:.2%} | VaR 99%: {report.var_99:.2%} | CVaR 95%: {report.cvar_95:.2%}")
-    sections.append(f"  年化波动率: {report.annual_volatility:.2%} | 夏普: {report.sharpe_ratio:.2f} | 最大回撤: {report.max_drawdown:.2%}")
+    sections.append(
+        f"  VaR 95%: {report.var_95:.2%} | VaR 99%: {report.var_99:.2%} | CVaR 95%: {report.cvar_95:.2%}"
+    )
+    sections.append(
+        f"  年化波动率: {report.annual_volatility:.2%} | 夏普: {report.sharpe_ratio:.2f} | 最大回撤: {report.max_drawdown:.2%}"
+    )
     sections.append(f"  压力损失: {report.stress_loss:.2%}")
 
     if report.margin_call_info and report.margin_call_info.get("has_margin"):
@@ -766,7 +797,9 @@ def build_market_intelligence_context(
     if fear_greed_data and fear_greed_data.get("score") is not None:
         fg = fear_greed_data
         lines.append("## 18. CNN Fear & Greed Index")
-        lines.append(f"  Score: {fg['score']}/100 - {fg.get('rating_display', 'N/A')} {fg.get('rating_icon', '')}")
+        lines.append(
+            f"  Score: {fg['score']}/100 - {fg.get('rating_display', 'N/A')} {fg.get('rating_icon', '')}"
+        )
         if fg.get("previous_close"):
             lines.append(f"  Previous Close: {fg['previous_close']:.1f}")
         if fg.get("one_week_ago"):
@@ -838,6 +871,7 @@ def build_market_intelligence_context(
 #  5. 简易 DCF 估值 (Gordon Growth Model)
 # ══════════════════════════════════════════════════════════════
 
+
 def compute_simple_dcf(ticker: str, discount_rate: float = 0.10) -> Dict:
     """Backwards-compatible alias for compute_advanced_dcf."""
     return compute_advanced_dcf(ticker)
@@ -858,8 +892,11 @@ def compute_advanced_dcf(
                    method, discount_rate, ...}
     """
     _NA = {
-        "intrinsic_value": None, "current_price": None,
-        "upside_pct": None, "verdict": "N/A", "method": "N/A",
+        "intrinsic_value": None,
+        "current_price": None,
+        "upside_pct": None,
+        "verdict": "N/A",
+        "method": "N/A",
     }
 
     # Skip crypto and known non-equity tickers
@@ -872,7 +909,9 @@ def compute_advanced_dcf(
 
         # Skip ETFs
         if qtype in ("ETF", "MUTUALFUND") or ticker in ("SPY", "QQQ", "GLD", "TQQQ", "COPX", "SLV"):
-            price = info.get("currentPrice") or info.get("regularMarketPrice") or info.get("navPrice")
+            price = (
+                info.get("currentPrice") or info.get("regularMarketPrice") or info.get("navPrice")
+            )
             return {
                 **_NA,
                 "current_price": round(price, 2) if price else None,
@@ -887,7 +926,9 @@ def compute_advanced_dcf(
         shares = info.get("sharesOutstanding")
         beta = info.get("beta")
         if beta is None or not isinstance(beta, (int, float)) or np.isnan(beta):
-            logger.warning("dcf.beta_fallback", ticker=ticker, reason="beta unavailable, defaulting to 1.0")
+            logger.warning(
+                "dcf.beta_fallback", ticker=ticker, reason="beta unavailable, defaulting to 1.0"
+            )
             beta = 1.0
 
         # CAPM discount rate
@@ -915,10 +956,12 @@ def compute_advanced_dcf(
             pv_fcf_total = 0.0
             projected_fcf = float(fcf)
             for year in range(1, 6):
-                projected_fcf *= (1 + short_growth)
+                projected_fcf *= 1 + short_growth
                 pv_fcf_total += projected_fcf / ((1 + discount_rate) ** year)
 
-            terminal_value = projected_fcf * (1 + terminal_growth) / (discount_rate - terminal_growth)
+            terminal_value = (
+                projected_fcf * (1 + terminal_growth) / (discount_rate - terminal_growth)
+            )
             pv_terminal = terminal_value / ((1 + discount_rate) ** 5)
 
             enterprise_value = pv_fcf_total + pv_terminal
@@ -927,7 +970,11 @@ def compute_advanced_dcf(
             if equity_value > 0:
                 intrinsic = equity_value / shares
                 upside_pct = (intrinsic - current_price) / current_price
-                verdict = "Undervalued" if upside_pct > 0.15 else ("Overvalued" if upside_pct < -0.15 else "Fair")
+                verdict = (
+                    "Undervalued"
+                    if upside_pct > 0.15
+                    else ("Overvalued" if upside_pct < -0.15 else "Fair")
+                )
                 return {
                     "intrinsic_value": round(intrinsic, 2),
                     "current_price": round(current_price, 2),
@@ -958,7 +1005,11 @@ def compute_advanced_dcf(
             intrinsic = eps * fair_pe
             if intrinsic > 0:
                 upside_pct = (intrinsic - current_price) / current_price
-                verdict = "Undervalued" if upside_pct > 0.15 else ("Overvalued" if upside_pct < -0.15 else "Fair")
+                verdict = (
+                    "Undervalued"
+                    if upside_pct > 0.15
+                    else ("Overvalued" if upside_pct < -0.15 else "Fair")
+                )
                 return {
                     "intrinsic_value": round(intrinsic, 2),
                     "current_price": round(current_price, 2),
@@ -986,6 +1037,7 @@ def compute_advanced_dcf(
 #  Insider Transaction Signals
 # ══════════════════════════════════════════════════════════════
 
+
 def _fetch_single_insider(tk: str) -> Optional[tuple]:
     """Fetch insider signals for a single ticker. Returns (ticker, result_dict) or None."""
     if tk.endswith("-USD"):
@@ -997,12 +1049,15 @@ def _fetch_single_insider(tk: str) -> Optional[tuple]:
         txn_df = yf.Ticker(tk).insider_transactions
 
         if txn_df is None or txn_df.empty:
-            return (tk, {
-                "net_shares": 0,
-                "direction": "No Data",
-                "count": 0,
-                "recent_txns": [],
-            })
+            return (
+                tk,
+                {
+                    "net_shares": 0,
+                    "direction": "No Data",
+                    "count": 0,
+                    "recent_txns": [],
+                },
+            )
 
         # Determine the date column name
         date_col = "Start Date" if "Start Date" in txn_df.columns else "Date"
@@ -1013,12 +1068,15 @@ def _fetch_single_insider(tk: str) -> Optional[tuple]:
             txn_df = txn_df[txn_df[date_col] >= cutoff]
 
         if txn_df.empty:
-            return (tk, {
-                "net_shares": 0,
-                "direction": "No Activity",
-                "count": 0,
-                "recent_txns": [],
-            })
+            return (
+                tk,
+                {
+                    "net_shares": 0,
+                    "direction": "No Activity",
+                    "count": 0,
+                    "recent_txns": [],
+                },
+            )
 
         net = int(txn_df["Shares"].sum()) if "Shares" in txn_df.columns else 0
 
@@ -1041,20 +1099,26 @@ def _fetch_single_insider(tk: str) -> Optional[tuple]:
             else:
                 recent_txns.append(f"SELL {abs(int(shares))} shares")
 
-        return (tk, {
-            "net_shares": net,
-            "direction": direction,
-            "count": count,
-            "recent_txns": recent_txns,
-        })
+        return (
+            tk,
+            {
+                "net_shares": net,
+                "direction": direction,
+                "count": count,
+                "recent_txns": recent_txns,
+            },
+        )
 
     except Exception:
-        return (tk, {
-            "net_shares": 0,
-            "direction": "No Data",
-            "count": 0,
-            "recent_txns": [],
-        })
+        return (
+            tk,
+            {
+                "net_shares": 0,
+                "direction": "No Data",
+                "count": 0,
+                "recent_txns": [],
+            },
+        )
 
 
 def fetch_insider_signals(tickers: List[str]) -> Dict[str, dict]:
@@ -1082,6 +1146,7 @@ def fetch_insider_signals(tickers: List[str]) -> Dict[str, dict]:
 # ══════════════════════════════════════════════════════════════
 #  Technical Signals (RSI & SMA50)
 # ══════════════════════════════════════════════════════════════
+
 
 def compute_technical_signals(prices: pd.DataFrame) -> pd.DataFrame:
     """
@@ -1130,22 +1195,28 @@ def compute_technical_signals(prices: pd.DataFrame) -> pd.DataFrame:
             sma50_val = round(sma50_val, 2)
             price_val_round = round(price_val, 2)
             price_vs_sma = "Above" if price_val > sma50_val else "Below"
-            pct_vs_sma = round((price_val - sma50_val) / sma50_val * 100, 2) if sma50_val != 0 else 0.0
+            pct_vs_sma = (
+                round((price_val - sma50_val) / sma50_val * 100, 2) if sma50_val != 0 else 0.0
+            )
         else:
             sma50_val = "N/A"
-            price_val_round = round(price_val, 2) if price_val is not None and not np.isnan(price_val) else "N/A"
+            price_val_round = (
+                round(price_val, 2) if price_val is not None and not np.isnan(price_val) else "N/A"
+            )
             price_vs_sma = "N/A"
             pct_vs_sma = "N/A"
 
-        records.append({
-            "Ticker": col,
-            "RSI": rsi_val,
-            "RSI_Signal": rsi_signal,
-            "SMA50": sma50_val,
-            "Price": price_val_round,
-            "Price_vs_SMA50": price_vs_sma,
-            "Pct_vs_SMA50": pct_vs_sma,
-        })
+        records.append(
+            {
+                "Ticker": col,
+                "RSI": rsi_val,
+                "RSI_Signal": rsi_signal,
+                "SMA50": sma50_val,
+                "Price": price_val_round,
+                "Price_vs_SMA50": price_vs_sma,
+                "Pct_vs_SMA50": pct_vs_sma,
+            }
+        )
 
     return pd.DataFrame(records).set_index("Ticker")
 
@@ -1153,6 +1224,7 @@ def compute_technical_signals(prices: pd.DataFrame) -> pd.DataFrame:
 # ══════════════════════════════════════════════════════════════
 #  8. Reddit 散户情绪（Apify）
 # ══════════════════════════════════════════════════════════════
+
 
 def fetch_reddit_sentiment_apify(
     tickers: List[str],
@@ -1173,9 +1245,7 @@ def fetch_reddit_sentiment_apify(
 
     # Detect crypto tickers (ending in -USD) — only pay the crypto-subreddit
     # latency cost if the portfolio actually holds crypto.
-    has_crypto = any(
-        isinstance(tk, str) and tk.upper().endswith("-USD") for tk in (tickers or [])
-    )
+    has_crypto = any(isinstance(tk, str) and tk.upper().endswith("-USD") for tk in (tickers or []))
 
     # Strategy A: Use Apify's web scraper to fetch Reddit JSON API directly
     # Reddit exposes .json endpoints that don't need authentication
@@ -1199,14 +1269,16 @@ def fetch_reddit_sentiment_apify(
                     created = post.get("created_utc", 0)
                     permalink = post.get("permalink", "")
                     if title and score > 5:  # filter low-quality
-                        all_posts.append({
-                            "title": title[:200],
-                            "text": (text or "")[:500],
-                            "upvotes": int(score),
-                            "comments": int(num_comments),
-                            "subreddit": sub,
-                            "url": f"https://reddit.com{permalink}" if permalink else "",
-                        })
+                        all_posts.append(
+                            {
+                                "title": title[:200],
+                                "text": (text or "")[:500],
+                                "upvotes": int(score),
+                                "comments": int(num_comments),
+                                "subreddit": sub,
+                                "url": f"https://reddit.com{permalink}" if permalink else "",
+                            }
+                        )
         except Exception:
             continue
 
@@ -1214,6 +1286,7 @@ def fetch_reddit_sentiment_apify(
     if not all_posts:
         try:
             from apify_client import ApifyClient
+
             client = ApifyClient(apify_key)
 
             run_input = {
@@ -1227,7 +1300,11 @@ def fetch_reddit_sentiment_apify(
             }
 
             # Try multiple actor IDs (Apify ecosystem varies)
-            for actor_id in ["trudax/reddit-scraper", "apify/reddit-scraper", "okheydk/reddit-scraper"]:
+            for actor_id in [
+                "trudax/reddit-scraper",
+                "apify/reddit-scraper",
+                "okheydk/reddit-scraper",
+            ]:
                 try:
                     run = client.actor(actor_id).call(
                         run_input=run_input,
@@ -1240,14 +1317,16 @@ def fetch_reddit_sentiment_apify(
                         score = item.get("score", item.get("upVotes", item.get("ups", 0)))
                         comments = item.get("numberOfComments", item.get("num_comments", 0))
                         if title:
-                            all_posts.append({
-                                "title": title[:200],
-                                "text": (text or "")[:500],
-                                "upvotes": int(score) if score else 0,
-                                "comments": int(comments) if comments else 0,
-                                "subreddit": "wsb/stocks",
-                                "url": item.get("url", ""),
-                            })
+                            all_posts.append(
+                                {
+                                    "title": title[:200],
+                                    "text": (text or "")[:500],
+                                    "upvotes": int(score) if score else 0,
+                                    "comments": int(comments) if comments else 0,
+                                    "subreddit": "wsb/stocks",
+                                    "url": item.get("url", ""),
+                                }
+                            )
                     if all_posts:
                         break  # found working actor
                 except Exception:
@@ -1284,7 +1363,7 @@ def fetch_reddit_sentiment_apify(
         # \b handles word boundaries; $ prefix optional.
         # (?i) makes aliases like "Bitcoin" match regardless of case in the
         # uppercased search_text below (still safe because search_text is .upper()).
-        pattern = re.compile(rf'(?<![A-Z])\$?(?:{alt_group})(?![A-Z])', re.IGNORECASE)
+        pattern = re.compile(rf"(?<![A-Z])\$?(?:{alt_group})(?![A-Z])", re.IGNORECASE)
         matched = []
         for p in all_posts:
             search_text = (p["title"] + " " + p["text"]).upper()
@@ -1398,7 +1477,8 @@ def fetch_latest_transcript_fmp(ticker: str, fmp_key: str) -> Dict:
     # "give me the latest" shortcut. We fetch the latest two quarters by
     # inferring from today's date; the loop tries (year, q) combinations
     # working backwards until one returns data.
-    from datetime import datetime as _dt, timezone as _tz
+    from datetime import datetime as _dt
+    from datetime import timezone as _tz
 
     now = _dt.now(_tz.utc)
     # Rough current fiscal quarter (calendar-based); transcripts typically
@@ -1424,10 +1504,12 @@ def fetch_latest_transcript_fmp(ticker: str, fmp_key: str) -> Dict:
                 timeout=15,
             )
             if resp.status_code == 402:
-                return {"error": (
-                    "FMP earnings transcripts require a Starter plan or above. "
-                    "Upgrade at https://site.financialmodelingprep.com/developer/docs/pricing"
-                )}
+                return {
+                    "error": (
+                        "FMP earnings transcripts require a Starter plan or above. "
+                        "Upgrade at https://site.financialmodelingprep.com/developer/docs/pricing"
+                    )
+                }
             if resp.status_code == 401:
                 return {"error": "FMP API key is invalid"}
             if resp.status_code != 200:
@@ -1436,11 +1518,14 @@ def fetch_latest_transcript_fmp(ticker: str, fmp_key: str) -> Dict:
             if isinstance(data, list) and data:
                 latest = data[0]
                 if latest.get("content"):
-                    results.append({
-                        "year": yr, "quarter": qt,
-                        "date": latest.get("date", ""),
-                        "content": latest.get("content", ""),
-                    })
+                    results.append(
+                        {
+                            "year": yr,
+                            "quarter": qt,
+                            "date": latest.get("date", ""),
+                            "content": latest.get("content", ""),
+                        }
+                    )
                     if len(results) >= 2:
                         break
 
@@ -1509,7 +1594,7 @@ def analyze_transcript_with_claude(
             f'    {{"topic": "<Revenue Guidance|CAPEX|Macro Outlook|Competition|Margins>", '
             f'"direction": "<up|down|flat>", '
             f'"detail": "<1-sentence describing how management tone changed from Q{prev_q} to Q{quarter}>"}}\n'
-            f'  ],\n'
+            f"  ],\n"
         )
 
     prompt = (
@@ -1517,24 +1602,25 @@ def analyze_transcript_with_claude(
         f"Analyze {'these two quarters of' if has_prev else 'this'} earnings call transcript(s) for {ticker}.\n"
         f"{'Compare Q' + str(prev_q) + ' ' + str(prev_y) + ' vs Q' + str(quarter) + ' ' + str(year) + ' to identify marginal changes in management sentiment.' if has_prev else ''}\n\n"
         f"Return ONLY valid JSON:\n"
-        f'{{\n'
+        f"{{\n"
         f'  "management_tone": "<Hawkish|Dovish|Neutral> with 1-sentence justification",\n'
         f'  "forward_guidance": "<1-2 sentence summary of outlook>",\n'
         f'  "capex_and_margins": "<key statements about CAPEX or margins>",\n'
         f'  "qa_highlights": [\n'
         f'    {{"question": "<analyst question>", "response": "<management response>"}},\n'
         f'    {{"question": "<analyst question>", "response": "<management response>"}}\n'
-        f'  ],\n'
+        f"  ],\n"
         f'  "key_risks": "<1-2 risks flagged>",\n'
         f'  "sentiment_shift": "<tone change within the call or across quarters>",\n'
-        f'{delta_field}'
-        f'}}\n\n'
+        f"{delta_field}"
+        f"}}\n\n"
         f"TRANSCRIPT(S):\n{transcript_block}"
     )
 
     try:
-        import anthropic
         import time
+
+        import anthropic
 
         client = anthropic.Anthropic(api_key=anthropic_api_key)
 
@@ -1557,6 +1643,7 @@ def analyze_transcript_with_claude(
 
         # Parse JSON
         import re as _re
+
         cleaned = _re.sub(r"<think>.*?</think>", "", raw, flags=_re.DOTALL).strip()
 
         parsed = None
@@ -1567,7 +1654,7 @@ def analyze_transcript_with_claude(
             brace_end = cleaned.rfind("}")
             if brace_start != -1 and brace_end > brace_start:
                 try:
-                    parsed = _json.loads(cleaned[brace_start:brace_end + 1])
+                    parsed = _json.loads(cleaned[brace_start : brace_end + 1])
                 except (_json.JSONDecodeError, ValueError):
                     pass
 
@@ -1632,6 +1719,7 @@ def fetch_price_targets_fmp(ticker: str, fmp_key: str) -> Dict:
 #  Comprehensive Ticker Research
 # ══════════════════════════════════════════════════════════════
 
+
 def fetch_ticker_research(ticker: str, fmp_key: str = "") -> Dict:
     """
     Comprehensive single-ticker research aggregator.
@@ -1679,10 +1767,7 @@ def fetch_ticker_research(ticker: str, fmp_key: str = "") -> Dict:
         result["website"] = info.get("website")
         result["employees"] = info.get("fullTimeEmployees")
         result["market_cap"] = info.get("marketCap")
-        result["current_price"] = (
-            info.get("currentPrice")
-            or info.get("regularMarketPrice")
-        )
+        result["current_price"] = info.get("currentPrice") or info.get("regularMarketPrice")
         result["institutional_pct"] = info.get("heldPercentInstitutions")
     except Exception as e:
         logger.warning("ticker_research.info_failed", ticker=ticker, error=str(e))
@@ -1728,10 +1813,7 @@ def fetch_ticker_research(ticker: str, fmp_key: str = "") -> Dict:
 
             if total > 0:
                 # Weighted score: 5=strongBuy .. 1=strongSell
-                score = (
-                    5 * strong_buy + 4 * buy + 3 * hold
-                    + 2 * sell + 1 * strong_sell
-                ) / total
+                score = (5 * strong_buy + 4 * buy + 3 * hold + 2 * sell + 1 * strong_sell) / total
                 if score >= 4.0:
                     result["analyst_rating"] = "Strong Buy"
                 elif score >= 3.5:
@@ -1803,14 +1885,26 @@ def fetch_ticker_research(ticker: str, fmp_key: str = "") -> Dict:
             avg_loss = loss.rolling(14).mean()
             rs = avg_gain / avg_loss
             rsi_series = 100 - (100 / (1 + rs))
-            rsi_val = round(float(rsi_series.dropna().iloc[-1]), 2) if not rsi_series.dropna().empty else None
+            rsi_val = (
+                round(float(rsi_series.dropna().iloc[-1]), 2)
+                if not rsi_series.dropna().empty
+                else None
+            )
 
             # SMA50 & SMA200
             sma50_series = close.rolling(50).mean()
-            sma50 = round(float(sma50_series.dropna().iloc[-1]), 2) if not sma50_series.dropna().empty else None
+            sma50 = (
+                round(float(sma50_series.dropna().iloc[-1]), 2)
+                if not sma50_series.dropna().empty
+                else None
+            )
 
             sma200_series = close.rolling(200).mean()
-            sma200 = round(float(sma200_series.dropna().iloc[-1]), 2) if len(close) >= 200 and not sma200_series.dropna().empty else None
+            sma200 = (
+                round(float(sma200_series.dropna().iloc[-1]), 2)
+                if len(close) >= 200 and not sma200_series.dropna().empty
+                else None
+            )
 
             # MACD (12, 26, 9)
             ema12 = close.ewm(span=12, adjust=False).mean()
@@ -1826,8 +1920,16 @@ def fetch_ticker_research(ticker: str, fmp_key: str = "") -> Dict:
             bb_upper_series = bb_sma + 2 * bb_std
             bb_lower_series = bb_sma - 2 * bb_std
 
-            bb_upper = round(float(bb_upper_series.dropna().iloc[-1]), 2) if not bb_upper_series.dropna().empty else None
-            bb_lower = round(float(bb_lower_series.dropna().iloc[-1]), 2) if not bb_lower_series.dropna().empty else None
+            bb_upper = (
+                round(float(bb_upper_series.dropna().iloc[-1]), 2)
+                if not bb_upper_series.dropna().empty
+                else None
+            )
+            bb_lower = (
+                round(float(bb_lower_series.dropna().iloc[-1]), 2)
+                if not bb_lower_series.dropna().empty
+                else None
+            )
 
             # Bollinger %B = (price - lower) / (upper - lower)
             bb_pct = None
@@ -1856,14 +1958,22 @@ def fetch_ticker_research(ticker: str, fmp_key: str = "") -> Dict:
             top10 = inst.head(10)
             holders_list = []
             for _, row in top10.iterrows():
-                holders_list.append({
-                    "name": row.get("Holder", ""),
-                    "shares": int(row["Shares"]) if pd.notna(row.get("Shares")) else None,
-                    "value": float(row["Value"]) if pd.notna(row.get("Value")) else None,
-                    "pct_held": float(row["pctHeld"]) if "pctHeld" in row and pd.notna(row.get("pctHeld")) else (
-                        float(row["% Out"]) if "% Out" in row and pd.notna(row.get("% Out")) else None
-                    ),
-                })
+                holders_list.append(
+                    {
+                        "name": row.get("Holder", ""),
+                        "shares": int(row["Shares"]) if pd.notna(row.get("Shares")) else None,
+                        "value": float(row["Value"]) if pd.notna(row.get("Value")) else None,
+                        "pct_held": (
+                            float(row["pctHeld"])
+                            if "pctHeld" in row and pd.notna(row.get("pctHeld"))
+                            else (
+                                float(row["% Out"])
+                                if "% Out" in row and pd.notna(row.get("% Out"))
+                                else None
+                            )
+                        ),
+                    }
+                )
             result["top_institutions"] = holders_list
     except Exception as e:
         logger.warning("ticker_research.institutions_failed", ticker=ticker, error=str(e))
@@ -1873,13 +1983,17 @@ def fetch_ticker_research(ticker: str, fmp_key: str = "") -> Dict:
         lines = []
         lines.append(f"=== Research Summary for {result['ticker']} ===")
         lines.append(f"Company: {result['company_name'] or 'N/A'}")
-        lines.append(f"Sector: {result['sector'] or 'N/A'} | Industry: {result['industry'] or 'N/A'}")
+        lines.append(
+            f"Sector: {result['sector'] or 'N/A'} | Industry: {result['industry'] or 'N/A'}"
+        )
         if result["description"]:
             # Truncate description to first 500 chars for context efficiency
             desc = result["description"][:500]
             lines.append(f"Business: {desc}")
         lines.append(f"Website: {result['website'] or 'N/A'}")
-        lines.append(f"Employees: {result['employees']:,}" if result['employees'] else "Employees: N/A")
+        lines.append(
+            f"Employees: {result['employees']:,}" if result["employees"] else "Employees: N/A"
+        )
 
         mc = result.get("market_cap")
         if mc:
@@ -1903,7 +2017,14 @@ def fetch_ticker_research(ticker: str, fmp_key: str = "") -> Dict:
             for key, val in fund.items():
                 if val is not None:
                     if isinstance(val, float):
-                        if "%" in key or key in ("Div Yield", "Rev Growth", "Earn Growth", "Profit Margin", "ROE", "% from 52W High"):
+                        if "%" in key or key in (
+                            "Div Yield",
+                            "Rev Growth",
+                            "Earn Growth",
+                            "Profit Margin",
+                            "ROE",
+                            "% from 52W High",
+                        ):
                             lines.append(f"  {key}: {val:.2%}")
                         else:
                             lines.append(f"  {key}: {val:.2f}")
@@ -1915,40 +2036,64 @@ def fetch_ticker_research(ticker: str, fmp_key: str = "") -> Dict:
         if val_data and val_data.get("intrinsic_value") is not None:
             lines.append("\n--- Valuation (DCF) ---")
             lines.append(f"  Method: {val_data.get('method', 'N/A')}")
-            lines.append(f"  Intrinsic Value: ${val_data['intrinsic_value']:.2f}" if val_data.get('intrinsic_value') else "  Intrinsic Value: N/A")
-            lines.append(f"  Upside: {val_data['upside_pct']:.1f}%" if val_data.get('upside_pct') is not None else "  Upside: N/A")
+            lines.append(
+                f"  Intrinsic Value: ${val_data['intrinsic_value']:.2f}"
+                if val_data.get("intrinsic_value")
+                else "  Intrinsic Value: N/A"
+            )
+            lines.append(
+                f"  Upside: {val_data['upside_pct']:.1f}%"
+                if val_data.get("upside_pct") is not None
+                else "  Upside: N/A"
+            )
             lines.append(f"  Verdict: {val_data.get('verdict', 'N/A')}")
 
         # Analyst
         if result.get("analyst_rating"):
             lines.append("\n--- Analyst Consensus ---")
-            lines.append(f"  Rating: {result['analyst_rating']} (from {result.get('analyst_count', 'N/A')} analysts)")
+            lines.append(
+                f"  Rating: {result['analyst_rating']} (from {result.get('analyst_count', 'N/A')} analysts)"
+            )
         pt = result.get("price_targets", {})
         if pt:
-            lines.append(f"  Price Targets: Low=${pt.get('low', 'N/A')}, Median=${pt.get('median', 'N/A')}, Consensus=${pt.get('consensus', 'N/A')}, High=${pt.get('high', 'N/A')}")
+            lines.append(
+                f"  Price Targets: Low=${pt.get('low', 'N/A')}, Median=${pt.get('median', 'N/A')}, Consensus=${pt.get('consensus', 'N/A')}, High=${pt.get('high', 'N/A')}"
+            )
 
         # Upgrades
         upgrades = result.get("recent_upgrades", [])
         if upgrades:
             lines.append("\n--- Recent Upgrades/Downgrades ---")
             for u in upgrades:
-                lines.append(f"  {u.get('date', 'N/A')}: {u.get('firm', 'N/A')} - {u.get('action', 'N/A')} to {u.get('to_grade', 'N/A')} (from {u.get('from_grade', 'N/A')})")
+                lines.append(
+                    f"  {u.get('date', 'N/A')}: {u.get('firm', 'N/A')} - {u.get('action', 'N/A')} to {u.get('to_grade', 'N/A')} (from {u.get('from_grade', 'N/A')})"
+                )
 
         # Technicals
         tech = result.get("technicals", {})
         if tech:
             lines.append("\n--- Technical Indicators ---")
             lines.append(f"  RSI(14): {tech.get('rsi14', 'N/A')}")
-            lines.append(f"  SMA50: {tech.get('sma50', 'N/A')} (price {tech.get('price_vs_sma50', 'N/A')}% vs SMA50)")
-            lines.append(f"  SMA200: {tech.get('sma200', 'N/A')} (price {tech.get('price_vs_sma200', 'N/A')}% vs SMA200)")
-            lines.append(f"  MACD: {tech.get('macd', 'N/A')} | Signal: {tech.get('macd_signal', 'N/A')}")
-            lines.append(f"  Bollinger Bands: Upper={tech.get('bb_upper', 'N/A')}, Lower={tech.get('bb_lower', 'N/A')}, %B={tech.get('bb_pct', 'N/A')}")
+            lines.append(
+                f"  SMA50: {tech.get('sma50', 'N/A')} (price {tech.get('price_vs_sma50', 'N/A')}% vs SMA50)"
+            )
+            lines.append(
+                f"  SMA200: {tech.get('sma200', 'N/A')} (price {tech.get('price_vs_sma200', 'N/A')}% vs SMA200)"
+            )
+            lines.append(
+                f"  MACD: {tech.get('macd', 'N/A')} | Signal: {tech.get('macd_signal', 'N/A')}"
+            )
+            lines.append(
+                f"  Bollinger Bands: Upper={tech.get('bb_upper', 'N/A')}, Lower={tech.get('bb_lower', 'N/A')}, %B={tech.get('bb_pct', 'N/A')}"
+            )
 
         # Insider
         ins = result.get("insider", {})
         if ins:
             lines.append("\n--- Insider Activity (90d) ---")
-            lines.append(f"  Direction: {ins.get('direction', 'N/A')} | Net Shares: {ins.get('net_shares', 0):,} | Txn Count: {ins.get('count', 0)}")
+            lines.append(
+                f"  Direction: {ins.get('direction', 'N/A')} | Net Shares: {ins.get('net_shares', 0):,} | Txn Count: {ins.get('count', 0)}"
+            )
             for txn in ins.get("recent_txns", []):
                 lines.append(f"    - {txn}")
 
@@ -1959,7 +2104,7 @@ def fetch_ticker_research(ticker: str, fmp_key: str = "") -> Dict:
         top_inst = result.get("top_institutions", [])
         if top_inst:
             for h in top_inst[:5]:
-                shares_str = f"{h['shares']:,}" if h.get('shares') else 'N/A'
+                shares_str = f"{h['shares']:,}" if h.get("shares") else "N/A"
                 lines.append(f"  {h.get('name', 'N/A')}: {shares_str} shares")
 
         result["summary_context"] = "\n".join(lines)
@@ -1969,11 +2114,13 @@ def fetch_ticker_research(ticker: str, fmp_key: str = "") -> Dict:
 
     return result
 
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  10. Institutional Analyst Report
 #      Aggregates FMP financial-statement + ratio + peer data and asks Claude
 #      to produce a structured investment-banking equity research note.
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def _fmp_get(path: str, fmp_key: str, params: Optional[Dict] = None, timeout: int = 12):
     """GET wrapper for the FMP /stable/ API. Returns JSON payload or None.
@@ -1995,8 +2142,9 @@ def _fmp_get(path: str, fmp_key: str, params: Optional[Dict] = None, timeout: in
         elif resp.status_code == 402:
             logger.info("fmp.premium_required", path=path)
         elif resp.status_code == 403:
-            logger.warning("fmp.legacy_endpoint", path=path,
-                           detail="Endpoint deprecated — migrate to /stable/")
+            logger.warning(
+                "fmp.legacy_endpoint", path=path, detail="Endpoint deprecated — migrate to /stable/"
+            )
         elif resp.status_code == 429:
             logger.warning("fmp.rate_limited", path=path)
         else:
@@ -2024,16 +2172,28 @@ def fmp_validate_key(fmp_key: str) -> Dict:
         if resp.status_code == 200:
             return {"ok": True, "error": None, "status": 200}
         if resp.status_code == 401:
-            return {"ok": False, "status": 401,
-                    "error": "FMP API key is invalid. Get a new one at https://site.financialmodelingprep.com/"}
+            return {
+                "ok": False,
+                "status": 401,
+                "error": "FMP API key is invalid. Get a new one at https://site.financialmodelingprep.com/",
+            }
         if resp.status_code == 403:
-            return {"ok": False, "status": 403,
-                    "error": "FMP endpoint deprecated (account may need re-registration on the new stable API)"}
+            return {
+                "ok": False,
+                "status": 403,
+                "error": "FMP endpoint deprecated (account may need re-registration on the new stable API)",
+            }
         if resp.status_code == 429:
-            return {"ok": False, "status": 429,
-                    "error": "FMP rate limit hit. Wait a minute and retry, or upgrade plan."}
-        return {"ok": False, "status": resp.status_code,
-                "error": f"FMP preflight returned HTTP {resp.status_code}"}
+            return {
+                "ok": False,
+                "status": 429,
+                "error": "FMP rate limit hit. Wait a minute and retry, or upgrade plan.",
+            }
+        return {
+            "ok": False,
+            "status": resp.status_code,
+            "error": f"FMP preflight returned HTTP {resp.status_code}",
+        }
     except Exception as e:
         return {"ok": False, "status": -1, "error": f"FMP preflight failed: {e}"}
 
@@ -2070,16 +2230,17 @@ def fetch_analyst_report_data(ticker: str, fmp_key: str) -> Dict:
     data["key_metrics"] = _stmt("/key-metrics")
 
     # Street consensus + price target + rating movements
-    data["analyst_estimates"] = _fmp_get(
-        "/analyst-estimates", fmp_key, {"symbol": tk, "period": "annual", "limit": 4}
-    ) or []
-    data["price_target_consensus"] = _fmp_get(
-        "/price-target-consensus", fmp_key, {"symbol": tk}
-    ) or []
+    data["analyst_estimates"] = (
+        _fmp_get("/analyst-estimates", fmp_key, {"symbol": tk, "period": "annual", "limit": 4})
+        or []
+    )
+    data["price_target_consensus"] = (
+        _fmp_get("/price-target-consensus", fmp_key, {"symbol": tk}) or []
+    )
     # Renamed on /stable/: upgrades-downgrades → grades-historical
-    data["upgrades_downgrades"] = _fmp_get(
-        "/grades-historical", fmp_key, {"symbol": tk, "limit": 10}
-    ) or []
+    data["upgrades_downgrades"] = (
+        _fmp_get("/grades-historical", fmp_key, {"symbol": tk, "limit": 10}) or []
+    )
 
     # Peers — stable returns a list of peer profile objects directly,
     # not [{"peersList": [...]}] like v3/v4.
@@ -2190,8 +2351,7 @@ def build_analyst_report_prompt(data: Dict) -> str:
     transcript = data.get("transcript", {}) or {}
     transcript_snippet = (transcript.get("content", "") or "")[:3000]
     transcript_meta = (
-        f"Q{transcript.get('quarter','?')} {transcript.get('year','?')}"
-        if transcript else "N/A"
+        f"Q{transcript.get('quarter','?')} {transcript.get('year','?')}" if transcript else "N/A"
     )
 
     prompt = f"""You are a Managing Director of Equity Research at a top-tier
@@ -2342,6 +2502,7 @@ def generate_analyst_report(
     # 3. Call Claude
     try:
         from anthropic import Anthropic
+
         client = Anthropic(api_key=anthropic_key)
         resp = client.messages.create(
             model=claude_model,
@@ -2365,6 +2526,7 @@ def generate_analyst_report(
     report = None
     try:
         import json as _json
+
         report = _json.loads(cleaned)
     except Exception:
         # Try to extract first {...} block
@@ -2373,9 +2535,19 @@ def generate_analyst_report(
             try:
                 report = _json.loads(m.group(0))
             except Exception as e:
-                return {"report": None, "raw_data": data, "error": f"JSON parse failed: {e}", "raw_response": raw}
+                return {
+                    "report": None,
+                    "raw_data": data,
+                    "error": f"JSON parse failed: {e}",
+                    "raw_response": raw,
+                }
 
     if not report:
-        return {"report": None, "raw_data": data, "error": "Could not parse Claude output", "raw_response": raw}
+        return {
+            "report": None,
+            "raw_data": data,
+            "error": "Could not parse Claude output",
+            "raw_response": raw,
+        }
 
     return {"report": report, "raw_data": data, "error": None}

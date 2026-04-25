@@ -3,15 +3,16 @@ pages/6_Options.py
 Options Lab: Strategy analysis, Greeks, IV surface, and education.
 """
 
-import streamlit as st
-import pandas as pd
-import plotly.graph_objects as go
 from datetime import datetime, timedelta
 
-from ui.shared_sidebar import render_shared_sidebar
-from ui.components import render_section, render_kpi_row, render_ai_digest
-from i18n import get_translator
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
+
 from app import call_llm
+from i18n import get_translator
+from ui.components import render_ai_digest, render_kpi_row, render_section
+from ui.shared_sidebar import render_shared_sidebar
 
 # Render shared sidebar
 render_shared_sidebar()
@@ -68,9 +69,9 @@ def _make_expiry_str(days: int) -> str:
 # ══════════════════════════════════════════════════════════════
 #  Tabs
 # ══════════════════════════════════════════════════════════════
-tab_chain, tab_strategy, tab_iv, tab_greeks, tab_learn = st.tabs([
-    "Option Chain", "Strategy Builder", "IV Surface", "Portfolio Greeks", "Learn"
-])
+tab_chain, tab_strategy, tab_iv, tab_greeks, tab_learn = st.tabs(
+    ["Option Chain", "Strategy Builder", "IV Surface", "Portfolio Greeks", "Learn"]
+)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -86,7 +87,8 @@ with tab_chain:
         expirations = []
         spot = 0.0
         try:
-            from options_engine import get_option_chain, _get_spot_price
+            from options_engine import _get_spot_price, get_option_chain
+
             chain_data = get_option_chain(chain_ticker)
             expirations = chain_data.get("expirations", [])
             spot = _get_spot_price(chain_ticker)
@@ -115,6 +117,7 @@ with tab_chain:
         with st.spinner("Loading chain with Greeks..."):
             try:
                 from options_engine import get_chain_with_greeks
+
                 chain_result = get_chain_with_greeks(chain_ticker, selected_exp)
                 calls_df = chain_result.get("calls")
                 puts_df = chain_result.get("puts")
@@ -123,9 +126,23 @@ with tab_chain:
                 with col_c:
                     st.markdown("**CALLS**")
                     if calls_df is not None and not calls_df.empty:
-                        display_cols = [c for c in ["strike", "lastPrice", "bid", "ask",
-                                        "volume", "openInterest", "iv", "delta",
-                                        "gamma", "theta", "vega"] if c in calls_df.columns]
+                        display_cols = [
+                            c
+                            for c in [
+                                "strike",
+                                "lastPrice",
+                                "bid",
+                                "ask",
+                                "volume",
+                                "openInterest",
+                                "iv",
+                                "delta",
+                                "gamma",
+                                "theta",
+                                "vega",
+                            ]
+                            if c in calls_df.columns
+                        ]
                         fmt = {}
                         for c in display_cols:
                             if c in ("strike", "lastPrice", "bid", "ask"):
@@ -136,7 +153,9 @@ with tab_chain:
                                 fmt[c] = "{:.3f}"
                         st.dataframe(
                             calls_df[display_cols].style.format(fmt, na_rep="-"),
-                            hide_index=True, use_container_width=True, height=400,
+                            hide_index=True,
+                            use_container_width=True,
+                            height=400,
                         )
                     else:
                         st.info("No call data available")
@@ -144,9 +163,23 @@ with tab_chain:
                 with col_p:
                     st.markdown("**PUTS**")
                     if puts_df is not None and not puts_df.empty:
-                        display_cols = [c for c in ["strike", "lastPrice", "bid", "ask",
-                                        "volume", "openInterest", "iv", "delta",
-                                        "gamma", "theta", "vega"] if c in puts_df.columns]
+                        display_cols = [
+                            c
+                            for c in [
+                                "strike",
+                                "lastPrice",
+                                "bid",
+                                "ask",
+                                "volume",
+                                "openInterest",
+                                "iv",
+                                "delta",
+                                "gamma",
+                                "theta",
+                                "vega",
+                            ]
+                            if c in puts_df.columns
+                        ]
                         fmt = {}
                         for c in display_cols:
                             if c in ("strike", "lastPrice", "bid", "ask"):
@@ -157,7 +190,9 @@ with tab_chain:
                                 fmt[c] = "{:.3f}"
                         st.dataframe(
                             puts_df[display_cols].style.format(fmt, na_rep="-"),
-                            hide_index=True, use_container_width=True, height=400,
+                            hide_index=True,
+                            use_container_width=True,
+                            height=400,
                         )
                     else:
                         st.info("No put data available")
@@ -174,8 +209,14 @@ with tab_strategy:
 
     try:
         from options_engine import (
-            build_strategy, compute_pnl_at_expiry, compute_strategy_greeks,
-            strategy_metrics, STRATEGY_INFO, _get_spot_price as _spot,
+            STRATEGY_INFO,
+            build_strategy,
+            compute_pnl_at_expiry,
+            compute_strategy_greeks,
+            strategy_metrics,
+        )
+        from options_engine import (
+            _get_spot_price as _spot,
         )
     except ImportError as e:
         st.error(f"Options engine not available: {e}")
@@ -186,7 +227,8 @@ with tab_strategy:
     col_strat, col_tk2 = st.columns([3, 2])
     with col_strat:
         selected_strategy = st.selectbox(
-            "Strategy", strategy_names,
+            "Strategy",
+            strategy_names,
             format_func=lambda x: _STRATEGY_LABELS.get(x, x.replace("_", " ").title()),
             key="opt_strategy_sel",
         )
@@ -212,17 +254,32 @@ with tab_strategy:
             default_spot = _spot(strat_ticker)
         except Exception:
             default_spot = 100.0
-        spot_price = st.number_input("Spot Price ($)", value=float(round(default_spot, 2)),
-                                      min_value=0.01, step=1.0, key="opt_spot")
+        spot_price = st.number_input(
+            "Spot Price ($)",
+            value=float(round(default_spot, 2)),
+            min_value=0.01,
+            step=1.0,
+            key="opt_spot",
+        )
     with col_k:
-        strike1 = st.number_input("Strike ($)", value=float(round(spot_price * 1.05, 2)),
-                                   min_value=0.01, step=1.0, key="opt_strike1")
+        strike1 = st.number_input(
+            "Strike ($)",
+            value=float(round(spot_price * 1.05, 2)),
+            min_value=0.01,
+            step=1.0,
+            key="opt_strike1",
+        )
     with col_t:
-        days_to_exp = st.number_input("Days to Expiry", value=30, min_value=1,
-                                       max_value=730, step=7, key="opt_dte")
+        days_to_exp = st.number_input(
+            "Days to Expiry", value=30, min_value=1, max_value=730, step=7, key="opt_dte"
+        )
     with col_v:
-        vol = st.number_input("IV (%)", value=30.0, min_value=1.0,
-                               max_value=200.0, step=1.0, key="opt_vol") / 100
+        vol = (
+            st.number_input(
+                "IV (%)", value=30.0, min_value=1.0, max_value=200.0, step=1.0, key="opt_vol"
+            )
+            / 100
+        )
 
     expiry_str = _make_expiry_str(days_to_exp)
     r = st.session_state.get("risk_free_fallback", 0.045)
@@ -231,36 +288,77 @@ with tab_strategy:
     strat_kwargs = {}
     if selected_strategy in ("bull_call_spread",):
         strat_kwargs["strike_call"] = strike1
-        k2 = st.number_input("Upper Strike ($)", value=float(round(spot_price * 1.10, 2)),
-                              min_value=0.01, step=1.0, key="opt_strike2")
+        k2 = st.number_input(
+            "Upper Strike ($)",
+            value=float(round(spot_price * 1.10, 2)),
+            min_value=0.01,
+            step=1.0,
+            key="opt_strike2",
+        )
         strat_kwargs["strike_call_high"] = k2
     elif selected_strategy in ("bear_put_spread",):
         strat_kwargs["strike_put"] = strike1
-        k2 = st.number_input("Lower Strike ($)", value=float(round(spot_price * 0.90, 2)),
-                              min_value=0.01, step=1.0, key="opt_strike2")
+        k2 = st.number_input(
+            "Lower Strike ($)",
+            value=float(round(spot_price * 0.90, 2)),
+            min_value=0.01,
+            step=1.0,
+            key="opt_strike2",
+        )
         strat_kwargs["strike_put_low"] = k2
     elif selected_strategy == "iron_condor":
         c1, c2 = st.columns(2)
         with c1:
-            k_put = st.number_input("Short Put Strike", value=float(round(spot_price * 0.97, 2)),
-                                     min_value=0.01, step=1.0, key="opt_ic_sp")
-            k_lp = st.number_input("Long Put Strike (lower)", value=float(round(spot_price * 0.93, 2)),
-                                    min_value=0.01, step=1.0, key="opt_ic_lp")
+            k_put = st.number_input(
+                "Short Put Strike",
+                value=float(round(spot_price * 0.97, 2)),
+                min_value=0.01,
+                step=1.0,
+                key="opt_ic_sp",
+            )
+            k_lp = st.number_input(
+                "Long Put Strike (lower)",
+                value=float(round(spot_price * 0.93, 2)),
+                min_value=0.01,
+                step=1.0,
+                key="opt_ic_lp",
+            )
         with c2:
-            k_call = st.number_input("Short Call Strike", value=float(round(spot_price * 1.03, 2)),
-                                      min_value=0.01, step=1.0, key="opt_ic_sc")
-            k_hc = st.number_input("Long Call Strike (upper)", value=float(round(spot_price * 1.07, 2)),
-                                    min_value=0.01, step=1.0, key="opt_ic_hc")
-        strat_kwargs.update(strike_put=k_put, strike_low_put=k_lp,
-                            strike_call=k_call, strike_high_call=k_hc)
+            k_call = st.number_input(
+                "Short Call Strike",
+                value=float(round(spot_price * 1.03, 2)),
+                min_value=0.01,
+                step=1.0,
+                key="opt_ic_sc",
+            )
+            k_hc = st.number_input(
+                "Long Call Strike (upper)",
+                value=float(round(spot_price * 1.07, 2)),
+                min_value=0.01,
+                step=1.0,
+                key="opt_ic_hc",
+            )
+        strat_kwargs.update(
+            strike_put=k_put, strike_low_put=k_lp, strike_call=k_call, strike_high_call=k_hc
+        )
     elif selected_strategy == "strangle":
         c1, c2 = st.columns(2)
         with c1:
-            k_put = st.number_input("Put Strike", value=float(round(spot_price * 0.95, 2)),
-                                     min_value=0.01, step=1.0, key="opt_str_put")
+            k_put = st.number_input(
+                "Put Strike",
+                value=float(round(spot_price * 0.95, 2)),
+                min_value=0.01,
+                step=1.0,
+                key="opt_str_put",
+            )
         with c2:
-            k_call = st.number_input("Call Strike", value=float(round(spot_price * 1.05, 2)),
-                                      min_value=0.01, step=1.0, key="opt_str_call")
+            k_call = st.number_input(
+                "Call Strike",
+                value=float(round(spot_price * 1.05, 2)),
+                min_value=0.01,
+                step=1.0,
+                key="opt_str_call",
+            )
         strat_kwargs.update(strike_call=k_call, strike_put=k_put)
     elif selected_strategy in ("long_call", "covered_call"):
         strat_kwargs["strike_call"] = strike1
@@ -272,8 +370,12 @@ with tab_strategy:
     # Build strategy and show results
     try:
         strategy = build_strategy(
-            selected_strategy, strat_ticker,
-            S=spot_price, expiry=expiry_str, r=r, sigma=vol,
+            selected_strategy,
+            strat_ticker,
+            S=spot_price,
+            expiry=expiry_str,
+            r=r,
+            sigma=vol,
             **strat_kwargs,
         )
 
@@ -281,22 +383,30 @@ with tab_strategy:
         price_range, pnl = compute_pnl_at_expiry(strategy)
 
         fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=price_range, y=pnl,
-            mode='lines', name='P&L at Expiry',
-            line=dict(color='#00C8DC', width=2.5),
-            fill='tozeroy', fillcolor='rgba(0, 200, 220, 0.1)',
-        ))
-        fig.add_hline(y=0, line=dict(color='gray', width=1, dash='dash'))
-        fig.add_vline(x=spot_price, line=dict(color='#D29922', width=1, dash='dot'),
-                      annotation_text=f"Spot ${spot_price:.0f}")
+        fig.add_trace(
+            go.Scatter(
+                x=price_range,
+                y=pnl,
+                mode="lines",
+                name="P&L at Expiry",
+                line=dict(color="#00C8DC", width=2.5),
+                fill="tozeroy",
+                fillcolor="rgba(0, 200, 220, 0.1)",
+            )
+        )
+        fig.add_hline(y=0, line=dict(color="gray", width=1, dash="dash"))
+        fig.add_vline(
+            x=spot_price,
+            line=dict(color="#D29922", width=1, dash="dot"),
+            annotation_text=f"Spot ${spot_price:.0f}",
+        )
         fig.update_layout(
             title=f"{strategy.name} — P&L at Expiration",
             xaxis_title="Underlying Price ($)",
             yaxis_title="Profit / Loss ($)",
             template="plotly_dark",
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
             height=400,
             margin=dict(l=40, r=20, t=50, b=40),
         )
@@ -313,11 +423,11 @@ with tab_strategy:
         col_g4.metric("Vega", f"${greeks.get('vega', 0) * 100:.2f}")
 
         col_m1, col_m2, col_m3 = st.columns(3)
-        mp = metrics.get('max_profit', 0)
-        ml = metrics.get('max_loss', 0)
-        be = metrics.get('breakevens', [])
-        col_m1.metric("Max Profit", f"${mp:,.2f}" if mp != float('inf') else "Unlimited")
-        col_m2.metric("Max Loss", f"${ml:,.2f}" if abs(ml) != float('inf') else "Unlimited")
+        mp = metrics.get("max_profit", 0)
+        ml = metrics.get("max_loss", 0)
+        be = metrics.get("breakevens", [])
+        col_m1.metric("Max Profit", f"${mp:,.2f}" if mp != float("inf") else "Unlimited")
+        col_m2.metric("Max Loss", f"${ml:,.2f}" if abs(ml) != float("inf") else "Unlimited")
         col_m3.metric("Break-even", ", ".join(f"${b:.2f}" for b in be) or "N/A")
 
     except Exception as e:
@@ -336,6 +446,7 @@ with tab_iv:
         with st.spinner("Building volatility surface..."):
             try:
                 from options_engine import get_iv_surface
+
                 iv_data = get_iv_surface(iv_ticker)
 
                 if iv_data is not None and not iv_data.empty and len(iv_data) > 10:
@@ -343,15 +454,19 @@ with tab_iv:
                     iv_data["dte"] = (iv_data["T"] * 365.25).round(0)
 
                     # 3D Surface
-                    fig_3d = go.Figure(data=[go.Mesh3d(
-                        x=iv_data["strike"],
-                        y=iv_data["dte"],
-                        z=iv_data["iv"],
-                        intensity=iv_data["iv"],
-                        colorscale="Viridis",
-                        opacity=0.8,
-                        name="IV Surface",
-                    )])
+                    fig_3d = go.Figure(
+                        data=[
+                            go.Mesh3d(
+                                x=iv_data["strike"],
+                                y=iv_data["dte"],
+                                z=iv_data["iv"],
+                                intensity=iv_data["iv"],
+                                colorscale="Viridis",
+                                opacity=0.8,
+                                name="IV Surface",
+                            )
+                        ]
+                    )
                     fig_3d.update_layout(
                         title=f"{iv_ticker} Implied Volatility Surface",
                         scene=dict(
@@ -360,7 +475,7 @@ with tab_iv:
                             zaxis_title="Implied Volatility",
                         ),
                         template="plotly_dark",
-                        paper_bgcolor='rgba(0,0,0,0)',
+                        paper_bgcolor="rgba(0,0,0,0)",
                         height=500,
                     )
                     st.plotly_chart(fig_3d, use_container_width=True)
@@ -377,23 +492,31 @@ with tab_iv:
                             calls = skew
                             puts = pd.DataFrame()
 
-                        fig_skew.add_trace(go.Scatter(
-                            x=calls["strike"], y=calls["iv"],
-                            mode='lines+markers', name='Calls',
-                            line=dict(color='#2EA043'),
-                        ))
+                        fig_skew.add_trace(
+                            go.Scatter(
+                                x=calls["strike"],
+                                y=calls["iv"],
+                                mode="lines+markers",
+                                name="Calls",
+                                line=dict(color="#2EA043"),
+                            )
+                        )
                         if not puts.empty:
-                            fig_skew.add_trace(go.Scatter(
-                                x=puts["strike"], y=puts["iv"],
-                                mode='lines+markers', name='Puts',
-                                line=dict(color='#DA3633'),
-                            ))
+                            fig_skew.add_trace(
+                                go.Scatter(
+                                    x=puts["strike"],
+                                    y=puts["iv"],
+                                    mode="lines+markers",
+                                    name="Puts",
+                                    line=dict(color="#DA3633"),
+                                )
+                            )
                         fig_skew.update_layout(
                             title=f"IV Skew — {nearest_dte:.0f} DTE",
                             xaxis_title="Strike ($)",
                             yaxis_title="Implied Volatility",
                             template="plotly_dark",
-                            paper_bgcolor='rgba(0,0,0,0)',
+                            paper_bgcolor="rgba(0,0,0,0)",
                             height=350,
                         )
                         st.plotly_chart(fig_skew, use_container_width=True)
@@ -402,12 +525,14 @@ with tab_iv:
                     avg_iv = iv_data["iv"].mean()
                     min_iv = iv_data["iv"].min()
                     max_iv = iv_data["iv"].max()
-                    render_kpi_row([
-                        {"label": "Avg IV", "value": f"{avg_iv:.1%}"},
-                        {"label": "Min IV", "value": f"{min_iv:.1%}"},
-                        {"label": "Max IV", "value": f"{max_iv:.1%}"},
-                        {"label": "IV Range", "value": f"{(max_iv - min_iv):.1%}"},
-                    ])
+                    render_kpi_row(
+                        [
+                            {"label": "Avg IV", "value": f"{avg_iv:.1%}"},
+                            {"label": "Min IV", "value": f"{min_iv:.1%}"},
+                            {"label": "Max IV", "value": f"{max_iv:.1%}"},
+                            {"label": "IV Range", "value": f"{(max_iv - min_iv):.1%}"},
+                        ]
+                    )
                 else:
                     st.warning("Insufficient IV data. Try a more liquid ticker.")
             except Exception as e:
@@ -429,7 +554,7 @@ with tab_greeks:
     weights = st.session_state.get("weights")
     if weights:
         try:
-            from options_engine import compute_portfolio_greeks, StockPosition, _get_spot_price
+            from options_engine import StockPosition, _get_spot_price, compute_portfolio_greeks
 
             stock_positions = []
             for tk, w in weights.items():
@@ -446,32 +571,51 @@ with tab_greeks:
             portfolio_greeks = compute_portfolio_greeks(stock_positions, [])
             total_delta_dollars = sum(sp.shares * sp.price for sp in stock_positions)
 
-            render_kpi_row([
-                {"label": "Total Delta ($)", "value": f"${total_delta_dollars:,.0f}",
-                 "delta": "Stock-equivalent exposure", "delta_color": "neutral"},
-                {"label": "Total Gamma ($)", "value": f"${portfolio_greeks.get('gamma', 0):,.0f}"},
-                {"label": "Total Theta ($/day)", "value": f"${portfolio_greeks.get('theta', 0):,.2f}"},
-                {"label": "Total Vega ($)", "value": f"${portfolio_greeks.get('vega', 0):,.2f}"},
-            ])
+            render_kpi_row(
+                [
+                    {
+                        "label": "Total Delta ($)",
+                        "value": f"${total_delta_dollars:,.0f}",
+                        "delta": "Stock-equivalent exposure",
+                        "delta_color": "neutral",
+                    },
+                    {
+                        "label": "Total Gamma ($)",
+                        "value": f"${portfolio_greeks.get('gamma', 0):,.0f}",
+                    },
+                    {
+                        "label": "Total Theta ($/day)",
+                        "value": f"${portfolio_greeks.get('theta', 0):,.2f}",
+                    },
+                    {
+                        "label": "Total Vega ($)",
+                        "value": f"${portfolio_greeks.get('vega', 0):,.2f}",
+                    },
+                ]
+            )
 
             if stock_positions:
-                delta_data = pd.DataFrame([
-                    {"Ticker": sp.ticker, "Delta ($)": sp.shares * sp.price}
-                    for sp in stock_positions
-                ]).sort_values("Delta ($)", ascending=True)
+                delta_data = pd.DataFrame(
+                    [
+                        {"Ticker": sp.ticker, "Delta ($)": sp.shares * sp.price}
+                        for sp in stock_positions
+                    ]
+                ).sort_values("Delta ($)", ascending=True)
 
-                fig_delta = go.Figure(go.Bar(
-                    x=delta_data["Delta ($)"],
-                    y=delta_data["Ticker"],
-                    orientation='h',
-                    marker_color='#0B7285',
-                ))
+                fig_delta = go.Figure(
+                    go.Bar(
+                        x=delta_data["Delta ($)"],
+                        y=delta_data["Ticker"],
+                        orientation="h",
+                        marker_color="#0B7285",
+                    )
+                )
                 fig_delta.update_layout(
                     title="Delta Exposure by Asset",
                     xaxis_title="Delta ($)",
                     template="plotly_dark",
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    plot_bgcolor='rgba(0,0,0,0)',
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
                     height=max(300, len(stock_positions) * 28),
                     yaxis=dict(automargin=True, tickfont=dict(color="#E6EDF3")),
                     margin=dict(l=60, r=40, t=50, b=40),
@@ -533,8 +677,10 @@ with tab_learn:
                             example_kwargs["strike_put"] = 95
                         elif key == "iron_condor":
                             example_kwargs.update(
-                                strike_low_put=93, strike_put=97,
-                                strike_call=103, strike_high_call=107,
+                                strike_low_put=93,
+                                strike_put=97,
+                                strike_call=103,
+                                strike_high_call=107,
                             )
                         else:
                             example_kwargs["strike"] = 100
@@ -543,18 +689,23 @@ with tab_learn:
                         prices, pnl = compute_pnl_at_expiry(strat)
 
                         fig = go.Figure()
-                        fig.add_trace(go.Scatter(
-                            x=prices, y=pnl,
-                            mode='lines', line=dict(color='#00C8DC', width=2),
-                            fill='tozeroy', fillcolor='rgba(0,200,220,0.08)',
-                        ))
-                        fig.add_hline(y=0, line=dict(color='gray', width=1, dash='dash'))
+                        fig.add_trace(
+                            go.Scatter(
+                                x=prices,
+                                y=pnl,
+                                mode="lines",
+                                line=dict(color="#00C8DC", width=2),
+                                fill="tozeroy",
+                                fillcolor="rgba(0,200,220,0.08)",
+                            )
+                        )
+                        fig.add_hline(y=0, line=dict(color="gray", width=1, dash="dash"))
                         fig.update_layout(
                             xaxis_title="Price at Expiry",
                             yaxis_title="P&L ($)",
                             template="plotly_dark",
-                            paper_bgcolor='rgba(0,0,0,0)',
-                            plot_bgcolor='rgba(0,0,0,0)',
+                            paper_bgcolor="rgba(0,0,0,0)",
+                            plot_bgcolor="rgba(0,0,0,0)",
                             height=250,
                             margin=dict(l=40, r=20, t=10, b=40),
                             showlegend=False,
@@ -569,6 +720,7 @@ with tab_learn:
 # Floating AI Chat
 try:
     from ui.floating_chat import render_floating_ai_chat
+
     render_floating_ai_chat()
 except Exception:
     pass

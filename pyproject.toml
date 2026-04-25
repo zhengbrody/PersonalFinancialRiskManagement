@@ -14,16 +14,29 @@ exclude = '''
 '''
 
 [tool.ruff]
+line-length = 100
+exclude = [".git", ".venv", "__pycache__", "build", "dist"]
+
+[tool.ruff.lint]
 select = [
     "E",   # pycodestyle错误
     "F",   # pyflakes
     "I",   # isort
-    "N",   # pep8命名
     "W",   # pycodestyle警告
 ]
-ignore = ["E501"]  # 行长度由black处理
-line-length = 100
-exclude = [".git", ".venv", "__pycache__", "build", "dist"]
+# Naming (N-rules) deliberately disabled — this codebase uses uppercase
+# locals (CLR_ACCENT, T, FMP_BASE) and uppercase keyword args by design
+# (the UI design-token system + financial constants treat these as
+# module-level constants). Enforcing snake_case here would force
+# 100+ renames purely cosmetic, with no behavioral benefit.
+ignore = [
+    "E501",  # 行长度由black处理
+    "E402",  # streamlit pages frequently configure layout before imports
+    "E712",  # `== True`/`== False` show up in pandas mask code clearly
+    "E731",  # one-off lambda assignment in legacy module
+    "E741",  # `l` is used in legacy code; rename would touch many call sites
+    "F841",  # unused locals are common in exploratory code paths
+]
 
 [tool.mypy]
 python_version = "3.10"

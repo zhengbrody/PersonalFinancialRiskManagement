@@ -6,9 +6,11 @@ error_handler.py
 
 import json
 import traceback
-from typing import Optional, Callable, Any
-import streamlit as st
+from typing import Any, Callable, Optional
+
 import numpy as np
+import streamlit as st
+
 from logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -84,7 +86,7 @@ ERROR_SUGGESTIONS = {
         "suggestions": [
             "确保所有权重是正数",
             "权重总和应接近100%（会自动归一化）",
-            "使用JSON格式: {\"AAPL\": 0.3, \"GOOGL\": 0.7}",
+            '使用JSON格式: {"AAPL": 0.3, "GOOGL": 0.7}',
         ],
     },
     "invalid_ticker": {
@@ -133,6 +135,7 @@ ERROR_SUGGESTIONS = {
 # ═══════════════════════════════════════════════════════════════════
 #  通用错误处理函数
 # ═══════════════════════════════════════════════════════════════════
+
 
 def show_error(
     error: Exception,
@@ -214,6 +217,7 @@ def show_success(message: str, title: str = "成功") -> None:
 #  特定错误处理函数
 # ═══════════════════════════════════════════════════════════════════
 
+
 def handle_json_error(error: json.JSONDecodeError, json_string: str) -> None:
     """处理JSON解析错误"""
     st.error("❌ JSON格式错误")
@@ -221,7 +225,7 @@ def handle_json_error(error: json.JSONDecodeError, json_string: str) -> None:
     st.markdown(f"**错误信息**: {error.msg}")
 
     # 显示错误位置附近的代码
-    lines = json_string.split('\n')
+    lines = json_string.split("\n")
     if error.lineno and error.lineno <= len(lines):
         st.markdown("**错误附近的代码:**")
         start = max(0, error.lineno - 3)
@@ -249,7 +253,7 @@ def handle_weight_error(weights: dict, total: float) -> None:
     st.markdown("**已自动归一化为100%**")
 
     # 显示归一化后的权重
-    normalized = {k: round(v/total * 100, 2) for k, v in weights.items()}
+    normalized = {k: round(v / total * 100, 2) for k, v in weights.items()}
     st.markdown("**归一化后的权重:**")
     for ticker, pct in sorted(normalized.items(), key=lambda x: x[1], reverse=True):
         st.markdown(f"- {ticker}: {pct}%")
@@ -357,7 +361,7 @@ def safe_operation(
     operation_name: str = "操作",
     show_spinner: bool = True,
     spinner_text: str = "处理中...",
-    **kwargs
+    **kwargs,
 ) -> Optional[Any]:
     """
     安全执行操作，自动处理异常

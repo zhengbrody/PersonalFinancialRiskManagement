@@ -4,16 +4,17 @@ tests/integration/test_risk_pipeline.py
 使用合成数据，不依赖网络。
 """
 
-import pytest
+from unittest.mock import patch
+
 import numpy as np
 import pandas as pd
-from unittest.mock import patch, MagicMock
+import pytest
 
 from data_provider import DataProvider
 from risk_engine import RiskEngine, RiskReport
 
-
 # ── Helpers ──────────────────────────────────────────────────
+
 
 def _make_synthetic_prices(tickers, days=504, seed=42):
     """Generate synthetic price data for testing."""
@@ -68,6 +69,7 @@ def _mock_yf_download(tickers_str, **kwargs):
 
 # ── Fixtures ─────────────────────────────────────────────────
 
+
 @pytest.fixture
 def weights():
     return {"NVDA": 0.4, "SPY": 0.35, "GLD": 0.25}
@@ -94,6 +96,7 @@ def risk_engine(data_provider):
 # ══════════════════════════════════════════════════════════════
 #  Tests
 # ══════════════════════════════════════════════════════════════
+
 
 class TestDataProviderPipeline:
     """DataProvider 数据管道测试"""
@@ -123,8 +126,7 @@ class TestFullRiskPipeline:
     @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     def test_run_produces_valid_report(self, mock_dp, mock_re, weights):
         dp = DataProvider(weights, period_years=2)
-        engine = RiskEngine(dp, mc_simulations=3000, mc_horizon=21,
-                            risk_free_rate_fallback=0.045)
+        engine = RiskEngine(dp, mc_simulations=3000, mc_horizon=21, risk_free_rate_fallback=0.045)
         report = engine.run()
 
         assert isinstance(report, RiskReport)
@@ -144,8 +146,7 @@ class TestFullRiskPipeline:
     @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     def test_report_contains_all_fields(self, mock_dp, mock_re, weights):
         dp = DataProvider(weights, period_years=2)
-        engine = RiskEngine(dp, mc_simulations=2000, mc_horizon=21,
-                            risk_free_rate_fallback=0.045)
+        engine = RiskEngine(dp, mc_simulations=2000, mc_horizon=21, risk_free_rate_fallback=0.045)
         report = engine.run()
 
         assert report.cov_matrix is not None

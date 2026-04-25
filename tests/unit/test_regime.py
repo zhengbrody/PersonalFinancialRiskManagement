@@ -5,26 +5,26 @@ Covers: detect_regime_vol, detect_regime_trend, get_regime_transitions
 All tests use synthetic data -- no network calls.
 """
 
-import pytest
 import numpy as np
 import pandas as pd
+import pytest
 
 from regime_detector import (
-    detect_regime_vol,
-    detect_regime_trend,
-    get_regime_transitions,
+    REGIME_BEAR,
+    REGIME_BULL,
     REGIME_HIGH_VOL,
     REGIME_LOW_VOL,
     REGIME_NORMAL_VOL,
-    REGIME_BULL,
-    REGIME_BEAR,
     REGIME_TRANSITION,
+    detect_regime_trend,
+    detect_regime_vol,
+    get_regime_transitions,
 )
-
 
 # ══════════════════════════════════════════════════════════════
 #  Fixtures
 # ══════════════════════════════════════════════════════════════
+
 
 @pytest.fixture
 def low_vol_returns():
@@ -76,12 +76,7 @@ def downtrend_prices():
 @pytest.fixture
 def known_regime_series():
     """A simple hand-crafted regime series for transition testing."""
-    labels = (
-        ["A"] * 10 +
-        ["B"] * 5 +
-        ["A"] * 8 +
-        ["C"] * 7
-    )
+    labels = ["A"] * 10 + ["B"] * 5 + ["A"] * 8 + ["C"] * 7
     dates = pd.date_range("2023-01-02", periods=len(labels), freq="B")
     return pd.Series(labels, index=dates)
 
@@ -89,6 +84,7 @@ def known_regime_series():
 # ══════════════════════════════════════════════════════════════
 #  detect_regime_vol tests
 # ══════════════════════════════════════════════════════════════
+
 
 class TestDetectRegimeVol:
     """Volatility-based regime detection."""
@@ -130,6 +126,7 @@ class TestDetectRegimeVol:
 #  detect_regime_trend tests
 # ══════════════════════════════════════════════════════════════
 
+
 class TestDetectRegimeTrend:
     """Trend-based (SMA crossover) regime detection."""
 
@@ -147,7 +144,9 @@ class TestDetectRegimeTrend:
         regime_counts = result["regime"].value_counts()
         bull_count = regime_counts.get(REGIME_BULL, 0)
         total = len(result)
-        assert bull_count / total > 0.5, f"Expected >50% BULL in uptrend, got {bull_count/total:.1%}"
+        assert (
+            bull_count / total > 0.5
+        ), f"Expected >50% BULL in uptrend, got {bull_count/total:.1%}"
 
     def test_downtrend_mostly_bear(self, downtrend_prices):
         """A clear downtrend should produce majority BEAR classifications."""
@@ -155,7 +154,9 @@ class TestDetectRegimeTrend:
         regime_counts = result["regime"].value_counts()
         bear_count = regime_counts.get(REGIME_BEAR, 0)
         total = len(result)
-        assert bear_count / total > 0.5, f"Expected >50% BEAR in downtrend, got {bear_count/total:.1%}"
+        assert (
+            bear_count / total > 0.5
+        ), f"Expected >50% BEAR in downtrend, got {bear_count/total:.1%}"
 
     def test_regime_values_valid(self, uptrend_prices):
         """All trend regime labels must be valid."""
@@ -167,6 +168,7 @@ class TestDetectRegimeTrend:
 # ══════════════════════════════════════════════════════════════
 #  get_regime_transitions tests
 # ══════════════════════════════════════════════════════════════
+
 
 class TestGetRegimeTransitions:
     """Transition analysis on a known regime series."""

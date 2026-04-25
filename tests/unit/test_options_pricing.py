@@ -5,28 +5,26 @@ Covers: bs_price, bs_greeks, implied_volatility, build_strategy,
         compute_pnl_at_expiry, strategy_metrics, compute_portfolio_greeks
 """
 
-import pytest
-import numpy as np
-from unittest.mock import patch
 from datetime import datetime, timedelta
+from unittest.mock import patch
+
+import numpy as np
+import pytest
 
 from options_engine import (
-    bs_price,
+    CONTRACT_MULTIPLIER,
+    OptionLeg,
+    OptionPosition,
+    OptionStrategy,
+    StockPosition,
     bs_greeks,
-    implied_volatility,
+    bs_price,
     build_strategy,
     compute_pnl_at_expiry,
-    strategy_metrics,
     compute_portfolio_greeks,
-    compute_strategy_greeks,
-    OptionLeg,
-    OptionStrategy,
-    StockLeg,
-    StockPosition,
-    OptionPosition,
-    CONTRACT_MULTIPLIER,
+    implied_volatility,
+    strategy_metrics,
 )
-
 
 # ══════════════════════════════════════════════════════════════
 #  Helpers
@@ -39,6 +37,7 @@ _FAR_EXPIRY = (datetime.now() + timedelta(days=365)).strftime("%Y-%m-%d")
 # ══════════════════════════════════════════════════════════════
 #  bs_price tests
 # ══════════════════════════════════════════════════════════════
+
 
 class TestBSPrice:
     """Black-Scholes pricing sanity checks."""
@@ -90,6 +89,7 @@ class TestBSPrice:
 #  bs_greeks tests
 # ══════════════════════════════════════════════════════════════
 
+
 class TestBSGreeks:
     """Greeks analytical tests."""
 
@@ -133,6 +133,7 @@ class TestBSGreeks:
 #  implied_volatility tests
 # ══════════════════════════════════════════════════════════════
 
+
 class TestImpliedVolatility:
     """IV round-trip and edge-case tests."""
 
@@ -165,6 +166,7 @@ class TestImpliedVolatility:
 # ══════════════════════════════════════════════════════════════
 #  build_strategy tests
 # ══════════════════════════════════════════════════════════════
+
 
 class TestBuildStrategy:
     """Ensure all 10 strategies construct without error."""
@@ -202,6 +204,7 @@ class TestBuildStrategy:
 # ══════════════════════════════════════════════════════════════
 #  compute_pnl_at_expiry tests
 # ══════════════════════════════════════════════════════════════
+
 
 class TestPnlAtExpiry:
     """P&L at expiration for simple strategies."""
@@ -243,6 +246,7 @@ class TestPnlAtExpiry:
 #  strategy_metrics tests
 # ══════════════════════════════════════════════════════════════
 
+
 class TestStrategyMetrics:
     """Max profit, max loss, breakevens for known strategies."""
 
@@ -282,6 +286,7 @@ class TestStrategyMetrics:
 # ══════════════════════════════════════════════════════════════
 #  compute_portfolio_greeks tests
 # ══════════════════════════════════════════════════════════════
+
 
 class TestPortfolioGreeks:
     """Portfolio-level Greeks aggregation."""

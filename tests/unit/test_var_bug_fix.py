@@ -5,18 +5,20 @@ This module validates the fix to the Monte Carlo VaR calculation,
 which previously used an incorrect compound return formula.
 """
 
-import pytest
-import numpy as np
-import pandas as pd
-from datetime import datetime, timedelta
+import os
 
 # Import the modules we need to test
 import sys
-import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+from datetime import datetime
 
-from risk_engine import RiskEngine
+import numpy as np
+import pandas as pd
+import pytest
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
 from data_provider import DataProvider
+from risk_engine import RiskEngine
 
 
 class TestCompoundReturnCalculation:
@@ -74,7 +76,7 @@ class TestCompoundReturnCalculation:
         daily_returns = np.array([0.02, 0.02, 0.02, 0.02, 0.02])
 
         # Correct: (1.02)^5 - 1 ≈ 0.10408 (10.408%)
-        expected = (1.02 ** 5) - 1
+        expected = (1.02**5) - 1
 
         cumulative = np.prod(1 + daily_returns) - 1
         assert abs(cumulative - expected) < 0.00001
@@ -94,7 +96,7 @@ class TestMonteCarloVaRFix:
         """Create a sample DataProvider with synthetic data."""
         # Create synthetic price data for 2 assets over 252 days
         np.random.seed(42)
-        dates = pd.date_range(end=datetime.now(), periods=252, freq='D')
+        dates = pd.date_range(end=datetime.now(), periods=252, freq="D")
 
         # Generate correlated returns
         mean_returns = np.array([0.0005, 0.0003])  # 0.05% and 0.03% daily
@@ -104,23 +106,21 @@ class TestMonteCarloVaRFix:
 
         # Convert to prices (starting at 100)
         prices = pd.DataFrame(
-            100 * np.exp(np.cumsum(returns, axis=0)),
-            index=dates,
-            columns=['STOCK_A', 'STOCK_B']
+            100 * np.exp(np.cumsum(returns, axis=0)), index=dates, columns=["STOCK_A", "STOCK_B"]
         )
 
         # Create DataProvider
-        weights = {'STOCK_A': 0.6, 'STOCK_B': 0.4}
+        weights = {"STOCK_A": 0.6, "STOCK_B": 0.4}
         holdings = {
-            'STOCK_A': {'shares': 100, 'avg_cost': 95.0},
-            'STOCK_B': {'shares': 150, 'avg_cost': 98.0}
+            "STOCK_A": {"shares": 100, "avg_cost": 95.0},
+            "STOCK_B": {"shares": 150, "avg_cost": 98.0},
         }
 
         dp = DataProvider(
             weights=weights,
             holdings=holdings,
             end_date=dates[-1].strftime("%Y-%m-%d"),
-            period_years=1
+            period_years=1,
         )
 
         # Override the cached price data with our synthetic data
@@ -132,11 +132,7 @@ class TestMonteCarloVaRFix:
 
     def test_var_is_positive(self, sample_data_provider):
         """VaR should be a positive number (representing potential loss)."""
-        engine = RiskEngine(
-            data_provider=sample_data_provider,
-            mc_simulations=1000,
-            mc_horizon=21
-        )
+        engine = RiskEngine(data_provider=sample_data_provider, mc_simulations=1000, mc_horizon=21)
 
         report = engine.run()
 
@@ -146,11 +142,7 @@ class TestMonteCarloVaRFix:
 
     def test_var_99_greater_than_var_95(self, sample_data_provider):
         """99% VaR should be greater than 95% VaR (more conservative)."""
-        engine = RiskEngine(
-            data_provider=sample_data_provider,
-            mc_simulations=1000,
-            mc_horizon=21
-        )
+        engine = RiskEngine(data_provider=sample_data_provider, mc_simulations=1000, mc_horizon=21)
 
         report = engine.run()
 
@@ -158,11 +150,7 @@ class TestMonteCarloVaRFix:
 
     def test_cvar_greater_than_var(self, sample_data_provider):
         """CVaR should be greater than VaR (expected loss in tail)."""
-        engine = RiskEngine(
-            data_provider=sample_data_provider,
-            mc_simulations=1000,
-            mc_horizon=21
-        )
+        engine = RiskEngine(data_provider=sample_data_provider, mc_simulations=1000, mc_horizon=21)
 
         report = engine.run()
 
@@ -170,11 +158,7 @@ class TestMonteCarloVaRFix:
 
     def test_var_reasonable_range(self, sample_data_provider):
         """VaR should be in a reasonable range (5% - 30% for typical portfolios)."""
-        engine = RiskEngine(
-            data_provider=sample_data_provider,
-            mc_simulations=1000,
-            mc_horizon=21
-        )
+        engine = RiskEngine(data_provider=sample_data_provider, mc_simulations=1000, mc_horizon=21)
 
         report = engine.run()
 
@@ -184,11 +168,7 @@ class TestMonteCarloVaRFix:
 
     def test_mc_returns_distribution(self, sample_data_provider):
         """Monte Carlo returns should have reasonable statistical properties."""
-        engine = RiskEngine(
-            data_provider=sample_data_provider,
-            mc_simulations=10000,
-            mc_horizon=21
-        )
+        engine = RiskEngine(data_provider=sample_data_provider, mc_simulations=10000, mc_horizon=21)
 
         report = engine.run()
         mc_returns = report.mc_portfolio_returns
@@ -210,9 +190,7 @@ class TestMonteCarloVaRFix:
     def test_single_day_horizon(self, sample_data_provider):
         """Test edge case: single-day horizon."""
         engine = RiskEngine(
-            data_provider=sample_data_provider,
-            mc_simulations=1000,
-            mc_horizon=1  # Single day
+            data_provider=sample_data_provider, mc_simulations=1000, mc_horizon=1  # Single day
         )
 
         report = engine.run()
@@ -242,7 +220,7 @@ class TestComparisonBeforeAfterFix:
 
         # Simulate portfolio daily returns
         daily_mean = 0.001  # 0.1% per day
-        daily_std = 0.02    # 2% vol
+        daily_std = 0.02  # 2% vol
 
         cumulative_returns = []
         for _ in range(n_sims):

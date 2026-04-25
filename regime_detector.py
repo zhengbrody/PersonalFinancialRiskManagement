@@ -60,6 +60,7 @@ REGIME_TRANSITION = "TRANSITION"
 #  File-based Cache
 # ══════════════════════════════════════════════════════════════
 
+
 def _ensure_cache_dir():
     """Create cache directory if it does not exist."""
     os.makedirs(CACHE_DIR, exist_ok=True)
@@ -99,6 +100,7 @@ def _write_cache(path: str, data: dict):
 # ══════════════════════════════════════════════════════════════
 #  Internal Helpers
 # ══════════════════════════════════════════════════════════════
+
 
 def _safe_float(val) -> Optional[float]:
     """Convert a value to float, returning None on failure."""
@@ -169,6 +171,7 @@ def _fetch_spy_data(period_years: int = 2) -> Tuple[Optional[pd.Series], Optiona
 #  1. Gaussian Mixture (Simplified HMM-style) Regime Detection
 # ══════════════════════════════════════════════════════════════
 
+
 def detect_regime_hmm(
     returns: pd.Series,
     n_regimes: int = 3,
@@ -207,7 +210,9 @@ def detect_regime_hmm(
     )
 
     if len(returns) < window * 2:
-        logger.warning("regime.hmm.insufficient_data", n_returns=len(returns), min_required=window * 2)
+        logger.warning(
+            "regime.hmm.insufficient_data", n_returns=len(returns), min_required=window * 2
+        )
         return pd.Series(REGIME_NORMAL, index=returns.index, name="hmm_regime")
 
     clean_returns = returns.dropna().copy()
@@ -243,7 +248,7 @@ def detect_regime_hmm(
     for i in range(len(clean_returns)):
         # Use rolling window or all available data up to this point
         start_idx = max(0, i - window + 1)
-        window_returns = values[start_idx: i + 1]
+        window_returns = values[start_idx : i + 1]
 
         if len(window_returns) < 5:
             regime_series.iloc[i] = REGIME_NORMAL
@@ -255,9 +260,8 @@ def detect_regime_hmm(
             if stds[k] < 1e-10:
                 log_likelihoods[k] = -np.inf
             else:
-                log_likelihoods[k] = (
-                    np.log(weights[k] + 1e-300)
-                    + np.sum(norm.logpdf(window_returns, loc=means[k], scale=stds[k]))
+                log_likelihoods[k] = np.log(weights[k] + 1e-300) + np.sum(
+                    norm.logpdf(window_returns, loc=means[k], scale=stds[k])
                 )
 
         best_regime = np.argmax(log_likelihoods)
@@ -325,7 +329,9 @@ def _fit_gaussian_mixture(
         # ── E-step: compute responsibilities in log-space to avoid underflow ──
         log_resp = np.zeros((n, n_components))
         for k in range(n_components):
-            log_resp[:, k] = np.log(weights[k] + 1e-300) + norm.logpdf(data, loc=means[k], scale=stds[k])
+            log_resp[:, k] = np.log(weights[k] + 1e-300) + norm.logpdf(
+                data, loc=means[k], scale=stds[k]
+            )
         log_norm = logsumexp(log_resp, axis=1, keepdims=True)
         responsibilities = np.exp(log_resp - log_norm)
 
@@ -338,9 +344,7 @@ def _fit_gaussian_mixture(
 
         for k in range(n_components):
             diff = data - means[k]
-            stds[k] = np.sqrt(
-                (responsibilities[:, k] * diff ** 2).sum() / Nk[k]
-            )
+            stds[k] = np.sqrt((responsibilities[:, k] * diff**2).sum() / Nk[k])
 
         # Floor standard deviations
         stds = np.maximum(stds, min_std)
@@ -368,6 +372,7 @@ def _fit_gaussian_mixture(
 # ══════════════════════════════════════════════════════════════
 #  2. Volatility-Based Regime Detection
 # ══════════════════════════════════════════════════════════════
+
 
 def detect_regime_vol(
     returns: pd.Series,
@@ -429,13 +434,15 @@ def detect_regime_vol(
     regime[vol_ratio > 1.5] = REGIME_HIGH_VOL
     regime[vol_ratio < 0.7] = REGIME_LOW_VOL
 
-    result = pd.DataFrame({
-        "date": returns.index,
-        "short_vol": short_vol,
-        "long_vol": long_vol,
-        "vol_ratio": vol_ratio,
-        "regime": regime,
-    }).dropna(subset=["short_vol", "long_vol"])
+    result = pd.DataFrame(
+        {
+            "date": returns.index,
+            "short_vol": short_vol,
+            "long_vol": long_vol,
+            "vol_ratio": vol_ratio,
+            "regime": regime,
+        }
+    ).dropna(subset=["short_vol", "long_vol"])
 
     result = result.reset_index(drop=True)
 
@@ -451,6 +458,7 @@ def detect_regime_vol(
 # ══════════════════════════════════════════════════════════════
 #  3. Trend-Based Regime Detection (SMA Crossover)
 # ══════════════════════════════════════════════════════════════
+
 
 def detect_regime_trend(
     prices: pd.Series,
@@ -505,13 +513,15 @@ def detect_regime_trend(
     regime[bull_mask] = REGIME_BULL
     regime[bear_mask] = REGIME_BEAR
 
-    result = pd.DataFrame({
-        "date": prices.index,
-        "price": prices,
-        "sma_short": sma_s,
-        "sma_long": sma_l,
-        "regime": regime,
-    }).dropna(subset=["sma_short", "sma_long"])
+    result = pd.DataFrame(
+        {
+            "date": prices.index,
+            "price": prices,
+            "sma_short": sma_s,
+            "sma_long": sma_l,
+            "regime": regime,
+        }
+    ).dropna(subset=["sma_short", "sma_long"])
 
     result = result.reset_index(drop=True)
 
@@ -527,6 +537,7 @@ def detect_regime_trend(
 # ══════════════════════════════════════════════════════════════
 #  4. Composite Regime Detection
 # ══════════════════════════════════════════════════════════════
+
 
 def get_composite_regime(
     returns: pd.Series,
@@ -665,24 +676,34 @@ def _build_regime_history(
     hmm_series = hmm_regimes.copy()
     hmm_series.name = "hmm_regime"
 
-    vol_series = pd.Series(
-        vol_df["regime"].values,
-        index=pd.DatetimeIndex(vol_df["date"]),
-        name="vol_regime",
-    ) if len(vol_df) > 0 else pd.Series(dtype=str, name="vol_regime")
+    vol_series = (
+        pd.Series(
+            vol_df["regime"].values,
+            index=pd.DatetimeIndex(vol_df["date"]),
+            name="vol_regime",
+        )
+        if len(vol_df) > 0
+        else pd.Series(dtype=str, name="vol_regime")
+    )
 
-    trend_series = pd.Series(
-        trend_df["regime"].values,
-        index=pd.DatetimeIndex(trend_df["date"]),
-        name="trend_regime",
-    ) if len(trend_df) > 0 else pd.Series(dtype=str, name="trend_regime")
+    trend_series = (
+        pd.Series(
+            trend_df["regime"].values,
+            index=pd.DatetimeIndex(trend_df["date"]),
+            name="trend_regime",
+        )
+        if len(trend_df) > 0
+        else pd.Series(dtype=str, name="trend_regime")
+    )
 
     # Combine on shared dates
-    history = pd.DataFrame({
-        "hmm_regime": hmm_series,
-        "vol_regime": vol_series,
-        "trend_regime": trend_series,
-    })
+    history = pd.DataFrame(
+        {
+            "hmm_regime": hmm_series,
+            "vol_regime": vol_series,
+            "trend_regime": trend_series,
+        }
+    )
 
     # Forward-fill gaps from different series having different start dates
     history = history.ffill()
@@ -725,6 +746,7 @@ def _composite_signal_for_row(hmm: str, vol: str, trend: str) -> str:
 # ══════════════════════════════════════════════════════════════
 #  5. Quick Regime Summary (SPY-based)
 # ══════════════════════════════════════════════════════════════
+
 
 def get_regime_summary() -> Dict:
     """
@@ -780,9 +802,7 @@ def get_regime_summary() -> Dict:
 
     # Determine when the current regime started
     history = composite.get("history", pd.DataFrame())
-    regime_since = _find_regime_start_date(
-        history, composite["current_regime"]
-    )
+    regime_since = _find_regime_start_date(history, composite["current_regime"])
 
     result = {
         "current_regime": composite["current_regime"],
@@ -797,7 +817,9 @@ def get_regime_summary() -> Dict:
     # Cache the result (convert DataFrame to records for JSON serialization)
     cache_data = result.copy()
     if isinstance(cache_data["historical_regimes"], pd.DataFrame):
-        cache_data["historical_regimes"] = cache_data["historical_regimes"].to_dict(orient="records")
+        cache_data["historical_regimes"] = cache_data["historical_regimes"].to_dict(
+            orient="records"
+        )
     _write_cache(cache_path, cache_data)
 
     logger.info(
@@ -828,9 +850,7 @@ def _get_vix_regime() -> str:
             else:
                 vix_close = vix_data.iloc[:, 0]
         else:
-            vix_close = (
-                vix_data["Close"] if "Close" in vix_data.columns else vix_data.iloc[:, 0]
-            )
+            vix_close = vix_data["Close"] if "Close" in vix_data.columns else vix_data.iloc[:, 0]
 
         vix_level = float(vix_close.iloc[-1])
 
@@ -892,6 +912,7 @@ def _find_regime_start_date(
 # ══════════════════════════════════════════════════════════════
 #  6. Regime Transition Analysis
 # ══════════════════════════════════════════════════════════════
+
 
 def get_regime_transitions(regime_series: pd.Series) -> Dict:
     """

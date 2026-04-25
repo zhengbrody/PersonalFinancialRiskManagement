@@ -4,42 +4,59 @@ External Context: What is happening in markets and with my holdings?
 """
 
 import os
-import streamlit as st
-import numpy as np
+
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.express as px
-from app import (get_sector, SECTOR_MAP, CLR_ACCENT, CLR_WARN,
-                 CLR_DANGER, CLR_GOOD, CLR_MUTED, CLR_GRID, CLR_GOLD,
-                 call_llm, fetch_asset_news, score_sentiment_ollama,
-                 score_reddit_fomo, build_risk_context,
-                 render_sentiment_tear_sheet, _safe_get_secret)
-from i18n import get_translator
-from ui.components import render_section, render_chart, render_metric_list, render_empty_state
-from market_intelligence import (
-    get_vix_current, fetch_vix_data, fetch_yield_curve, fetch_fear_greed,
-    get_all_macro_news, fetch_fundamentals, format_fundamentals_for_display,
-    fetch_reddit_sentiment_apify, format_reddit_for_llm,
+import streamlit as st
+
+from app import (
+    CLR_DANGER,
+    CLR_GOOD,
+    CLR_WARN,
+    _safe_get_secret,
+    build_risk_context,
+    fetch_asset_news,
+    render_sentiment_tear_sheet,
+    score_reddit_fomo,
+    score_sentiment_ollama,
 )
+from i18n import get_translator
+from market_intelligence import (
+    fetch_fear_greed,
+    fetch_reddit_sentiment_apify,
+    fetch_vix_data,
+    fetch_yield_curve,
+    format_fundamentals_for_display,
+    format_reddit_for_llm,
+    get_all_macro_news,
+    get_vix_current,
+)
+from ui.components import render_chart, render_empty_state, render_section
 
 # Render shared sidebar
 from ui.shared_sidebar import render_shared_sidebar
+
 render_shared_sidebar()
 
 # ── Guard ────────────────────────────────────────────────────
 if not st.session_state.get("analysis_ready"):
     _lang = st.session_state.get("_lang", "en")
     render_empty_state(
-        title="Markets need a portfolio to contextualize" if _lang == "en" else "市场页面需要组合数据",
+        title=(
+            "Markets need a portfolio to contextualize" if _lang == "en" else "市场页面需要组合数据"
+        ),
         description=(
             "VIX, Fear & Greed, yield curve, macro news, AI sentiment and earnings call AI. "
             "Sentiment scoring uses your holdings — run analysis to start."
-            if _lang == "en" else
-            "VIX、恐贪指数、收益率曲线、宏观新闻、AI 情绪分析、财报电话会 AI。"
+            if _lang == "en"
+            else "VIX、恐贪指数、收益率曲线、宏观新闻、AI 情绪分析、财报电话会 AI。"
             "情绪分析基于你的持仓 — 请先运行分析。"
         ),
-        action_hint="Crypto + equity coverage · ~30 tickers scored per run"
-                   if _lang == "en" else "覆盖加密货币 + 股票 · 每次约 30 只",
+        action_hint=(
+            "Crypto + equity coverage · ~30 tickers scored per run"
+            if _lang == "en"
+            else "覆盖加密货币 + 股票 · 每次约 30 只"
+        ),
     )
     st.stop()
 
@@ -54,7 +71,6 @@ model_provider = st.session_state.get("_model_provider", "Ollama (Local)")
 api_key_input = st.session_state.get("_api_key_input", "")
 deepseek_key = st.session_state.get("_deepseek_key", "")
 ollama_model = st.session_state.get("_ollama_model", "deepseek-r1:14b")
-
 
 
 # ══════════════════════════════════════════════════════════════
@@ -73,14 +89,20 @@ load_col, refresh_col, _ = st.columns([1, 1, 2])
 with load_col:
     run_regime = st.button(
         "Refresh Market Data" if lang == "en" else "刷新市场数据",
-        type="primary", key="run_regime", use_container_width=True,
+        type="primary",
+        key="run_regime",
+        use_container_width=True,
     )
 with refresh_col:
     if _needs_regime_load:
         st.caption("Auto-loading…" if lang == "en" else "首次加载中…")
 
 if run_regime or _needs_regime_load:
-    with st.spinner("Fetching VIX, Fear & Greed, Yield Curve..." if lang == "en" else "正在获取 VIX / 恐贪指数 / 收益率曲线..."):
+    with st.spinner(
+        "Fetching VIX, Fear & Greed, Yield Curve..."
+        if lang == "en"
+        else "正在获取 VIX / 恐贪指数 / 收益率曲线..."
+    ):
         try:
             st.session_state.vix_current = get_vix_current()
         except Exception as e:
@@ -95,11 +117,15 @@ if run_regime or _needs_regime_load:
             st.session_state.yield_curve_df = yc_df
             st.session_state.yield_analysis = yc_analysis
         except Exception as e:
-            st.warning(f"Yield curve fetch failed: {e}" if lang == "en" else f"收益率曲线获取失败: {e}")
+            st.warning(
+                f"Yield curve fetch failed: {e}" if lang == "en" else f"收益率曲线获取失败: {e}"
+            )
         try:
             st.session_state.fear_greed_data = fetch_fear_greed()
         except Exception as e:
-            st.warning(f"Fear & Greed fetch failed: {e}" if lang == "en" else f"恐贪指数获取失败: {e}")
+            st.warning(
+                f"Fear & Greed fetch failed: {e}" if lang == "en" else f"恐贪指数获取失败: {e}"
+            )
 
 vix_cur = st.session_state.get("vix_current")
 fg_data = st.session_state.get("fear_greed_data")
@@ -109,9 +135,12 @@ rc1, rc2, rc3 = st.columns(3)
 with rc1:
     if vix_cur and vix_cur.get("current") is not None:
         v_val = vix_cur["current"]
-        st.metric(f"{vix_cur.get('level_icon', '')} VIX", f"{v_val:.2f}",
-                  delta=f"{vix_cur.get('change', 0):+.1%}" if vix_cur.get("change") else None,
-                  delta_color="inverse")
+        st.metric(
+            f"{vix_cur.get('level_icon', '')} VIX",
+            f"{v_val:.2f}",
+            delta=f"{vix_cur.get('change', 0):+.1%}" if vix_cur.get("change") else None,
+            delta_color="inverse",
+        )
     else:
         st.metric("VIX", "-- (Load data)")
 
@@ -119,7 +148,7 @@ with rc2:
     if fg_data and fg_data.get("score") is not None:
         fg_score = fg_data["score"]
         fg_rating = fg_data.get("rating_display", "N/A")
-        st.metric(f"Fear & Greed", f"{fg_score}/100 -- {fg_rating}")
+        st.metric("Fear & Greed", f"{fg_score}/100 -- {fg_rating}")
     else:
         st.metric("Fear & Greed", "-- (Load data)")
 
@@ -137,21 +166,36 @@ with rc3:
 _yc_df = st.session_state.get("yield_curve_df")
 if _yc_df is not None and not _yc_df.empty:
     fig_yc = go.Figure()
-    fig_yc.add_trace(go.Scatter(
-        x=_yc_df["Maturity"], y=_yc_df["Current (%)"],
-        mode="lines+markers", name="Current",
-        line=dict(color="#0B7285", width=3), marker=dict(size=8),
-    ))
-    fig_yc.add_trace(go.Scatter(
-        x=_yc_df["Maturity"], y=_yc_df["30d Ago (%)"],
-        mode="lines+markers", name="30 days ago",
-        line=dict(color="#8B949E", width=2, dash="dash"), marker=dict(size=6),
-    ))
-    fig_yc.add_trace(go.Scatter(
-        x=_yc_df["Maturity"], y=_yc_df["90d Ago (%)"],
-        mode="lines+markers", name="90 days ago",
-        line=dict(color="#484F58", width=1, dash="dot"), marker=dict(size=5),
-    ))
+    fig_yc.add_trace(
+        go.Scatter(
+            x=_yc_df["Maturity"],
+            y=_yc_df["Current (%)"],
+            mode="lines+markers",
+            name="Current",
+            line=dict(color="#0B7285", width=3),
+            marker=dict(size=8),
+        )
+    )
+    fig_yc.add_trace(
+        go.Scatter(
+            x=_yc_df["Maturity"],
+            y=_yc_df["30d Ago (%)"],
+            mode="lines+markers",
+            name="30 days ago",
+            line=dict(color="#8B949E", width=2, dash="dash"),
+            marker=dict(size=6),
+        )
+    )
+    fig_yc.add_trace(
+        go.Scatter(
+            x=_yc_df["Maturity"],
+            y=_yc_df["90d Ago (%)"],
+            mode="lines+markers",
+            name="90 days ago",
+            line=dict(color="#484F58", width=1, dash="dot"),
+            marker=dict(size=5),
+        )
+    )
     fig_yc.update_layout(
         title="US Treasury Yield Curve" if lang == "en" else "美国国债收益率曲线",
         xaxis_title="Maturity" if lang == "en" else "期限",
@@ -170,7 +214,9 @@ render_section(t("macro_news_title"))
 
 mnews_col, _ = st.columns([1, 3])
 with mnews_col:
-    run_mnews = st.button(t("macro_news_btn"), type="primary", key="run_macro_news", use_container_width=True)
+    run_mnews = st.button(
+        t("macro_news_btn"), type="primary", key="run_macro_news", use_container_width=True
+    )
 
 if run_mnews:
     with st.spinner(t("macro_news_spinner")):
@@ -205,11 +251,11 @@ st.markdown(
     f'{"For comprehensive single-stock analysis (fundamentals, valuation, technicals, insider activity, analyst ratings, AI recommendation), use the" if lang == "en" else "如需全面的个股分析（基本面、估值、技术面、内部人交易、分析师评级、AI推荐），请使用"}'
     f' <b>{"Ticker Research" if lang == "en" else "个股研究"}</b> '
     f'{"page in the sidebar." if lang == "en" else "页面（侧边栏）。"}'
-    '</div>'
+    "</div>"
     '<div style="font-size:12px;color:#8B949E">'
     f'{"Supports any ticker symbol — not limited to your portfolio holdings." if lang == "en" else "支持搜索任意股票代码，不限于持仓股票。"}'
-    '</div>'
-    '</div>',
+    "</div>"
+    "</div>",
     unsafe_allow_html=True,
 )
 
@@ -225,8 +271,8 @@ selected_ticker = st.selectbox(
     key="market_intel_ticker",
     help=(
         f"Choose from all {len(selector_options)} equity holdings"
-        if lang == "en" else
-        f"从全部 {len(selector_options)} 只股票持仓中选择"
+        if lang == "en"
+        else f"从全部 {len(selector_options)} 只股票持仓中选择"
     ),
 )
 
@@ -238,9 +284,9 @@ st.markdown("---")
 render_section("AI Sentiment" if lang == "en" else "AI 情绪分析")
 
 _llm_available = (
-    (model_provider == "Anthropic Claude" and api_key_input) or
-    (model_provider == "DeepSeek API" and deepseek_key) or
-    model_provider == "Ollama (Local)"
+    (model_provider == "Anthropic Claude" and api_key_input)
+    or (model_provider == "DeepSeek API" and deepseek_key)
+    or model_provider == "Ollama (Local)"
 )
 
 if not _llm_available:
@@ -257,20 +303,25 @@ else:
             f"Will analyze all {_total_holdings} holdings "
             f"({len(_equity_by_weight)} equities + {_total_holdings - len(_equity_by_weight)} crypto). "
             f"Each click fetches fresh news."
-            if lang == "en" else
-            f"将分析全部 {_total_holdings} 只持仓（{len(_equity_by_weight)} 股票 + "
+            if lang == "en"
+            else f"将分析全部 {_total_holdings} 只持仓（{len(_equity_by_weight)} 股票 + "
             f"{_total_holdings - len(_equity_by_weight)} 加密）。每次点击获取最新新闻。"
         )
     with sent_col:
-        run_sent = st.button(t("sentiment_btn"), type="primary", key="run_sentiment", use_container_width=True)
+        run_sent = st.button(
+            t("sentiment_btn"), type="primary", key="run_sentiment", use_container_width=True
+        )
     with reddit_col:
         _apify_key = os.environ.get("APIFY_API_KEY", "") or _safe_get_secret("APIFY_API_KEY")
         run_reddit = st.button(
             "Reddit FOMO" if lang == "en" else "Reddit 散户情绪",
-            key="run_reddit", use_container_width=True,
-            help="Reddit sentiment covers equities + crypto via r/wallstreetbets and r/stocks"
-                 if lang == "en" else
-                 "Reddit 情绪覆盖股票 + 加密货币，来源 r/wallstreetbets + r/stocks",
+            key="run_reddit",
+            use_container_width=True,
+            help=(
+                "Reddit sentiment covers equities + crypto via r/wallstreetbets and r/stocks"
+                if lang == "en"
+                else "Reddit 情绪覆盖股票 + 加密货币，来源 r/wallstreetbets + r/stocks"
+            ),
         )
 
     if run_sent:
@@ -288,6 +339,7 @@ else:
         # to avoid tripping provider rate limits (Claude/DeepSeek) or local
         # Ollama's single-GPU bottleneck.
         from concurrent.futures import ThreadPoolExecutor, as_completed
+
         sentiment_results: dict = {}
         completed = 0
         with st.spinner(f"Scoring {len(selected)} tickers in parallel (max 5 at once)..."):
@@ -302,22 +354,29 @@ else:
                         scored = fut.result()
                     except Exception as e:
                         scored = {
-                            "retail_sentiment_score": 5.0, "sentiment_label": "Error",
+                            "retail_sentiment_score": 5.0,
+                            "sentiment_label": "Error",
                             "key_narrative": f"Scoring failed: {e}",
-                            "score": 5, "confidence": "Low",
+                            "score": 5,
+                            "confidence": "Low",
                         }
                     scored["headlines"] = news_data.get(tk, [])
                     scored["weight"] = weights[tk]
                     sentiment_results[tk] = scored
                     completed += 1
-                    progress_bar.progress(completed / len(selected),
-                                          text=f"Scored {completed}/{len(selected)}")
+                    progress_bar.progress(
+                        completed / len(selected), text=f"Scored {completed}/{len(selected)}"
+                    )
         progress_bar.empty()
 
         st.session_state.sentiment_data = sentiment_results
-        st.session_state.sentiment_last_run = datetime.now() if False else __import__("time").time()
+        st.session_state.sentiment_last_run = __import__("time").time()
         st.session_state.risk_context = build_risk_context(
-            report, weights, mc_horizon, market_shock, prices,
+            report,
+            weights,
+            mc_horizon,
+            market_shock,
+            prices,
             sentiment=sentiment_results,
             fund_data=st.session_state.get("fundamentals_data"),
             insider_data=st.session_state.get("insider_data"),
@@ -328,7 +387,9 @@ else:
     if run_reddit:
         selected_reddit = _all_by_weight
         with st.spinner(f"Scraping Reddit for {len(selected_reddit)} tickers..."):
-            reddit_data = fetch_reddit_sentiment_apify(selected_reddit, max_posts=12, apify_key=_apify_key)
+            reddit_data = fetch_reddit_sentiment_apify(
+                selected_reddit, max_posts=12, apify_key=_apify_key
+            )
             hot_posts = reddit_data.get("_hot", [])
             hot_text = format_reddit_for_llm(hot_posts)
             fomo_results = {"_hot_posts": hot_posts}
@@ -358,28 +419,38 @@ else:
     # Individual tear sheet moved below as a drill-down.
     if sent:
         st.markdown("")
-        sent_df = pd.DataFrame([
-            {"Ticker": tk, "Score": d.get("retail_sentiment_score", d.get("score", 5))}
-            for tk, d in sorted(sent.items(), key=lambda x: x[1].get("retail_sentiment_score", x[1].get("score", 5)))
-        ])
-        bar_colors_sent = [CLR_DANGER if s <= 3 else (CLR_WARN if s < 5 else CLR_GOOD) for s in sent_df["Score"]]
-        fig_sent = go.Figure(go.Bar(
-            x=sent_df["Ticker"], y=sent_df["Score"],
-            marker_color=bar_colors_sent,
-            text=sent_df["Score"].map(lambda s: f"{s:.1f}"),
-            textposition="outside",
-        ))
+        sent_df = pd.DataFrame(
+            [
+                {"Ticker": tk, "Score": d.get("retail_sentiment_score", d.get("score", 5))}
+                for tk, d in sorted(
+                    sent.items(),
+                    key=lambda x: x[1].get("retail_sentiment_score", x[1].get("score", 5)),
+                )
+            ]
+        )
+        bar_colors_sent = [
+            CLR_DANGER if s <= 3 else (CLR_WARN if s < 5 else CLR_GOOD) for s in sent_df["Score"]
+        ]
+        fig_sent = go.Figure(
+            go.Bar(
+                x=sent_df["Ticker"],
+                y=sent_df["Score"],
+                marker_color=bar_colors_sent,
+                text=sent_df["Score"].map(lambda s: f"{s:.1f}"),
+                textposition="outside",
+            )
+        )
         fig_sent.add_hline(y=7, line_dash="dot", line_color=CLR_GOOD, opacity=0.4)
         fig_sent.add_hline(y=3, line_dash="dot", line_color=CLR_DANGER, opacity=0.4)
-        fig_sent.update_layout(title="Sentiment Score Overview", yaxis=dict(range=[0, 11]), height=300)
+        fig_sent.update_layout(
+            title="Sentiment Score Overview", yaxis=dict(range=[0, 11]), height=300
+        )
         render_chart(fig_sent)
 
         # ── Full overview table: weight + score + top headline ─────
         st.markdown("")
         render_section(
-            "All Holdings — Sentiment & Headlines"
-            if lang == "en" else
-            "全持仓情绪与头条"
+            "All Holdings — Sentiment & Headlines" if lang == "en" else "全持仓情绪与头条"
         )
         _rows = []
         for tk in sorted(sent.keys(), key=lambda x: -weights.get(x, 0)):
@@ -389,15 +460,17 @@ else:
             headlines = d.get("headlines", []) or []
             top_headline = headlines[0] if headlines else "(no news)"
             confidence = d.get("confidence", "--")
-            _rows.append({
-                "Ticker": tk,
-                "Weight": f"{weights.get(tk, 0) * 100:.1f}%",
-                "Score": f"{score:.1f}" if isinstance(score, (int, float)) else "--",
-                "Label": label or "--",
-                "Confidence": confidence,
-                "News": len(headlines),
-                "Top Headline": top_headline[:120],
-            })
+            _rows.append(
+                {
+                    "Ticker": tk,
+                    "Weight": f"{weights.get(tk, 0) * 100:.1f}%",
+                    "Score": f"{score:.1f}" if isinstance(score, (int, float)) else "--",
+                    "Label": label or "--",
+                    "Confidence": confidence,
+                    "News": len(headlines),
+                    "Top Headline": top_headline[:120],
+                }
+            )
         st.dataframe(
             pd.DataFrame(_rows),
             use_container_width=True,
@@ -415,8 +488,10 @@ else:
                 collapsed=True,
             )
             render_sentiment_tear_sheet(
-                selected_ticker, sent[selected_ticker],
-                sent[selected_ticker].get("weight", weights.get(selected_ticker, 0)), lang,
+                selected_ticker,
+                sent[selected_ticker],
+                sent[selected_ticker].get("weight", weights.get(selected_ticker, 0)),
+                lang,
             )
 
 
@@ -431,29 +506,35 @@ else:
 # ══════════════════════════════════════════════════════════════
 reddit_fomo = st.session_state.get("reddit_fomo_data")
 if reddit_fomo:
-    with render_section("Reddit FOMO Monitor" if lang == "en" else "Reddit 散户情绪监控", collapsed=True):
+    with render_section(
+        "Reddit FOMO Monitor" if lang == "en" else "Reddit 散户情绪监控", collapsed=True
+    ):
         # Split scored vs no-mention tickers.
         # A scored ticker has a numeric fomo_score (not None).
-        all_tickers = {k: v for k, v in reddit_fomo.items() if k != "_hot_posts" and isinstance(v, dict)}
+        all_tickers = {
+            k: v for k, v in reddit_fomo.items() if k != "_hot_posts" and isinstance(v, dict)
+        }
         scored = {k: v for k, v in all_tickers.items() if v.get("fomo_score") is not None}
         no_mention = [k for k, v in all_tickers.items() if v.get("fomo_score") is None]
 
         st.caption(
             f"{len(scored)} tickers had Reddit mentions in the last 24h · "
             f"{len(no_mention)} had no mentions"
-            if lang == "en" else
-            f"{len(scored)} 只在过去 24h 有 Reddit 讨论 · {len(no_mention)} 只无讨论"
+            if lang == "en"
+            else f"{len(scored)} 只在过去 24h 有 Reddit 讨论 · {len(no_mention)} 只无讨论"
         )
 
         if scored:
             # Show scored tickers (sorted by weight) as cards
             scored_sorted = sorted(scored.items(), key=lambda kv: -weights.get(kv[0], 0))
             for row_start in range(0, len(scored_sorted), 5):
-                row_items = scored_sorted[row_start: row_start + 5]
+                row_items = scored_sorted[row_start : row_start + 5]
                 fomo_cols = st.columns(5)
                 for col, (tk, fomo) in zip(fomo_cols, row_items):
                     score = fomo["fomo_score"]
-                    fomo_color = CLR_DANGER if score >= 70 else (CLR_GOOD if score <= 30 else CLR_WARN)
+                    fomo_color = (
+                        CLR_DANGER if score >= 70 else (CLR_GOOD if score <= 30 else CLR_WARN)
+                    )
                     fomo_label = "FOMO" if score >= 70 else ("Fear" if score <= 30 else "Neutral")
                     post_count = len(fomo.get("posts", []))
                     with col:
@@ -463,7 +544,7 @@ if reddit_fomo:
                             f'<div style="font-size:36px;font-weight:900;color:{fomo_color}">{score}</div>'
                             f'<div style="font-size:12px;font-weight:600;color:{fomo_color}">{fomo_label}</div>'
                             f'<div style="font-size:10px;opacity:0.6;margin-top:4px">{post_count} posts</div>'
-                            f'</div>',
+                            f"</div>",
                             unsafe_allow_html=True,
                         )
                         consensus = fomo.get("retail_consensus", "")
@@ -491,8 +572,8 @@ if reddit_fomo:
             st.caption(
                 f"No Reddit mentions: {', '.join(no_mention[:15])}"
                 f"{'…' if len(no_mention) > 15 else ''}"
-                if lang == "en" else
-                f"无 Reddit 讨论: {', '.join(no_mention[:15])}"
+                if lang == "en"
+                else f"无 Reddit 讨论: {', '.join(no_mention[:15])}"
                 f"{'…' if len(no_mention) > 15 else ''}"
             )
 
@@ -502,7 +583,9 @@ if reddit_fomo:
 # ══════════════════════════════════════════════════════════════
 fund_data = st.session_state.get("fundamentals_data")
 if fund_data is not None and not fund_data.empty:
-    with render_section("Full Fundamentals Table" if lang == "en" else "完整基本面数据", collapsed=True):
+    with render_section(
+        "Full Fundamentals Table" if lang == "en" else "完整基本面数据", collapsed=True
+    ):
         order = [tk for tk in sorted(weights, key=lambda x: -weights[x]) if tk in fund_data.index]
         fund_sorted = fund_data.loc[order].copy()
         fund_sorted.insert(0, "Weight", [f"{weights.get(tk, 0):.1%}" for tk in fund_sorted.index])
@@ -512,6 +595,7 @@ if fund_data is not None and not fund_data.empty:
 # Floating AI Assistant
 try:
     from ui.floating_chat import render_floating_ai_chat
+
     render_floating_ai_chat()
-except Exception as e:
+except Exception:
     pass  # Silently fail if floating chat has issues

@@ -5,17 +5,16 @@ Backtesting, performance attribution, and regime analysis.
 """
 
 import json
-import streamlit as st
+from datetime import datetime, timedelta
+
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.express as px
-from datetime import datetime, timedelta
+import streamlit as st
 
-from ui.shared_sidebar import render_shared_sidebar
-from ui.components import render_section, render_kpi_row, render_ai_digest
-from i18n import get_translator
 from app import call_llm
+from ui.components import render_ai_digest, render_kpi_row, render_section
+from ui.shared_sidebar import render_shared_sidebar
 from ui.tokens import T
 
 # ── Shared sidebar ─────────────────────────────────────────
@@ -24,21 +23,24 @@ lang, t = render_shared_sidebar()
 # ── Page config ────────────────────────────────────────────
 st.markdown(
     f'<div style="{T.font_page_title};color:{T.text};margin-bottom:4px">'
-    f'Quantitative Research Lab</div>',
+    f"Quantitative Research Lab</div>",
     unsafe_allow_html=True,
 )
 st.markdown(
     f'<div style="{T.font_caption};color:{T.text_muted};margin-bottom:{T.sp_xl}">'
-    f'Backtesting  |  Performance Attribution  |  Regime Analysis</div>',
+    f"Backtesting  |  Performance Attribution  |  Regime Analysis</div>",
     unsafe_allow_html=True,
 )
 
 # ── Terminal-style CSS overrides for monospace numbers ─────
-st.markdown(f"""
+st.markdown(
+    """
 <style>
-    .mono {{font-family:'JetBrains Mono','Fira Code','SF Mono',monospace;}}
+    .mono {font-family:'JetBrains Mono','Fira Code','SF Mono',monospace;}
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # ── AI Quant Summary ──
 if st.session_state.get("analysis_ready"):
@@ -62,6 +64,7 @@ Comment on risk-adjusted performance quality and whether the return justifies th
 # ══════════════════════════════════════════════════════════════
 #  Plotly helpers
 # ══════════════════════════════════════════════════════════════
+
 
 def _dark_layout(fig: go.Figure, title: str = "", height: int = 420) -> go.Figure:
     """Apply consistent dark theme to a plotly figure."""
@@ -92,6 +95,7 @@ def _render_mono_kpi(label: str, value: str, color: str = T.text):
 #  Helper: get portfolio tickers from session state
 # ══════════════════════════════════════════════════════════════
 
+
 def _get_portfolio_tickers():
     """Extract tickers from the current portfolio weights in session state."""
     try:
@@ -115,11 +119,13 @@ def _get_portfolio_weights():
 #  TABS
 # ══════════════════════════════════════════════════════════════
 
-tab_bt, tab_attr, tab_regime = st.tabs([
-    "Backtesting",
-    "Performance Attribution",
-    "Regime Analysis",
-])
+tab_bt, tab_attr, tab_regime = st.tabs(
+    [
+        "Backtesting",
+        "Performance Attribution",
+        "Regime Analysis",
+    ]
+)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -238,11 +244,11 @@ with tab_bt:
         with st.spinner("Running backtest... downloading price data and simulating..."):
             try:
                 from backtest_engine import (
-                    run_backtest,
-                    run_momentum_backtest,
-                    run_equal_weight_backtest,
-                    compute_rolling_metrics,
                     BacktestResult,
+                    compute_rolling_metrics,
+                    run_backtest,
+                    run_equal_weight_backtest,
+                    run_momentum_backtest,
                 )
 
                 result: BacktestResult
@@ -302,34 +308,43 @@ with tab_bt:
         render_section("Performance Summary")
 
         kpi_data = [
-            {"label": "Total Return",
-             "value": f"{result.total_return:+.2%}",
-             "delta_color": "positive" if result.total_return > 0 else "negative"},
-            {"label": "Annual Return",
-             "value": f"{result.annual_return:+.2%}",
-             "delta_color": "positive" if result.annual_return > 0 else "negative"},
-            {"label": "Sharpe Ratio",
-             "value": f"{result.sharpe_ratio:.3f}",
-             "delta_color": "positive" if result.sharpe_ratio > 0.5 else "neutral"},
-            {"label": "Sortino Ratio",
-             "value": f"{result.sortino_ratio:.3f}",
-             "delta_color": "positive" if result.sortino_ratio > 0.5 else "neutral"},
-            {"label": "Calmar Ratio",
-             "value": f"{result.calmar_ratio:.3f}"},
+            {
+                "label": "Total Return",
+                "value": f"{result.total_return:+.2%}",
+                "delta_color": "positive" if result.total_return > 0 else "negative",
+            },
+            {
+                "label": "Annual Return",
+                "value": f"{result.annual_return:+.2%}",
+                "delta_color": "positive" if result.annual_return > 0 else "negative",
+            },
+            {
+                "label": "Sharpe Ratio",
+                "value": f"{result.sharpe_ratio:.3f}",
+                "delta_color": "positive" if result.sharpe_ratio > 0.5 else "neutral",
+            },
+            {
+                "label": "Sortino Ratio",
+                "value": f"{result.sortino_ratio:.3f}",
+                "delta_color": "positive" if result.sortino_ratio > 0.5 else "neutral",
+            },
+            {"label": "Calmar Ratio", "value": f"{result.calmar_ratio:.3f}"},
         ]
         render_kpi_row(kpi_data)
 
         kpi_data_2 = [
-            {"label": "Max Drawdown",
-             "value": f"{result.max_drawdown:.2%}",
-             "delta_color": "negative" if result.max_drawdown < -0.10 else "neutral"},
-            {"label": "Win Rate",
-             "value": f"{result.win_rate:.1%}"},
-            {"label": "Alpha (ann.)",
-             "value": f"{result.alpha:+.4f}",
-             "delta_color": "positive" if result.alpha > 0 else "negative"},
-            {"label": "Beta",
-             "value": f"{result.beta:.3f}"},
+            {
+                "label": "Max Drawdown",
+                "value": f"{result.max_drawdown:.2%}",
+                "delta_color": "negative" if result.max_drawdown < -0.10 else "neutral",
+            },
+            {"label": "Win Rate", "value": f"{result.win_rate:.1%}"},
+            {
+                "label": "Alpha (ann.)",
+                "value": f"{result.alpha:+.4f}",
+                "delta_color": "positive" if result.alpha > 0 else "negative",
+            },
+            {"label": "Beta", "value": f"{result.beta:.3f}"},
         ]
         render_kpi_row(kpi_data_2)
 
@@ -338,25 +353,25 @@ with tab_bt:
 
         if result.equity_curve is not None:
             fig_eq = go.Figure()
-            fig_eq.add_trace(go.Scatter(
-                x=result.equity_curve.index,
-                y=result.equity_curve.values,
-                name="Portfolio",
-                line=dict(color=T.accent, width=2),
-                fill="tonexty" if False else None,
-            ))
+            fig_eq.add_trace(
+                go.Scatter(
+                    x=result.equity_curve.index,
+                    y=result.equity_curve.values,
+                    name="Portfolio",
+                    line=dict(color=T.accent, width=2),
+                    fill="tonexty" if False else None,
+                )
+            )
 
             # Add benchmark line if we have data
             if result.benchmark_total_return is not None:
-                bench_curve = (
-                    result.equity_curve.iloc[0]
-                    * (1 + result.benchmark_total_return)
-                )
+                bench_curve = result.equity_curve.iloc[0] * (1 + result.benchmark_total_return)
                 # Reconstruct approximate benchmark curve from portfolio equity start
                 # We stored benchmark total return; construct from alpha/beta
                 # Use a simpler approach: scale initial capital by benchmark return linearly
                 try:
                     from backtest_engine import _download_prices
+
                     bench_prices = _download_prices(
                         [benchmark],
                         result.start_date,
@@ -367,12 +382,14 @@ with tab_bt:
                         bp_scaled = bp / bp.iloc[0] * initial_capital
                         # Align to equity curve index
                         bp_aligned = bp_scaled.reindex(result.equity_curve.index, method="ffill")
-                        fig_eq.add_trace(go.Scatter(
-                            x=bp_aligned.index,
-                            y=bp_aligned.values,
-                            name=f"Benchmark ({benchmark})",
-                            line=dict(color=T.text_muted, width=1.5, dash="dot"),
-                        ))
+                        fig_eq.add_trace(
+                            go.Scatter(
+                                x=bp_aligned.index,
+                                y=bp_aligned.values,
+                                name=f"Benchmark ({benchmark})",
+                                line=dict(color=T.text_muted, width=1.5, dash="dot"),
+                            )
+                        )
                 except Exception:
                     pass
 
@@ -383,14 +400,16 @@ with tab_bt:
         # -- Drawdown chart --
         if result.drawdown_series is not None:
             fig_dd = go.Figure()
-            fig_dd.add_trace(go.Scatter(
-                x=result.drawdown_series.index,
-                y=result.drawdown_series.values,
-                fill="tozeroy",
-                line=dict(color=T.negative, width=1),
-                fillcolor="rgba(218, 54, 51, 0.20)",
-                name="Drawdown",
-            ))
+            fig_dd.add_trace(
+                go.Scatter(
+                    x=result.drawdown_series.index,
+                    y=result.drawdown_series.values,
+                    fill="tozeroy",
+                    line=dict(color=T.negative, width=1),
+                    fillcolor="rgba(218, 54, 51, 0.20)",
+                    name="Drawdown",
+                )
+            )
             _dark_layout(fig_dd, "Drawdown", height=220)
             fig_dd.update_yaxes(tickformat=".1%")
             st.plotly_chart(fig_dd, use_container_width=True, config={"displayModeBar": False})
@@ -401,43 +420,63 @@ with tab_bt:
 
             try:
                 mr = result.monthly_returns.copy()
-                mr.index = pd.DatetimeIndex(mr.index.to_timestamp()) if hasattr(mr.index, 'to_timestamp') else mr.index
-                mr_df = pd.DataFrame({
-                    "year": mr.index.year,
-                    "month": mr.index.month,
-                    "return": mr.values,
-                })
+                mr.index = (
+                    pd.DatetimeIndex(mr.index.to_timestamp())
+                    if hasattr(mr.index, "to_timestamp")
+                    else mr.index
+                )
+                mr_df = pd.DataFrame(
+                    {
+                        "year": mr.index.year,
+                        "month": mr.index.month,
+                        "return": mr.values,
+                    }
+                )
                 pivot = mr_df.pivot_table(
                     index="year", columns="month", values="return", aggfunc="sum"
                 )
-                month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+                month_labels = [
+                    "Jan",
+                    "Feb",
+                    "Mar",
+                    "Apr",
+                    "May",
+                    "Jun",
+                    "Jul",
+                    "Aug",
+                    "Sep",
+                    "Oct",
+                    "Nov",
+                    "Dec",
+                ]
                 pivot.columns = [month_labels[c - 1] for c in pivot.columns]
 
                 # Format text as percentages
                 text_vals = pivot.map(lambda x: f"{x:+.1%}" if pd.notna(x) else "")
 
-                fig_hm = go.Figure(data=go.Heatmap(
-                    z=pivot.values,
-                    x=pivot.columns.tolist(),
-                    y=[str(y) for y in pivot.index.tolist()],
-                    text=text_vals.values,
-                    texttemplate="%{text}",
-                    textfont=dict(size=11, family="JetBrains Mono, monospace"),
-                    colorscale=[
-                        [0, T.negative],
-                        [0.5, T.surface],
-                        [1, T.positive],
-                    ],
-                    zmid=0,
-                    showscale=True,
-                    colorbar=dict(
-                        title="Return",
-                        tickformat=".0%",
-                        len=0.6,
-                    ),
-                    hovertemplate="Year: %{y}<br>Month: %{x}<br>Return: %{text}<extra></extra>",
-                ))
+                fig_hm = go.Figure(
+                    data=go.Heatmap(
+                        z=pivot.values,
+                        x=pivot.columns.tolist(),
+                        y=[str(y) for y in pivot.index.tolist()],
+                        text=text_vals.values,
+                        texttemplate="%{text}",
+                        textfont=dict(size=11, family="JetBrains Mono, monospace"),
+                        colorscale=[
+                            [0, T.negative],
+                            [0.5, T.surface],
+                            [1, T.positive],
+                        ],
+                        zmid=0,
+                        showscale=True,
+                        colorbar=dict(
+                            title="Return",
+                            tickformat=".0%",
+                            len=0.6,
+                        ),
+                        hovertemplate="Year: %{y}<br>Month: %{x}<br>Return: %{text}<extra></extra>",
+                    )
+                )
                 _dark_layout(fig_hm, "Monthly Returns", height=max(200, len(pivot) * 45 + 80))
                 st.plotly_chart(fig_hm, use_container_width=True, config={"displayModeBar": False})
 
@@ -449,29 +488,38 @@ with tab_bt:
             render_section("Rolling Sharpe Ratio (252-day)")
             try:
                 from backtest_engine import compute_rolling_metrics
+
                 rolling = compute_rolling_metrics(result.equity_curve, window=252)
                 rs = rolling["rolling_sharpe"].dropna()
 
                 if len(rs) > 10:
                     fig_rs = go.Figure()
-                    fig_rs.add_trace(go.Scatter(
-                        x=rs.index,
-                        y=rs.values,
-                        line=dict(color=T.accent, width=1.5),
-                        name="Rolling Sharpe",
-                    ))
-                    fig_rs.add_hline(
-                        y=0, line_dash="dash",
-                        line_color=T.text_muted, line_width=1,
+                    fig_rs.add_trace(
+                        go.Scatter(
+                            x=rs.index,
+                            y=rs.values,
+                            line=dict(color=T.accent, width=1.5),
+                            name="Rolling Sharpe",
+                        )
                     )
                     fig_rs.add_hline(
-                        y=1.0, line_dash="dot",
-                        line_color=T.positive, line_width=1,
+                        y=0,
+                        line_dash="dash",
+                        line_color=T.text_muted,
+                        line_width=1,
+                    )
+                    fig_rs.add_hline(
+                        y=1.0,
+                        line_dash="dot",
+                        line_color=T.positive,
+                        line_width=1,
                         annotation_text="Sharpe = 1.0",
                         annotation_font_color=T.positive,
                     )
                     _dark_layout(fig_rs, "Rolling 252-day Sharpe Ratio", height=300)
-                    st.plotly_chart(fig_rs, use_container_width=True, config={"displayModeBar": False})
+                    st.plotly_chart(
+                        fig_rs, use_container_width=True, config={"displayModeBar": False}
+                    )
                 else:
                     st.caption("Insufficient data for 252-day rolling Sharpe.")
             except Exception as e:
@@ -486,8 +534,8 @@ with tab_attr:
 
     st.markdown(
         f'<div style="{T.font_caption};color:{T.text_muted};margin-bottom:{T.sp_lg}">'
-        f'Brinson decomposition and multi-factor regression attribution based on '
-        f'current portfolio weights and historical returns.</div>',
+        f"Brinson decomposition and multi-factor regression attribution based on "
+        f"current portfolio weights and historical returns.</div>",
         unsafe_allow_html=True,
     )
 
@@ -516,14 +564,13 @@ with tab_attr:
         if run_attr_btn:
             with st.spinner("Computing performance attribution..."):
                 try:
-                    from performance_attribution import (
-                        brinson_attribution,
-                        factor_attribution,
-                        get_attribution_summary,
-                        DEFAULT_SECTOR_MAP,
-                    )
-                    import yfinance as yf
                     import warnings
+
+                    import yfinance as yf
+
+                    from performance_attribution import (
+                        get_attribution_summary,
+                    )
 
                     tickers_attr = list(port_weights.keys())
                     all_tickers = list(set(tickers_attr + ["SPY", "QQQ", "GLD"]))
@@ -586,17 +633,28 @@ with tab_attr:
             # -- KPI row --
             render_section("Attribution KPIs")
             attr_kpis = [
-                {"label": "Tracking Error",
-                 "value": f"{attr_result.get('tracking_error', 0):.2%}"},
-                {"label": "Information Ratio",
-                 "value": f"{attr_result.get('information_ratio', 0):.3f}",
-                 "delta_color": "positive" if attr_result.get('information_ratio', 0) > 0 else "negative"},
-                {"label": "Hit Ratio",
-                 "value": f"{attr_result.get('hit_ratio', 0):.1%}",
-                 "delta_color": "positive" if attr_result.get('hit_ratio', 0) > 0.5 else "neutral"},
-                {"label": "Active Return (ann.)",
-                 "value": f"{attr_result.get('active_return_annual', 0):+.2%}",
-                 "delta_color": "positive" if attr_result.get('active_return_annual', 0) > 0 else "negative"},
+                {"label": "Tracking Error", "value": f"{attr_result.get('tracking_error', 0):.2%}"},
+                {
+                    "label": "Information Ratio",
+                    "value": f"{attr_result.get('information_ratio', 0):.3f}",
+                    "delta_color": (
+                        "positive" if attr_result.get("information_ratio", 0) > 0 else "negative"
+                    ),
+                },
+                {
+                    "label": "Hit Ratio",
+                    "value": f"{attr_result.get('hit_ratio', 0):.1%}",
+                    "delta_color": (
+                        "positive" if attr_result.get("hit_ratio", 0) > 0.5 else "neutral"
+                    ),
+                },
+                {
+                    "label": "Active Return (ann.)",
+                    "value": f"{attr_result.get('active_return_annual', 0):+.2%}",
+                    "delta_color": (
+                        "positive" if attr_result.get("active_return_annual", 0) > 0 else "negative"
+                    ),
+                },
             ]
             render_kpi_row(attr_kpis)
 
@@ -623,28 +681,36 @@ with tab_attr:
                 with bc2:
                     # Stacked bar: Allocation vs Selection vs Interaction
                     fig_brinson = go.Figure()
-                    fig_brinson.add_trace(go.Bar(
-                        x=["Decomposition"],
-                        y=[alloc],
-                        name="Allocation",
-                        marker_color=T.accent,
-                    ))
-                    fig_brinson.add_trace(go.Bar(
-                        x=["Decomposition"],
-                        y=[selec],
-                        name="Selection",
-                        marker_color="#D29922",
-                    ))
-                    fig_brinson.add_trace(go.Bar(
-                        x=["Decomposition"],
-                        y=[inter],
-                        name="Interaction",
-                        marker_color=T.text_muted,
-                    ))
+                    fig_brinson.add_trace(
+                        go.Bar(
+                            x=["Decomposition"],
+                            y=[alloc],
+                            name="Allocation",
+                            marker_color=T.accent,
+                        )
+                    )
+                    fig_brinson.add_trace(
+                        go.Bar(
+                            x=["Decomposition"],
+                            y=[selec],
+                            name="Selection",
+                            marker_color="#D29922",
+                        )
+                    )
+                    fig_brinson.add_trace(
+                        go.Bar(
+                            x=["Decomposition"],
+                            y=[inter],
+                            name="Interaction",
+                            marker_color=T.text_muted,
+                        )
+                    )
                     fig_brinson.update_layout(barmode="stack")
                     _dark_layout(fig_brinson, "Allocation / Selection / Interaction", height=280)
                     fig_brinson.update_yaxes(tickformat=".4f")
-                    st.plotly_chart(fig_brinson, use_container_width=True, config={"displayModeBar": False})
+                    st.plotly_chart(
+                        fig_brinson, use_container_width=True, config={"displayModeBar": False}
+                    )
 
                 # Per-sector breakdown table
                 sector_df = brinson.get("sector_detail")
@@ -652,8 +718,10 @@ with tab_attr:
                     render_section("Sector Attribution Detail")
 
                     display_cols = [
-                        "portfolio_weight", "benchmark_weight",
-                        "allocation_effect", "selection_effect",
+                        "portfolio_weight",
+                        "benchmark_weight",
+                        "allocation_effect",
+                        "selection_effect",
                     ]
                     available_cols = [c for c in display_cols if c in sector_df.columns]
 
@@ -668,12 +736,14 @@ with tab_attr:
                         fmt_df = fmt_df.rename(columns=col_rename)
 
                         st.dataframe(
-                            fmt_df.style.format({
-                                "Port Weight": "{:.2%}",
-                                "Bench Weight": "{:.2%}",
-                                "Allocation": "{:+.6f}",
-                                "Selection": "{:+.6f}",
-                            }).background_gradient(
+                            fmt_df.style.format(
+                                {
+                                    "Port Weight": "{:.2%}",
+                                    "Bench Weight": "{:.2%}",
+                                    "Allocation": "{:+.6f}",
+                                    "Selection": "{:+.6f}",
+                                }
+                            ).background_gradient(
                                 subset=["Allocation", "Selection"],
                                 cmap="RdYlGn",
                                 vmin=-0.01,
@@ -690,9 +760,11 @@ with tab_attr:
                     render_section("Factor Attribution")
 
                     # Factor betas table
-                    factor_rows = attr_df[attr_df.index.isin(
-                        [f for f in attr_df.index if f not in ["Alpha", "Residual"]]
-                    )]
+                    factor_rows = attr_df[
+                        attr_df.index.isin(
+                            [f for f in attr_df.index if f not in ["Alpha", "Residual"]]
+                        )
+                    ]
 
                     if not factor_rows.empty:
                         display_factor = factor_rows[["beta", "contribution_annual"]].copy()
@@ -703,10 +775,12 @@ with tab_attr:
                         display_factor["R-squared"] = f"{r_sq:.4f}"
 
                         st.dataframe(
-                            display_factor.style.format({
-                                "Beta": "{:.4f}",
-                                "Contribution (ann.)": "{:+.6f}",
-                            }),
+                            display_factor.style.format(
+                                {
+                                    "Beta": "{:.4f}",
+                                    "Contribution (ann.)": "{:+.6f}",
+                                }
+                            ),
                             use_container_width=True,
                         )
 
@@ -722,26 +796,36 @@ with tab_attr:
                     pie_data["Residual"] = abs(residual_val)
 
                     if sum(pie_data.values()) > 0:
-                        fig_pie = go.Figure(data=[go.Pie(
-                            labels=list(pie_data.keys()),
-                            values=list(pie_data.values()),
-                            hole=0.45,
-                            textinfo="label+percent",
-                            textfont=dict(
-                                size=11,
-                                family="JetBrains Mono, monospace",
-                                color=T.text,
-                            ),
-                            marker=dict(
-                                colors=[
-                                    T.accent, "#D29922", "#58A6FF",
-                                    T.positive, T.warning, T.negative,
-                                    T.text_muted,
-                                ][:len(pie_data)],
-                            ),
-                        )])
+                        fig_pie = go.Figure(
+                            data=[
+                                go.Pie(
+                                    labels=list(pie_data.keys()),
+                                    values=list(pie_data.values()),
+                                    hole=0.45,
+                                    textinfo="label+percent",
+                                    textfont=dict(
+                                        size=11,
+                                        family="JetBrains Mono, monospace",
+                                        color=T.text,
+                                    ),
+                                    marker=dict(
+                                        colors=[
+                                            T.accent,
+                                            "#D29922",
+                                            "#58A6FF",
+                                            T.positive,
+                                            T.warning,
+                                            T.negative,
+                                            T.text_muted,
+                                        ][: len(pie_data)],
+                                    ),
+                                )
+                            ]
+                        )
                         _dark_layout(fig_pie, "Return Decomposition", height=360)
-                        st.plotly_chart(fig_pie, use_container_width=True, config={"displayModeBar": False})
+                        st.plotly_chart(
+                            fig_pie, use_container_width=True, config={"displayModeBar": False}
+                        )
 
 
 # ══════════════════════════════════════════════════════════════
@@ -752,7 +836,7 @@ with tab_regime:
 
     st.markdown(
         f'<div style="{T.font_caption};color:{T.text_muted};margin-bottom:{T.sp_lg}">'
-        f'Composite regime detection combining HMM, volatility ratio, and SMA trend methods.</div>',
+        f"Composite regime detection combining HMM, volatility ratio, and SMA trend methods.</div>",
         unsafe_allow_html=True,
     )
 
@@ -767,11 +851,11 @@ with tab_regime:
         with st.spinner("Analyzing market regimes... fetching SPY data and running detectors..."):
             try:
                 from regime_detector import (
-                    get_regime_summary,
-                    get_composite_regime,
-                    get_regime_transitions,
-                    detect_regime_hmm,
                     _fetch_spy_data,
+                    detect_regime_hmm,
+                    get_composite_regime,
+                    get_regime_summary,
+                    get_regime_transitions,
                 )
 
                 summary = get_regime_summary()
@@ -835,7 +919,11 @@ with tab_regime:
 
         # -- Regime history chart --
         history = summary.get("historical_regimes")
-        if isinstance(history, pd.DataFrame) and not history.empty and "composite_signal" in history.columns:
+        if (
+            isinstance(history, pd.DataFrame)
+            and not history.empty
+            and "composite_signal" in history.columns
+        ):
             render_section("Regime History")
 
             try:
@@ -861,14 +949,16 @@ with tab_regime:
                     mask = hist_df["composite_signal"] == regime_label
                     subset = hist_df[mask]
                     if not subset.empty:
-                        fig_hist.add_trace(go.Bar(
-                            x=subset["date"],
-                            y=[1] * len(subset),
-                            name=regime_label,
-                            marker_color=color,
-                            opacity=0.8,
-                            width=86400000,  # 1 day in ms
-                        ))
+                        fig_hist.add_trace(
+                            go.Bar(
+                                x=subset["date"],
+                                y=[1] * len(subset),
+                                name=regime_label,
+                                marker_color=color,
+                                opacity=0.8,
+                                width=86400000,  # 1 day in ms
+                            )
+                        )
 
                 _dark_layout(fig_hist, "Composite Regime Timeline (SPY)", height=200)
                 fig_hist.update_layout(
@@ -877,7 +967,9 @@ with tab_regime:
                     yaxis=dict(visible=False),
                     bargap=0,
                 )
-                st.plotly_chart(fig_hist, use_container_width=True, config={"displayModeBar": False})
+                st.plotly_chart(
+                    fig_hist, use_container_width=True, config={"displayModeBar": False}
+                )
 
             except Exception as e:
                 st.caption(f"Could not render regime history chart: {e}")
@@ -899,13 +991,16 @@ with tab_regime:
                 # Calculate frequency and avg return/vol per regime
                 # Need returns aligned with regime labels
                 from regime_detector import _fetch_spy_data
+
                 prices_r, returns_r = _fetch_spy_data(period_years=2)
 
                 if returns_r is not None:
-                    aligned = pd.DataFrame({
-                        "regime": hmm_regimes,
-                        "return": returns_r,
-                    }).dropna()
+                    aligned = pd.DataFrame(
+                        {
+                            "regime": hmm_regimes,
+                            "return": returns_r,
+                        }
+                    ).dropna()
 
                     for rlabel in regime_labels:
                         mask = aligned["regime"] == rlabel
@@ -913,22 +1008,32 @@ with tab_regime:
                         total = len(aligned)
                         regime_rets = aligned.loc[mask, "return"]
 
-                        stats_rows.append({
-                            "Regime": rlabel,
-                            "Avg Duration (days)": avg_duration.get(rlabel, 0),
-                            "Frequency": f"{count / total:.1%}" if total > 0 else "0%",
-                            "Avg Daily Return": f"{regime_rets.mean():.4%}" if len(regime_rets) > 0 else "N/A",
-                            "Avg Annualized Vol": f"{regime_rets.std() * np.sqrt(252):.2%}" if len(regime_rets) > 1 else "N/A",
-                        })
+                        stats_rows.append(
+                            {
+                                "Regime": rlabel,
+                                "Avg Duration (days)": avg_duration.get(rlabel, 0),
+                                "Frequency": f"{count / total:.1%}" if total > 0 else "0%",
+                                "Avg Daily Return": (
+                                    f"{regime_rets.mean():.4%}" if len(regime_rets) > 0 else "N/A"
+                                ),
+                                "Avg Annualized Vol": (
+                                    f"{regime_rets.std() * np.sqrt(252):.2%}"
+                                    if len(regime_rets) > 1
+                                    else "N/A"
+                                ),
+                            }
+                        )
                 else:
                     for rlabel in regime_labels:
-                        stats_rows.append({
-                            "Regime": rlabel,
-                            "Avg Duration (days)": avg_duration.get(rlabel, 0),
-                            "Frequency": "N/A",
-                            "Avg Daily Return": "N/A",
-                            "Avg Annualized Vol": "N/A",
-                        })
+                        stats_rows.append(
+                            {
+                                "Regime": rlabel,
+                                "Avg Duration (days)": avg_duration.get(rlabel, 0),
+                                "Frequency": "N/A",
+                                "Avg Daily Return": "N/A",
+                                "Avg Annualized Vol": "N/A",
+                            }
+                        )
 
                 stats_df = pd.DataFrame(stats_rows).set_index("Regime")
                 st.dataframe(stats_df, use_container_width=True)
@@ -945,34 +1050,38 @@ with tab_regime:
                     # Normalize to probabilities
                     tm_norm = tm.div(tm.sum(axis=1).replace(0, 1), axis=0)
 
-                    fig_tm = go.Figure(data=go.Heatmap(
-                        z=tm_norm.values,
-                        x=tm_norm.columns.tolist(),
-                        y=tm_norm.index.tolist(),
-                        text=tm_norm.map(lambda x: f"{x:.1%}").values,
-                        texttemplate="%{text}",
-                        textfont=dict(
-                            size=13,
-                            family="JetBrains Mono, monospace",
-                            color=T.text,
-                        ),
-                        colorscale=[
-                            [0, T.surface],
-                            [0.5, T.accent],
-                            [1, T.positive],
-                        ],
-                        showscale=True,
-                        colorbar=dict(
-                            title="P(transition)",
-                            tickformat=".0%",
-                            len=0.6,
-                        ),
-                        hovertemplate="From: %{y}<br>To: %{x}<br>P: %{text}<extra></extra>",
-                    ))
+                    fig_tm = go.Figure(
+                        data=go.Heatmap(
+                            z=tm_norm.values,
+                            x=tm_norm.columns.tolist(),
+                            y=tm_norm.index.tolist(),
+                            text=tm_norm.map(lambda x: f"{x:.1%}").values,
+                            texttemplate="%{text}",
+                            textfont=dict(
+                                size=13,
+                                family="JetBrains Mono, monospace",
+                                color=T.text,
+                            ),
+                            colorscale=[
+                                [0, T.surface],
+                                [0.5, T.accent],
+                                [1, T.positive],
+                            ],
+                            showscale=True,
+                            colorbar=dict(
+                                title="P(transition)",
+                                tickformat=".0%",
+                                len=0.6,
+                            ),
+                            hovertemplate="From: %{y}<br>To: %{x}<br>P: %{text}<extra></extra>",
+                        )
+                    )
                     _dark_layout(fig_tm, "Transition Probabilities (HMM Regimes)", height=320)
                     fig_tm.update_xaxes(title="To Regime")
                     fig_tm.update_yaxes(title="From Regime")
-                    st.plotly_chart(fig_tm, use_container_width=True, config={"displayModeBar": False})
+                    st.plotly_chart(
+                        fig_tm, use_container_width=True, config={"displayModeBar": False}
+                    )
 
             except Exception as e:
                 st.caption(f"Could not render transition matrix: {e}")
@@ -980,6 +1089,7 @@ with tab_regime:
 # Floating AI Assistant
 try:
     from ui.floating_chat import render_floating_ai_chat
+
     render_floating_ai_chat()
 except Exception:
     pass

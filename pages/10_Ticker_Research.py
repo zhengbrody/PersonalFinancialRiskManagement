@@ -5,21 +5,25 @@ Works standalone -- no portfolio analysis required.
 """
 
 import os
-import streamlit as st
+from datetime import datetime
+
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+import streamlit as st
 import yfinance as yf
-from datetime import datetime
 
-from ui.shared_sidebar import render_shared_sidebar
-from ui.components import (
-    render_section, render_kpi_row, render_ai_digest,
-    render_chart, render_pt_range_bar,
-)
-from ui.tokens import T
+from app import CLR_ACCENT, CLR_DANGER, CLR_GOLD, CLR_GOOD, CLR_MUTED, call_llm
 from i18n import get_translator
-from app import call_llm, CLR_ACCENT, CLR_GOOD, CLR_DANGER, CLR_WARN, CLR_MUTED, CLR_GOLD
+from ui.components import (
+    render_ai_digest,
+    render_chart,
+    render_kpi_row,
+    render_pt_range_bar,
+    render_section,
+)
+from ui.shared_sidebar import render_shared_sidebar
+from ui.tokens import T
 
 # ── Shared sidebar ────────────────────────────────────────────
 render_shared_sidebar()
@@ -38,6 +42,7 @@ if not fmp_key:
 # ══════════════════════════════════════════════════════════════
 #  Helpers
 # ══════════════════════════════════════════════════════════════
+
 
 def _fmt_market_cap(val) -> str:
     if val is None or (isinstance(val, float) and np.isnan(val)):
@@ -89,6 +94,7 @@ def _safe(d, key, default=None):
 #  Cached data fetcher
 # ══════════════════════════════════════════════════════════════
 
+
 @st.cache_data(ttl=600, show_spinner=False)
 def _cached_fetch_ticker_research(ticker: str, fmp_key: str) -> dict:
     """Fetch comprehensive ticker research data with caching."""
@@ -101,7 +107,8 @@ def _build_research_inline(ticker: str, fmp_key: str) -> dict:
     market_intelligence functions and yfinance directly.
     """
     from market_intelligence import (
-        compute_simple_dcf, fetch_insider_signals,
+        compute_simple_dcf,
+        fetch_insider_signals,
         fetch_price_targets_fmp,
     )
 
@@ -215,13 +222,23 @@ def _build_research_inline(ticker: str, fmp_key: str) -> dict:
             rs = avg_gain / avg_loss
             rsi = 100 - (100 / (1 + rs))
             _rsi_last = rsi.iloc[-1] if not rsi.empty else None
-            tech["rsi"] = float(_rsi_last) if _rsi_last is not None and not np.isnan(_rsi_last) else None
+            tech["rsi"] = (
+                float(_rsi_last) if _rsi_last is not None and not np.isnan(_rsi_last) else None
+            )
 
             # SMA 50 / 200
             _sma50_last = close.rolling(50).mean().iloc[-1] if len(close) >= 50 else None
-            sma50 = float(_sma50_last) if _sma50_last is not None and not np.isnan(_sma50_last) else None
+            sma50 = (
+                float(_sma50_last)
+                if _sma50_last is not None and not np.isnan(_sma50_last)
+                else None
+            )
             _sma200_last = close.rolling(200).mean().iloc[-1] if len(close) >= 200 else None
-            sma200 = float(_sma200_last) if _sma200_last is not None and not np.isnan(_sma200_last) else None
+            sma200 = (
+                float(_sma200_last)
+                if _sma200_last is not None and not np.isnan(_sma200_last)
+                else None
+            )
             tech["sma50"] = sma50
             tech["sma200"] = sma200
             tech["price_vs_sma50"] = ((last_price - sma50) / sma50 * 100) if sma50 else None
@@ -303,11 +320,15 @@ def _build_research_inline(ticker: str, fmp_key: str) -> dict:
     if tech.get("price_vs_sma200") is not None:
         context_lines.append(f"Price vs SMA200: {tech['price_vs_sma200']:+.1f}%")
     if tech.get("macd") is not None:
-        context_lines.append(f"MACD: {tech['macd']:.2f} | Signal: {tech['macd_signal']:.2f} | Hist: {tech['macd_histogram']:.2f}")
+        context_lines.append(
+            f"MACD: {tech['macd']:.2f} | Signal: {tech['macd_signal']:.2f} | Hist: {tech['macd_histogram']:.2f}"
+        )
 
     insider = result.get("insider", {})
     if insider:
-        context_lines.append(f"Insider Activity: {insider.get('direction', 'N/A')} | Net Shares: {insider.get('net_shares', 0):,}")
+        context_lines.append(
+            f"Insider Activity: {insider.get('direction', 'N/A')} | Net Shares: {insider.get('net_shares', 0):,}"
+        )
 
     inst_data = result.get("institutional", {})
     if inst_data.get("pct_held") is not None:
@@ -326,24 +347,27 @@ page_title = "Ticker Research" if lang == "en" else "个股研究"
 page_subtitle = "Deep-dive single-stock analysis" if lang == "en" else "个股深度分析"
 
 st.markdown(
-    f'<div style="{T.font_page_title};color:{T.text};margin-bottom:4px">'
-    f'{page_title}</div>',
+    f'<div style="{T.font_page_title};color:{T.text};margin-bottom:4px">' f"{page_title}</div>",
     unsafe_allow_html=True,
 )
 st.markdown(
     f'<div style="{T.font_caption};color:{T.text_muted};margin-bottom:{T.sp_xl}">'
-    f'{page_subtitle}</div>',
+    f"{page_subtitle}</div>",
     unsafe_allow_html=True,
 )
 
 col_input, col_btn = st.columns([3, 1])
 with col_input:
-    ticker_input = st.text_input(
-        "Ticker Symbol" if lang == "en" else "股票代码",
-        value=st.session_state.get("_research_ticker", ""),
-        placeholder="Enter ticker symbol, e.g. AAPL",
-        key="research_ticker_input",
-    ).strip().upper()
+    ticker_input = (
+        st.text_input(
+            "Ticker Symbol" if lang == "en" else "股票代码",
+            value=st.session_state.get("_research_ticker", ""),
+            placeholder="Enter ticker symbol, e.g. AAPL",
+            key="research_ticker_input",
+        )
+        .strip()
+        .upper()
+    )
 with col_btn:
     st.markdown("<div style='margin-top:28px'></div>", unsafe_allow_html=True)
     search_clicked = st.button(
@@ -362,7 +386,7 @@ if not ticker:
     st.markdown(
         f'<div style="{T.font_body};color:{T.text_secondary};margin-top:{T.sp_xl};text-align:center">'
         f'{"Enter a ticker symbol above to begin research." if lang == "en" else "请在上方输入股票代码开始研究。"}'
-        f'</div>',
+        f"</div>",
         unsafe_allow_html=True,
     )
     st.stop()
@@ -371,7 +395,9 @@ if not ticker:
 #  Fetch Research Data
 # ══════════════════════════════════════════════════════════════
 
-with st.spinner(f"Fetching research data for {ticker}..." if lang == "en" else f"正在获取 {ticker} 研究数据..."):
+with st.spinner(
+    f"Fetching research data for {ticker}..." if lang == "en" else f"正在获取 {ticker} 研究数据..."
+):
     research = _cached_fetch_ticker_research(ticker, fmp_key)
 
 if not research or research.get("error"):
@@ -404,14 +430,16 @@ try:
     price = fundamentals.get("price")
     high52 = fundamentals.get("52w_high")
     low52 = fundamentals.get("52w_low")
-    range_str = f'{_fmt_dollar(low52)} - {_fmt_dollar(high52)}' if low52 and high52 else "---"
+    range_str = f"{_fmt_dollar(low52)} - {_fmt_dollar(high52)}" if low52 and high52 else "---"
 
-    render_kpi_row([
-        {"label": "Market Cap", "value": _fmt_market_cap(fundamentals.get("market_cap"))},
-        {"label": "Current Price", "value": _fmt_dollar(price)},
-        {"label": "Beta (5Y)", "value": _fmt_ratio(fundamentals.get("beta"))},
-        {"label": "52W Range", "value": range_str},
-    ])
+    render_kpi_row(
+        [
+            {"label": "Market Cap", "value": _fmt_market_cap(fundamentals.get("market_cap"))},
+            {"label": "Current Price", "value": _fmt_dollar(price)},
+            {"label": "Beta (5Y)", "value": _fmt_ratio(fundamentals.get("beta"))},
+            {"label": "52W Range", "value": range_str},
+        ]
+    )
 
     desc = profile.get("description", "")
     if desc:
@@ -427,33 +455,43 @@ try:
 
     render_section("Fundamentals" if lang == "en" else "基本面指标")
 
-    render_kpi_row([
-        {"label": "P/E (TTM)", "value": _fmt_ratio(fundamentals.get("pe_ttm"))},
-        {"label": "P/E (Fwd)", "value": _fmt_ratio(fundamentals.get("pe_fwd"))},
-        {"label": "EPS (TTM)", "value": _fmt_dollar(fundamentals.get("eps_ttm"))},
-        {"label": "Div Yield", "value": _fmt_pct(fundamentals.get("div_yield"))},
-    ])
+    render_kpi_row(
+        [
+            {"label": "P/E (TTM)", "value": _fmt_ratio(fundamentals.get("pe_ttm"))},
+            {"label": "P/E (Fwd)", "value": _fmt_ratio(fundamentals.get("pe_fwd"))},
+            {"label": "EPS (TTM)", "value": _fmt_dollar(fundamentals.get("eps_ttm"))},
+            {"label": "Div Yield", "value": _fmt_pct(fundamentals.get("div_yield"))},
+        ]
+    )
 
     st.markdown(f"<div style='height:{T.sp_sm}'></div>", unsafe_allow_html=True)
 
-    render_kpi_row([
-        {"label": "Rev Growth", "value": _fmt_pct(fundamentals.get("rev_growth"))},
-        {"label": "Earn Growth", "value": _fmt_pct(fundamentals.get("earn_growth"))},
-        {"label": "Profit Margin", "value": _fmt_pct(fundamentals.get("profit_margin"))},
-        {"label": "ROE", "value": _fmt_pct(fundamentals.get("roe"))},
-    ])
+    render_kpi_row(
+        [
+            {"label": "Rev Growth", "value": _fmt_pct(fundamentals.get("rev_growth"))},
+            {"label": "Earn Growth", "value": _fmt_pct(fundamentals.get("earn_growth"))},
+            {"label": "Profit Margin", "value": _fmt_pct(fundamentals.get("profit_margin"))},
+            {"label": "ROE", "value": _fmt_pct(fundamentals.get("roe"))},
+        ]
+    )
 
     st.markdown(f"<div style='height:{T.sp_sm}'></div>", unsafe_allow_html=True)
 
     de_raw = fundamentals.get("de_ratio")
-    de_display = _fmt_ratio(de_raw / 100, 2) if (de_raw is not None and not (isinstance(de_raw, float) and np.isnan(de_raw))) else "---"
+    de_display = (
+        _fmt_ratio(de_raw / 100, 2)
+        if (de_raw is not None and not (isinstance(de_raw, float) and np.isnan(de_raw)))
+        else "---"
+    )
 
-    render_kpi_row([
-        {"label": "D/E Ratio", "value": de_display},
-        {"label": "Current Ratio", "value": _fmt_ratio(fundamentals.get("current_ratio"))},
-        {"label": "Avg Volume", "value": _fmt_volume(fundamentals.get("avg_volume"))},
-        {"label": "% from 52W High", "value": _fmt_pct(fundamentals.get("pct_from_52w_high"))},
-    ])
+    render_kpi_row(
+        [
+            {"label": "D/E Ratio", "value": de_display},
+            {"label": "Current Ratio", "value": _fmt_ratio(fundamentals.get("current_ratio"))},
+            {"label": "Avg Volume", "value": _fmt_volume(fundamentals.get("avg_volume"))},
+            {"label": "% from 52W High", "value": _fmt_pct(fundamentals.get("pct_from_52w_high"))},
+        ]
+    )
 
     # ══════════════════════════════════════════════════════════
     #  4. Valuation Analysis
@@ -480,25 +518,27 @@ try:
 
     upside_str = f"{upside_pct:+.1f}%" if upside_pct is not None else "---"
 
-    render_kpi_row([
-        {"label": "Intrinsic Value", "value": _fmt_dollar(intrinsic)},
-        {"label": "Current Price", "value": _fmt_dollar(current_p)},
-        {"label": "Upside / Downside", "value": upside_str},
-        {"label": "Verdict", "value": verdict},
-    ])
+    render_kpi_row(
+        [
+            {"label": "Intrinsic Value", "value": _fmt_dollar(intrinsic)},
+            {"label": "Current Price", "value": _fmt_dollar(current_p)},
+            {"label": "Upside / Downside", "value": upside_str},
+            {"label": "Verdict", "value": verdict},
+        ]
+    )
 
     st.markdown(
         f'<div style="{T.font_caption};color:{T.text_muted};margin-top:{T.sp_xs}">'
-        f'Method: {method}</div>',
+        f"Method: {method}</div>",
         unsafe_allow_html=True,
     )
 
     if verdict and verdict != "N/A":
         st.markdown(
             f'<div style="display:inline-block;background:rgba(0,0,0,0.2);'
-            f'border:1px solid {verdict_color};color:{verdict_color};'
+            f"border:1px solid {verdict_color};color:{verdict_color};"
             f'{T.font_label};padding:4px 12px;border-radius:12px;margin-top:{T.sp_sm}">'
-            f'{verdict}</div>',
+            f"{verdict}</div>",
             unsafe_allow_html=True,
         )
 
@@ -513,12 +553,14 @@ try:
     consensus_target = analyst.get("target_mean")
     analyst_upside = analyst.get("upside")
 
-    render_kpi_row([
-        {"label": "Rating", "value": str(rating).replace("_", " ").title()},
-        {"label": "# Analysts", "value": str(num_analysts) if num_analysts else "---"},
-        {"label": "Consensus Target", "value": _fmt_dollar(consensus_target)},
-        {"label": "Upside", "value": _fmt_pct(analyst_upside)},
-    ])
+    render_kpi_row(
+        [
+            {"label": "Rating", "value": str(rating).replace("_", " ").title()},
+            {"label": "# Analysts", "value": str(num_analysts) if num_analysts else "---"},
+            {"label": "Consensus Target", "value": _fmt_dollar(consensus_target)},
+            {"label": "Upside", "value": _fmt_pct(analyst_upside)},
+        ]
+    )
 
     # Price Target Range Bar
     pt_low = analyst.get("fmp_low") or analyst.get("target_low")
@@ -541,11 +583,17 @@ try:
     upgrades_list = analyst.get("upgrades_downgrades", [])
     if upgrades_list:
         st.markdown(f"<div style='height:{T.sp_sm}'></div>", unsafe_allow_html=True)
-        with render_section("Recent Upgrades / Downgrades" if lang == "en" else "近期评级变动", collapsed=True):
+        with render_section(
+            "Recent Upgrades / Downgrades" if lang == "en" else "近期评级变动", collapsed=True
+        ):
             try:
                 ug_df = pd.DataFrame(upgrades_list)
                 # Keep only useful columns
-                display_cols = [c for c in ["GradeDate", "Firm", "ToGrade", "FromGrade", "Action"] if c in ug_df.columns]
+                display_cols = [
+                    c
+                    for c in ["GradeDate", "Firm", "ToGrade", "FromGrade", "Action"]
+                    if c in ug_df.columns
+                ]
                 if not display_cols:
                     display_cols = list(ug_df.columns)[:5]
                 st.dataframe(ug_df[display_cols], use_container_width=True, hide_index=True)
@@ -574,18 +622,30 @@ try:
         {
             "label": "RSI (14)",
             "value": f"{rsi_val:.1f}" if rsi_val is not None else "---",
-            "delta": ("Overbought" if rsi_val and rsi_val >= 70 else "Oversold" if rsi_val and rsi_val <= 30 else None),
+            "delta": (
+                "Overbought"
+                if rsi_val and rsi_val >= 70
+                else "Oversold" if rsi_val and rsi_val <= 30 else None
+            ),
             "delta_color": rsi_color,
         },
         {
             "label": "Price vs SMA50",
             "value": f"{pv_sma50:+.1f}%" if pv_sma50 is not None else "---",
-            "delta_color": "positive" if pv_sma50 and pv_sma50 > 0 else "negative" if pv_sma50 and pv_sma50 < 0 else "neutral",
+            "delta_color": (
+                "positive"
+                if pv_sma50 and pv_sma50 > 0
+                else "negative" if pv_sma50 and pv_sma50 < 0 else "neutral"
+            ),
         },
         {
             "label": "Price vs SMA200",
             "value": f"{pv_sma200:+.1f}%" if pv_sma200 is not None else "---",
-            "delta_color": "positive" if pv_sma200 and pv_sma200 > 0 else "negative" if pv_sma200 and pv_sma200 < 0 else "neutral",
+            "delta_color": (
+                "positive"
+                if pv_sma200 and pv_sma200 > 0
+                else "negative" if pv_sma200 and pv_sma200 < 0 else "neutral"
+            ),
         },
     ]
     render_kpi_row(kpi_tech)
@@ -597,8 +657,16 @@ try:
     bb_pos = technical.get("bb_position")
 
     if macd_val is not None:
-        macd_label = "Bullish" if macd_hist and macd_hist > 0 else "Bearish" if macd_hist and macd_hist < 0 else "Neutral"
-        macd_color = CLR_GOOD if macd_hist and macd_hist > 0 else CLR_DANGER if macd_hist and macd_hist < 0 else CLR_MUTED
+        macd_label = (
+            "Bullish"
+            if macd_hist and macd_hist > 0
+            else "Bearish" if macd_hist and macd_hist < 0 else "Neutral"
+        )
+        macd_color = (
+            CLR_GOOD
+            if macd_hist and macd_hist > 0
+            else CLR_DANGER if macd_hist and macd_hist < 0 else CLR_MUTED
+        )
 
         st.markdown(f"<div style='height:{T.sp_sm}'></div>", unsafe_allow_html=True)
 
@@ -609,11 +677,11 @@ try:
                 f'border-radius:{T.radius};padding:{T.sp_lg}">'
                 f'<div style="{T.font_label};color:{T.text_secondary}">MACD</div>'
                 f'<div style="font-size:20px;font-weight:600;color:{T.text};margin:4px 0">'
-                f'{macd_val:.2f}</div>'
+                f"{macd_val:.2f}</div>"
                 f'<div style="{T.font_caption};color:{T.text_muted}">'
-                f'Signal: {macd_sig:.2f} | Histogram: {macd_hist:+.2f}</div>'
+                f"Signal: {macd_sig:.2f} | Histogram: {macd_hist:+.2f}</div>"
                 f'<div style="{T.font_caption};color:{macd_color};margin-top:2px">{macd_label}</div>'
-                f'</div>',
+                f"</div>",
                 unsafe_allow_html=True,
             )
         with col_bb:
@@ -631,18 +699,21 @@ try:
                     bb_color = CLR_MUTED
 
             st.markdown(
-                f'<div style="background:{T.surface};border:1px solid {T.border_subtle};'
-                f'border-radius:{T.radius};padding:{T.sp_lg}">'
-                f'<div style="{T.font_label};color:{T.text_secondary}">Bollinger Band Position</div>'
-                f'<div style="font-size:20px;font-weight:600;color:{T.text};margin:4px 0">'
-                f'{bb_pos:.0%}</div>'
-                f'<div style="{T.font_caption};color:{bb_color}">{bb_label}</div>'
-                f'</div>' if bb_pos is not None else
-                f'<div style="background:{T.surface};border:1px solid {T.border_subtle};'
-                f'border-radius:{T.radius};padding:{T.sp_lg}">'
-                f'<div style="{T.font_label};color:{T.text_secondary}">Bollinger Band Position</div>'
-                f'<div style="font-size:20px;font-weight:600;color:{T.text};margin:4px 0">---</div>'
-                f'</div>',
+                (
+                    f'<div style="background:{T.surface};border:1px solid {T.border_subtle};'
+                    f'border-radius:{T.radius};padding:{T.sp_lg}">'
+                    f'<div style="{T.font_label};color:{T.text_secondary}">Bollinger Band Position</div>'
+                    f'<div style="font-size:20px;font-weight:600;color:{T.text};margin:4px 0">'
+                    f"{bb_pos:.0%}</div>"
+                    f'<div style="{T.font_caption};color:{bb_color}">{bb_label}</div>'
+                    f"</div>"
+                    if bb_pos is not None
+                    else f'<div style="background:{T.surface};border:1px solid {T.border_subtle};'
+                    f'border-radius:{T.radius};padding:{T.sp_lg}">'
+                    f'<div style="{T.font_label};color:{T.text_secondary}">Bollinger Band Position</div>'
+                    f'<div style="font-size:20px;font-weight:600;color:{T.text};margin:4px 0">---</div>'
+                    f"</div>"
+                ),
                 unsafe_allow_html=True,
             )
 
@@ -653,27 +724,39 @@ try:
         close = hist["Close"]
         fig = go.Figure()
 
-        fig.add_trace(go.Scatter(
-            x=hist.index, y=close,
-            mode="lines", name="Price",
-            line=dict(color=CLR_ACCENT, width=2),
-        ))
+        fig.add_trace(
+            go.Scatter(
+                x=hist.index,
+                y=close,
+                mode="lines",
+                name="Price",
+                line=dict(color=CLR_ACCENT, width=2),
+            )
+        )
 
         if len(close) >= 50:
             sma50_series = close.rolling(50).mean()
-            fig.add_trace(go.Scatter(
-                x=hist.index, y=sma50_series,
-                mode="lines", name="SMA 50",
-                line=dict(color=CLR_GOLD, width=1, dash="dash"),
-            ))
+            fig.add_trace(
+                go.Scatter(
+                    x=hist.index,
+                    y=sma50_series,
+                    mode="lines",
+                    name="SMA 50",
+                    line=dict(color=CLR_GOLD, width=1, dash="dash"),
+                )
+            )
 
         if len(close) >= 200:
             sma200_series = close.rolling(200).mean()
-            fig.add_trace(go.Scatter(
-                x=hist.index, y=sma200_series,
-                mode="lines", name="SMA 200",
-                line=dict(color=CLR_DANGER, width=1, dash="dot"),
-            ))
+            fig.add_trace(
+                go.Scatter(
+                    x=hist.index,
+                    y=sma200_series,
+                    mode="lines",
+                    name="SMA 200",
+                    line=dict(color=CLR_DANGER, width=1, dash="dot"),
+                )
+            )
 
         fig.update_layout(
             title=f"{ticker} -- 1Y Price Chart",
@@ -694,27 +777,45 @@ try:
     net_shares = insider.get("net_shares", 0)
     txn_count = insider.get("count", 0)
 
-    dir_color = CLR_GOOD if "buyer" in direction.lower() else CLR_DANGER if "seller" in direction.lower() else CLR_MUTED
+    dir_color = (
+        CLR_GOOD
+        if "buyer" in direction.lower()
+        else CLR_DANGER if "seller" in direction.lower() else CLR_MUTED
+    )
 
-    render_kpi_row([
-        {
-            "label": "Direction (90d)",
-            "value": direction,
-            "delta_color": "positive" if "buyer" in direction.lower() else "negative" if "seller" in direction.lower() else "neutral",
-        },
-        {"label": "Net Shares", "value": f"{net_shares:,}"},
-        {"label": "Transactions", "value": str(txn_count)},
-    ])
+    render_kpi_row(
+        [
+            {
+                "label": "Direction (90d)",
+                "value": direction,
+                "delta_color": (
+                    "positive"
+                    if "buyer" in direction.lower()
+                    else "negative" if "seller" in direction.lower() else "neutral"
+                ),
+            },
+            {"label": "Net Shares", "value": f"{net_shares:,}"},
+            {"label": "Transactions", "value": str(txn_count)},
+        ]
+    )
 
     recent_txns = insider.get("recent_txns", [])
     if recent_txns:
-        with render_section("Recent Insider Transactions" if lang == "en" else "近期内部人交易", collapsed=True):
+        with render_section(
+            "Recent Insider Transactions" if lang == "en" else "近期内部人交易", collapsed=True
+        ):
             try:
                 txn_df = pd.DataFrame(recent_txns)
-                display_cols = [c for c in ["Insider", "Text", "Shares", "Value", "Start Date"] if c in txn_df.columns]
+                display_cols = [
+                    c
+                    for c in ["Insider", "Text", "Shares", "Value", "Start Date"]
+                    if c in txn_df.columns
+                ]
                 if not display_cols:
                     display_cols = list(txn_df.columns)[:5]
-                st.dataframe(txn_df[display_cols].head(10), use_container_width=True, hide_index=True)
+                st.dataframe(
+                    txn_df[display_cols].head(10), use_container_width=True, hide_index=True
+                )
             except Exception:
                 st.caption("Could not display insider transactions.")
 
@@ -745,15 +846,23 @@ try:
                 "% Out": "% Held",
                 "Value": "Value",
             }
-            holders_df = holders_df.rename(columns={k: v for k, v in col_rename.items() if k in holders_df.columns})
-            display_cols = [c for c in ["Institution", "Shares", "Value", "% Held", "Date"] if c in holders_df.columns]
+            holders_df = holders_df.rename(
+                columns={k: v for k, v in col_rename.items() if k in holders_df.columns}
+            )
+            display_cols = [
+                c
+                for c in ["Institution", "Shares", "Value", "% Held", "Date"]
+                if c in holders_df.columns
+            ]
             if not display_cols:
                 display_cols = list(holders_df.columns)[:5]
             st.dataframe(holders_df[display_cols], use_container_width=True, hide_index=True)
         except Exception:
             st.caption("Could not display institutional holders.")
     else:
-        st.caption("No institutional holder data available." if lang == "en" else "暂无机构持仓数据。")
+        st.caption(
+            "No institutional holder data available." if lang == "en" else "暂无机构持仓数据。"
+        )
 
     # ══════════════════════════════════════════════════════════
     #  9. AI Investment Summary
@@ -855,8 +964,8 @@ CONFIDENCE: [High / Medium / Low]"""
         subtitle=(
             "Comprehensive equity research note combining earnings, financials, "
             "valuation methods, peer comparison, and top-bank views."
-            if lang == "en" else
-            "综合研报：财报电话会、财务报表、估值方法、同业对比、顶级投行观点。"
+            if lang == "en"
+            else "综合研报：财报电话会、财务报表、估值方法、同业对比、顶级投行观点。"
         ),
     )
 
@@ -867,21 +976,21 @@ CONFIDENCE: [High / Medium / Low]"""
         or os.environ.get("ANTHROPIC_API_KEY", "")
     )
     _fmp_key_for_report = (
-        fmp_key
-        or _safe_get_secret("FMP_API_KEY")
-        or os.environ.get("FMP_API_KEY", "")
+        fmp_key or _safe_get_secret("FMP_API_KEY") or os.environ.get("FMP_API_KEY", "")
     )
     _can_generate = bool(_anth_key) and bool(_fmp_key_for_report)
 
     if not _can_generate:
         missing = []
-        if not _fmp_key_for_report: missing.append("FMP_API_KEY")
-        if not _anth_key: missing.append("ANTHROPIC_API_KEY")
+        if not _fmp_key_for_report:
+            missing.append("FMP_API_KEY")
+        if not _anth_key:
+            missing.append("ANTHROPIC_API_KEY")
         st.info(
             f"🔑 Configure {' + '.join(missing)} in the sidebar or secrets.toml "
             f"to unlock the institutional analyst report."
-            if lang == "en" else
-            f"🔑 在侧边栏或 secrets.toml 中配置 {' + '.join(missing)} 以解锁投行分析报告。"
+            if lang == "en"
+            else f"🔑 在侧边栏或 secrets.toml 中配置 {' + '.join(missing)} 以解锁投行分析报告。"
         )
     else:
         report_key = f"_analyst_report_{ticker.upper()}"
@@ -891,26 +1000,29 @@ CONFIDENCE: [High / Medium / Low]"""
         with bcol1:
             _btn_label = (
                 ("Regenerate Report" if cached_report else "Generate Report")
-                if lang == "en" else
-                ("重新生成报告" if cached_report else "生成分析报告")
+                if lang == "en"
+                else ("重新生成报告" if cached_report else "生成分析报告")
             )
             gen_clicked = st.button(
-                _btn_label, key="generate_analyst_report", type="primary",
+                _btn_label,
+                key="generate_analyst_report",
+                type="primary",
                 use_container_width=True,
             )
         with bcol2:
             st.caption(
                 "~30-60s. Fetches 4Q of statements, peer comps, analyst actions, earnings call + sends to Claude."
-                if lang == "en" else
-                "约 30-60 秒。获取 4 个季度财务报表、同业对比、分析师评级变更、财报电话会，并发送给 Claude。"
+                if lang == "en"
+                else "约 30-60 秒。获取 4 个季度财务报表、同业对比、分析师评级变更、财报电话会，并发送给 Claude。"
             )
 
         if gen_clicked:
             from market_intelligence import generate_analyst_report
+
             with st.spinner(
                 f"📊 Aggregating institutional data for {ticker.upper()}..."
-                if lang == "en" else
-                f"📊 正在聚合 {ticker.upper()} 的机构级数据..."
+                if lang == "en"
+                else f"📊 正在聚合 {ticker.upper()} 的机构级数据..."
             ):
                 result = generate_analyst_report(
                     ticker=ticker.upper(),
@@ -920,24 +1032,20 @@ CONFIDENCE: [High / Medium / Low]"""
                 )
             if result.get("error"):
                 render_unified_error(
-                    message="Analyst report generation failed"
-                            if lang == "en" else
-                            "分析报告生成失败",
+                    message=(
+                        "Analyst report generation failed" if lang == "en" else "分析报告生成失败"
+                    ),
                     detail=result.get("error"),
                     suggestion=(
                         "Check that both FMP and Anthropic API keys are valid, "
                         "and that the ticker exists in FMP's database."
-                        if lang == "en" else
-                        "确认 FMP 和 Anthropic API key 有效，且该 ticker 存在于 FMP 数据库中。"
+                        if lang == "en"
+                        else "确认 FMP 和 Anthropic API key 有效，且该 ticker 存在于 FMP 数据库中。"
                     ),
                 )
             else:
                 st.session_state[report_key] = result["report"]
-                st.success(
-                    "Report generated successfully."
-                    if lang == "en" else
-                    "报告生成成功。"
-                )
+                st.success("Report generated successfully." if lang == "en" else "报告生成成功。")
                 cached_report = result["report"]
 
         if cached_report:
@@ -955,5 +1063,6 @@ except Exception as e:
         else f"渲染 **{ticker}** 研究数据时出错: {str(e)}"
     )
     import traceback
+
     with st.expander("Error Details"):
         st.code(traceback.format_exc())

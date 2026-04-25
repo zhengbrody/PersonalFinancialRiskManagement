@@ -4,9 +4,10 @@
 """
 
 import json
+
 import yfinance as yf
 
-from portfolio_config import PORTFOLIO_HOLDINGS, MARGIN_LOAN
+from portfolio_config import MARGIN_LOAN, PORTFOLIO_HOLDINGS
 
 portfolio = PORTFOLIO_HOLDINGS
 margin_loan = MARGIN_LOAN
@@ -15,12 +16,12 @@ print("正在获取当前价格...")
 values = {}
 for ticker, info in portfolio.items():
     try:
-        hist = yf.Ticker(ticker).history(period='2d', auto_adjust=True)
+        hist = yf.Ticker(ticker).history(period="2d", auto_adjust=True)
         if hist.empty:
             print(f"  警告: {ticker} 无数据，跳过")
             continue
-        price = float(hist['Close'].iloc[-1])
-        values[ticker] = price * info['shares']
+        price = float(hist["Close"].iloc[-1])
+        values[ticker] = price * info["shares"]
     except Exception as e:
         print(f"  警告: {ticker} 获取失败 ({e})，跳过")
 

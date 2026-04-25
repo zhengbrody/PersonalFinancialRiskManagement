@@ -13,34 +13,31 @@ Covers:
   - Helper functions (get_institution_name, get_institution_cik, etc.)
 """
 
-import json
 import os
 import time
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from institutional_tracker import (
-    CUSIP_TO_TICKER,
-    TICKER_TO_CUSIPS,
-    SEC_HEADERS,
+    _TOP_INSTITUTIONS,
     CACHE_DIR,
     CACHE_MAX_AGE_SECONDS,
-    _TOP_INSTITUTIONS,
-    get_top_institutions,
+    CUSIP_TO_TICKER,
+    SEC_HEADERS,
+    TICKER_TO_CUSIPS,
     _cache_key,
-    _read_cache,
-    _write_cache,
     _cusip_to_ticker,
     _parse_13f_xml,
-    fetch_13f_holdings,
-    get_smart_money_signals,
-    get_institutional_ownership,
-    get_institution_name,
-    get_institution_cik,
-    summarize_top_holdings,
+    _read_cache,
+    _write_cache,
     clear_cache,
+    fetch_13f_holdings,
+    get_institution_cik,
+    get_institution_name,
+    get_institutional_ownership,
+    get_smart_money_signals,
+    get_top_institutions,
+    summarize_top_holdings,
 )
-
 
 # ══════════════════════════════════════════════════════════════
 #  Sample XML fixtures
@@ -265,7 +262,7 @@ class TestCacheKey:
         # The hash is the last 16 chars of name_part (after the prefix + '_')
         prefix = "fetch_13f_"
         assert name_part.startswith(prefix)
-        hash_part = name_part[len(prefix):]
+        hash_part = name_part[len(prefix) :]
         assert len(hash_part) == 16
         # Hash should be lowercase hex
         int(hash_part, 16)  # Raises ValueError if not valid hex
@@ -709,6 +706,7 @@ class TestGetSmartMoneySignals:
     @patch("institutional_tracker.fetch_13f_holdings")
     def test_smart_money_signals_sorted_by_conviction(self, mock_fetch, tmp_path):
         """Results should be sorted by num_institutions descending."""
+
         # AAPL will be held by all institutions, RANDO by none
         def fake_fetch(cik, limit=1):
             return [
@@ -819,12 +817,30 @@ class TestHelperFunctions:
             {
                 "filing_date": "2024-02-14",
                 "holdings": [
-                    {"ticker": "AAPL", "name": "APPLE", "cusip": "037833100",
-                     "shares": 100, "value": 5000, "change_pct_qoq": None},
-                    {"ticker": "MSFT", "name": "MICROSOFT", "cusip": "594918104",
-                     "shares": 200, "value": 10000, "change_pct_qoq": None},
-                    {"ticker": "NVDA", "name": "NVIDIA", "cusip": "67066G104",
-                     "shares": 50, "value": 3000, "change_pct_qoq": None},
+                    {
+                        "ticker": "AAPL",
+                        "name": "APPLE",
+                        "cusip": "037833100",
+                        "shares": 100,
+                        "value": 5000,
+                        "change_pct_qoq": None,
+                    },
+                    {
+                        "ticker": "MSFT",
+                        "name": "MICROSOFT",
+                        "cusip": "594918104",
+                        "shares": 200,
+                        "value": 10000,
+                        "change_pct_qoq": None,
+                    },
+                    {
+                        "ticker": "NVDA",
+                        "name": "NVIDIA",
+                        "cusip": "67066G104",
+                        "shares": 50,
+                        "value": 3000,
+                        "change_pct_qoq": None,
+                    },
                 ],
             }
         ]

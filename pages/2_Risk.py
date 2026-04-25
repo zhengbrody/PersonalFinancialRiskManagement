@@ -3,22 +3,34 @@ pages/2_Risk.py
 Deep Risk Analytics: What could go wrong and why?
 """
 
-import streamlit as st
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 import plotly.express as px
-from app import (get_sector, SECTOR_MAP, CLR_ACCENT, CLR_WARN,
-                 CLR_DANGER, CLR_GOOD, CLR_MUTED, CLR_GRID, CLR_GOLD, call_llm)
+import plotly.graph_objects as go
+import streamlit as st
+
+from app import (
+    CLR_ACCENT,
+    CLR_DANGER,
+    CLR_GOLD,
+    CLR_MUTED,
+    CLR_WARN,
+    call_llm,
+    get_sector,
+)
 from i18n import get_translator
 from risk_engine import RiskEngine
-from ui.components import (render_section, render_chart, render_risk_badge,
-                           render_metric_list, render_kpi_row, render_ai_digest,
-                           render_empty_state)
-from ui.tokens import T
+from ui.components import (
+    render_ai_digest,
+    render_chart,
+    render_empty_state,
+    render_section,
+)
 
 # Render shared sidebar
 from ui.shared_sidebar import render_shared_sidebar
+from ui.tokens import T
+
 render_shared_sidebar()
 
 # ── Guard ────────────────────────────────────────────────────
@@ -29,12 +41,15 @@ if not st.session_state.get("analysis_ready"):
         description=(
             "This page shows VaR/CVaR, component VaR, factor betas, stress tests "
             "and the AI risk digest. Run Analysis from the sidebar to unlock."
-            if _lang == "en" else
-            "本页展示 VaR/CVaR、边际 VaR、因子 Beta、压力测试和 AI 风险摘要。"
+            if _lang == "en"
+            else "本页展示 VaR/CVaR、边际 VaR、因子 Beta、压力测试和 AI 风险摘要。"
             "请从侧边栏点击 Run Analysis 解锁。"
         ),
-        action_hint="Monte Carlo @ 10k paths · 6-factor OLS · stress scenarios"
-                   if _lang == "en" else "蒙特卡洛 10k 路径 · 6 因子 OLS · 压力场景",
+        action_hint=(
+            "Monte Carlo @ 10k paths · 6-factor OLS · stress scenarios"
+            if _lang == "en"
+            else "蒙特卡洛 10k 路径 · 6 因子 OLS · 压力场景"
+        ),
     )
     st.stop()
 
@@ -99,7 +114,7 @@ except Exception:
     render_ai_digest(
         f"Portfolio VaR 95% is {report.var_95:.2%} over {mc_horizon} days. "
         f"Max drawdown {report.max_drawdown:.2%}. Stress loss under {market_shock:.0%} shock: {report.stress_loss:.2%}.",
-        sources="Risk Engine"
+        sources="Risk Engine",
     )
 
 meta_kpi = getattr(st.session_state, "_portfolio_meta", None)
@@ -118,24 +133,47 @@ vc3.metric(f"CVaR 95% ({mc_horizon}d)", f"{report.cvar_95:.2%}")
 
 mc = report.mc_portfolio_returns
 fig_mc = go.Figure()
-fig_mc.add_trace(go.Histogram(
-    x=mc, nbinsx=100, marker_color=CLR_ACCENT, opacity=0.75,
-))
-fig_mc.add_vline(x=-report.var_95, line_dash="dash", line_color=CLR_WARN,
-                  annotation_text=f"VaR 95%: {report.var_95:.2%}")
-fig_mc.add_vline(x=-report.var_99, line_dash="dash", line_color=CLR_DANGER,
-                  annotation_text=f"VaR 99%: {report.var_99:.2%}")
+fig_mc.add_trace(
+    go.Histogram(
+        x=mc,
+        nbinsx=100,
+        marker_color=CLR_ACCENT,
+        opacity=0.75,
+    )
+)
+fig_mc.add_vline(
+    x=-report.var_95,
+    line_dash="dash",
+    line_color=CLR_WARN,
+    annotation_text=f"VaR 95%: {report.var_95:.2%}",
+)
+fig_mc.add_vline(
+    x=-report.var_99,
+    line_dash="dash",
+    line_color=CLR_DANGER,
+    annotation_text=f"VaR 99%: {report.var_99:.2%}",
+)
 fig_mc.update_layout(
     title=t("mc_title", horizon=mc_horizon, sims=mc_sims),
-    xaxis_title=t("mc_xaxis"), xaxis_tickformat=".1%",
+    xaxis_title=t("mc_xaxis"),
+    xaxis_tickformat=".1%",
     height=450,
-    annotations=[dict(
-        text=f"EWMA-based covariance (lambda={RiskEngine.EWMA_LAMBDA})",
-        xref="paper", yref="paper", x=0.98, y=0.98,
-        showarrow=False, font=dict(size=10, color=CLR_MUTED),
-    )],
+    annotations=[
+        dict(
+            text=f"EWMA-based covariance (lambda={RiskEngine.EWMA_LAMBDA})",
+            xref="paper",
+            yref="paper",
+            x=0.98,
+            y=0.98,
+            showarrow=False,
+            font=dict(size=10, color=CLR_MUTED),
+        )
+    ],
 )
-render_chart(fig_mc, insight="AI: The Monte Carlo distribution shows the range of possible portfolio outcomes. Left tail indicates extreme losses.")
+render_chart(
+    fig_mc,
+    insight="AI: The Monte Carlo distribution shows the range of possible portfolio outcomes. Left tail indicates extreme losses.",
+)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -145,17 +183,19 @@ render_section(t("attr_cvar_title"))
 
 if report.component_var_pct is not None:
     cv = report.component_var_pct
-    cv_df = pd.DataFrame({
-        "Ticker": cv.index,
-        "VaR Contribution %": cv.values * 100,
-        "Weight %": [weights.get(tk, 0) * 100 for tk in cv.index],
-        "Sector": [get_sector(tk) for tk in cv.index],
-    })
+    cv_df = pd.DataFrame(
+        {
+            "Ticker": cv.index,
+            "VaR Contribution %": cv.values * 100,
+            "Weight %": [weights.get(tk, 0) * 100 for tk in cv.index],
+            "Sector": [get_sector(tk) for tk in cv.index],
+        }
+    )
     cv_df["Risk/Weight Ratio"] = cv_df.apply(
         lambda r: r["VaR Contribution %"] / r["Weight %"] if r["Weight %"] > 0.01 else 0, axis=1
     )
     cv_df["Weight Label"] = cv_df["Weight %"].map("{:.1f}%".format)
-    cv_df["VaR Label"]    = cv_df["VaR Contribution %"].map("{:.1f}%".format)
+    cv_df["VaR Label"] = cv_df["VaR Contribution %"].map("{:.1f}%".format)
 
     fig_tree = px.treemap(
         cv_df,
@@ -172,38 +212,60 @@ if report.component_var_pct is not None:
         texttemplate="<b>%{label}</b><br>W: %{customdata[0]}<br>VaR: %{customdata[1]}",
         hovertemplate="<b>%{label}</b><br>Weight: %{customdata[0]}<br>VaR: %{customdata[1]}<br>Risk/Weight: %{customdata[2]:.2f}x<extra></extra>",
     )
-    render_chart(fig_tree, insight="AI: Treemap size represents portfolio weight. Color intensity shows risk-to-weight ratio; red areas consume disproportionate risk budget.")
+    render_chart(
+        fig_tree,
+        insight="AI: Treemap size represents portfolio weight. Color intensity shows risk-to-weight ratio; red areas consume disproportionate risk budget.",
+    )
 
-    overweight_risk = cv_df[cv_df["Risk/Weight Ratio"] > 1.5].sort_values("Risk/Weight Ratio", ascending=False)
+    overweight_risk = cv_df[cv_df["Risk/Weight Ratio"] > 1.5].sort_values(
+        "Risk/Weight Ratio", ascending=False
+    )
     if not overweight_risk.empty:
         st.error(
-            "Risk Budget Alert -- VaR contribution > 1.5x weight:\n\n" +
-            "  ".join(f"**{row['Ticker']}** ({row['Risk/Weight Ratio']:.1f}x)" for _, row in overweight_risk.iterrows())
+            "Risk Budget Alert -- VaR contribution > 1.5x weight:\n\n"
+            + "  ".join(
+                f"**{row['Ticker']}** ({row['Risk/Weight Ratio']:.1f}x)"
+                for _, row in overweight_risk.iterrows()
+            )
         )
 
     with render_section("Component VaR Table & Charts", collapsed=True):
         fig_cv = px.bar(
             cv_df.sort_values("VaR Contribution %", ascending=False),
-            x="Ticker", y="VaR Contribution %", color="Sector",
+            x="Ticker",
+            y="VaR Contribution %",
+            color="Sector",
             title=t("attr_cvar_bar_title"),
-            text=cv_df.sort_values("VaR Contribution %", ascending=False)["VaR Contribution %"].map("{:.1f}%".format),
+            text=cv_df.sort_values("VaR Contribution %", ascending=False)["VaR Contribution %"].map(
+                "{:.1f}%".format
+            ),
         )
         fig_cv.update_layout(height=380)
         render_chart(fig_cv)
 
         max_val = max(cv_df["Weight %"].max(), cv_df["VaR Contribution %"].max()) * 1.1
         fig_sc = px.scatter(
-            cv_df, x="Weight %", y="VaR Contribution %",
-            text="Ticker", color="Sector",
+            cv_df,
+            x="Weight %",
+            y="VaR Contribution %",
+            text="Ticker",
+            color="Sector",
             title=t("attr_scatter_title"),
         )
-        fig_sc.add_shape(type="line", x0=0, y0=0, x1=max_val, y1=max_val,
-                          line=dict(color="gray", dash="dash"))
+        fig_sc.add_shape(
+            type="line", x0=0, y0=0, x1=max_val, y1=max_val, line=dict(color="gray", dash="dash")
+        )
         fig_sc.update_traces(textposition="top center")
         fig_sc.update_layout(height=380)
         render_chart(fig_sc)
 
-        st.dataframe(cv_df[["Ticker", "Sector", "Weight %", "VaR Contribution %", "Risk/Weight Ratio"]].sort_values("VaR Contribution %", ascending=False), hide_index=True, use_container_width=True)
+        st.dataframe(
+            cv_df[
+                ["Ticker", "Sector", "Weight %", "VaR Contribution %", "Risk/Weight Ratio"]
+            ].sort_values("VaR Contribution %", ascending=False),
+            hide_index=True,
+            use_container_width=True,
+        )
 
 # Sector breakdown
 render_section(t("attr_sector_title"))
@@ -211,7 +273,9 @@ sector_weights_attr: dict[str, float] = {}
 for tk, w in weights.items():
     s = get_sector(tk)
     sector_weights_attr[s] = sector_weights_attr.get(s, 0) + w
-sec_df = pd.DataFrame(list(sector_weights_attr.items()), columns=["Sector", "Weight"]).sort_values("Weight", ascending=False)
+sec_df = pd.DataFrame(list(sector_weights_attr.items()), columns=["Sector", "Weight"]).sort_values(
+    "Weight", ascending=False
+)
 
 pie_col, tbl_col = st.columns([2, 1])
 with pie_col:
@@ -241,9 +305,13 @@ if fb is not None and not fb.empty:
         )
         port_factor[factor] = exposure
 
-    pf_df = pd.DataFrame({"Factor": list(port_factor.keys()), "Portfolio Beta": list(port_factor.values())})
+    pf_df = pd.DataFrame(
+        {"Factor": list(port_factor.keys()), "Portfolio Beta": list(port_factor.values())}
+    )
     fig_pf = px.bar(
-        pf_df, x="Factor", y="Portfolio Beta",
+        pf_df,
+        x="Factor",
+        y="Portfolio Beta",
         color="Portfolio Beta",
         color_continuous_scale=[[0, CLR_DANGER], [0.5, CLR_MUTED], [1.0, CLR_ACCENT]],
         title=t("factor_port_bar_title"),
@@ -282,33 +350,46 @@ else:
 if fb is not None and not fb.empty:
     sig_df = report.factor_betas_significance
     if sig_df is not None and not sig_df.empty:
-        render_section("Factor Beta Significance Analysis", subtitle="Statistical significance tests for each asset-factor relationship (p < 0.05 indicates significant)")
+        render_section(
+            "Factor Beta Significance Analysis",
+            subtitle="Statistical significance tests for each asset-factor relationship (p < 0.05 indicates significant)",
+        )
 
         # 为每个资产创建汇总表
         with render_section("View Detailed Beta Statistics by Asset", collapsed=True):
             for ticker in fb.index:
-                ticker_sig = sig_df[sig_df['Ticker'] == ticker].copy()
+                ticker_sig = sig_df[sig_df["Ticker"] == ticker].copy()
                 if ticker_sig.empty:
                     continue
 
                 st.markdown(f"**{ticker}**")
 
                 # 创建展示表格
-                display_df = ticker_sig[['Factor', 'Beta', 't_stat', 'p_value', 'is_significant', 'r_squared']].copy()
+                display_df = ticker_sig[
+                    ["Factor", "Beta", "t_stat", "p_value", "is_significant", "r_squared"]
+                ].copy()
 
                 # 添加显著性标记
-                display_df['Significant'] = display_df['is_significant'].apply(
-                    lambda x: 'Yes' if x else 'No'
+                display_df["Significant"] = display_df["is_significant"].apply(
+                    lambda x: "Yes" if x else "No"
                 )
 
                 # 格式化数值
-                display_df['Beta'] = display_df['Beta'].apply(lambda x: f"{x:.3f}" if not np.isnan(x) else "N/A")
-                display_df['t-stat'] = display_df['t_stat'].apply(lambda x: f"{x:.2f}" if not np.isnan(x) else "N/A")
-                display_df['p-value'] = display_df['p_value'].apply(lambda x: f"{x:.4f}" if not np.isnan(x) else "N/A")
-                display_df['R²'] = display_df['r_squared'].apply(lambda x: f"{x:.3f}" if not np.isnan(x) else "N/A")
+                display_df["Beta"] = display_df["Beta"].apply(
+                    lambda x: f"{x:.3f}" if not np.isnan(x) else "N/A"
+                )
+                display_df["t-stat"] = display_df["t_stat"].apply(
+                    lambda x: f"{x:.2f}" if not np.isnan(x) else "N/A"
+                )
+                display_df["p-value"] = display_df["p_value"].apply(
+                    lambda x: f"{x:.4f}" if not np.isnan(x) else "N/A"
+                )
+                display_df["R²"] = display_df["r_squared"].apply(
+                    lambda x: f"{x:.3f}" if not np.isnan(x) else "N/A"
+                )
 
                 # 选择展示列
-                final_df = display_df[['Factor', 'Beta', 't-stat', 'p-value', 'Significant', 'R²']]
+                final_df = display_df[["Factor", "Beta", "t-stat", "p-value", "Significant", "R²"]]
 
                 # Color-code significance column (works in both light/dark themes)
                 def _style_significance(val):
@@ -316,17 +397,11 @@ if fb is not None and not fb.empty:
                         return f"color: {T.signal_positive}; font-weight: 600"
                     return f"color: {T.signal_negative}; font-weight: 600"
 
-                styled = final_df.style.map(
-                    _style_significance, subset=["Significant"]
-                )
-                st.dataframe(
-                    styled,
-                    hide_index=True,
-                    use_container_width=True
-                )
+                styled = final_df.style.map(_style_significance, subset=["Significant"])
+                st.dataframe(styled, hide_index=True, use_container_width=True)
 
                 # 警告：不显著因子过多
-                insignificant_count = sum(~ticker_sig['is_significant'])
+                insignificant_count = sum(~ticker_sig["is_significant"])
                 total_factors = len(ticker_sig)
                 if insignificant_count > total_factors * 0.5:
                     st.warning(
@@ -340,20 +415,22 @@ if fb is not None and not fb.empty:
         # 计算每个因子的平均显著性
         factor_summary = []
         for factor in fb.columns:
-            factor_data = sig_df[sig_df['Factor'] == factor]
+            factor_data = sig_df[sig_df["Factor"] == factor]
             if not factor_data.empty:
-                sig_count = sum(factor_data['is_significant'])
+                sig_count = sum(factor_data["is_significant"])
                 total_count = len(factor_data)
-                avg_p_value = factor_data['p_value'].mean()
-                avg_r_squared = factor_data['r_squared'].mean()
+                avg_p_value = factor_data["p_value"].mean()
+                avg_r_squared = factor_data["r_squared"].mean()
 
-                factor_summary.append({
-                    'Factor': factor,
-                    'Significant Assets': f"{sig_count}/{total_count}",
-                    'Avg p-value': f"{avg_p_value:.4f}",
-                    'Avg R²': f"{avg_r_squared:.3f}",
-                    'Significance Rate': f"{sig_count/total_count*100:.1f}%"
-                })
+                factor_summary.append(
+                    {
+                        "Factor": factor,
+                        "Significant Assets": f"{sig_count}/{total_count}",
+                        "Avg p-value": f"{avg_p_value:.4f}",
+                        "Avg R²": f"{avg_r_squared:.3f}",
+                        "Significance Rate": f"{sig_count/total_count*100:.1f}%",
+                    }
+                )
 
         if factor_summary:
             summary_df = pd.DataFrame(factor_summary)
@@ -361,8 +438,7 @@ if fb is not None and not fb.empty:
 
             # AI 洞察
             low_sig_factors = [
-                item for item in factor_summary
-                if float(item['Significance Rate'].rstrip('%')) < 50
+                item for item in factor_summary if float(item["Significance Rate"].rstrip("%")) < 50
             ]
             if low_sig_factors:
                 st.info(
@@ -376,7 +452,9 @@ if fb is not None and not fb.empty:
 # ══════════════════════════════════════════════════════════════
 render_section(t("barra_title"), subtitle=t("barra_caption"))
 
-if st.button("Compute Barra Attribution" if lang == "en" else "计算 Barra 归因", key="compute_barra"):
+if st.button(
+    "Compute Barra Attribution" if lang == "en" else "计算 Barra 归因", key="compute_barra"
+):
     engine_ref = st.session_state.get("_engine")
     if engine_ref:
         with st.spinner("Running PCA factor decomposition..."):
@@ -388,19 +466,26 @@ if st.button("Compute Barra Attribution" if lang == "en" else "计算 Barra 归�
 barra = st.session_state.get("_barra_result")
 if barra:
     var_data = barra["factor_var_contrib"]
-    var_df = pd.DataFrame([
-        {"Factor": k, "Variance (%)": v * 100}
-        for k, v in sorted(var_data.items(), key=lambda x: -x[1])
-    ])
-    fig_var = go.Figure(go.Bar(
-        y=var_df["Factor"], x=var_df["Variance (%)"],
-        orientation="h",
-        marker_color=[CLR_MUTED if "Idio" in f else CLR_ACCENT for f in var_df["Factor"]],
-        text=var_df["Variance (%)"].map(lambda x: f"{x:.1f}%"),
-        textposition="outside",
-    ))
+    var_df = pd.DataFrame(
+        [
+            {"Factor": k, "Variance (%)": v * 100}
+            for k, v in sorted(var_data.items(), key=lambda x: -x[1])
+        ]
+    )
+    fig_var = go.Figure(
+        go.Bar(
+            y=var_df["Factor"],
+            x=var_df["Variance (%)"],
+            orientation="h",
+            marker_color=[CLR_MUTED if "Idio" in f else CLR_ACCENT for f in var_df["Factor"]],
+            text=var_df["Variance (%)"].map(lambda x: f"{x:.1f}%"),
+            textposition="outside",
+        )
+    )
     fig_var.update_layout(
-        title=t("barra_variance_title"), height=350, xaxis_title="% of Variance",
+        title=t("barra_variance_title"),
+        height=350,
+        xaxis_title="% of Variance",
         yaxis=dict(automargin=True, tickfont=dict(color="#E6EDF3")),
     )
     render_chart(fig_var)
@@ -452,16 +537,25 @@ with render_section("Correlation Heatmap" if lang == "en" else "相关性热力�
         horizontal=True,
     )
     use_ewma = "EWMA" in corr_choice or "ewma" in corr_choice.lower()
-    corr_display = report.corr_matrix_ewma if (use_ewma and report.corr_matrix_ewma is not None) else report.corr_matrix
+    corr_display = (
+        report.corr_matrix_ewma
+        if (use_ewma and report.corr_matrix_ewma is not None)
+        else report.corr_matrix
+    )
 
     fig_hm = px.imshow(
-        corr_display, text_auto=".2f",
+        corr_display,
+        text_auto=".2f",
         color_continuous_scale=["#E04050", "#283041", "#00C8DC"],
-        zmin=-1, zmax=1,
+        zmin=-1,
+        zmax=1,
         title=f"{t('corr_title')} {'(EWMA)' if use_ewma else '(Traditional)'}",
     )
     fig_hm.update_layout(height=520)
-    render_chart(fig_hm, insight="AI: High correlation pairs indicate concentration risk. Consider diversifying away from strongly correlated assets.")
+    render_chart(
+        fig_hm,
+        insight="AI: High correlation pairs indicate concentration risk. Consider diversifying away from strongly correlated assets.",
+    )
 
 
 # ── Macro Sensitivity ────────────────────────────────────────
@@ -480,13 +574,17 @@ with render_section("Macro Sensitivity" if lang == "en" else "宏观敏感度", 
         radar_col, stats_col = st.columns([1, 1])
         with radar_col:
             fig_radar = go.Figure()
-            fig_radar.add_trace(go.Scatterpolar(
-                r=radar_r, theta=radar_theta,
-                fill="toself", fillcolor="rgba(11, 114, 133, 0.18)",
-                line=dict(color=CLR_ACCENT, width=2),
-                name="Macro Exposure",
-                hovertemplate="%{theta}<br>Score: %{r:.1f}<extra></extra>",
-            ))
+            fig_radar.add_trace(
+                go.Scatterpolar(
+                    r=radar_r,
+                    theta=radar_theta,
+                    fill="toself",
+                    fillcolor="rgba(11, 114, 133, 0.18)",
+                    line=dict(color=CLR_ACCENT, width=2),
+                    name="Macro Exposure",
+                    hovertemplate="%{theta}<br>Score: %{r:.1f}<extra></extra>",
+                )
+            )
             fig_radar.update_layout(
                 polar=dict(bgcolor="rgba(0,0,0,0)", radialaxis=dict(visible=True, range=[0, 100])),
                 title=dict(text=t("macro_radar_title"), font=dict(size=14)),
@@ -501,14 +599,20 @@ with render_section("Macro Sensitivity" if lang == "en" else "宏观敏感度", 
                 score = radar_scores[radar_factors.index(f)]
                 sig = "***" if abs(t_val) > 2.58 else ("**" if abs(t_val) > 1.96 else "ns")
                 direction = "up" if bv > 0 else "down"
-                st.metric(f"{f}", f"beta = {bv:+.4f} {direction}", delta=f"t={t_val:.2f} {sig} | Score {score:.0f}/100", delta_color="off")
+                st.metric(
+                    f"{f}",
+                    f"beta = {bv:+.4f} {direction}",
+                    delta=f"t={t_val:.2f} {sig} | Score {score:.0f}/100",
+                    delta_color="off",
+                )
             st.metric("R-squared", f"{mb['r_squared']:.3f}")
 
         # Per-asset heatmap
         if not mb["per_asset"].empty:
             pa = mb["per_asset"].astype(float)
             fig_mb = px.imshow(
-                pa, text_auto=".3f",
+                pa,
+                text_auto=".3f",
                 color_continuous_scale=[[0, CLR_DANGER], [0.5, "#283041"], [1.0, CLR_ACCENT]],
                 title=t("macro_per_asset_heatmap"),
                 aspect="auto",
@@ -527,7 +631,9 @@ with render_section("Rolling Correlation" if lang == "en" else "滚动相关性"
     if report.rolling_corr_with_port is not None:
         rc = report.rolling_corr_with_port.dropna(how="all")
         top_by_weight = sorted(weights, key=lambda x: -weights[x])[:8]
-        low_corr = [tk for tk in rc.columns if rc[tk].dropna().mean() < 0.3 and tk not in top_by_weight][:3]
+        low_corr = [
+            tk for tk in rc.columns if rc[tk].dropna().mean() < 0.3 and tk not in top_by_weight
+        ][:3]
         default_sel = list(dict.fromkeys(top_by_weight + low_corr))
 
         selected = st.multiselect(
@@ -538,11 +644,21 @@ with render_section("Rolling Correlation" if lang == "en" else "滚动相关性"
         if selected:
             fig_rc = go.Figure()
             for tk in selected:
-                fig_rc.add_trace(go.Scatter(x=rc.index, y=rc[tk], mode="lines", name=tk, opacity=0.85))
+                fig_rc.add_trace(
+                    go.Scatter(x=rc.index, y=rc[tk], mode="lines", name=tk, opacity=0.85)
+                )
             fig_rc.add_hline(y=0, line_dash="dot", line_color="gray")
             fig_rc.add_hline(y=0.5, line_dash="dash", line_color=CLR_WARN, opacity=0.4)
-            fig_rc.update_layout(title=t("rolling_chart_title"), yaxis_title="Pearson Correlation", yaxis=dict(range=[-1.1, 1.1]), height=480)
-            render_chart(fig_rc, insight="AI: Rising correlations during stress indicate diversification breaks down when you need it most.")
+            fig_rc.update_layout(
+                title=t("rolling_chart_title"),
+                yaxis_title="Pearson Correlation",
+                yaxis=dict(range=[-1.1, 1.1]),
+                height=480,
+            )
+            render_chart(
+                fig_rc,
+                insight="AI: Rising correlations during stress indicate diversification breaks down when you need it most.",
+            )
 
 
 # ── Liquidity Risk ───────────────────────────────────────────
@@ -553,26 +669,42 @@ with render_section("Liquidity Risk" if lang == "en" else "流动性风险", col
             valid_liq = liq["Days_to_Liquidate"].dropna()
             if not valid_liq.empty:
                 l1, l2, l3 = st.columns(3)
-                l1.metric(t("liq_slowest"), f"{valid_liq.max():.2f} days", help=f"Asset: {valid_liq.idxmax()}")
-                weighted_days = sum(liq.loc[tk, "Days_to_Liquidate"] * liq.loc[tk, "Weight"] for tk in valid_liq.index if tk in liq.index)
+                l1.metric(
+                    t("liq_slowest"),
+                    f"{valid_liq.max():.2f} days",
+                    help=f"Asset: {valid_liq.idxmax()}",
+                )
+                weighted_days = sum(
+                    liq.loc[tk, "Days_to_Liquidate"] * liq.loc[tk, "Weight"]
+                    for tk in valid_liq.index
+                    if tk in liq.index
+                )
                 l2.metric(t("liq_weighted_avg"), f"{weighted_days:.3f} days")
                 l3.metric(t("liq_over_1d"), str(sum(1 for v in valid_liq if v > 1.0)))
 
         display_liq = liq.copy()
         if "ADV_30d" in display_liq.columns:
-            display_liq["ADV_30d"] = display_liq["ADV_30d"].apply(lambda x: f"{x:,.0f}" if not np.isnan(x) else "N/A")
+            display_liq["ADV_30d"] = display_liq["ADV_30d"].apply(
+                lambda x: f"{x:,.0f}" if not np.isnan(x) else "N/A"
+            )
         if "Days_to_Liquidate" in display_liq.columns:
-            display_liq["Days_to_Liquidate"] = display_liq["Days_to_Liquidate"].apply(lambda x: f"{x:.3f}" if not np.isnan(x) else "N/A")
+            display_liq["Days_to_Liquidate"] = display_liq["Days_to_Liquidate"].apply(
+                lambda x: f"{x:.3f}" if not np.isnan(x) else "N/A"
+            )
         if "Weight" in display_liq.columns:
             display_liq["Weight"] = display_liq["Weight"].apply(lambda x: f"{x:.2%}")
         st.dataframe(display_liq, use_container_width=True)
-        st.caption("AI: Illiquid positions (>1 day to liquidate) create slippage risk during forced selling.")
+        st.caption(
+            "AI: Illiquid positions (>1 day to liquidate) create slippage risk during forced selling."
+        )
     else:
         st.info(t("liq_no_data"))
 
 
 # ── Full Factor Beta Heatmap ─────────────────────────────────
-with render_section("Full Factor Beta Heatmap" if lang == "en" else "完整因子 Beta 热力图", collapsed=True):
+with render_section(
+    "Full Factor Beta Heatmap" if lang == "en" else "完整因子 Beta 热力图", collapsed=True
+):
     if fb is not None and not fb.empty:
         fig_fb = px.imshow(
             fb.astype(float),
@@ -596,18 +728,22 @@ with render_section("Full Factor Beta Heatmap" if lang == "en" else "完整因�
 st.markdown("---")
 render_section("Stress Testing" if lang == "en" else "压力测试")
 
-mode = st.selectbox("Scenario Mode" if lang == "en" else "情景模式", [
-    "Market Shock (Beta-implied)",
-    "Custom Macro Scenario",
-    "Black Swan Propagation",
-])
+mode = st.selectbox(
+    "Scenario Mode" if lang == "en" else "情景模式",
+    [
+        "Market Shock (Beta-implied)",
+        "Custom Macro Scenario",
+        "Black Swan Propagation",
+    ],
+)
 
 # Mode 1: Market Shock
 if mode == "Market Shock (Beta-implied)":
     st.markdown(t("stress_scenario", shock=market_shock))
     betas = report.betas
     asset_losses = {
-        tk: (betas.get(tk, 1.0) if not np.isnan(betas.get(tk, float("nan"))) else 1.0) * market_shock
+        tk: (betas.get(tk, 1.0) if not np.isnan(betas.get(tk, float("nan"))) else 1.0)
+        * market_shock
         for tk in weights
     }
     stress_loss_display = sum(asset_losses[tk] * w for tk, w in weights.items())
@@ -621,41 +757,51 @@ if mode == "Market Shock (Beta-implied)":
     with col_r:
         assets = list(asset_losses.keys())
         losses_pct = [asset_losses[a] * weights[a] for a in assets]
-        fig_wf = go.Figure(go.Waterfall(
-            x=assets + ["Portfolio"],
-            y=losses_pct + [stress_loss_display],
-            measure=["relative"] * len(assets) + ["total"],
-            text=[f"{v:.2%}" for v in losses_pct] + [f"{stress_loss_display:.2%}"],
-            textposition="outside",
-            connector=dict(line=dict(color="gray")),
-            decreasing=dict(marker=dict(color=CLR_DANGER)),
-            totals=dict(marker=dict(color=CLR_GOLD)),
-        ))
+        fig_wf = go.Figure(
+            go.Waterfall(
+                x=assets + ["Portfolio"],
+                y=losses_pct + [stress_loss_display],
+                measure=["relative"] * len(assets) + ["total"],
+                text=[f"{v:.2%}" for v in losses_pct] + [f"{stress_loss_display:.2%}"],
+                textposition="outside",
+                connector=dict(line=dict(color="gray")),
+                decreasing=dict(marker=dict(color=CLR_DANGER)),
+                totals=dict(marker=dict(color=CLR_GOLD)),
+            )
+        )
         fig_wf.update_layout(
             title=f"{t('stress_wf_title')} -- {scenario_label}",
             yaxis_title=t("stress_wf_yaxis"),
-            yaxis_tickformat=".1%", height=450,
+            yaxis_tickformat=".1%",
+            height=450,
         )
         render_chart(fig_wf)
 
-    st.caption("Beta-implied stress test assumes each asset moves proportionally to its SPY beta times the market shock.")
+    st.caption(
+        "Beta-implied stress test assumes each asset moves proportionally to its SPY beta times the market shock."
+    )
 
 # Mode 2: Custom Macro Scenario
 elif mode == "Custom Macro Scenario":
     has_macro = report.macro_betas and report.macro_betas.get("betas")
     if not has_macro:
-        st.warning("Macro beta data not available. Ensure ^TNX, DX-Y.NYB, CL=F are accessible on Yahoo Finance.")
+        st.warning(
+            "Macro beta data not available. Ensure ^TNX, DX-Y.NYB, CL=F are accessible on Yahoo Finance."
+        )
         st.stop()
 
     mb = report.macro_betas
     macro_factor_names = list(mb["betas"].keys())
 
-    render_section("Custom Macro Scenario" if lang == "en" else "自定义宏观情景", subtitle="Adjust each macro factor shock. Portfolio impact is computed from OLS macro betas in real time.")
+    render_section(
+        "Custom Macro Scenario" if lang == "en" else "自定义宏观情景",
+        subtitle="Adjust each macro factor shock. Portfolio impact is computed from OLS macro betas in real time.",
+    )
 
     factor_labels = {
-        "Rate":  ("Rate Change (^TNX, %)", -2.0, 2.0, 1.0),
-        "USD":   ("USD Index Change (%)", -10.0, 10.0, 0.0),
-        "Oil":   ("Oil Price Change (%)", -40.0, 40.0, -20.0),
+        "Rate": ("Rate Change (^TNX, %)", -2.0, 2.0, 1.0),
+        "USD": ("USD Index Change (%)", -10.0, 10.0, 0.0),
+        "Oil": ("Oil Price Change (%)", -40.0, 40.0, -20.0),
     }
     slider_cols = st.columns(len(macro_factor_names))
     factor_shocks: dict[str, float] = {}
@@ -665,15 +811,26 @@ elif mode == "Custom Macro Scenario":
             label, fmin, fmax, fdefault = factor_labels[key]
         else:
             label, fmin, fmax, fdefault = fname, -20.0, 20.0, 0.0
-        factor_shocks[fname] = slider_cols[i].slider(
-            label, min_value=fmin, max_value=fmax,
-            value=fdefault, step=0.1, key=f"macro_shock_{fname}",
-        ) / 100.0
+        factor_shocks[fname] = (
+            slider_cols[i].slider(
+                label,
+                min_value=fmin,
+                max_value=fmax,
+                value=fdefault,
+                step=0.1,
+                key=f"macro_shock_{fname}",
+            )
+            / 100.0
+        )
 
-    spy_shock_pct = st.slider("SPY additional shock (%)", min_value=-30, max_value=10, value=0, step=1)
+    spy_shock_pct = st.slider(
+        "SPY additional shock (%)", min_value=-30, max_value=10, value=0, step=1
+    )
     spy_shock = spy_shock_pct / 100.0
 
-    macro_contribution = sum(mb["betas"].get(fname, 0) * fshock for fname, fshock in factor_shocks.items())
+    macro_contribution = sum(
+        mb["betas"].get(fname, 0) * fshock for fname, fshock in factor_shocks.items()
+    )
     pa = mb.get("per_asset", pd.DataFrame())
     asset_losses = {}
     for tk in weights:
@@ -694,8 +851,10 @@ elif mode == "Custom Macro Scenario":
 
     smcol1, smcol2, smcol3 = st.columns(3)
     smcol1.metric("Macro Factor Contribution", f"{macro_contribution:.2%}")
-    smcol2.metric("SPY Beta Contribution",
-                  f"{sum(report.betas.get(tk, 1.0) * spy_shock * w for tk, w in weights.items() if not np.isnan(report.betas.get(tk, float('nan')))):.2%}")
+    smcol2.metric(
+        "SPY Beta Contribution",
+        f"{sum(report.betas.get(tk, 1.0) * spy_shock * w for tk, w in weights.items() if not np.isnan(report.betas.get(tk, float('nan')))):.2%}",
+    )
     smcol3.metric("Combined Expected P&L", f"{stress_loss_display:.2%}", delta_color="off")
 
 # Mode 3: Black Swan Propagation
@@ -704,6 +863,7 @@ elif mode == "Black Swan Propagation":
     st.caption(t("blackswan_caption"))
 
     from risk_engine import RiskEngine as _RE_bs
+
     presets = _RE_bs.PRESET_SCENARIOS
 
     preset_options = list(presets.keys()) + [t("blackswan_custom")]
@@ -715,9 +875,15 @@ elif mode == "Black Swan Propagation":
         for i in range(3):
             cc1, cc2 = st.columns([2, 1])
             with cc1:
-                tk_sel = st.selectbox(f"{t('blackswan_asset_select')} {i+1}", ["(none)"] + available_tickers, key=f"bs_tk_{i}")
+                tk_sel = st.selectbox(
+                    f"{t('blackswan_asset_select')} {i+1}",
+                    ["(none)"] + available_tickers,
+                    key=f"bs_tk_{i}",
+                )
             with cc2:
-                shock_val = st.slider(f"{t('blackswan_shock_pct')} {i+1}", -50, 50, 0, key=f"bs_shock_{i}")
+                shock_val = st.slider(
+                    f"{t('blackswan_shock_pct')} {i+1}", -50, 50, 0, key=f"bs_shock_{i}"
+                )
             if tk_sel != "(none)" and shock_val != 0:
                 custom_scenario[tk_sel] = shock_val / 100.0
         scenario = custom_scenario
@@ -739,6 +905,7 @@ elif mode == "Black Swan Propagation":
 # Floating AI Assistant
 try:
     from ui.floating_chat import render_floating_ai_chat
+
     render_floating_ai_chat()
-except Exception as e:
+except Exception:
     pass  # Silently fail if floating chat has issues

@@ -9,6 +9,7 @@ call can succeed. DataProvider already loads portfolio-price data that the
 test injects directly, so the hot path (VaR, drawdown, EWMA cov, stress)
 remains exercised.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -38,13 +39,14 @@ def synthetic_prices():
 def _build_offline_provider(prices: pd.DataFrame) -> DataProvider:
     weights = {col: 1.0 / len(prices.columns) for col in prices.columns}
     dp = DataProvider(weights, period_years=1)
-    dp._prices = prices                         # inject pre-computed prices
+    dp._prices = prices  # inject pre-computed prices
     dp._returns = prices.pct_change().dropna()  # simple returns per convention
     return dp
 
 
 def test_risk_engine_runs_offline(synthetic_prices, monkeypatch):
     """RiskEngine.run() must complete without crashing when yfinance is blocked."""
+
     # Block every possible network call
     def _boom(*args, **kwargs):
         raise _OfflineError("network blocked by test harness")
@@ -140,9 +142,11 @@ def test_stress_loss_uses_user_market_shock(synthetic_prices, shock, monkeypatch
     Also verify report.stress_market_shock mirrors the value used so the
     UI / AI / exports all reference the same number.
     """
+
     # Stub all network calls
     def _boom(*a, **kw):
         raise ConnectionError("blocked")
+
     monkeypatch.setattr("yfinance.download", _boom)
     monkeypatch.setattr("data_provider.yf.download", _boom, raising=False)
 
@@ -150,6 +154,7 @@ def test_stress_loss_uses_user_market_shock(synthetic_prices, shock, monkeypatch
     # Force a non-NaN beta so stress_loss is meaningful
     bench_df = synthetic_prices[["AAA"]].pct_change().dropna().rename(columns={"AAA": "SPY"})
     from unittest.mock import MagicMock
+
     dp.get_benchmark_returns = MagicMock(return_value=bench_df)
 
     engine = RiskEngine(
@@ -174,10 +179,12 @@ def test_stress_loss_uses_user_market_shock(synthetic_prices, shock, monkeypatch
 
 def test_stress_shock_bounds_enforced():
     """market_shock is clamped to [-0.90, 0.0] — no positive shocks, no <−90%."""
-    from risk_engine import RiskEngine
     from unittest.mock import MagicMock
+
+    from risk_engine import RiskEngine
+
     dp = MagicMock()
-    engine_pos = RiskEngine(dp, market_shock=0.20)   # positive input
+    engine_pos = RiskEngine(dp, market_shock=0.20)  # positive input
     assert engine_pos.market_shock == 0.0
 
     engine_too_neg = RiskEngine(dp, market_shock=-2.0)  # too negative

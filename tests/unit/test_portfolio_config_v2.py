@@ -4,14 +4,12 @@ tests/unit/test_portfolio_config_v2.py
 Coverage for the upgraded portfolio_config: accounts, holding metadata,
 position-cost summary, per-account aggregation, and validation.
 """
-from __future__ import annotations
 
-import importlib
+from __future__ import annotations
 
 import pytest
 
 import portfolio_config as _pc
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  Backward compatibility
@@ -91,15 +89,15 @@ def test_position_cost_summary_without_avg_cost():
 def test_position_cost_summary_mv_coverage(monkeypatch):
     """coverage_by_mv_pct should weight by market value, not ticker count."""
     test_holdings = {
-        "BIG1": {"shares": 10, "avg_cost": 100.0, "account": "margin"},   # known
-        "BIG2": {"shares": 5,  "avg_cost": 200.0, "account": "margin"},   # known
-        "SMALL": {"shares": 1, "account": "margin"},                       # unknown
+        "BIG1": {"shares": 10, "avg_cost": 100.0, "account": "margin"},  # known
+        "BIG2": {"shares": 5, "avg_cost": 200.0, "account": "margin"},  # known
+        "SMALL": {"shares": 1, "account": "margin"},  # unknown
     }
     monkeypatch.setattr(_pc, "PORTFOLIO_HOLDINGS", test_holdings)
     market_values = {
-        "BIG1": 1000.0,   # covered
-        "BIG2": 1000.0,   # covered
-        "SMALL": 10.0,    # missing avg_cost
+        "BIG1": 1000.0,  # covered
+        "BIG2": 1000.0,  # covered
+        "SMALL": 10.0,  # missing avg_cost
     }
     info = _pc.position_cost_summary(market_values=market_values)
 
@@ -132,7 +130,7 @@ def test_position_cost_summary_mv_coverage_exposes_small_tracked_tickers(monkeyp
     ticker-count coverage looks healthy while MV coverage exposes the gap.
     """
     test_holdings = {
-        "HUGE_UNTRACKED": {"shares": 100, "account": "margin"},           # no avg_cost
+        "HUGE_UNTRACKED": {"shares": 100, "account": "margin"},  # no avg_cost
         "TINY_TRACKED1": {"shares": 1, "avg_cost": 10.0, "account": "margin"},
         "TINY_TRACKED2": {"shares": 1, "avg_cost": 10.0, "account": "margin"},
     }
@@ -175,8 +173,11 @@ def test_position_cost_summary_with_partial_avg_cost(monkeypatch):
 def test_account_summary_splits_margin_vs_crypto():
     """MV of equities goes to margin account, crypto MV to crypto account."""
     market_values = {
-        "NVDA": 5000.0, "MSFT": 2000.0, "SQQQ": 500.0,
-        "BTC-USD": 2000.0, "ETH-USD": 1500.0,
+        "NVDA": 5000.0,
+        "MSFT": 2000.0,
+        "SQQQ": 500.0,
+        "BTC-USD": 2000.0,
+        "ETH-USD": 1500.0,
     }
     margin_sum = _pc.account_summary("margin", market_values)
     crypto_sum = _pc.account_summary("crypto", market_values)
@@ -219,7 +220,8 @@ def test_validation_flags_missing_sector(monkeypatch):
 
 def test_validation_flags_zero_shares(monkeypatch):
     monkeypatch.setattr(
-        _pc, "PORTFOLIO_HOLDINGS",
+        _pc,
+        "PORTFOLIO_HOLDINGS",
         {"NVDA": {"shares": 0, "account": "margin"}},
     )
     issues = _pc.validate_portfolio_config()
@@ -228,7 +230,8 @@ def test_validation_flags_zero_shares(monkeypatch):
 
 def test_validation_flags_negative_margin_loan(monkeypatch):
     monkeypatch.setattr(
-        _pc, "ACCOUNTS",
+        _pc,
+        "ACCOUNTS",
         {"margin": {"margin_loan": -100, "type": "margin"}},
     )
     issues = _pc.validate_portfolio_config()
@@ -238,7 +241,8 @@ def test_validation_flags_negative_margin_loan(monkeypatch):
 def test_validation_flags_unknown_account(monkeypatch):
     """A holding pointing to an account not declared in ACCOUNTS must warn."""
     monkeypatch.setattr(
-        _pc, "PORTFOLIO_HOLDINGS",
+        _pc,
+        "PORTFOLIO_HOLDINGS",
         {"NVDA": {"shares": 1, "account": "ghost_account"}},
     )
     issues = _pc.validate_portfolio_config()
@@ -248,7 +252,8 @@ def test_validation_flags_unknown_account(monkeypatch):
 def test_validation_flags_bad_crypto_ticker(monkeypatch):
     """asset_type=crypto but ticker doesn't end with -USD."""
     monkeypatch.setattr(
-        _pc, "PORTFOLIO_HOLDINGS",
+        _pc,
+        "PORTFOLIO_HOLDINGS",
         {"BTC": {"shares": 1, "asset_type": "crypto"}},
     )
     issues = _pc.validate_portfolio_config()
@@ -257,7 +262,8 @@ def test_validation_flags_bad_crypto_ticker(monkeypatch):
 
 def test_validation_flags_bad_avg_cost(monkeypatch):
     monkeypatch.setattr(
-        _pc, "PORTFOLIO_HOLDINGS",
+        _pc,
+        "PORTFOLIO_HOLDINGS",
         {"NVDA": {"shares": 1, "avg_cost": -50.0}},
     )
     issues = _pc.validate_portfolio_config()

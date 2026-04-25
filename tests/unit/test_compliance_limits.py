@@ -15,6 +15,7 @@ still had 0.15. Corrected weights then failed the user-defined check.
 This test verifies both methods, given the same user limits, produce a
 self-consistent result (no new violations emerge after correction).
 """
+
 from __future__ import annotations
 
 from unittest.mock import Mock
@@ -34,8 +35,11 @@ def engine():
 @pytest.fixture
 def sector_map():
     return {
-        "AAPL": "Big Tech", "GOOGL": "Big Tech", "MSFT": "Big Tech",
-        "NVDA": "Semiconductors", "AVGO": "Semiconductors",
+        "AAPL": "Big Tech",
+        "GOOGL": "Big Tech",
+        "MSFT": "Big Tech",
+        "NVDA": "Semiconductors",
+        "AVGO": "Semiconductors",
         "SPY": "Broad Market ETF",
     }
 
@@ -76,8 +80,7 @@ def test_checker_and_corrector_use_same_limits(engine, sector_map):
     # Re-check with SAME limits: should now pass
     v2 = engine.check_trade_compliance(corrected, sector_map, limits=user_limits)
     assert v2 == [], (
-        f"Corrected weights still fail checker under same limits: {v2}\n"
-        f"Corrected: {corrected}"
+        f"Corrected weights still fail checker under same limits: {v2}\n" f"Corrected: {corrected}"
     )
 
 

@@ -6,15 +6,16 @@ data_provider.py
 v2.2: 健壮的数据管道 - 缓存机制 + 数据质量验证 + 错误处理
 """
 
-import pandas as pd
-import numpy as np
-import yfinance as yf
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
 import os
 import pickle
-import warnings
 import time
+import warnings
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
+import pandas as pd
+import yfinance as yf
 
 from logging_config import get_logger
 
@@ -31,10 +32,7 @@ class CachedDataProvider:
     def _get_cache_path(self, ticker: str, start: str, end: str, data_type: str = "prices") -> str:
         """生成缓存文件路径"""
         safe_ticker = ticker.replace("/", "_").replace("^", "").replace("=", "")
-        return os.path.join(
-            self.cache_dir,
-            f"{safe_ticker}_{start}_{end}_{data_type}.pkl"
-        )
+        return os.path.join(self.cache_dir, f"{safe_ticker}_{start}_{end}_{data_type}.pkl")
 
     def _is_cache_valid(self, cache_path: str, max_age_hours: int = 24) -> bool:
         """检查缓存是否有效（未过期）"""
@@ -53,7 +51,7 @@ class CachedDataProvider:
         end_date: str,
         force_refresh: bool = False,
         data_type: str = "prices",
-        max_age_hours: int = 24
+        max_age_hours: int = 24,
     ) -> Optional[pd.DataFrame]:
         """
         带缓存的数据获取
@@ -75,7 +73,7 @@ class CachedDataProvider:
         # 尝试从缓存加载
         if not force_refresh and self._is_cache_valid(cache_path, max_age_hours):
             try:
-                with open(cache_path, 'rb') as f:
+                with open(cache_path, "rb") as f:
                     data = pickle.load(f)
                 duration_ms = (time.time() - start_time) * 1000
                 logger.info(
@@ -83,15 +81,11 @@ class CachedDataProvider:
                     ticker=ticker,
                     data_type=data_type,
                     rows=len(data),
-                    duration_ms=round(duration_ms, 2)
+                    duration_ms=round(duration_ms, 2),
                 )
                 return data
             except Exception as e:
-                logger.warning(
-                    "data.cache.load_failed",
-                    ticker=ticker,
-                    error=str(e)
-                )
+                logger.warning("data.cache.load_failed", ticker=ticker, error=str(e))
                 warnings.warn(f"缓存加载失败 ({ticker}): {e}，重新下载")
 
         # 从网络下载
@@ -100,37 +94,25 @@ class CachedDataProvider:
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 data = yf.download(
-                    ticker,
-                    start=start_date,
-                    end=end_date,
-                    auto_adjust=True,
-                    progress=False
+                    ticker, start=start_date, end=end_date, auto_adjust=True, progress=False
                 )
             download_duration = (time.time() - download_start) * 1000
 
             if data.empty:
-                logger.warning(
-                    "data.download.empty",
-                    ticker=ticker,
-                    data_type=data_type
-                )
+                logger.warning("data.download.empty", ticker=ticker, data_type=data_type)
                 # 如果网络下载为空，尝试使用过期缓存
                 if os.path.exists(cache_path):
                     warnings.warn(f"下载数据为空 ({ticker})，使用过期缓存")
-                    with open(cache_path, 'rb') as f:
+                    with open(cache_path, "rb") as f:
                         return pickle.load(f)
                 return None
 
             # 保存到缓存
             try:
-                with open(cache_path, 'wb') as f:
+                with open(cache_path, "wb") as f:
                     pickle.dump(data, f)
             except Exception as e:
-                logger.warning(
-                    "data.cache.save_failed",
-                    ticker=ticker,
-                    error=str(e)
-                )
+                logger.warning("data.cache.save_failed", ticker=ticker, error=str(e))
                 warnings.warn(f"缓存保存失败 ({ticker}): {e}")
 
             total_duration = (time.time() - start_time) * 1000
@@ -141,22 +123,17 @@ class CachedDataProvider:
                 rows=len(data),
                 download_duration_ms=round(download_duration, 2),
                 total_duration_ms=round(total_duration, 2),
-                cached=True
+                cached=True,
             )
             return data
 
         except Exception as e:
-            logger.error(
-                "data.download.failed",
-                ticker=ticker,
-                data_type=data_type,
-                error=str(e)
-            )
+            logger.error("data.download.failed", ticker=ticker, data_type=data_type, error=str(e))
             # 如果网络失败，尝试使用过期缓存
             if os.path.exists(cache_path):
                 warnings.warn(f"网络下载失败 ({ticker}): {e}，使用过期缓存")
                 try:
-                    with open(cache_path, 'rb') as f:
+                    with open(cache_path, "rb") as f:
                         return pickle.load(f)
                 except Exception as cache_error:
                     warnings.warn(f"过期缓存也加载失败: {cache_error}")
@@ -173,9 +150,9 @@ class DataProvider:
 
     # 宏观因子 ticker → 可读名
     MACRO_FACTOR_TICKERS = {
-        "^TNX":     "US10Y Rate",     # 10 年美债收益率 — 利率因子
-        "DX-Y.NYB": "USD Index",      # 美元指数 — 汇率因子
-        "CL=F":     "Crude Oil",      # WTI 原油期货 — 通胀因子
+        "^TNX": "US10Y Rate",  # 10 年美债收益率 — 利率因子
+        "DX-Y.NYB": "USD Index",  # 美元指数 — 汇率因子
+        "CL=F": "Crude Oil",  # WTI 原油期货 — 通胀因子
     }
 
     def __init__(
@@ -195,9 +172,7 @@ class DataProvider:
         self.weights = weights
         self.tickers = list(weights.keys())
         self.period_years = period_years
-        self.end_date = (
-            pd.Timestamp(end_date) if end_date else pd.Timestamp.today().normalize()
-        )
+        self.end_date = pd.Timestamp(end_date) if end_date else pd.Timestamp.today().normalize()
         self.start_date = self.end_date - timedelta(days=365 * period_years)
         self.holdings = holdings  # optional, for liquidity calc
 
@@ -232,15 +207,15 @@ class DataProvider:
         """
         # 常见的非美元资产后缀
         foreign_indicators = {
-            '.L': 'GBP (伦敦)',
-            '.T': 'JPY (东京)',
-            '.TO': 'CAD (多伦多)',
-            '.HK': 'HKD (香港)',
-            '.SS': 'CNY (上海)',
-            '.SZ': 'CNY (深圳)',
-            '.AX': 'AUD (澳洲)',
-            '.PA': 'EUR (巴黎)',
-            '.DE': 'EUR (德国)',
+            ".L": "GBP (伦敦)",
+            ".T": "JPY (东京)",
+            ".TO": "CAD (多伦多)",
+            ".HK": "HKD (香港)",
+            ".SS": "CNY (上海)",
+            ".SZ": "CNY (深圳)",
+            ".AX": "AUD (澳洲)",
+            ".PA": "EUR (巴黎)",
+            ".DE": "EUR (德国)",
         }
 
         detected_currencies = {}
@@ -252,18 +227,20 @@ class DataProvider:
                     is_foreign = True
                     break
             if not is_foreign:
-                detected_currencies[ticker] = 'USD'
+                detected_currencies[ticker] = "USD"
 
         # 检查是否有多种货币
         unique_currencies = set(detected_currencies.values())
         if len(unique_currencies) > 1:
-            currency_list = ', '.join(f"{t}({c})" for t, c in detected_currencies.items())
+            currency_list = ", ".join(f"{t}({c})" for t, c in detected_currencies.items())
             return True, f"检测到混合货币: {currency_list}。VaR计算可能不准确。"
 
         return False, ""
 
     @staticmethod
-    def _winsorize_returns(returns: pd.Series, lower_pct: float = 0.01, upper_pct: float = 0.99) -> pd.Series:
+    def _winsorize_returns(
+        returns: pd.Series, lower_pct: float = 0.01, upper_pct: float = 0.99
+    ) -> pd.Series:
         """
         Winsorization: 将极端值裁剪到百分位数阈值
 
@@ -295,13 +272,15 @@ class DataProvider:
                 "data.winsorization.applied",
                 n_clipped=n_clipped,
                 lower_bound=round(lower_bound, 4),
-                upper_bound=round(upper_bound, 4)
+                upper_bound=round(upper_bound, 4),
             )
 
         return clipped
 
     @staticmethod
-    def _detect_gaps(data: pd.Series, max_gap_days: int = 5) -> List[Tuple[pd.Timestamp, pd.Timestamp, int]]:
+    def _detect_gaps(
+        data: pd.Series, max_gap_days: int = 5
+    ) -> List[Tuple[pd.Timestamp, pd.Timestamp, int]]:
         """
         检测数据中的缺口（连续缺失）
 
@@ -346,7 +325,7 @@ class DataProvider:
         return gaps
 
     @staticmethod
-    def _smart_fill_gaps(data: pd.Series, method: str = 'auto') -> pd.Series:
+    def _smart_fill_gaps(data: pd.Series, method: str = "auto") -> pd.Series:
         """
         智能填充数据缺口
 
@@ -363,11 +342,11 @@ class DataProvider:
         if data.isnull().sum() == 0:
             return data
 
-        if method == 'ffill':
+        if method == "ffill":
             return data.ffill()
-        elif method == 'interpolate':
-            return data.interpolate(method='linear', limit_direction='both')
-        elif method == 'auto':
+        elif method == "interpolate":
+            return data.interpolate(method="linear", limit_direction="both")
+        elif method == "auto":
             # 对小缺口（<=3天）用插值，大缺口用前向填充
             filled = data.copy()
 
@@ -375,12 +354,12 @@ class DataProvider:
             filled = filled.ffill()
 
             # 找连续缺失<=3的区间用插值
-            missing_runs = (filled.isnull().astype(int).groupby(
-                filled.notnull().astype(int).cumsum()
-            ).cumsum())
+            missing_runs = (
+                filled.isnull().astype(int).groupby(filled.notnull().astype(int).cumsum()).cumsum()
+            )
 
             small_gaps = missing_runs <= 3
-            filled[small_gaps] = data[small_gaps].interpolate(method='linear')
+            filled[small_gaps] = data[small_gaps].interpolate(method="linear")
 
             # 最后再填充剩余的
             filled = filled.ffill().bfill()
@@ -401,16 +380,16 @@ class DataProvider:
 
         # 获取 Close 列（如果是 MultiIndex）
         if isinstance(data.columns, pd.MultiIndex):
-            if 'Close' in data.columns.get_level_values(0):
-                close_data = data['Close']
+            if "Close" in data.columns.get_level_values(0):
+                close_data = data["Close"]
                 # 如果还是DataFrame，取第一列
                 if isinstance(close_data, pd.DataFrame):
                     close_data = close_data.iloc[:, 0]
             else:
                 close_data = data.iloc[:, 0] if len(data.columns) > 0 else data
         else:
-            if 'Close' in data.columns:
-                close_data = data['Close']
+            if "Close" in data.columns:
+                close_data = data["Close"]
             else:
                 close_data = data.iloc[:, 0] if len(data.columns) > 0 else data
 
@@ -446,7 +425,7 @@ class DataProvider:
                             "data.validation.extreme_returns",
                             ticker=ticker,
                             extreme_count=extreme_count,
-                            max_return=round(returns.abs().max(), 3)
+                            max_return=round(returns.abs().max(), 3),
                         )
 
         # 检查5: 连续相同价格(停牌) - 放宽标准，因为某些资产可能正常停滞
@@ -467,7 +446,7 @@ class DataProvider:
                     "data.validation.gaps_detected",
                     ticker=ticker,
                     n_gaps=len(gaps),
-                    total_gap_days=total_gap_days
+                    total_gap_days=total_gap_days,
                 )
 
         # 检查7: 价格波动性异常（可能是数据错误）
@@ -480,7 +459,7 @@ class DataProvider:
                     logger.warning(
                         "data.validation.extreme_volatility",
                         ticker=ticker,
-                        annual_vol=round(volatility * np.sqrt(252), 2)
+                        annual_vol=round(volatility * np.sqrt(252), 2),
                     )
 
         return True, ""
@@ -519,7 +498,7 @@ class DataProvider:
             force_refresh=force_refresh,
             period_years=self.period_years,
             start_date=start_str,
-            end_date=end_str
+            end_date=end_str,
         )
         batch_start_time = time.time()
 
@@ -532,11 +511,7 @@ class DataProvider:
             try:
                 # 使用缓存下载
                 data = self._cache_provider.fetch_with_cache(
-                    ticker,
-                    start_str,
-                    end_str,
-                    force_refresh=force_refresh,
-                    data_type="prices"
+                    ticker, start_str, end_str, force_refresh=force_refresh, data_type="prices"
                 )
 
                 if data is None:
@@ -549,24 +524,22 @@ class DataProvider:
                 if not is_valid:
                     self._failed_tickers.append((ticker, error_msg))
                     logger.warning(
-                        "data.fetch_prices.validation_failed",
-                        ticker=ticker,
-                        error=error_msg
+                        "data.fetch_prices.validation_failed", ticker=ticker, error=error_msg
                     )
                     print(f"  ✗ {ticker}: 验证失败 - {error_msg}")
                     continue
 
                 # 提取 Close 价格
                 if isinstance(data.columns, pd.MultiIndex):
-                    if 'Close' in data.columns.get_level_values(0):
-                        close = data['Close']
+                    if "Close" in data.columns.get_level_values(0):
+                        close = data["Close"]
                         if isinstance(close, pd.DataFrame):
                             close = close.iloc[:, 0]
                     else:
                         close = data.iloc[:, 0]
                 else:
-                    if 'Close' in data.columns:
-                        close = data['Close']
+                    if "Close" in data.columns:
+                        close = data["Close"]
                     else:
                         close = data.iloc[:, 0] if len(data.columns) > 0 else data
 
@@ -585,31 +558,24 @@ class DataProvider:
             successful=len(successful_prices),
             failed=len(self._failed_tickers),
             total=len(self.tickers),
-            duration_ms=round(batch_duration, 2)
+            duration_ms=round(batch_duration, 2),
         )
 
         print(f"\n{'='*60}")
-        print(f"数据下载完成:")
+        print("数据下载完成:")
         print(f"  成功: {len(successful_prices)}/{len(self.tickers)}")
         print(f"  失败: {len(self._failed_tickers)}")
 
         if self._failed_tickers:
-            print(f"\n失败详情:")
+            print("\n失败详情:")
             for ticker, error in self._failed_tickers:
-                logger.warning(
-                    "data.fetch_prices.ticker_failed",
-                    ticker=ticker,
-                    error=error
-                )
+                logger.warning("data.fetch_prices.ticker_failed", ticker=ticker, error=error)
                 print(f"  - {ticker}: {error}")
 
         print(f"{'='*60}\n")
 
         if not successful_prices:
-            logger.error(
-                "data.fetch_prices.all_failed",
-                ticker_count=len(self.tickers)
-            )
+            logger.error("data.fetch_prices.all_failed", ticker_count=len(self.tickers))
             raise ValueError(
                 "所有ticker数据获取失败！请检查:\n"
                 "  1. 网络连接\n"
@@ -622,8 +588,7 @@ class DataProvider:
 
         # 检测货币混合
         has_mixing, currency_warning = self._detect_currency_mixing(
-            self._prices,
-            list(successful_prices.keys())
+            self._prices, list(successful_prices.keys())
         )
         if has_mixing:
             logger.warning("data.currency_mixing", message=currency_warning)
@@ -631,7 +596,7 @@ class DataProvider:
 
         # 智能填充缺口（使用前向填充+插值处理节假日差异和小缺口）
         for col in self._prices.columns:
-            self._prices[col] = self._smart_fill_gaps(self._prices[col], method='auto')
+            self._prices[col] = self._smart_fill_gaps(self._prices[col], method="auto")
 
         # 移除仍有缺失的行
         self._prices = self._prices.dropna()
@@ -715,9 +680,7 @@ class DataProvider:
         end_str = self.end_date.strftime("%Y-%m-%d")
 
         logger.info(
-            "data.fetch_macro.start",
-            macro_tickers=macro_tickers,
-            force_refresh=force_refresh
+            "data.fetch_macro.start", macro_tickers=macro_tickers, force_refresh=force_refresh
         )
         start_time = time.time()
 
@@ -727,11 +690,7 @@ class DataProvider:
         for ticker in macro_tickers:
             try:
                 data = self._cache_provider.fetch_with_cache(
-                    ticker,
-                    start_str,
-                    end_str,
-                    force_refresh=force_refresh,
-                    data_type="macro"
+                    ticker, start_str, end_str, force_refresh=force_refresh, data_type="macro"
                 )
 
                 if data is None or data.empty:
@@ -740,15 +699,15 @@ class DataProvider:
 
                 # 提取 Close 价格
                 if isinstance(data.columns, pd.MultiIndex):
-                    if 'Close' in data.columns.get_level_values(0):
-                        close = data['Close']
+                    if "Close" in data.columns.get_level_values(0):
+                        close = data["Close"]
                         if isinstance(close, pd.DataFrame):
                             close = close.iloc[:, 0]
                     else:
                         close = data.iloc[:, 0]
                 else:
-                    if 'Close' in data.columns:
-                        close = data['Close']
+                    if "Close" in data.columns:
+                        close = data["Close"]
                     else:
                         close = data.iloc[:, 0] if len(data.columns) > 0 else data
 
@@ -764,32 +723,25 @@ class DataProvider:
 
         if failed_macro:
             for ticker, error in failed_macro:
-                logger.warning(
-                    "data.fetch_macro.ticker_failed",
-                    ticker=ticker,
-                    error=error
-                )
+                logger.warning("data.fetch_macro.ticker_failed", ticker=ticker, error=error)
             warnings.warn(f"宏观因子部分下载失败: {failed_macro}")
 
         if not successful_data:
             # 如果全部失败，返回空 DataFrame 而不是抛出异常
-            logger.warning(
-                "data.fetch_macro.all_failed",
-                duration_ms=round(duration_ms, 2)
-            )
+            logger.warning("data.fetch_macro.all_failed", duration_ms=round(duration_ms, 2))
             warnings.warn("所有宏观因子下载失败，返回空数据")
             self._macro_prices = pd.DataFrame()
             return self._macro_prices
 
         # 合并数据并前向填充
         self._macro_prices = pd.DataFrame(successful_data)
-        self._macro_prices = self._macro_prices.ffill().dropna(how='all')
+        self._macro_prices = self._macro_prices.ffill().dropna(how="all")
 
         logger.info(
             "data.fetch_macro.complete",
             successful=len(successful_data),
             failed=len(failed_macro),
-            duration_ms=round(duration_ms, 2)
+            duration_ms=round(duration_ms, 2),
         )
 
         return self._macro_prices
@@ -823,7 +775,9 @@ class DataProvider:
         if not benchmarks:
             return pd.DataFrame()
 
-        start_str = start or (self.end_date - timedelta(days=int(self.period_years * 365) + 10)).strftime("%Y-%m-%d")
+        start_str = start or (
+            self.end_date - timedelta(days=int(self.period_years * 365) + 10)
+        ).strftime("%Y-%m-%d")
         end_str = end or self.end_date.strftime("%Y-%m-%d")
 
         try:
@@ -836,7 +790,9 @@ class DataProvider:
                 threads=False,
             )
         except Exception as exc:
-            logger.warning("data.benchmark.download_failed", benchmarks=list(benchmarks), error=str(exc))
+            logger.warning(
+                "data.benchmark.download_failed", benchmarks=list(benchmarks), error=str(exc)
+            )
             return pd.DataFrame(columns=benchmarks)
 
         if raw is None or raw.empty:
@@ -878,7 +834,11 @@ class DataProvider:
             return fallback
         try:
             if isinstance(raw.columns, pd.MultiIndex):
-                close = raw["Close"]["^IRX"] if "^IRX" in raw["Close"].columns else raw["Close"].iloc[:, 0]
+                close = (
+                    raw["Close"]["^IRX"]
+                    if "^IRX" in raw["Close"].columns
+                    else raw["Close"].iloc[:, 0]
+                )
             else:
                 close = raw["Close"] if "Close" in raw.columns else raw.iloc[:, 0]
             latest = float(close.dropna().iloc[-1])
@@ -914,7 +874,10 @@ class DataProvider:
         except Exception as exc:
             logger.warning(
                 "data.scenario.download_failed",
-                tickers=list(tickers), start=start, end=end, error=str(exc),
+                tickers=list(tickers),
+                start=start,
+                end=end,
+                error=str(exc),
             )
             return None
 
@@ -962,7 +925,7 @@ class DataProvider:
                     end_str,
                     force_refresh=force_refresh,
                     data_type="volume",
-                    max_age_hours=6  # 成交量数据更频繁更新
+                    max_age_hours=6,  # 成交量数据更频繁更新
                 )
 
                 if data is None or data.empty:
@@ -971,16 +934,16 @@ class DataProvider:
 
                 # 提取 Volume 列
                 if isinstance(data.columns, pd.MultiIndex):
-                    if 'Volume' in data.columns.get_level_values(0):
-                        volume = data['Volume']
+                    if "Volume" in data.columns.get_level_values(0):
+                        volume = data["Volume"]
                         if isinstance(volume, pd.DataFrame):
                             volume = volume.iloc[:, 0]
                     else:
                         # 没有 Volume 列，跳过
                         continue
                 else:
-                    if 'Volume' in data.columns:
-                        volume = data['Volume']
+                    if "Volume" in data.columns:
+                        volume = data["Volume"]
                     else:
                         # 没有 Volume 列，跳过
                         continue

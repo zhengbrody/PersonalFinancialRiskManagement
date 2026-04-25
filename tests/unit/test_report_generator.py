@@ -11,20 +11,17 @@ exceptions from chart generation gracefully, so tests work even
 without kaleido installed.
 """
 
-import pytest
 import numpy as np
 import pandas as pd
-from dataclasses import dataclass, field
-from typing import Dict, Optional
-from unittest.mock import patch
+import pytest
 
-from risk_engine import RiskReport
 from report_generator import generate_pdf_report
-
+from risk_engine import RiskReport
 
 # ══════════════════════════════════════════════════════════════
 #  Fixtures
 # ══════════════════════════════════════════════════════════════
+
 
 @pytest.fixture
 def sample_prices():
@@ -65,8 +62,12 @@ def sample_report():
         betas={"AAPL": 1.15, "GOOGL": 1.22, "MSFT": 0.98},
         stress_asset_losses={"AAPL": -0.25, "GOOGL": -0.28, "MSFT": -0.20},
         factor_betas=pd.DataFrame(
-            {"SPY": [1.1, 1.2, 0.9], "QQQ": [0.8, 0.9, 0.7],
-             "GLD": [-0.1, -0.05, 0.02], "TLT": [-0.2, -0.15, -0.1]},
+            {
+                "SPY": [1.1, 1.2, 0.9],
+                "QQQ": [0.8, 0.9, 0.7],
+                "GLD": [-0.1, -0.05, 0.02],
+                "TLT": [-0.2, -0.15, -0.1],
+            },
             index=["AAPL", "GOOGL", "MSFT"],
         ),
         drawdown_stats={
@@ -112,11 +113,11 @@ def minimal_report():
 #  Tests
 # ══════════════════════════════════════════════════════════════
 
+
 class TestGeneratePdfReport:
     """Core tests for PDF generation."""
 
-    def test_returns_bytes(self, sample_report, sample_weights,
-                           sample_prices, sample_sector_map):
+    def test_returns_bytes(self, sample_report, sample_weights, sample_prices, sample_sector_map):
         result = generate_pdf_report(
             report=sample_report,
             weights=sample_weights,
@@ -127,8 +128,7 @@ class TestGeneratePdfReport:
         )
         assert isinstance(result, (bytes, bytearray))
 
-    def test_pdf_header(self, sample_report, sample_weights,
-                        sample_prices, sample_sector_map):
+    def test_pdf_header(self, sample_report, sample_weights, sample_prices, sample_sector_map):
         """The returned bytes must start with the PDF magic header."""
         result = generate_pdf_report(
             report=sample_report,
@@ -140,8 +140,9 @@ class TestGeneratePdfReport:
         )
         assert result[:5] == b"%PDF-", "PDF output should start with %PDF- header"
 
-    def test_pdf_has_substantial_size(self, sample_report, sample_weights,
-                                      sample_prices, sample_sector_map):
+    def test_pdf_has_substantial_size(
+        self, sample_report, sample_weights, sample_prices, sample_sector_map
+    ):
         """A 3-page report should be more than a trivial number of bytes."""
         result = generate_pdf_report(
             report=sample_report,
@@ -153,8 +154,7 @@ class TestGeneratePdfReport:
         )
         assert len(result) > 1000, "PDF should be more than 1KB"
 
-    def test_handles_none_fields_gracefully(self, minimal_report, sample_prices,
-                                             sample_sector_map):
+    def test_handles_none_fields_gracefully(self, minimal_report, sample_prices, sample_sector_map):
         """Report with None optional fields should not crash."""
         result = generate_pdf_report(
             report=minimal_report,
@@ -167,8 +167,7 @@ class TestGeneratePdfReport:
         assert isinstance(result, (bytes, bytearray))
         assert result[:5] == b"%PDF-"
 
-    def test_works_with_empty_weights(self, minimal_report, sample_prices,
-                                       sample_sector_map):
+    def test_works_with_empty_weights(self, minimal_report, sample_prices, sample_sector_map):
         """Empty weights dict should not crash the generator."""
         result = generate_pdf_report(
             report=minimal_report,
@@ -181,8 +180,7 @@ class TestGeneratePdfReport:
         assert isinstance(result, (bytes, bytearray))
         assert result[:5] == b"%PDF-"
 
-    def test_lang_en(self, sample_report, sample_weights,
-                     sample_prices, sample_sector_map):
+    def test_lang_en(self, sample_report, sample_weights, sample_prices, sample_sector_map):
         """Explicit lang='en' should produce a valid PDF."""
         result = generate_pdf_report(
             report=sample_report,
@@ -196,8 +194,7 @@ class TestGeneratePdfReport:
         assert isinstance(result, (bytes, bytearray))
         assert result[:5] == b"%PDF-"
 
-    def test_lang_zh(self, sample_report, sample_weights,
-                     sample_prices, sample_sector_map):
+    def test_lang_zh(self, sample_report, sample_weights, sample_prices, sample_sector_map):
         """lang='zh' should also produce a valid PDF without errors."""
         result = generate_pdf_report(
             report=sample_report,
@@ -237,8 +234,9 @@ class TestGeneratePdfReport:
         assert isinstance(result, (bytes, bytearray))
         assert result[:5] == b"%PDF-"
 
-    def test_with_margin_info(self, sample_report, sample_weights,
-                               sample_prices, sample_sector_map):
+    def test_with_margin_info(
+        self, sample_report, sample_weights, sample_prices, sample_sector_map
+    ):
         """If margin_info is provided, the PDF should include margin section."""
         margin_info = {
             "has_margin": True,
@@ -260,8 +258,9 @@ class TestGeneratePdfReport:
         assert isinstance(result, (bytes, bytearray))
         assert result[:5] == b"%PDF-"
 
-    def test_zero_market_shock(self, sample_report, sample_weights,
-                                sample_prices, sample_sector_map):
+    def test_zero_market_shock(
+        self, sample_report, sample_weights, sample_prices, sample_sector_map
+    ):
         """A 0% market shock should not cause division errors."""
         result = generate_pdf_report(
             report=sample_report,

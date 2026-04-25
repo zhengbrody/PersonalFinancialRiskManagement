@@ -20,14 +20,12 @@ SEC EDGAR compliance:
 Dependencies: requests, yfinance (all in requirements.txt)
 """
 
+import hashlib
 import json
 import os
 import time
-import hashlib
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Dict, List, Optional
 
 import requests
 
@@ -61,134 +59,131 @@ _MIN_REQUEST_INTERVAL = 0.12  # ~8 req/sec to stay safely under limit
 
 CUSIP_TO_TICKER = {
     # Mega-cap tech
-    "037833100": "AAPL",   # Apple
-    "594918104": "MSFT",   # Microsoft
-    "67066G104": "NVDA",   # NVIDIA
+    "037833100": "AAPL",  # Apple
+    "594918104": "MSFT",  # Microsoft
+    "67066G104": "NVDA",  # NVIDIA
     "02079K305": "GOOGL",  # Alphabet Class A
-    "02079K107": "GOOG",   # Alphabet Class C
-    "023135106": "AMZN",   # Amazon
-    "30303M102": "META",   # Meta Platforms
-    "88160R101": "TSLA",   # Tesla
+    "02079K107": "GOOG",  # Alphabet Class C
+    "023135106": "AMZN",  # Amazon
+    "30303M102": "META",  # Meta Platforms
+    "88160R101": "TSLA",  # Tesla
     "084670702": "BRK-B",  # Berkshire Hathaway B
     "084670108": "BRK-A",  # Berkshire Hathaway A
     # Semiconductors
-    "11135F101": "AVGO",   # Broadcom
-    "007903107": "AMD",    # AMD
-    "458140100": "INTC",   # Intel
-    "874568002": "TXN",    # Texas Instruments
-    "868857108": "QCOM",   # Qualcomm
-    "00507V109": "AMAT",   # Applied Materials
-    "512807108": "LRCX",   # Lam Research
-    "482480100": "KLAC",   # KLA Corp
-    "03662Q105": "ARM",    # ARM Holdings
+    "11135F101": "AVGO",  # Broadcom
+    "007903107": "AMD",  # AMD
+    "458140100": "INTC",  # Intel
+    "874568002": "TXN",  # Texas Instruments
+    "868857108": "QCOM",  # Qualcomm
+    "00507V109": "AMAT",  # Applied Materials
+    "512807108": "LRCX",  # Lam Research
+    "482480100": "KLAC",  # KLA Corp
+    "03662Q105": "ARM",  # ARM Holdings
     # Software / Cloud
-    "79466L302": "CRM",    # Salesforce
-    "00724F101": "ADBE",   # Adobe
-    "668771300": "NOW",    # ServiceNow
-    "44107P104": "INTU",   # Intuit
-    "72352L106": "PANW",   # Palo Alto Networks
-    "22788C105": "CRWD",   # CrowdStrike
-    "34959E109": "FTNT",   # Fortinet
-    "69608A108": "PLTR",   # Palantir
-    "68389X105": "ORCL",   # Oracle
+    "79466L302": "CRM",  # Salesforce
+    "00724F101": "ADBE",  # Adobe
+    "668771300": "NOW",  # ServiceNow
+    "44107P104": "INTU",  # Intuit
+    "72352L106": "PANW",  # Palo Alto Networks
+    "22788C105": "CRWD",  # CrowdStrike
+    "34959E109": "FTNT",  # Fortinet
+    "69608A108": "PLTR",  # Palantir
+    "68389X105": "ORCL",  # Oracle
     # Financials
-    "46625H100": "JPM",    # JPMorgan Chase
-    "060505104": "BAC",    # Bank of America
-    "92826C839": "V",      # Visa
-    "57636Q104": "MA",     # Mastercard
-    "172967424": "C",      # Citigroup
-    "808513105": "SCHW",   # Charles Schwab
-    "38141G104": "GS",     # Goldman Sachs
-    "617446448": "MS",     # Morgan Stanley
-    "902973304": "USB",    # US Bancorp
-    "09247X101": "BLK",    # BlackRock
+    "46625H100": "JPM",  # JPMorgan Chase
+    "060505104": "BAC",  # Bank of America
+    "92826C839": "V",  # Visa
+    "57636Q104": "MA",  # Mastercard
+    "172967424": "C",  # Citigroup
+    "808513105": "SCHW",  # Charles Schwab
+    "38141G104": "GS",  # Goldman Sachs
+    "617446448": "MS",  # Morgan Stanley
+    "902973304": "USB",  # US Bancorp
+    "09247X101": "BLK",  # BlackRock
     # Healthcare
-    "91324P102": "UNH",    # UnitedHealth
-    "049560105": "LLY",    # Eli Lilly
-    "478160104": "JNJ",    # Johnson & Johnson
-    "58933Y105": "MRK",    # Merck
-    "00287Y109": "ABBV",   # AbbVie
-    "717081103": "PFE",    # Pfizer
-    "110122108": "BMY",    # Bristol-Myers Squibb
-    "88322Q108": "TMO",    # Thermo Fisher
-    "002824100": "ABT",    # Abbott Labs
-    "863667101": "SYK",    # Stryker
-    "46120E602": "ISRG",   # Intuitive Surgical
-    "375558103": "GILD",   # Gilead Sciences
-    "543370108": "REGN",   # Regeneron
-    "92532F100": "VRTX",   # Vertex Pharma
-    "00846U101": "AMGN",   # Amgen
+    "91324P102": "UNH",  # UnitedHealth
+    "049560105": "LLY",  # Eli Lilly
+    "478160104": "JNJ",  # Johnson & Johnson
+    "58933Y105": "MRK",  # Merck
+    "00287Y109": "ABBV",  # AbbVie
+    "717081103": "PFE",  # Pfizer
+    "110122108": "BMY",  # Bristol-Myers Squibb
+    "88322Q108": "TMO",  # Thermo Fisher
+    "002824100": "ABT",  # Abbott Labs
+    "863667101": "SYK",  # Stryker
+    "46120E602": "ISRG",  # Intuitive Surgical
+    "375558103": "GILD",  # Gilead Sciences
+    "543370108": "REGN",  # Regeneron
+    "92532F100": "VRTX",  # Vertex Pharma
+    "00846U101": "AMGN",  # Amgen
     # Consumer
-    "22160K105": "COST",   # Costco
-    "437076102": "HD",     # Home Depot
-    "931142103": "WMT",    # Walmart
-    "64110L106": "NFLX",   # Netflix
-    "548661107": "LOW",    # Lowe's
-    "580135101": "MCD",    # McDonald's
-    "191216100": "KO",     # Coca-Cola
-    "713448108": "PEP",    # PepsiCo
-    "742718109": "PG",     # Procter & Gamble
-    "17275R102": "CSCO",   # Cisco
-    "00971T101": "BKNG",   # Booking Holdings
-    "609207105": "MDLZ",   # Mondelez
-    "172062101": "CL",     # Colgate-Palmolive
-    "609207950": "MO",     # Altria (Philip Morris parent)
-    "718172109": "PM",     # Philip Morris Intl
-    "90384S303": "UBER",   # Uber
-    "15223T107": "ABNB",   # Airbnb
-    "25809K105": "DASH",   # DoorDash
+    "22160K105": "COST",  # Costco
+    "437076102": "HD",  # Home Depot
+    "931142103": "WMT",  # Walmart
+    "64110L106": "NFLX",  # Netflix
+    "548661107": "LOW",  # Lowe's
+    "580135101": "MCD",  # McDonald's
+    "191216100": "KO",  # Coca-Cola
+    "713448108": "PEP",  # PepsiCo
+    "742718109": "PG",  # Procter & Gamble
+    "17275R102": "CSCO",  # Cisco
+    "00971T101": "BKNG",  # Booking Holdings
+    "609207105": "MDLZ",  # Mondelez
+    "172062101": "CL",  # Colgate-Palmolive
+    "609207950": "MO",  # Altria (Philip Morris parent)
+    "718172109": "PM",  # Philip Morris Intl
+    "90384S303": "UBER",  # Uber
+    "15223T107": "ABNB",  # Airbnb
+    "25809K105": "DASH",  # DoorDash
     # Energy
-    "30231G102": "XOM",    # Exxon Mobil
-    "166764100": "CVX",    # Chevron
-    "26875P101": "EOG",    # EOG Resources
-    "806857108": "SLB",    # Schlumberger
+    "30231G102": "XOM",  # Exxon Mobil
+    "166764100": "CVX",  # Chevron
+    "26875P101": "EOG",  # EOG Resources
+    "806857108": "SLB",  # Schlumberger
     # Industrials
-    "907818108": "UNP",    # Union Pacific
-    "75513E101": "RTX",    # RTX (Raytheon)
-    "438516106": "HON",    # Honeywell
-    "369604103": "GE",     # GE Aerospace
-    "244199105": "DE",     # Deere
-    "002546108": "ACN",    # Accenture
-    "053015103": "ADP",    # ADP
-    "236521105": "DHR",    # Danaher
-    "269246401": "FDX",    # FedEx
-    "961214209": "WM",     # Waste Management
+    "907818108": "UNP",  # Union Pacific
+    "75513E101": "RTX",  # RTX (Raytheon)
+    "438516106": "HON",  # Honeywell
+    "369604103": "GE",  # GE Aerospace
+    "244199105": "DE",  # Deere
+    "002546108": "ACN",  # Accenture
+    "053015103": "ADP",  # ADP
+    "236521105": "DHR",  # Danaher
+    "269246401": "FDX",  # FedEx
+    "961214209": "WM",  # Waste Management
     # Utilities / REITs
-    "65339F101": "NEE",    # NextEra Energy
-    "842587107": "SO",     # Southern Co
-    "263534109": "DUK",    # Duke Energy
-    "743315103": "PGR",    # Progressive Corp
-    "73278L105": "PLD",    # Prologis
+    "65339F101": "NEE",  # NextEra Energy
+    "842587107": "SO",  # Southern Co
+    "263534109": "DUK",  # Duke Energy
+    "743315103": "PGR",  # Progressive Corp
+    "73278L105": "PLD",  # Prologis
     # Other notable
-    "552953101": "CME",    # CME Group
-    "458140100": "ICE",    # Intercontinental Exchange
-    "571903202": "MMC",    # Marsh McLennan
-    "125523100": "CI",     # Cigna
-    "00287Y109": "ELV",    # Elevance Health
-    "98978V103": "ZTS",    # Zoetis
-    "70450Y103": "PYPL",   # PayPal
-    "00206R102": "T",      # AT&T
-    "92343V104": "VZ",     # Verizon
-    "22822V101": "CRWD",   # CrowdStrike (alt CUSIP)
-    "00790R104": "ADI",    # Analog Devices
-    "86800U104": "SNPS",   # Synopsys
-    "12673P105": "CDNS",   # Cadence
-    "003654108": "APD",    # Air Products
-    "589331107": "MCK",    # McKesson
-    "00108J109": "AJG",    # Arthur J Gallagher
-    "1326801":   "COIN",   # Coinbase (newer listing)
-    "584404107": "MELI",   # MercadoLibre
-    # ARK-held names
-    "88160R101": "TSLA",   # (dupe ok — same CUSIP)
-    "862121100": "SQ",     # Block (Square)
-    "64110W142": "NFLX",   # alt CUSIP
-    "78468R107": "ROKU",   # Roku
-    "09857L108": "BIDU",   # Baidu
-    "98980L101": "ZM",     # Zoom
-    "58463J304": "MELI",   # alt CUSIP
-    "74587V107": "QCOM",   # alt CUSIP
-    "46625H100": "JPM",    # dupe ok
-    "92343V104": "VZ",     # dupe ok
+    "552953101": "CME",  # CME Group
+    # 458140100 is Intel (line 75), not ICE — keeping INTC mapping
+    "571903202": "MMC",  # Marsh McLennan
+    "125523100": "CI",  # Cigna
+    # 00287Y109 is AbbVie (line 108), not ELV — keeping ABBV mapping
+    "98978V103": "ZTS",  # Zoetis
+    "70450Y103": "PYPL",  # PayPal
+    "00206R102": "T",  # AT&T
+    "92343V104": "VZ",  # Verizon
+    "22822V101": "CRWD",  # CrowdStrike (alt CUSIP)
+    "00790R104": "ADI",  # Analog Devices
+    "86800U104": "SNPS",  # Synopsys
+    "12673P105": "CDNS",  # Cadence
+    "003654108": "APD",  # Air Products
+    "589331107": "MCK",  # McKesson
+    "00108J109": "AJG",  # Arthur J Gallagher
+    "1326801": "COIN",  # Coinbase (newer listing)
+    "584404107": "MELI",  # MercadoLibre
+    # ARK-held names (TSLA, JPM, VZ already mapped above)
+    "862121100": "SQ",  # Block (Square)
+    "64110W142": "NFLX",  # alt CUSIP
+    "78468R107": "ROKU",  # Roku
+    "09857L108": "BIDU",  # Baidu
+    "98980L101": "ZM",  # Zoom
+    "58463J304": "MELI",  # alt CUSIP
+    "74587V107": "QCOM",  # alt CUSIP
 }
 
 # Reverse lookup: ticker -> list of CUSIPs (for ownership search)
@@ -205,44 +200,44 @@ for _cusip, _tkr in CUSIP_TO_TICKER.items():
 # Format: (display_name, CIK as zero-padded 10-digit string)
 _TOP_INSTITUTIONS = [
     # Legendary value / macro
-    ("Berkshire Hathaway",       "0001067983"),
-    ("Bridgewater Associates",   "0001350694"),
+    ("Berkshire Hathaway", "0001067983"),
+    ("Bridgewater Associates", "0001350694"),
     ("Renaissance Technologies", "0001037389"),
     # Multi-strategy hedge funds
-    ("Citadel Advisors",         "0001423053"),
+    ("Citadel Advisors", "0001423053"),
     ("Point72 Asset Management", "0001603466"),
-    ("Millennium Management",    "0001273087"),
-    ("DE Shaw & Co",             "0001009207"),
-    ("Two Sigma Investments",    "0001179392"),
+    ("Millennium Management", "0001273087"),
+    ("DE Shaw & Co", "0001009207"),
+    ("Two Sigma Investments", "0001179392"),
     # Tiger cubs / activist
-    ("Tiger Global Management",  "0001167483"),
-    ("Appaloosa Management",     "0001656456"),
-    ("Baupost Group",            "0001061768"),
-    ("Pershing Square Capital",  "0001336528"),
-    ("Third Point",              "0001040273"),
-    ("Icahn Enterprises",        "0000049588"),
-    ("Soros Fund Management",    "0001029160"),
-    ("Greenlight Capital",       "0001079114"),
+    ("Tiger Global Management", "0001167483"),
+    ("Appaloosa Management", "0001656456"),
+    ("Baupost Group", "0001061768"),
+    ("Pershing Square Capital", "0001336528"),
+    ("Third Point", "0001040273"),
+    ("Icahn Enterprises", "0000049588"),
+    ("Soros Fund Management", "0001029160"),
+    ("Greenlight Capital", "0001079114"),
     # Quant / systematic
-    ("AQR Capital Management",   "0001167557"),
-    ("Lone Pine Capital",        "0001061165"),
-    ("Viking Global Investors",  "0001103804"),
-    ("Coatue Management",        "0001535392"),
-    ("Dragoneer Investment",     "0001571983"),
+    ("AQR Capital Management", "0001167557"),
+    ("Lone Pine Capital", "0001061165"),
+    ("Viking Global Investors", "0001103804"),
+    ("Coatue Management", "0001535392"),
+    ("Dragoneer Investment", "0001571983"),
     # Thematic / ETF
-    ("ARK Investment Management","0001697748"),
+    ("ARK Investment Management", "0001697748"),
     # Mega asset managers
-    ("BlackRock",                "0001364742"),
-    ("Vanguard Group",           "0000102909"),
+    ("BlackRock", "0001364742"),
+    ("Vanguard Group", "0000102909"),
     ("State Street Corporation", "0000093751"),
-    ("Fidelity (FMR LLC)",       "0000315066"),
+    ("Fidelity (FMR LLC)", "0000315066"),
     # Investment banks
-    ("JPMorgan Chase & Co",      "0000019617"),
-    ("Goldman Sachs Group",      "0000886982"),
-    ("Morgan Stanley",           "0000895421"),
+    ("JPMorgan Chase & Co", "0000019617"),
+    ("Goldman Sachs Group", "0000886982"),
+    ("Morgan Stanley", "0000895421"),
     # Mutual fund giants
     ("T. Rowe Price Associates", "0001549575"),
-    ("Capital Group Companies",  "0000783412"),
+    ("Capital Group Companies", "0000783412"),
 ]
 
 
@@ -267,6 +262,7 @@ def get_top_institutions() -> List[Dict[str, str]]:
 # ══════════════════════════════════════════════════════════════
 #  File-based Cache
 # ══════════════════════════════════════════════════════════════
+
 
 def _ensure_cache_dir():
     """Create cache directory if it does not exist."""
@@ -312,6 +308,7 @@ def _write_cache(key: str, data) -> None:
 # ══════════════════════════════════════════════════════════════
 #  SEC EDGAR Rate-Limited Request
 # ══════════════════════════════════════════════════════════════
+
 
 def _sec_get(url: str, timeout: int = 15) -> Optional[requests.Response]:
     """
@@ -376,8 +373,15 @@ def _cusip_to_ticker(cusip: str) -> str:
     cusip_base = cusip[:8] if len(cusip) >= 9 else cusip
 
     # Check both 8-char and 9-char variants in our mapping
-    for variant in [cusip, cusip_base, cusip + "0", cusip_base + "0",
-                    cusip_base + "1", cusip_base + "2", cusip_base + "3"]:
+    for variant in [
+        cusip,
+        cusip_base,
+        cusip + "0",
+        cusip_base + "0",
+        cusip_base + "1",
+        cusip_base + "2",
+        cusip_base + "3",
+    ]:
         if variant in CUSIP_TO_TICKER:
             return CUSIP_TO_TICKER[variant]
 
@@ -427,6 +431,7 @@ def _resolve_cusips_batch(cusips: List[str]) -> Dict[str, str]:
 #  Section 2 — Fetch 13F Holdings from SEC EDGAR
 # ══════════════════════════════════════════════════════════════
 
+
 def _get_filing_urls(cik: str, form_type: str = "13F-HR", limit: int = 2) -> List[Dict]:
     """
     Retrieve the most recent 13F filing URLs for a given CIK.
@@ -474,17 +479,18 @@ def _get_filing_urls(cik: str, form_type: str = "13F-HR", limit: int = 2) -> Lis
         if form.startswith(form_type) and len(results) < limit:
             acc = accessions[i].replace("-", "")
             acc_dashed = accessions[i]
-            results.append({
-                "accession_number": acc_dashed,
-                "filing_date": filing_dates[i],
-                "primary_document": primary_docs[i] if i < len(primary_docs) else "",
-                "form": form,
-                "cik": cik_padded,
-                "archive_url": (
-                    f"{SEC_ARCHIVES_URL}/Archives/edgar/data/"
-                    f"{cik_padded.lstrip('0')}/{acc}"
-                ),
-            })
+            results.append(
+                {
+                    "accession_number": acc_dashed,
+                    "filing_date": filing_dates[i],
+                    "primary_document": primary_docs[i] if i < len(primary_docs) else "",
+                    "form": form,
+                    "cik": cik_padded,
+                    "archive_url": (
+                        f"{SEC_ARCHIVES_URL}/Archives/edgar/data/" f"{cik_padded.lstrip('0')}/{acc}"
+                    ),
+                }
+            )
 
     return results
 
@@ -511,7 +517,7 @@ def _parse_13f_xml(xml_text: str) -> List[Dict]:
         if cleaned.startswith("<?"):
             idx = cleaned.find("?>")
             if idx > 0:
-                cleaned = cleaned[idx + 2:]
+                cleaned = cleaned[idx + 2 :]
         try:
             root = ET.fromstring(cleaned)
         except ET.ParseError as exc:
@@ -630,9 +636,9 @@ def _extract_holding_from_element(entry: ET.Element, namespaces: dict) -> Option
             except ValueError:
                 shares = 0
 
-    investment_discretion = _find_text(
-        entry, ["investmentDiscretion", "INVESTMENTDISCRETION"]
-    ) or "SOLE"
+    investment_discretion = (
+        _find_text(entry, ["investmentDiscretion", "INVESTMENTDISCRETION"]) or "SOLE"
+    )
 
     return {
         "cusip": cusip,
@@ -653,8 +659,7 @@ def _fetch_13f_info_table(filing: Dict) -> List[Dict]:
     cik_stripped = filing["cik"].lstrip("0")
     acc_no_dashes = filing["accession_number"].replace("-", "")
     index_url = (
-        f"{SEC_ARCHIVES_URL}/Archives/edgar/data/{cik_stripped}/"
-        f"{acc_no_dashes}/index.json"
+        f"{SEC_ARCHIVES_URL}/Archives/edgar/data/{cik_stripped}/" f"{acc_no_dashes}/index.json"
     )
 
     resp = _sec_get(index_url)
@@ -695,10 +700,7 @@ def _fetch_13f_info_table(filing: Dict) -> List[Dict]:
 
     if info_table_url is None:
         # Try common info table filenames directly before falling back
-        base_url = (
-            f"{SEC_ARCHIVES_URL}/Archives/edgar/data/{cik_stripped}/"
-            f"{acc_no_dashes}"
-        )
+        base_url = f"{SEC_ARCHIVES_URL}/Archives/edgar/data/{cik_stripped}/" f"{acc_no_dashes}"
         common_names = [
             "infotable.xml",
             "InfoTable.xml",
@@ -805,20 +807,24 @@ def fetch_13f_holdings(cik: str, limit: int = 1) -> List[Dict]:
         enriched = []
         for h in raw_holdings:
             ticker = _cusip_to_ticker(h["cusip"])
-            enriched.append({
-                "ticker": ticker,
-                "name": h["name"],
-                "cusip": h["cusip"],
-                "shares": h["shares"],
-                "value": h["value"],
-                "change_pct_qoq": None,  # Filled in below if we have prior data
-            })
+            enriched.append(
+                {
+                    "ticker": ticker,
+                    "name": h["name"],
+                    "cusip": h["cusip"],
+                    "shares": h["shares"],
+                    "value": h["value"],
+                    "change_pct_qoq": None,  # Filled in below if we have prior data
+                }
+            )
 
         all_holdings_by_filing.append(enriched)
-        results.append({
-            "filing_date": meta["filing_date"],
-            "holdings": enriched,
-        })
+        results.append(
+            {
+                "filing_date": meta["filing_date"],
+                "holdings": enriched,
+            }
+        )
 
     # Compute QoQ changes if we have two filings
     if limit >= 2 and len(filings_meta) >= 2:
@@ -847,6 +853,7 @@ def fetch_13f_holdings(cik: str, limit: int = 1) -> List[Dict]:
 # ══════════════════════════════════════════════════════════════
 #  Section 3 — Institutional Ownership for a Given Ticker
 # ══════════════════════════════════════════════════════════════
+
 
 def get_institutional_ownership(
     ticker: str,
@@ -925,12 +932,14 @@ def get_institutional_ownership(
                         if portfolio_total_value > 0
                         else 0.0
                     )
-                    holders.append({
-                        "name": inst["name"],
-                        "shares": h["shares"],
-                        "value": h["value"],
-                        "pct_of_portfolio": round(pct_of_portfolio, 4),
-                    })
+                    holders.append(
+                        {
+                            "name": inst["name"],
+                            "shares": h["shares"],
+                            "value": h["value"],
+                            "pct_of_portfolio": round(pct_of_portfolio, 4),
+                        }
+                    )
                     total_shares += h["shares"]
                     total_value += h["value"]
                     break  # Only count each institution once per ticker
@@ -970,6 +979,7 @@ def get_institutional_ownership(
 # ══════════════════════════════════════════════════════════════
 #  Section 4 — Smart Money Signals for Portfolio
 # ══════════════════════════════════════════════════════════════
+
 
 def get_smart_money_signals(portfolio_tickers: List[str]) -> List[Dict]:
     """
@@ -1061,13 +1071,15 @@ def get_smart_money_signals(portfolio_tickers: List[str]) -> List[Dict]:
         else:
             signal = "LOW"
 
-        results.append({
-            "ticker": ticker_upper,
-            "num_institutions": num_holders,
-            "crowding_score": crowding,
-            "top_holders": holders[:5],
-            "signal": signal,
-        })
+        results.append(
+            {
+                "ticker": ticker_upper,
+                "num_institutions": num_holders,
+                "crowding_score": crowding,
+                "top_holders": holders[:5],
+                "signal": signal,
+            }
+        )
 
     # Sort by institutional conviction descending
     results.sort(key=lambda x: x["num_institutions"], reverse=True)
@@ -1086,6 +1098,7 @@ def get_smart_money_signals(portfolio_tickers: List[str]) -> List[Dict]:
 # ══════════════════════════════════════════════════════════════
 #  Section 5 — Quarter-over-Quarter Institutional Changes
 # ══════════════════════════════════════════════════════════════
+
 
 def get_institutional_changes(cik: str) -> Dict:
     """
@@ -1201,22 +1214,26 @@ def get_institutional_changes(cik: str) -> Dict:
         if in_latest and not in_prev:
             # New position
             h = latest_by_cusip[cusip]
-            new_positions.append({
-                "ticker": h["ticker"],
-                "name": h["name"],
-                "shares": h["shares"],
-                "value": h["value"],
-            })
+            new_positions.append(
+                {
+                    "ticker": h["ticker"],
+                    "name": h["name"],
+                    "shares": h["shares"],
+                    "value": h["value"],
+                }
+            )
 
         elif not in_latest and in_prev:
             # Exited position
             h = prev_by_cusip[cusip]
-            exited.append({
-                "ticker": h["ticker"],
-                "name": h["name"],
-                "prev_shares": h["shares"],
-                "prev_value": h["value"],
-            })
+            exited.append(
+                {
+                    "ticker": h["ticker"],
+                    "name": h["name"],
+                    "prev_shares": h["shares"],
+                    "prev_value": h["value"],
+                }
+            )
 
         elif in_latest and in_prev:
             curr = latest_by_cusip[cusip]
@@ -1227,9 +1244,7 @@ def get_institutional_changes(cik: str) -> Dict:
                 unchanged_count += 1
             else:
                 change_pct = (
-                    round((share_diff / prev["shares"]) * 100, 2)
-                    if prev["shares"] > 0
-                    else 0.0
+                    round((share_diff / prev["shares"]) * 100, 2) if prev["shares"] > 0 else 0.0
                 )
                 entry = {
                     "ticker": curr["ticker"],
@@ -1284,6 +1299,7 @@ def get_institutional_changes(cik: str) -> Dict:
 #  Convenience / Summary Helpers
 # ══════════════════════════════════════════════════════════════
 
+
 def get_institution_name(cik: str) -> Optional[str]:
     """Look up the display name for a CIK from our tracked institutions."""
     cik_padded = cik.lstrip("0").zfill(10)
@@ -1324,13 +1340,15 @@ def summarize_top_holdings(cik: str, top_n: int = 20) -> List[Dict]:
     result = []
     for h in sorted_holdings[:top_n]:
         pct = round((h["value"] / total_value * 100), 4) if total_value > 0 else 0.0
-        result.append({
-            "ticker": h["ticker"],
-            "name": h["name"],
-            "shares": h["shares"],
-            "value": h["value"],
-            "pct_of_portfolio": pct,
-        })
+        result.append(
+            {
+                "ticker": h["ticker"],
+                "name": h["name"],
+                "shares": h["shares"],
+                "value": h["value"],
+                "pct_of_portfolio": pct,
+            }
+        )
 
     return result
 

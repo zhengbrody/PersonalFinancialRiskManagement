@@ -3,30 +3,41 @@ pages/4_Portfolio.py
 Portfolio Optimization and Action: What should I do?
 """
 
-import json
-import os
 import re
-import streamlit as st
+
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.express as px
 import requests
-from app import (get_sector, SECTOR_MAP, CLR_ACCENT, CLR_WARN,
-                 CLR_DANGER, CLR_GOOD, CLR_MUTED, CLR_GRID, CLR_GOLD,
-                 get_conviction_multiplier, build_risk_context, _safe_get_secret,
-                 call_llm)
-from i18n import get_translator
+import streamlit as st
+
+from app import (
+    CLR_ACCENT,
+    CLR_DANGER,
+    CLR_GOLD,
+    CLR_GOOD,
+    CLR_MUTED,
+    SECTOR_MAP,
+    call_llm,
+    get_conviction_multiplier,
+)
 from data_provider import DataProvider
-from portfolio_config import MARGIN_LOAN
-from risk_engine import RiskEngine, RiskReport
+from i18n import get_translator
 from market_intelligence import build_ai_risk_briefing
-from ui.components import (render_section, render_chart, render_ai_digest,
-                           render_kpi_row, render_metric_list, render_empty_state)
-from ui.tokens import T
+from portfolio_config import MARGIN_LOAN
+from risk_engine import RiskEngine
+from ui.components import (
+    render_ai_digest,
+    render_chart,
+    render_empty_state,
+    render_kpi_row,
+    render_section,
+)
 
 # Render shared sidebar
 from ui.shared_sidebar import render_shared_sidebar
+from ui.tokens import T
+
 render_shared_sidebar()
 
 # ── Guard ────────────────────────────────────────────────────
@@ -38,12 +49,15 @@ if not st.session_state.get("analysis_ready"):
             "Efficient frontier, scenario simulator (-30% to +30%), compliance "
             "auto-correction, margin monitor, and trade blotter — all driven "
             "by your portfolio's risk profile. Run analysis from the sidebar."
-            if _lang == "en" else
-            "有效前沿、情景模拟器（-30% 至 +30%）、合规自动纠正、保证金监控、"
+            if _lang == "en"
+            else "有效前沿、情景模拟器（-30% 至 +30%）、合规自动纠正、保证金监控、"
             "交易下单单 — 均依赖组合风险画像。请从侧边栏运行分析。"
         ),
-        action_hint="Markowitz optimization · per-ticker impact waterfall"
-                   if _lang == "en" else "Markowitz 优化 · 单券影响瀑布图",
+        action_hint=(
+            "Markowitz optimization · per-ticker impact waterfall"
+            if _lang == "en"
+            else "Markowitz 优化 · 单券影响瀑布图"
+        ),
     )
     st.stop()
 
@@ -66,7 +80,6 @@ analysis_period_years = st.session_state.get("period_years", 2)
 analysis_risk_free_fallback = st.session_state.get("risk_free_fallback", 0.045)
 
 
-
 # ══════════════════════════════════════════════════════════════
 #  1. Efficient Frontier
 # ══════════════════════════════════════════════════════════════
@@ -83,37 +96,60 @@ if st.button(t("frontier_btn"), key="compute_ef"):
 ef = st.session_state.get("_ef_result")
 if ef:
     fig_ef = go.Figure()
-    fig_ef.add_trace(go.Scatter(
-        x=ef["frontier_vols"], y=ef["frontier_rets"],
-        mode="lines", name="Efficient Frontier",
-        line=dict(color=CLR_ACCENT, width=2),
-    ))
-    fig_ef.add_trace(go.Scatter(
-        x=[ef["max_sharpe_vol"]], y=[ef["max_sharpe_ret"]],
-        mode="markers+text", name="Max Sharpe",
-        marker=dict(size=14, color=CLR_GOLD, symbol="star"),
-        text=[f"SR={ef['max_sharpe_ratio']:.2f}"], textposition="top right",
-    ))
-    fig_ef.add_trace(go.Scatter(
-        x=[ef["min_var_vol"]], y=[ef["min_var_ret"]],
-        mode="markers+text", name="Min Variance",
-        marker=dict(size=12, color=CLR_GOOD, symbol="diamond"),
-        text=["MinVar"], textposition="bottom right",
-    ))
-    fig_ef.add_trace(go.Scatter(
-        x=[report.annual_volatility], y=[report.annual_return],
-        mode="markers+text", name="Current Portfolio",
-        marker=dict(size=14, color=CLR_DANGER, symbol="x"),
-        text=["You"], textposition="top left",
-    ))
+    fig_ef.add_trace(
+        go.Scatter(
+            x=ef["frontier_vols"],
+            y=ef["frontier_rets"],
+            mode="lines",
+            name="Efficient Frontier",
+            line=dict(color=CLR_ACCENT, width=2),
+        )
+    )
+    fig_ef.add_trace(
+        go.Scatter(
+            x=[ef["max_sharpe_vol"]],
+            y=[ef["max_sharpe_ret"]],
+            mode="markers+text",
+            name="Max Sharpe",
+            marker=dict(size=14, color=CLR_GOLD, symbol="star"),
+            text=[f"SR={ef['max_sharpe_ratio']:.2f}"],
+            textposition="top right",
+        )
+    )
+    fig_ef.add_trace(
+        go.Scatter(
+            x=[ef["min_var_vol"]],
+            y=[ef["min_var_ret"]],
+            mode="markers+text",
+            name="Min Variance",
+            marker=dict(size=12, color=CLR_GOOD, symbol="diamond"),
+            text=["MinVar"],
+            textposition="bottom right",
+        )
+    )
+    fig_ef.add_trace(
+        go.Scatter(
+            x=[report.annual_volatility],
+            y=[report.annual_return],
+            mode="markers+text",
+            name="Current Portfolio",
+            marker=dict(size=14, color=CLR_DANGER, symbol="x"),
+            text=["You"],
+            textposition="top left",
+        )
+    )
     fig_ef.update_layout(
         title=t("frontier_chart_title"),
         xaxis_title=t("frontier_xaxis"),
         yaxis_title=t("frontier_yaxis"),
-        xaxis_tickformat=".1%", yaxis_tickformat=".1%",
+        xaxis_tickformat=".1%",
+        yaxis_tickformat=".1%",
         height=500,
     )
-    render_chart(fig_ef, insight="AI: Your portfolio position relative to the efficient frontier shows how well you are compensated for risk taken.")
+    render_chart(
+        fig_ef,
+        insight="AI: Your portfolio position relative to the efficient frontier shows how well you are compensated for risk taken.",
+    )
 
 
 # ══════════════════════════════════════════════════════════════
@@ -138,7 +174,10 @@ if ef:
         if total_adj > 0:
             adj_weights = {tk: v / total_adj for tk, v in adj_raw.items()}
 
-    all_tk = sorted(set(list(weights) + list(msw) + (list(adj_weights) if adj_weights else [])), key=lambda x: -weights.get(x, 0))
+    all_tk = sorted(
+        set(list(weights) + list(msw) + (list(adj_weights) if adj_weights else [])),
+        key=lambda x: -weights.get(x, 0),
+    )
     cmp_data = []
     for tk in all_tk:
         cur = weights.get(tk, 0) * 100
@@ -156,11 +195,36 @@ if ef:
     # Grouped bar chart
     tickers_plot = [d["Ticker"] for d in cmp_data]
     fig_cmp = go.Figure()
-    fig_cmp.add_trace(go.Bar(name="Current", x=tickers_plot, y=[weights.get(tk, 0)*100 for tk in tickers_plot], marker_color=CLR_MUTED, opacity=0.7))
-    fig_cmp.add_trace(go.Bar(name="Max Sharpe", x=tickers_plot, y=[msw.get(tk, 0)*100 for tk in tickers_plot], marker_color=CLR_GOLD, opacity=0.8))
+    fig_cmp.add_trace(
+        go.Bar(
+            name="Current",
+            x=tickers_plot,
+            y=[weights.get(tk, 0) * 100 for tk in tickers_plot],
+            marker_color=CLR_MUTED,
+            opacity=0.7,
+        )
+    )
+    fig_cmp.add_trace(
+        go.Bar(
+            name="Max Sharpe",
+            x=tickers_plot,
+            y=[msw.get(tk, 0) * 100 for tk in tickers_plot],
+            marker_color=CLR_GOLD,
+            opacity=0.8,
+        )
+    )
     if adj_weights:
-        fig_cmp.add_trace(go.Bar(name="Sentiment-Adjusted", x=tickers_plot, y=[adj_weights.get(tk, 0)*100 for tk in tickers_plot], marker_color=CLR_ACCENT))
-    fig_cmp.update_layout(barmode="group", title="Weight Comparison", yaxis_title="Weight (%)", height=420)
+        fig_cmp.add_trace(
+            go.Bar(
+                name="Sentiment-Adjusted",
+                x=tickers_plot,
+                y=[adj_weights.get(tk, 0) * 100 for tk in tickers_plot],
+                marker_color=CLR_ACCENT,
+            )
+        )
+    fig_cmp.update_layout(
+        barmode="group", title="Weight Comparison", yaxis_title="Weight (%)", height=420
+    )
     render_chart(fig_cmp)
 
 
@@ -173,16 +237,22 @@ if ef:
     target_weights = adj_weights if adj_weights else msw
     if engine_ref:
         _user_limits = st.session_state.get("_risk_limits")
-        violations = engine_ref.check_trade_compliance(target_weights, SECTOR_MAP, limits=_user_limits)
+        violations = engine_ref.check_trade_compliance(
+            target_weights, SECTOR_MAP, limits=_user_limits
+        )
         if violations:
             for v in violations:
                 tk_or_sec = v.get("ticker", v.get("sector", ""))
-                st.error(f"Violation: **{tk_or_sec}** ({v['actual']:.1%}) > limit ({v['limit']:.0%})")
+                st.error(
+                    f"Violation: **{tk_or_sec}** ({v['actual']:.1%}) > limit ({v['limit']:.0%})"
+                )
             # BUG FIX: previously defaulted to DEFAULT_RISK_LIMITS here — checker
             # and auto-corrector used different rules, producing trades that
             # satisfied the CHECKED limits but violated the CORRECTED limits.
             corrected = engine_ref.adjust_weights_for_compliance(
-                target_weights, SECTOR_MAP, limits=_user_limits,
+                target_weights,
+                SECTOR_MAP,
+                limits=_user_limits,
             )
             st.caption(t("compliance_corrected"))
             target_weights = corrected
@@ -217,17 +287,21 @@ if ef:
                 action = f"BUY {abs(shares):.1f} shares"
             else:
                 action = f"SELL {abs(shares):.1f} shares"
-            blotter_rows.append({
-                "Ticker": tk,
-                "Current $": f"${cur_val:,.0f}",
-                "Target $": f"${tgt_val:,.0f}",
-                "Trade $": f"${trade_val:+,.0f}",
-                "Price": f"${last_px:.2f}",
-                "Action": action,
-            })
+            blotter_rows.append(
+                {
+                    "Ticker": tk,
+                    "Current $": f"${cur_val:,.0f}",
+                    "Target $": f"${tgt_val:,.0f}",
+                    "Trade $": f"${trade_val:+,.0f}",
+                    "Price": f"${last_px:.2f}",
+                    "Action": action,
+                }
+            )
         if blotter_rows:
             st.dataframe(pd.DataFrame(blotter_rows), hide_index=True, use_container_width=True)
-            render_ai_digest("The trade blotter shows the specific orders needed to move from your current allocation to the optimized target.")
+            render_ai_digest(
+                "The trade blotter shows the specific orders needed to move from your current allocation to the optimized target."
+            )
     else:
         st.info(t("blotter_need_portfolio"))
 
@@ -240,10 +314,17 @@ render_section(t("briefing_title"), subtitle=t("briefing_caption"))
 
 brief_col, _ = st.columns([1, 3])
 with brief_col:
-    run_brief = st.button(t("briefing_btn"), type="primary", key="run_briefing", use_container_width=True)
+    run_brief = st.button(
+        t("briefing_btn"), type="primary", key="run_briefing", use_container_width=True
+    )
 
 if run_brief:
-    from market_intelligence import get_vix_current, fetch_yield_curve, fetch_fundamentals, get_all_macro_news
+    from market_intelligence import (
+        fetch_fundamentals,
+        fetch_yield_curve,
+        get_all_macro_news,
+        get_vix_current,
+    )
 
     with st.spinner(t("briefing_gather_spinner")):
         if not st.session_state.get("vix_current"):
@@ -264,14 +345,22 @@ if run_brief:
     sent = st.session_state.get("sentiment_data")
 
     briefing_prompt = build_ai_risk_briefing(
-        report, weights, vix_info, yc_a, fund_df, news,
-        sentiment_data=sent, lang=lang,
+        report,
+        weights,
+        vix_info,
+        yc_a,
+        fund_df,
+        news,
+        sentiment_data=sent,
+        lang=lang,
     )
 
     with st.spinner(t("briefing_gen_spinner")):
         if model_provider == "Anthropic Claude" and api_key_input:
-            import anthropic
             import time as _time
+
+            import anthropic
+
             client = anthropic.Anthropic(api_key=api_key_input)
             briefing_text = None
             for _attempt in range(3):
@@ -295,15 +384,20 @@ if run_brief:
                 st.session_state.ai_briefing = briefing_text
         elif model_provider == "DeepSeek API" and deepseek_key:
             from openai import OpenAI
+
             client = OpenAI(api_key=deepseek_key, base_url="https://api.deepseek.com/v1")
             try:
                 resp = client.chat.completions.create(
                     model="deepseek-chat",
                     messages=[
-                        {"role": "system", "content": "You are an institutional-grade portfolio risk analyst."},
+                        {
+                            "role": "system",
+                            "content": "You are an institutional-grade portfolio risk analyst.",
+                        },
                         {"role": "user", "content": briefing_prompt},
                     ],
-                    max_tokens=2048, temperature=0.3,
+                    max_tokens=2048,
+                    temperature=0.3,
                 )
                 raw = resp.choices[0].message.content.strip()
                 raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
@@ -314,7 +408,10 @@ if run_brief:
             payload = {
                 "model": ollama_model,
                 "messages": [
-                    {"role": "system", "content": "You are an institutional-grade portfolio risk analyst."},
+                    {
+                        "role": "system",
+                        "content": "You are an institutional-grade portfolio risk analyst.",
+                    },
                     {"role": "user", "content": briefing_prompt},
                 ],
                 "stream": False,
@@ -335,6 +432,7 @@ briefing = st.session_state.get("ai_briefing")
 if briefing:
     st.markdown(briefing)
     from datetime import datetime
+
     st.download_button(
         label=t("briefing_export"),
         data=briefing,
@@ -348,8 +446,11 @@ if briefing:
 # ══════════════════════════════════════════════════════════════
 render_section(
     "Portfolio Scenario Simulator" if lang == "en" else "组合情景模拟",
-    subtitle=("Estimate portfolio impact from a broad market move using beta-implied asset returns."
-              if lang == "en" else "基于Beta估算市场变动对组合的影响"),
+    subtitle=(
+        "Estimate portfolio impact from a broad market move using beta-implied asset returns."
+        if lang == "en"
+        else "基于Beta估算市场变动对组合的影响"
+    ),
 )
 
 # --- Retrieve portfolio meta for dollar calculations ---
@@ -366,7 +467,10 @@ else:
 # --- Market move slider ---
 _scenario_market_move = st.slider(
     "Market Move (%)" if lang == "en" else "市场变动 (%)",
-    min_value=-30, max_value=30, value=0, step=1,
+    min_value=-30,
+    max_value=30,
+    value=0,
+    step=1,
     key="scenario_market_move",
 )
 _scenario_move_frac = _scenario_market_move / 100.0
@@ -384,76 +488,96 @@ if _scenario_market_move != 0:
         dollar_impact = asset_move * w * _sim_total_value
         new_value = w * _sim_total_value + dollar_impact
         _total_port_impact_dollar += dollar_impact
-        _scenario_rows.append({
-            "ticker": tk,
-            "weight": w,
-            "beta": beta_val,
-            "asset_move": asset_move,
-            "dollar_impact": dollar_impact,
-            "new_value": new_value,
-        })
+        _scenario_rows.append(
+            {
+                "ticker": tk,
+                "weight": w,
+                "beta": beta_val,
+                "asset_move": asset_move,
+                "dollar_impact": dollar_impact,
+                "new_value": new_value,
+            }
+        )
 
-    _total_port_impact_pct = _total_port_impact_dollar / _sim_total_value if _sim_total_value else 0.0
+    _total_port_impact_pct = (
+        _total_port_impact_dollar / _sim_total_value if _sim_total_value else 0.0
+    )
     _new_portfolio_value = _sim_total_value + _total_port_impact_dollar
     _new_equity = _new_portfolio_value - _sim_margin_loan
 
     # --- KPI row ---
     _impact_color = "positive" if _total_port_impact_pct >= 0 else "negative"
     _sim_cost_basis = _sim_meta.get("cost_basis", 0) if _sim_meta else 0
-    render_kpi_row([
-        {
-            "label": "Portfolio Impact" if lang == "en" else "组合影响",
-            "value": f"{_total_port_impact_pct:+.1%}",
-            "delta_color": _impact_color,
-        },
-        {
-            "label": "Dollar P&L" if lang == "en" else "盈亏金额",
-            "value": f"${_total_port_impact_dollar:+,.0f}",
-            "delta_color": _impact_color,
-        },
-        {
-            "label": "New Portfolio Value" if lang == "en" else "新组合价值",
-            "value": f"${_new_portfolio_value:,.0f}",
-        },
-        {
-            "label": "New Equity" if lang == "en" else "新净资产",
-            "value": f"${_new_equity:,.0f}",
-            "delta_color": "negative" if _new_equity < _sim_net_equity else "neutral",
-        },
-    ])
+    render_kpi_row(
+        [
+            {
+                "label": "Portfolio Impact" if lang == "en" else "组合影响",
+                "value": f"{_total_port_impact_pct:+.1%}",
+                "delta_color": _impact_color,
+            },
+            {
+                "label": "Dollar P&L" if lang == "en" else "盈亏金额",
+                "value": f"${_total_port_impact_dollar:+,.0f}",
+                "delta_color": _impact_color,
+            },
+            {
+                "label": "New Portfolio Value" if lang == "en" else "新组合价值",
+                "value": f"${_new_portfolio_value:,.0f}",
+            },
+            {
+                "label": "New Equity" if lang == "en" else "新净资产",
+                "value": f"${_new_equity:,.0f}",
+                "delta_color": "negative" if _new_equity < _sim_net_equity else "neutral",
+            },
+        ]
+    )
 
     # P&L vs Cost Basis row (if cost basis configured)
     if _sim_cost_basis > 0:
         _pnl_vs_cost = _new_equity - _sim_cost_basis
         _pnl_vs_cost_pct = _pnl_vs_cost / _sim_cost_basis
         _cb_color = "positive" if _pnl_vs_cost >= 0 else "negative"
-        render_kpi_row([
-            {"label": "Cost Basis" if lang == "en" else "本金",
-             "value": f"${_sim_cost_basis:,.0f}"},
-            {"label": "P&L vs Cost" if lang == "en" else "相对本金盈亏",
-             "value": f"${_pnl_vs_cost:+,.0f}",
-             "delta": f"{_pnl_vs_cost_pct:+.1%}",
-             "delta_color": _cb_color},
-            {"label": "Return on Capital" if lang == "en" else "资本回报率",
-             "value": f"{_pnl_vs_cost_pct:+.1%}",
-             "delta_color": _cb_color},
-            {"label": "Margin Loan" if lang == "en" else "保证金",
-             "value": f"${_sim_margin_loan:,.0f}"},
-        ])
+        render_kpi_row(
+            [
+                {
+                    "label": "Cost Basis" if lang == "en" else "本金",
+                    "value": f"${_sim_cost_basis:,.0f}",
+                },
+                {
+                    "label": "P&L vs Cost" if lang == "en" else "相对本金盈亏",
+                    "value": f"${_pnl_vs_cost:+,.0f}",
+                    "delta": f"{_pnl_vs_cost_pct:+.1%}",
+                    "delta_color": _cb_color,
+                },
+                {
+                    "label": "Return on Capital" if lang == "en" else "资本回报率",
+                    "value": f"{_pnl_vs_cost_pct:+.1%}",
+                    "delta_color": _cb_color,
+                },
+                {
+                    "label": "Margin Loan" if lang == "en" else "保证金",
+                    "value": f"${_sim_margin_loan:,.0f}",
+                },
+            ]
+        )
 
     # --- Per-asset breakdown table ---
     st.markdown("")
-    _scenario_rows_sorted = sorted(_scenario_rows, key=lambda r: abs(r["dollar_impact"]), reverse=True)
+    _scenario_rows_sorted = sorted(
+        _scenario_rows, key=lambda r: abs(r["dollar_impact"]), reverse=True
+    )
     _table_data = []
     for r in _scenario_rows_sorted:
-        _table_data.append({
-            "Ticker": r["ticker"],
-            "Weight": f"{r['weight']:.1%}",
-            "Beta": f"{r['beta']:.2f}",
-            "Asset Move (%)": f"{r['asset_move']:+.1%}",
-            "Dollar Impact ($)": f"${r['dollar_impact']:+,.0f}",
-            "New Value ($)": f"${r['new_value']:,.0f}",
-        })
+        _table_data.append(
+            {
+                "Ticker": r["ticker"],
+                "Weight": f"{r['weight']:.1%}",
+                "Beta": f"{r['beta']:.2f}",
+                "Asset Move (%)": f"{r['asset_move']:+.1%}",
+                "Dollar Impact ($)": f"${r['dollar_impact']:+,.0f}",
+                "New Value ($)": f"${r['new_value']:,.0f}",
+            }
+        )
     st.dataframe(pd.DataFrame(_table_data), hide_index=True, use_container_width=True)
 
     # --- Waterfall chart ---
@@ -461,20 +585,25 @@ if _scenario_market_move != 0:
     _wf_impacts = [r["asset_move"] * r["weight"] for r in _scenario_rows_sorted]
     _wf_colors = [CLR_GOOD if v >= 0 else CLR_DANGER for v in _wf_impacts]
 
-    fig_scenario_wf = go.Figure(go.Waterfall(
-        x=_wf_tickers + ["Portfolio"],
-        y=_wf_impacts + [_total_port_impact_pct],
-        measure=["relative"] * len(_wf_tickers) + ["total"],
-        text=[f"{v:+.2%}" for v in _wf_impacts] + [f"{_total_port_impact_pct:+.2%}"],
-        textposition="outside",
-        connector=dict(line=dict(color="gray")),
-        increasing=dict(marker=dict(color=CLR_GOOD)),
-        decreasing=dict(marker=dict(color=CLR_DANGER)),
-        totals=dict(marker=dict(color=CLR_GOLD)),
-    ))
+    fig_scenario_wf = go.Figure(
+        go.Waterfall(
+            x=_wf_tickers + ["Portfolio"],
+            y=_wf_impacts + [_total_port_impact_pct],
+            measure=["relative"] * len(_wf_tickers) + ["total"],
+            text=[f"{v:+.2%}" for v in _wf_impacts] + [f"{_total_port_impact_pct:+.2%}"],
+            textposition="outside",
+            connector=dict(line=dict(color="gray")),
+            increasing=dict(marker=dict(color=CLR_GOOD)),
+            decreasing=dict(marker=dict(color=CLR_DANGER)),
+            totals=dict(marker=dict(color=CLR_GOLD)),
+        )
+    )
     fig_scenario_wf.update_layout(
-        title=("Scenario Waterfall: Per-Asset Contribution" if lang == "en"
-               else "情景瀑布图: 各资产贡献"),
+        title=(
+            "Scenario Waterfall: Per-Asset Contribution"
+            if lang == "en"
+            else "情景瀑布图: 各资产贡献"
+        ),
         yaxis_title="Contribution (%)" if lang == "en" else "贡献 (%)",
         yaxis_tickformat=".1%",
         height=450,
@@ -486,12 +615,16 @@ if _scenario_market_move != 0:
         _new_equity_ratio = _new_equity / _new_portfolio_value
         if _new_equity_ratio < 0.30:
             st.warning(
-                ("Margin Call Risk: Equity ratio would drop to "
-                 f"{_new_equity_ratio:.1%}, below the 30% maintenance threshold. "
-                 "Consider reducing leverage or adding collateral.")
-                if lang == "en" else
-                (f"保证金预警: 净资产比率将降至 {_new_equity_ratio:.1%}，"
-                 "低于30%维持保证金线。建议降低杠杆或追加保证金。")
+                (
+                    "Margin Call Risk: Equity ratio would drop to "
+                    f"{_new_equity_ratio:.1%}, below the 30% maintenance threshold. "
+                    "Consider reducing leverage or adding collateral."
+                )
+                if lang == "en"
+                else (
+                    f"保证金预警: 净资产比率将降至 {_new_equity_ratio:.1%}，"
+                    "低于30%维持保证金线。建议降低杠杆或追加保证金。"
+                )
             )
 
     # --- Custom Per-Asset Override (expander) ---
@@ -499,19 +632,23 @@ if _scenario_market_move != 0:
         "Custom Asset Scenarios" if lang == "en" else "自定义资产情景",
         collapsed=True,
     ):
-        _override_df = pd.DataFrame([
-            {
-                "Ticker": r["ticker"],
-                "Beta-Implied Move (%)": round(r["asset_move"] * 100, 2),
-                "Custom Move (%)": round(r["asset_move"] * 100, 2),
-            }
-            for r in _scenario_rows_sorted
-        ])
+        _override_df = pd.DataFrame(
+            [
+                {
+                    "Ticker": r["ticker"],
+                    "Beta-Implied Move (%)": round(r["asset_move"] * 100, 2),
+                    "Custom Move (%)": round(r["asset_move"] * 100, 2),
+                }
+                for r in _scenario_rows_sorted
+            ]
+        )
         _edited_df = st.data_editor(
             _override_df,
             column_config={
                 "Ticker": st.column_config.TextColumn(disabled=True),
-                "Beta-Implied Move (%)": st.column_config.NumberColumn(disabled=True, format="%.2f"),
+                "Beta-Implied Move (%)": st.column_config.NumberColumn(
+                    disabled=True, format="%.2f"
+                ),
                 "Custom Move (%)": st.column_config.NumberColumn(format="%.2f"),
             },
             hide_index=True,
@@ -529,39 +666,43 @@ if _scenario_market_move != 0:
             dollar_impact = custom_move * w * _sim_total_value
             new_val = w * _sim_total_value + dollar_impact
             _custom_total_dollar += dollar_impact
-            _custom_rows.append({
-                "Ticker": tk,
-                "Weight": f"{w:.1%}",
-                "Custom Move (%)": f"{custom_move:+.1%}",
-                "Dollar Impact ($)": f"${dollar_impact:+,.0f}",
-                "New Value ($)": f"${new_val:,.0f}",
-            })
+            _custom_rows.append(
+                {
+                    "Ticker": tk,
+                    "Weight": f"{w:.1%}",
+                    "Custom Move (%)": f"{custom_move:+.1%}",
+                    "Dollar Impact ($)": f"${dollar_impact:+,.0f}",
+                    "New Value ($)": f"${new_val:,.0f}",
+                }
+            )
 
         _custom_total_pct = _custom_total_dollar / _sim_total_value if _sim_total_value else 0.0
         _custom_new_port = _sim_total_value + _custom_total_dollar
         _custom_new_equity = _custom_new_port - _sim_margin_loan
 
         st.markdown("")
-        render_kpi_row([
-            {
-                "label": "Custom Portfolio Impact" if lang == "en" else "自定义组合影响",
-                "value": f"{_custom_total_pct:+.1%}",
-                "delta_color": "positive" if _custom_total_pct >= 0 else "negative",
-            },
-            {
-                "label": "Custom Dollar P&L" if lang == "en" else "自定义盈亏金额",
-                "value": f"${_custom_total_dollar:+,.0f}",
-                "delta_color": "positive" if _custom_total_dollar >= 0 else "negative",
-            },
-            {
-                "label": "New Portfolio Value" if lang == "en" else "新组合价值",
-                "value": f"${_custom_new_port:,.0f}",
-            },
-            {
-                "label": "New Equity" if lang == "en" else "新净资产",
-                "value": f"${_custom_new_equity:,.0f}",
-            },
-        ])
+        render_kpi_row(
+            [
+                {
+                    "label": "Custom Portfolio Impact" if lang == "en" else "自定义组合影响",
+                    "value": f"{_custom_total_pct:+.1%}",
+                    "delta_color": "positive" if _custom_total_pct >= 0 else "negative",
+                },
+                {
+                    "label": "Custom Dollar P&L" if lang == "en" else "自定义盈亏金额",
+                    "value": f"${_custom_total_dollar:+,.0f}",
+                    "delta_color": "positive" if _custom_total_dollar >= 0 else "negative",
+                },
+                {
+                    "label": "New Portfolio Value" if lang == "en" else "新组合价值",
+                    "value": f"${_custom_new_port:,.0f}",
+                },
+                {
+                    "label": "New Equity" if lang == "en" else "新净资产",
+                    "value": f"${_custom_new_equity:,.0f}",
+                },
+            ]
+        )
         st.dataframe(pd.DataFrame(_custom_rows), hide_index=True, use_container_width=True)
 
     # --- AI Summary ---
@@ -586,17 +727,20 @@ if _scenario_market_move != 0:
         render_ai_digest(_ai_scenario_text, sources="Scenario Simulator, Beta Model")
     except Exception:
         render_ai_digest(
-            (f"A {_scenario_market_move:+d}% market move implies a "
-             f"{_total_port_impact_pct:+.1%} portfolio impact "
-             f"(${_total_port_impact_dollar:+,.0f}). "
-             f"New portfolio value: ${_new_portfolio_value:,.0f}."),
+            (
+                f"A {_scenario_market_move:+d}% market move implies a "
+                f"{_total_port_impact_pct:+.1%} portfolio impact "
+                f"(${_total_port_impact_dollar:+,.0f}). "
+                f"New portfolio value: ${_new_portfolio_value:,.0f}."
+            ),
             sources="Scenario Simulator",
         )
 
 else:
     st.caption(
         "Move the slider above to simulate a market scenario."
-        if lang == "en" else "拖动上方滑块以模拟市场情景。"
+        if lang == "en"
+        else "拖动上方滑块以模拟市场情景。"
     )
 
 
@@ -605,7 +749,9 @@ else:
 # ══════════════════════════════════════════════════════════════
 
 # ── Cash Deployment ──────────────────────────────────────────
-with render_section("Cash Deployment Simulator" if lang == "en" else "备用金追加模拟", collapsed=True):
+with render_section(
+    "Cash Deployment Simulator" if lang == "en" else "备用金追加模拟", collapsed=True
+):
     st.markdown(t("cash_title"))
 
     meta_ss = getattr(st.session_state, "_portfolio_meta", None)
@@ -617,16 +763,24 @@ with render_section("Cash Deployment Simulator" if lang == "en" else "备用金�
         m3.metric(t("cash_equity"), f"${meta_ss['net_equity']:,.0f}")
         m4.metric(t("cash_leverage"), f"{meta_ss['leverage']:.2f}x")
     else:
-        total_portfolio_value = st.number_input(t("cash_manual_input"), min_value=1000.0, value=50000.0, step=1000.0)
+        total_portfolio_value = st.number_input(
+            t("cash_manual_input"), min_value=1000.0, value=50000.0, step=1000.0
+        )
 
     cash_col, strat_col = st.columns([1, 2])
     with cash_col:
-        cash_amount = st.number_input(t("cash_amount_label"), min_value=0.0, value=4500.0, step=100.0)
+        cash_amount = st.number_input(
+            t("cash_amount_label"), min_value=0.0, value=4500.0, step=100.0
+        )
     with strat_col:
-        strategy = st.selectbox(t("cash_strategy_label"), [
-            t("cash_strategy_prorata"), t("cash_strategy_equal"),
-            "Optimal (Max Sharpe suggestion)",
-        ])
+        strategy = st.selectbox(
+            t("cash_strategy_label"),
+            [
+                t("cash_strategy_prorata"),
+                t("cash_strategy_equal"),
+                "Optimal (Max Sharpe suggestion)",
+            ],
+        )
 
     if st.button(t("cash_sim_btn"), type="primary", key="sim_run") and cash_amount > 0:
         current_values = {tk: w * total_portfolio_value for tk, w in weights.items()}
@@ -653,12 +807,19 @@ with render_section("Cash Deployment Simulator" if lang == "en" else "备用金�
         with st.spinner(t("spinner_engine")):
             dp_sim = DataProvider(new_weights, period_years=analysis_period_years)
             dp_sim._prices = prices
-            engine_sim = RiskEngine(dp_sim, mc_simulations=mc_sims, mc_horizon=mc_horizon, risk_free_rate_fallback=analysis_risk_free_fallback)
+            engine_sim = RiskEngine(
+                dp_sim,
+                mc_simulations=mc_sims,
+                mc_horizon=mc_horizon,
+                risk_free_rate_fallback=analysis_risk_free_fallback,
+            )
             report_sim = engine_sim.run()
 
         st.session_state.sim_result = {
-            "report": report_sim, "new_weights": new_weights,
-            "new_total": new_total, "cash_amount": cash_amount,
+            "report": report_sim,
+            "new_weights": new_weights,
+            "new_total": new_total,
+            "cash_amount": cash_amount,
             "strategy": strategy.split("(")[0].strip(),
         }
 
@@ -675,8 +836,12 @@ with render_section("Cash Deployment Simulator" if lang == "en" else "备用金�
         ]
         cols = st.columns(len(metrics_cmp))
         for col, (name, before, after, higher_better, fmt) in zip(cols, metrics_cmp):
-            col.metric(name, format(after, fmt), delta=f"{after - before:+{fmt}}",
-                        delta_color="normal" if higher_better else "inverse")
+            col.metric(
+                name,
+                format(after, fmt),
+                delta=f"{after - before:+{fmt}}",
+                delta_color="normal" if higher_better else "inverse",
+            )
 
 
 # ── Margin Monitor ───────────────────────────────────────────
@@ -691,22 +856,24 @@ with render_section("Margin Monitor" if lang == "en" else "保证金监控", col
         g3.metric(t("margin_distance"), f"{mi['distance_to_call_pct']:.1%}")
         g4.metric(t("margin_buffer"), f"${mi['buffer_dollars']:,.0f}")
 
-        fig_gauge = go.Figure(go.Indicator(
-            mode="gauge+number+delta",
-            value=mi["distance_to_call_pct"] * 100,
-            number={"suffix": "%"},
-            delta={"reference": 25, "suffix": "%"},
-            title={"text": t("margin_gauge_title")},
-            gauge={
-                "axis": {"range": [0, 60], "ticksuffix": "%"},
-                "bar": {"color": CLR_ACCENT},
-                "steps": [
-                    {"range": [0, 15], "color": T.gauge_danger},
-                    {"range": [15, 30], "color": T.gauge_warning},
-                    {"range": [30, 60], "color": T.gauge_safe},
-                ],
-            },
-        ))
+        fig_gauge = go.Figure(
+            go.Indicator(
+                mode="gauge+number+delta",
+                value=mi["distance_to_call_pct"] * 100,
+                number={"suffix": "%"},
+                delta={"reference": 25, "suffix": "%"},
+                title={"text": t("margin_gauge_title")},
+                gauge={
+                    "axis": {"range": [0, 60], "ticksuffix": "%"},
+                    "bar": {"color": CLR_ACCENT},
+                    "steps": [
+                        {"range": [0, 15], "color": T.gauge_danger},
+                        {"range": [15, 30], "color": T.gauge_warning},
+                        {"range": [30, 60], "color": T.gauge_safe},
+                    ],
+                },
+            )
+        )
         fig_gauge.update_layout(height=350)
         render_chart(fig_gauge)
 
@@ -718,13 +885,15 @@ with render_section("Margin Monitor" if lang == "en" else "保证金监控", col
             new_eq = new_val - MARGIN_LOAN
             new_eq_ratio = new_eq / new_val if new_val > 0 else 0
             status = "Safe" if new_eq_ratio > mi["maintenance_ratio"] else "MARGIN CALL"
-            scenarios_data.append({
-                "Market Drop": f"-{drop}%",
-                "Portfolio Value": f"${new_val:,.0f}",
-                "Net Equity": f"${new_eq:,.0f}",
-                "Equity Ratio": f"{new_eq_ratio:.1%}",
-                "Status": status,
-            })
+            scenarios_data.append(
+                {
+                    "Market Drop": f"-{drop}%",
+                    "Portfolio Value": f"${new_val:,.0f}",
+                    "Net Equity": f"${new_eq:,.0f}",
+                    "Equity Ratio": f"{new_eq_ratio:.1%}",
+                    "Status": status,
+                }
+            )
         st.dataframe(pd.DataFrame(scenarios_data), hide_index=True, use_container_width=True)
     else:
         st.info(t("margin_no_data"))
@@ -732,6 +901,7 @@ with render_section("Margin Monitor" if lang == "en" else "保证金监控", col
 # Floating AI Assistant
 try:
     from ui.floating_chat import render_floating_ai_chat
+
     render_floating_ai_chat()
-except Exception as e:
+except Exception:
     pass  # Silently fail if floating chat has issues

@@ -3,15 +3,15 @@ ui/tradingview.py
 TradingView widget embedding + tradingview-ta data integration.
 """
 
-import streamlit as st
-import streamlit.components.v1 as components
-from typing import List, Optional, Dict
-from tradingview_ta import TA_Handler, Interval
+from typing import Dict, List, Optional
 
+import streamlit.components.v1 as components
+from tradingview_ta import Interval, TA_Handler
 
 # ══════════════════════════════════════════════════════════════
 #  1. Embeddable TradingView Widgets (Real-Time Charts)
 # ══════════════════════════════════════════════════════════════
+
 
 def render_advanced_chart(
     symbol: str,
@@ -72,9 +72,16 @@ def render_fullpage_tradingview_with_watchlist(
 ):
     """Full-featured chart with dynamic watchlist from user's portfolio."""
     import json as _json
+
     default_watchlist = [
-        "NASDAQ:NVDA", "NASDAQ:GOOGL", "NASDAQ:META", "NASDAQ:TSLA",
-        "NASDAQ:MSFT", "NYSE:TSM", "BITSTAMP:BTCUSD", "BITSTAMP:ETHUSD",
+        "NASDAQ:NVDA",
+        "NASDAQ:GOOGL",
+        "NASDAQ:META",
+        "NASDAQ:TSLA",
+        "NASDAQ:MSFT",
+        "NYSE:TSM",
+        "BITSTAMP:BTCUSD",
+        "BITSTAMP:ETHUSD",
     ]
     wl = watchlist if watchlist else default_watchlist
     wl_json = _json.dumps(wl)
@@ -254,6 +261,7 @@ def render_ticker_tape(symbols: Optional[List[str]] = None):
         symbols = [{"proName": s, "title": s.split(":")[-1]} for s in symbols]
 
     import json
+
     symbols_json = json.dumps(symbols)
     html = f"""
     <div class="tradingview-widget-container">
@@ -313,28 +321,47 @@ def render_heatmap(height: int = 500):
 # Ticker → (exchange, screener) mapping
 EXCHANGE_MAP = {
     # US Stocks
-    "NVDA": ("NASDAQ", "america"), "GOOGL": ("NASDAQ", "america"),
-    "META": ("NASDAQ", "america"), "MSFT": ("NASDAQ", "america"),
-    "TSLA": ("NASDAQ", "america"), "NFLX": ("NASDAQ", "america"),
-    "AVGO": ("NASDAQ", "america"), "INTU": ("NASDAQ", "america"),
-    "MU": ("NASDAQ", "america"), "SOFI": ("NASDAQ", "america"),
-    "HOOD": ("NASDAQ", "america"), "ONDS": ("NASDAQ", "america"),
-    "CPNG": ("NYSE", "america"), "SMMT": ("NASDAQ", "america"),
-    "S": ("NYSE", "america"), "COST": ("NASDAQ", "america"),
-    "QQQ": ("NASDAQ", "america"), "SPY": ("AMEX", "america"),
-    "GLD": ("AMEX", "america"), "COPX": ("AMEX", "america"),
-    "AA": ("NYSE", "america"), "AXP": ("NYSE", "america"),
-    "VST": ("NYSE", "america"), "TSM": ("NYSE", "america"),
+    "NVDA": ("NASDAQ", "america"),
+    "GOOGL": ("NASDAQ", "america"),
+    "META": ("NASDAQ", "america"),
+    "MSFT": ("NASDAQ", "america"),
+    "TSLA": ("NASDAQ", "america"),
+    "NFLX": ("NASDAQ", "america"),
+    "AVGO": ("NASDAQ", "america"),
+    "INTU": ("NASDAQ", "america"),
+    "MU": ("NASDAQ", "america"),
+    "SOFI": ("NASDAQ", "america"),
+    "HOOD": ("NASDAQ", "america"),
+    "ONDS": ("NASDAQ", "america"),
+    "CPNG": ("NYSE", "america"),
+    "SMMT": ("NASDAQ", "america"),
+    "S": ("NYSE", "america"),
+    "COST": ("NASDAQ", "america"),
+    "QQQ": ("NASDAQ", "america"),
+    "SPY": ("AMEX", "america"),
+    "GLD": ("AMEX", "america"),
+    "COPX": ("AMEX", "america"),
+    "AA": ("NYSE", "america"),
+    "AXP": ("NYSE", "america"),
+    "VST": ("NYSE", "america"),
+    "TSM": ("NYSE", "america"),
     # Crypto
-    "BTC-USD": ("BITSTAMP", "crypto"), "ETH-USD": ("BITSTAMP", "crypto"),
-    "XRP-USD": ("BITSTAMP", "crypto"), "ADA-USD": ("BITSTAMP", "crypto"),
-    "SOL-USD": ("BITSTAMP", "crypto"), "LINK-USD": ("BITSTAMP", "crypto"),
+    "BTC-USD": ("BITSTAMP", "crypto"),
+    "ETH-USD": ("BITSTAMP", "crypto"),
+    "XRP-USD": ("BITSTAMP", "crypto"),
+    "ADA-USD": ("BITSTAMP", "crypto"),
+    "SOL-USD": ("BITSTAMP", "crypto"),
+    "LINK-USD": ("BITSTAMP", "crypto"),
 }
 
 # Crypto ticker normalization (yfinance → TradingView)
 _CRYPTO_TV = {
-    "BTC-USD": "BTCUSD", "ETH-USD": "ETHUSD", "XRP-USD": "XRPUSD",
-    "ADA-USD": "ADAUSD", "SOL-USD": "SOLUSD", "LINK-USD": "LINKUSD",
+    "BTC-USD": "BTCUSD",
+    "ETH-USD": "ETHUSD",
+    "XRP-USD": "XRPUSD",
+    "ADA-USD": "ADAUSD",
+    "SOL-USD": "SOLUSD",
+    "LINK-USD": "LINKUSD",
 }
 
 
@@ -411,7 +438,9 @@ def get_portfolio_ta(tickers: List[str], interval: str = "1d") -> List[Dict]:
             result = future.result()
             if result:
                 results.append(result)
-    return sorted(results, key=lambda x: tickers.index(x["ticker"]) if x["ticker"] in tickers else 999)
+    return sorted(
+        results, key=lambda x: tickers.index(x["ticker"]) if x["ticker"] in tickers else 999
+    )
 
 
 def get_tv_symbol(ticker: str) -> str:

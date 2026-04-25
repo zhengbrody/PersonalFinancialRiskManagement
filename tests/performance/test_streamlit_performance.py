@@ -7,12 +7,12 @@ Tests verify that:
 3. Performance scales well with more stocks
 """
 
-import pytest
-import time
 import json
 import sys
-import os
+import time
 from pathlib import Path
+
+import pytest
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -27,11 +27,7 @@ class TestCachePerformance:
     @pytest.fixture
     def sample_weights_dict(self):
         """Simple 3-stock portfolio"""
-        return {
-            "AAPL": 0.5,
-            "GOOGL": 0.3,
-            "MSFT": 0.2
-        }
+        return {"AAPL": 0.5, "GOOGL": 0.3, "MSFT": 0.2}
 
     @pytest.fixture
     def real_portfolio_weights(self):
@@ -43,7 +39,7 @@ class TestCachePerformance:
             "MSFT": 0.15,
             "TSLA": 0.15,
             "META": 0.15,
-            "AMZN": 0.10
+            "AMZN": 0.10,
         }
 
     def test_data_provider_creation_first_time(self, sample_weights_dict):
@@ -139,7 +135,7 @@ class TestCachePerformance:
 
         elapsed = time.time() - start
         print(f"\nFull analysis (7 stocks, cold): {elapsed:.2f}s")
-        print(f"Breakdown:")
+        print("Breakdown:")
         print(f"  - DataProvider + price fetch: ~{elapsed * 0.3:.2f}s")
         print(f"  - RiskEngine.run() (10k MC): ~{elapsed * 0.7:.2f}s")
 
@@ -185,9 +181,9 @@ class TestCachePerformance:
         print(f"Speedup from run 2 to run 3: {speedup_23:.1f}x")
 
         # At minimum, run 2 should not be slower than run 1 (cache not harmful)
-        assert times[1] <= times[0] * 1.05, (
-            f"Second run ({times[1]:.2f}s) should not be much slower than run 1 ({times[0]:.2f}s)"
-        )
+        assert (
+            times[1] <= times[0] * 1.05
+        ), f"Second run ({times[1]:.2f}s) should not be much slower than run 1 ({times[0]:.2f}s)"
 
 
 class TestCacheKeyHashing:
@@ -221,17 +217,28 @@ class TestCacheKeyHashing:
         assert json1 == json2
 
 
-@pytest.mark.parametrize("num_stocks,expected_max_time", [
-    (3, 15),   # 3 stocks: <15 seconds cold start
-    (5, 15),   # 5 stocks: <15 seconds
-    (7, 15),   # 7 stocks: <15 seconds (main use case)
-])
+@pytest.mark.parametrize(
+    "num_stocks,expected_max_time",
+    [
+        (3, 15),  # 3 stocks: <15 seconds cold start
+        (5, 15),  # 5 stocks: <15 seconds
+        (7, 15),  # 7 stocks: <15 seconds (main use case)
+    ],
+)
 def test_performance_scaling(num_stocks, expected_max_time):
     """Test that performance scales reasonably with portfolio size"""
     # Create equal-weight portfolio
     tickers = [
-        "NVDA", "AAPL", "GOOGL", "MSFT", "TSLA", "META", "AMZN",
-        "AMZN", "JPM", "V"  # Extra tickers for 10-stock test
+        "NVDA",
+        "AAPL",
+        "GOOGL",
+        "MSFT",
+        "TSLA",
+        "META",
+        "AMZN",
+        "AMZN",
+        "JPM",
+        "V",  # Extra tickers for 10-stock test
     ][:num_stocks]
 
     weights = {tk: 1.0 / num_stocks for tk in tickers}
@@ -249,9 +256,9 @@ def test_performance_scaling(num_stocks, expected_max_time):
 
     print(f"{num_stocks} stocks: {elapsed:.2f}s (max: {expected_max_time}s)")
 
-    assert elapsed < expected_max_time, (
-        f"{num_stocks} stocks took {elapsed:.2f}s, should be <{expected_max_time}s"
-    )
+    assert (
+        elapsed < expected_max_time
+    ), f"{num_stocks} stocks took {elapsed:.2f}s, should be <{expected_max_time}s"
 
 
 if __name__ == "__main__":

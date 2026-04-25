@@ -17,8 +17,7 @@ Position metadata is optional — minimum requirement is `shares`. Call
 Run `validate_portfolio_config()` at app start for a list of issues.
 """
 
-from typing import Dict, List, Any, Optional
-
+from typing import Any, Dict, List, Optional
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  Positions
@@ -34,39 +33,83 @@ from typing import Dict, List, Any, Optional
 
 PORTFOLIO_HOLDINGS: Dict[str, Dict[str, Any]] = {
     # Equities — margin account (avg_cost populated where user tracks entry price)
-    'NVDA':  {'shares': 25.00,  'avg_cost': 139.27, 'account': 'margin', 'asset_type': 'equity'},
-    'GOOGL': {'shares': 12.41,  'avg_cost': 170.23, 'account': 'margin', 'asset_type': 'equity'},
-    'META':  {'shares': 6.46,   'avg_cost': 592.18, 'account': 'margin', 'asset_type': 'equity'},
-    'MSFT':  {'shares': 9.19,   'avg_cost': 393.57, 'account': 'margin', 'asset_type': 'equity'},
-    'TSLA':  {'shares': 9.00,   'avg_cost': 277.74, 'account': 'margin', 'asset_type': 'equity'},
-    'TSM':   {'shares': 5.39,   'avg_cost': 181.45, 'account': 'margin', 'asset_type': 'equity'},
-    'NFLX':  {'shares': 17.01,  'avg_cost': 95.03,  'account': 'margin', 'asset_type': 'equity'},
-    'AVGO':  {'shares': 4.02,   'avg_cost': 324.19, 'account': 'margin', 'asset_type': 'equity'},
-    'AXP':   {'shares': 5.00,   'account': 'margin', 'asset_type': 'equity'},   # avg_cost not tracked
-    'INTU':  {'shares': 3.00,   'avg_cost': 476.38, 'account': 'margin', 'asset_type': 'equity'},
-    'MU':    {'shares': 0.77,   'account': 'margin', 'asset_type': 'equity'},   # avg_cost not tracked
-    'SOFI':  {'shares': 45.00,  'avg_cost': 13.80,  'account': 'margin', 'asset_type': 'equity'},
-    'VST':   {'shares': 4.01,   'avg_cost': 155.28, 'account': 'margin', 'asset_type': 'equity'},
-    'COST':  {'shares': 0.55,   'avg_cost': 918.56, 'account': 'margin', 'asset_type': 'equity'},
-    'HOOD':  {'shares': 10.00,  'avg_cost': 72.60,  'account': 'margin', 'asset_type': 'equity'},
-    'ONDS':  {'shares': 30.00,  'avg_cost': 12.09,  'account': 'margin', 'asset_type': 'equity'},
-    'COPX':  {'shares': 5.00,   'avg_cost': 79.13,  'account': 'margin', 'asset_type': 'etf'},
-    'AA':    {'shares': 7.01,   'avg_cost': 59.88,  'account': 'margin', 'asset_type': 'equity'},
-    'QQQ':   {'shares': 2.24,   'avg_cost': 557.43, 'account': 'margin', 'asset_type': 'etf'},
-    'SPY':   {'shares': 2.03,   'avg_cost': 622.08, 'account': 'margin', 'asset_type': 'etf'},
-    'GLD':   {'shares': 2.53,   'avg_cost': 345.52, 'account': 'margin', 'asset_type': 'etf'},
+    "NVDA": {"shares": 25.00, "avg_cost": 139.27, "account": "margin", "asset_type": "equity"},
+    "GOOGL": {"shares": 12.41, "avg_cost": 170.23, "account": "margin", "asset_type": "equity"},
+    "META": {"shares": 6.46, "avg_cost": 592.18, "account": "margin", "asset_type": "equity"},
+    "MSFT": {"shares": 9.19, "avg_cost": 393.57, "account": "margin", "asset_type": "equity"},
+    "TSLA": {"shares": 9.00, "avg_cost": 277.74, "account": "margin", "asset_type": "equity"},
+    "TSM": {"shares": 5.39, "avg_cost": 181.45, "account": "margin", "asset_type": "equity"},
+    "NFLX": {"shares": 17.01, "avg_cost": 95.03, "account": "margin", "asset_type": "equity"},
+    "AVGO": {"shares": 4.02, "avg_cost": 324.19, "account": "margin", "asset_type": "equity"},
+    "AXP": {"shares": 5.00, "account": "margin", "asset_type": "equity"},  # avg_cost not tracked
+    "INTU": {"shares": 3.00, "avg_cost": 476.38, "account": "margin", "asset_type": "equity"},
+    "MU": {"shares": 0.77, "account": "margin", "asset_type": "equity"},  # avg_cost not tracked
+    "SOFI": {"shares": 45.00, "avg_cost": 13.80, "account": "margin", "asset_type": "equity"},
+    "VST": {"shares": 4.01, "avg_cost": 155.28, "account": "margin", "asset_type": "equity"},
+    "COST": {"shares": 0.55, "avg_cost": 918.56, "account": "margin", "asset_type": "equity"},
+    "HOOD": {"shares": 10.00, "avg_cost": 72.60, "account": "margin", "asset_type": "equity"},
+    "ONDS": {"shares": 30.00, "avg_cost": 12.09, "account": "margin", "asset_type": "equity"},
+    "COPX": {"shares": 5.00, "avg_cost": 79.13, "account": "margin", "asset_type": "etf"},
+    "AA": {"shares": 7.01, "avg_cost": 59.88, "account": "margin", "asset_type": "equity"},
+    "QQQ": {"shares": 2.24, "avg_cost": 557.43, "account": "margin", "asset_type": "etf"},
+    "SPY": {"shares": 2.03, "avg_cost": 622.08, "account": "margin", "asset_type": "etf"},
+    "GLD": {"shares": 2.53, "avg_cost": 345.52, "account": "margin", "asset_type": "etf"},
     # Inverse leveraged ETFs — hedging instruments, NOT margin eligible (avg_cost not tracked)
-    'SQQQ':  {'shares': 13.00,  'account': 'margin', 'asset_type': 'inverse_etf', 'margin_eligible': False},
-    'SOXS':  {'shares': 10.00,  'account': 'margin', 'asset_type': 'inverse_etf', 'margin_eligible': False},
-    'SPXS':  {'shares': 5.00,   'account': 'margin', 'asset_type': 'inverse_etf', 'margin_eligible': False},
-
+    "SQQQ": {
+        "shares": 13.00,
+        "account": "margin",
+        "asset_type": "inverse_etf",
+        "margin_eligible": False,
+    },
+    "SOXS": {
+        "shares": 10.00,
+        "account": "margin",
+        "asset_type": "inverse_etf",
+        "margin_eligible": False,
+    },
+    "SPXS": {
+        "shares": 5.00,
+        "account": "margin",
+        "asset_type": "inverse_etf",
+        "margin_eligible": False,
+    },
     # Crypto — separate wallet, never margin (avg_cost not tracked)
-    'BTC-USD':  {'shares': 0.038, 'account': 'crypto', 'asset_type': 'crypto', 'margin_eligible': False},
-    'ETH-USD':  {'shares': 0.60,  'account': 'crypto', 'asset_type': 'crypto', 'margin_eligible': False},
-    'XRP-USD':  {'shares': 236,   'account': 'crypto', 'asset_type': 'crypto', 'margin_eligible': False},
-    'ADA-USD':  {'shares': 1133,  'account': 'crypto', 'asset_type': 'crypto', 'margin_eligible': False},
-    'SOL-USD':  {'shares': 2.5,   'account': 'crypto', 'asset_type': 'crypto', 'margin_eligible': False},
-    'LINK-USD': {'shares': 16.00, 'account': 'crypto', 'asset_type': 'crypto', 'margin_eligible': False},
+    "BTC-USD": {
+        "shares": 0.038,
+        "account": "crypto",
+        "asset_type": "crypto",
+        "margin_eligible": False,
+    },
+    "ETH-USD": {
+        "shares": 0.60,
+        "account": "crypto",
+        "asset_type": "crypto",
+        "margin_eligible": False,
+    },
+    "XRP-USD": {
+        "shares": 236,
+        "account": "crypto",
+        "asset_type": "crypto",
+        "margin_eligible": False,
+    },
+    "ADA-USD": {
+        "shares": 1133,
+        "account": "crypto",
+        "asset_type": "crypto",
+        "margin_eligible": False,
+    },
+    "SOL-USD": {
+        "shares": 2.5,
+        "account": "crypto",
+        "asset_type": "crypto",
+        "margin_eligible": False,
+    },
+    "LINK-USD": {
+        "shares": 16.00,
+        "account": "crypto",
+        "asset_type": "crypto",
+        "margin_eligible": False,
+    },
 }
 
 
@@ -74,18 +117,18 @@ PORTFOLIO_HOLDINGS: Dict[str, Dict[str, Any]] = {
 #  Accounts
 # ══════════════════════════════════════════════════════════════════════════════
 ACCOUNTS: Dict[str, Dict[str, Any]] = {
-    'margin': {
-        'type': 'margin',
-        'broker': 'default_broker',
-        'margin_loan': 16822,
-        'maintenance_req': 0.25,
-        'base_currency': 'USD',
+    "margin": {
+        "type": "margin",
+        "broker": "default_broker",
+        "margin_loan": 16822,
+        "maintenance_req": 0.25,
+        "base_currency": "USD",
     },
-    'crypto': {
-        'type': 'crypto_wallet',
-        'broker': 'default_crypto',
-        'margin_loan': 0,
-        'base_currency': 'USD',
+    "crypto": {
+        "type": "crypto_wallet",
+        "broker": "default_crypto",
+        "margin_loan": 0,
+        "base_currency": "USD",
     },
 }
 
@@ -98,41 +141,76 @@ CONTRIBUTED_CAPITAL = 19700
 
 # ── Backward-compat aliases (legacy callers) ─────────────────────────────────
 TOTAL_COST_BASIS = CONTRIBUTED_CAPITAL
-MARGIN_LOAN = sum(a.get('margin_loan', 0) for a in ACCOUNTS.values())
+MARGIN_LOAN = sum(a.get("margin_loan", 0) for a in ACCOUNTS.values())
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  Sector classification — single source, downstream falls back to "Other"
 # ══════════════════════════════════════════════════════════════════════════════
 SECTOR_MAP: Dict[str, str] = {
-    "NVDA": "Semiconductors", "AVGO": "Semiconductors", "TSM": "Semiconductors",
-    "MU": "Semiconductors", "INTC": "Semiconductors", "AMD": "Semiconductors",
-    "QCOM": "Semiconductors", "TXN": "Semiconductors",
-    "GOOGL": "Big Tech", "GOOG": "Big Tech", "MSFT": "Big Tech",
-    "META": "Big Tech", "AAPL": "Big Tech", "AMZN": "Big Tech",
-    "INTU": "Software", "CRM": "Software", "SNOW": "Software", "NOW": "Software",
-    "TSLA": "EV / Auto", "CPNG": "E-commerce", "BABA": "E-commerce",
-    "NFLX": "Streaming / Media", "DIS": "Streaming / Media",
-    "AXP": "Financials", "JPM": "Financials", "GS": "Financials",
-    "SOFI": "Fintech", "HOOD": "Fintech", "PYPL": "Fintech", "SQ": "Fintech",
-    "S": "Cybersecurity", "CRWD": "Cybersecurity", "PANW": "Cybersecurity",
-    "SMMT": "Biotech", "ONDS": "Technology / IoT",
-    "AA": "Materials", "COPX": "Mining ETF", "VST": "Utilities",
-    "COST": "Consumer Staples", "WMT": "Consumer Staples",
-    "TQQQ": "Leveraged ETF", "QQQ": "Tech ETF",
-    "SPY": "Broad Market ETF", "GLD": "Gold / Commodities", "SLV": "Gold / Commodities",
+    "NVDA": "Semiconductors",
+    "AVGO": "Semiconductors",
+    "TSM": "Semiconductors",
+    "MU": "Semiconductors",
+    "INTC": "Semiconductors",
+    "AMD": "Semiconductors",
+    "QCOM": "Semiconductors",
+    "TXN": "Semiconductors",
+    "GOOGL": "Big Tech",
+    "GOOG": "Big Tech",
+    "MSFT": "Big Tech",
+    "META": "Big Tech",
+    "AAPL": "Big Tech",
+    "AMZN": "Big Tech",
+    "INTU": "Software",
+    "CRM": "Software",
+    "SNOW": "Software",
+    "NOW": "Software",
+    "TSLA": "EV / Auto",
+    "CPNG": "E-commerce",
+    "BABA": "E-commerce",
+    "NFLX": "Streaming / Media",
+    "DIS": "Streaming / Media",
+    "AXP": "Financials",
+    "JPM": "Financials",
+    "GS": "Financials",
+    "SOFI": "Fintech",
+    "HOOD": "Fintech",
+    "PYPL": "Fintech",
+    "SQ": "Fintech",
+    "S": "Cybersecurity",
+    "CRWD": "Cybersecurity",
+    "PANW": "Cybersecurity",
+    "SMMT": "Biotech",
+    "ONDS": "Technology / IoT",
+    "AA": "Materials",
+    "COPX": "Mining ETF",
+    "VST": "Utilities",
+    "COST": "Consumer Staples",
+    "WMT": "Consumer Staples",
+    "TQQQ": "Leveraged ETF",
+    "QQQ": "Tech ETF",
+    "SPY": "Broad Market ETF",
+    "GLD": "Gold / Commodities",
+    "SLV": "Gold / Commodities",
     "SQQQ": "Inverse ETF (3x QQQ)",
     "SOXS": "Inverse ETF (3x Semis)",
     "SPXS": "Inverse ETF (3x S&P)",
-    "BTC-USD": "Crypto", "ETH-USD": "Crypto", "XRP-USD": "Crypto",
-    "ADA-USD": "Crypto", "SOL-USD": "Crypto", "LINK-USD": "Crypto",
-    "DOGE-USD": "Crypto", "BNB-USD": "Crypto",
+    "BTC-USD": "Crypto",
+    "ETH-USD": "Crypto",
+    "XRP-USD": "Crypto",
+    "ADA-USD": "Crypto",
+    "SOL-USD": "Crypto",
+    "LINK-USD": "Crypto",
+    "DOGE-USD": "Crypto",
+    "BNB-USD": "Crypto",
 }
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  Helpers
 # ══════════════════════════════════════════════════════════════════════════════
+
 
 def _infer_asset_type(ticker: str) -> str:
     if ticker.upper().endswith("-USD"):

@@ -3,21 +3,34 @@ pages/1_Overview.py
 Executive Dashboard: How is my portfolio doing right now?
 """
 
-import streamlit as st
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
 import plotly.express as px
-from app import (get_sector, SECTOR_MAP, CLR_ACCENT, CLR_WARN,
-                 CLR_DANGER, CLR_GOOD, CLR_MUTED, CLR_GRID, CLR_GOLD,
-                 create_excel_report, _fetch_daily_pnl, call_llm)
+import plotly.graph_objects as go
+import streamlit as st
+
+from app import (
+    CLR_ACCENT,
+    CLR_DANGER,
+    SECTOR_MAP,
+    _fetch_daily_pnl,
+    call_llm,
+    create_excel_report,
+    get_sector,
+)
 from i18n import get_translator
-from ui.components import (render_kpi_row, render_section,
-                           render_chart, render_ai_digest, render_metric_list,
-                           render_empty_state)
+from ui.components import (
+    render_ai_digest,
+    render_chart,
+    render_empty_state,
+    render_kpi_row,
+    render_metric_list,
+    render_section,
+)
 
 # Render shared sidebar
 from ui.shared_sidebar import render_shared_sidebar
+
 render_shared_sidebar()
 
 # Guard
@@ -28,11 +41,14 @@ if not st.session_state.get("analysis_ready"):
         description=(
             "Overview shows portfolio KPIs, cumulative returns, drawdown and cost-basis P&L. "
             "Configure your portfolio in the sidebar and click Run Analysis to populate this page."
-            if _lang == "en" else
-            "概览页展示组合 KPI、累计收益、回撤和本金盈亏。请在侧边栏配置持仓并点击 Run Analysis 加载数据。"
+            if _lang == "en"
+            else "概览页展示组合 KPI、累计收益、回撤和本金盈亏。请在侧边栏配置持仓并点击 Run Analysis 加载数据。"
         ),
-        action_hint="Takes ~5-10 seconds (first run) / <3s (cached)"
-                   if _lang == "en" else "首次约 5-10 秒 · 缓存命中约 3 秒内",
+        action_hint=(
+            "Takes ~5-10 seconds (first run) / <3s (cached)"
+            if _lang == "en"
+            else "首次约 5-10 秒 · 缓存命中约 3 秒内"
+        ),
     )
     st.stop()
 
@@ -59,7 +75,9 @@ try:
 - Stress Loss: {report.stress_loss:.2%}
 Highlight key risks and recommendations. Plain text, no markdown."""
     if lang == "zh":
-        prompt = prompt.replace("Based on", "根据").replace("generate a concise risk summary", "生成简洁的风险摘要")
+        prompt = prompt.replace("Based on", "根据").replace(
+            "generate a concise risk summary", "生成简洁的风险摘要"
+        )
 
     with st.spinner("Generating AI risk digest..."):
         digest = call_llm(prompt, max_tokens=300, temperature=0.3)
@@ -89,32 +107,38 @@ try:
 except Exception:
     pass
 
-_pnl_str = f"${daily_pnl:+,.0f} ({daily_pnl_pct:+.2%})" if daily_pnl is not None else (f"{daily_pnl_pct:+.2%}" if daily_pnl_pct is not None else "N/A")
+_pnl_str = (
+    f"${daily_pnl:+,.0f} ({daily_pnl_pct:+.2%})"
+    if daily_pnl is not None
+    else (f"{daily_pnl_pct:+.2%}" if daily_pnl_pct is not None else "N/A")
+)
 _pnl_color = "positive" if (daily_pnl_pct or 0) >= 0 else "negative"
 
-render_kpi_row([
-    {
-        "label": "Portfolio Value" if total_long_val else "Annual Return",
-        "value": f"${total_long_val:,.0f}" if total_long_val else f"{report.annual_return:.2%}",
-        "delta": _pnl_str if total_long_val else None,
-        "delta_color": _pnl_color,
-    },
-    {
-        "label": f"VaR 95% ({mc_horizon}d)",
-        "value": f"{report.var_95:.2%}",
-        "tooltip": f"VaR 99%: {report.var_99:.2%} | CVaR: {report.cvar_95:.2%}",
-    },
-    {
-        "label": "Sharpe Ratio",
-        "value": f"{report.sharpe_ratio:.2f}",
-        "tooltip": f"Rf={report.risk_free_rate:.2%} | Vol={report.annual_volatility:.2%}",
-    },
-    {
-        "label": "Max Drawdown",
-        "value": f"{report.max_drawdown:.2%}",
-        "tooltip": f"Stress: {report.stress_loss:.2%}",
-    },
-])
+render_kpi_row(
+    [
+        {
+            "label": "Portfolio Value" if total_long_val else "Annual Return",
+            "value": f"${total_long_val:,.0f}" if total_long_val else f"{report.annual_return:.2%}",
+            "delta": _pnl_str if total_long_val else None,
+            "delta_color": _pnl_color,
+        },
+        {
+            "label": f"VaR 95% ({mc_horizon}d)",
+            "value": f"{report.var_95:.2%}",
+            "tooltip": f"VaR 99%: {report.var_99:.2%} | CVaR: {report.cvar_95:.2%}",
+        },
+        {
+            "label": "Sharpe Ratio",
+            "value": f"{report.sharpe_ratio:.2f}",
+            "tooltip": f"Rf={report.risk_free_rate:.2%} | Vol={report.annual_volatility:.2%}",
+        },
+        {
+            "label": "Max Drawdown",
+            "value": f"{report.max_drawdown:.2%}",
+            "tooltip": f"Stress: {report.stress_loss:.2%}",
+        },
+    ]
+)
 
 # Contributed Capital & Return on Capital (account-level P&L, net of margin)
 if meta_kpi and meta_kpi.get("contributed_capital", meta_kpi.get("cost_basis", 0)) > 0:
@@ -122,22 +146,38 @@ if meta_kpi and meta_kpi.get("contributed_capital", meta_kpi.get("cost_basis", 0
     _roc_dollar = meta_kpi.get("return_on_capital_dollar", meta_kpi.get("total_pnl", 0))
     _roc_pct = meta_kpi.get("return_on_capital_pct", meta_kpi.get("total_pnl_pct", 0))
     _pnl_c = "positive" if _roc_dollar and _roc_dollar >= 0 else "negative"
-    render_kpi_row([
-        {"label": "Contributed Capital" if lang == "en" else "自有本金",
-         "value": f"${_cc:,.0f}",
-         "tooltip": "Self-funded principal (excludes margin draws)"
-                    if lang == "en" else "自有资金投入（不含融资借款）"},
-        {"label": "Return on Capital" if lang == "en" else "本金收益",
-         "value": f"${_roc_dollar:+,.0f}" if _roc_dollar is not None else "--",
-         "delta": f"{_roc_pct:+.1%}" if _roc_pct is not None else None,
-         "delta_color": _pnl_c,
-         "tooltip": "Net-equity change vs contributed capital. Includes margin cost."
-                    if lang == "en" else "净资产相对自有本金的变化，已反映融资成本"},
-        {"label": "Net Equity" if lang == "en" else "净资产",
-         "value": f"${meta_kpi['net_equity']:,.0f}"},
-        {"label": "Margin Loan" if lang == "en" else "保证金贷款",
-         "value": f"${meta_kpi.get('margin_loan', 0):,.0f}"},
-    ])
+    render_kpi_row(
+        [
+            {
+                "label": "Contributed Capital" if lang == "en" else "自有本金",
+                "value": f"${_cc:,.0f}",
+                "tooltip": (
+                    "Self-funded principal (excludes margin draws)"
+                    if lang == "en"
+                    else "自有资金投入（不含融资借款）"
+                ),
+            },
+            {
+                "label": "Return on Capital" if lang == "en" else "本金收益",
+                "value": f"${_roc_dollar:+,.0f}" if _roc_dollar is not None else "--",
+                "delta": f"{_roc_pct:+.1%}" if _roc_pct is not None else None,
+                "delta_color": _pnl_c,
+                "tooltip": (
+                    "Net-equity change vs contributed capital. Includes margin cost."
+                    if lang == "en"
+                    else "净资产相对自有本金的变化，已反映融资成本"
+                ),
+            },
+            {
+                "label": "Net Equity" if lang == "en" else "净资产",
+                "value": f"${meta_kpi['net_equity']:,.0f}",
+            },
+            {
+                "label": "Margin Loan" if lang == "en" else "保证金贷款",
+                "value": f"${meta_kpi.get('margin_loan', 0):,.0f}",
+            },
+        ]
+    )
 
     # Second P&L row: Position P&L (gross, margin-independent). Only shows
     # if the user has populated avg_cost on holdings. Otherwise display a
@@ -155,27 +195,38 @@ if meta_kpi and meta_kpi.get("contributed_capital", meta_kpi.get("cost_basis", 0
         missing_n = len(_pos_info.get("tickers_missing_cost", []))
         n_known = len(_pos_info.get("tickers_with_cost", []))
 
-        render_kpi_row([
-            {"label": "Position Cost" if lang == "en" else "持仓成本",
-             "value": f"${_pos_info['total_position_cost']:,.0f}",
-             "tooltip": f"Σ(shares × avg_cost) across {n_known} tickers"},
-            {"label": "Position P&L" if lang == "en" else "持仓盈亏",
-             "value": f"${_pos_pnl:+,.0f}",
-             "delta": f"{_pos_pnl_pct:+.1%}" if _pos_pnl_pct is not None else None,
-             "delta_color": _pc_c,
-             "tooltip": "Unrealized gain/loss on positions (excludes margin cost)"
-                        if lang == "en" else "持仓浮动盈亏（不含融资成本）"},
-            {"label": "Coverage (by $)" if lang == "en" else "成本覆盖（按市值）",
-             "value": f"{cov_display:.0%}" if cov_display is not None else "—",
-             "tooltip": (
-                 f"{n_known} of {n_known + missing_n} tickers tracked by market value. "
-                 f"Ticker count: {cov_ct:.0%}."
-                 if lang == "en" else
-                 f"按市值权重 {n_known}/{n_known + missing_n} 已追踪。"
-                 f"按 ticker 计数: {cov_ct:.0%}"
-             )},
-            {"label": " ", "value": " "},  # alignment spacer
-        ])
+        render_kpi_row(
+            [
+                {
+                    "label": "Position Cost" if lang == "en" else "持仓成本",
+                    "value": f"${_pos_info['total_position_cost']:,.0f}",
+                    "tooltip": f"Σ(shares × avg_cost) across {n_known} tickers",
+                },
+                {
+                    "label": "Position P&L" if lang == "en" else "持仓盈亏",
+                    "value": f"${_pos_pnl:+,.0f}",
+                    "delta": f"{_pos_pnl_pct:+.1%}" if _pos_pnl_pct is not None else None,
+                    "delta_color": _pc_c,
+                    "tooltip": (
+                        "Unrealized gain/loss on positions (excludes margin cost)"
+                        if lang == "en"
+                        else "持仓浮动盈亏（不含融资成本）"
+                    ),
+                },
+                {
+                    "label": "Coverage (by $)" if lang == "en" else "成本覆盖（按市值）",
+                    "value": f"{cov_display:.0%}" if cov_display is not None else "—",
+                    "tooltip": (
+                        f"{n_known} of {n_known + missing_n} tickers tracked by market value. "
+                        f"Ticker count: {cov_ct:.0%}."
+                        if lang == "en"
+                        else f"按市值权重 {n_known}/{n_known + missing_n} 已追踪。"
+                        f"按 ticker 计数: {cov_ct:.0%}"
+                    ),
+                },
+                {"label": " ", "value": " "},  # alignment spacer
+            ]
+        )
 
         # Always surface the missing list when anything is missing, so the
         # user can see exactly which tickers to backfill.
@@ -185,8 +236,8 @@ if meta_kpi and meta_kpi.get("contributed_capital", meta_kpi.get("cost_basis", 0
                 f"🔍 Missing `avg_cost` for **{missing_n}** ticker(s): "
                 f"{', '.join(f'`{t}`' for t in _missing)}. "
                 f"Add them in portfolio_config.py to raise coverage."
-                if lang == "en" else
-                f"🔍 有 **{missing_n}** 只持仓缺少 `avg_cost`：{', '.join(f'`{t}`' for t in _missing)}。"
+                if lang == "en"
+                else f"🔍 有 **{missing_n}** 只持仓缺少 `avg_cost`：{', '.join(f'`{t}`' for t in _missing)}。"
                 f"在 portfolio_config.py 补齐以提高覆盖率。"
             )
     elif _pos_info and _pos_info.get("tickers_missing_cost"):
@@ -194,8 +245,8 @@ if meta_kpi and meta_kpi.get("contributed_capital", meta_kpi.get("cost_basis", 0
         st.caption(
             "💡 Add `avg_cost` to holdings in portfolio_config.py for Position P&L "
             "(margin-independent). Current Return on Capital includes margin effects."
-            if lang == "en" else
-            "💡 在 portfolio_config.py 为持仓添加 `avg_cost` 可显示持仓盈亏（不含融资影响）。"
+            if lang == "en"
+            else "💡 在 portfolio_config.py 为持仓添加 `avg_cost` 可显示持仓盈亏（不含融资影响）。"
             "当前「本金收益」反映的是净资产相对本金变化，已包含融资成本。"
         )
 
@@ -219,17 +270,19 @@ if report.margin_call_info and report.margin_call_info.get("has_margin"):
         )
     else:
         st.caption(
-            f"Margin safe -- distance to call: {dist:.1%} | "
-            f"leverage: {mi['leverage']:.2f}x"
+            f"Margin safe -- distance to call: {dist:.1%} | " f"leverage: {mi['leverage']:.2f}x"
         )
 
 # Sentiment Quick Banner
 sent_ss = st.session_state.get("sentiment_data")
 if sent_ss:
-    worst_tk  = min(sent_ss, key=lambda x: sent_ss[x]["score"])
-    worst_sc  = sent_ss[worst_tk]["score"]
-    avg_sc    = sum(d["score"] for d in sent_ss.values()) / len(sent_ss)
-    st.caption(f"AI Sentiment Avg {avg_sc:.1f}/10" + (f" | Highest risk: **{worst_tk}** ({worst_sc})" if worst_sc <= 3 else ""))
+    worst_tk = min(sent_ss, key=lambda x: sent_ss[x]["score"])
+    worst_sc = sent_ss[worst_tk]["score"]
+    avg_sc = sum(d["score"] for d in sent_ss.values()) / len(sent_ss)
+    st.caption(
+        f"AI Sentiment Avg {avg_sc:.1f}/10"
+        + (f" | Highest risk: **{worst_tk}** ({worst_sc})" if worst_sc <= 3 else "")
+    )
 
 
 # Cumulative Returns Chart
@@ -238,7 +291,8 @@ norm = prices / prices.iloc[0]
 display_mode = st.radio(
     "Display Mode" if lang == "en" else "显示模式",
     ["Portfolio Only", "Portfolio + Top 10", "All Holdings"],
-    horizontal=True, key="cumret_mode",
+    horizontal=True,
+    key="cumret_mode",
 )
 fig = go.Figure()
 if "All Holdings" in display_mode:
@@ -250,22 +304,36 @@ else:
     cols_show = []
 
 for col in cols_show:
-    fig.add_trace(go.Scatter(
-        x=norm.index, y=norm[col], mode="lines", name=col, opacity=0.5,
-        hovertemplate="%{fullData.name}<br>%{x|%Y-%m-%d}<br>%{y:.3f}<extra></extra>",
-    ))
-fig.add_trace(go.Scatter(
-    x=cumret.index, y=cumret.values, mode="lines",
-    name="Portfolio", line=dict(width=3, color=CLR_ACCENT),
-    hovertemplate="Portfolio<br>%{x|%Y-%m-%d}<br>%{y:.3f}<extra></extra>",
-))
+    fig.add_trace(
+        go.Scatter(
+            x=norm.index,
+            y=norm[col],
+            mode="lines",
+            name=col,
+            opacity=0.5,
+            hovertemplate="%{fullData.name}<br>%{x|%Y-%m-%d}<br>%{y:.3f}<extra></extra>",
+        )
+    )
+fig.add_trace(
+    go.Scatter(
+        x=cumret.index,
+        y=cumret.values,
+        mode="lines",
+        name="Portfolio",
+        line=dict(width=3, color=CLR_ACCENT),
+        hovertemplate="Portfolio<br>%{x|%Y-%m-%d}<br>%{y:.3f}<extra></extra>",
+    )
+)
 fig.update_layout(
     yaxis_title="Cumulative Return" if lang == "en" else "累积收益",
     height=500,
     legend=dict(orientation="h", y=-0.12),
     hovermode="closest",
 )
-render_chart(fig, insight="Portfolio cumulative return tracks the weighted sum of all holdings over the analysis period.")
+render_chart(
+    fig,
+    insight="Portfolio cumulative return tracks the weighted sum of all holdings over the analysis period.",
+)
 
 
 # ── Historical Portfolio Value (dollar time series) ─────────────────────
@@ -276,9 +344,7 @@ if meta_kpi and cumret is not None and len(cumret) > 1:
     _base = meta_kpi.get("contributed_capital") or meta_kpi.get("cost_basis")
     if _base and _base > 0:
         render_section(
-            "Portfolio Value History (simulated)"
-            if lang == "en" else
-            "组合净值历史（模拟）"
+            "Portfolio Value History (simulated)" if lang == "en" else "组合净值历史（模拟）"
         )
         # cumret IS the value multiplier; direct projection onto base capital.
         port_value = _base * cumret
@@ -286,20 +352,30 @@ if meta_kpi and cumret is not None and len(cumret) > 1:
         drawdown_dollar = port_value - peak
 
         fig_hist = go.Figure()
-        fig_hist.add_trace(go.Scatter(
-            x=port_value.index, y=port_value.values,
-            mode="lines", name="Portfolio Value",
-            line=dict(width=2.5, color=CLR_ACCENT),
-            hovertemplate="%{x|%Y-%m-%d}<br>$%{y:,.0f}<extra></extra>",
-        ))
-        fig_hist.add_trace(go.Scatter(
-            x=peak.index, y=peak.values,
-            mode="lines", name="Peak",
-            line=dict(width=1, color="#8B949E", dash="dot"),
-            hovertemplate="Peak<br>%{x|%Y-%m-%d}<br>$%{y:,.0f}<extra></extra>",
-        ))
+        fig_hist.add_trace(
+            go.Scatter(
+                x=port_value.index,
+                y=port_value.values,
+                mode="lines",
+                name="Portfolio Value",
+                line=dict(width=2.5, color=CLR_ACCENT),
+                hovertemplate="%{x|%Y-%m-%d}<br>$%{y:,.0f}<extra></extra>",
+            )
+        )
+        fig_hist.add_trace(
+            go.Scatter(
+                x=peak.index,
+                y=peak.values,
+                mode="lines",
+                name="Peak",
+                line=dict(width=1, color="#8B949E", dash="dot"),
+                hovertemplate="Peak<br>%{x|%Y-%m-%d}<br>$%{y:,.0f}<extra></extra>",
+            )
+        )
         fig_hist.add_hline(
-            y=_base, line_dash="dash", line_color="#64748B",
+            y=_base,
+            line_dash="dash",
+            line_color="#64748B",
             annotation_text=f"Contributed Capital ${_base:,.0f}",
             annotation_position="bottom right",
         )
@@ -315,22 +391,26 @@ if meta_kpi and cumret is not None and len(cumret) > 1:
             insight=(
                 f"Simulated value if current weights had been held since "
                 f"{port_value.index[0].date()}. Dashed line is contributed capital."
-                if lang == "en" else
-                f"以当前权重在 {port_value.index[0].date()} 回溯模拟的净值曲线。"
+                if lang == "en"
+                else f"以当前权重在 {port_value.index[0].date()} 回溯模拟的净值曲线。"
                 f"虚线为自有本金。"
             ),
         )
 
         # Drawdown dollar series in a second compact chart
         if drawdown_dollar.min() < 0:
-            fig_dd = go.Figure(go.Scatter(
-                x=drawdown_dollar.index, y=drawdown_dollar.values,
-                fill="tozeroy", mode="lines",
-                line=dict(color="#DA3633", width=1),
-                fillcolor="rgba(218, 54, 51, 0.15)",
-                hovertemplate="%{x|%Y-%m-%d}<br>-$%{customdata:,.0f}<extra></extra>",
-                customdata=-drawdown_dollar.values,
-            ))
+            fig_dd = go.Figure(
+                go.Scatter(
+                    x=drawdown_dollar.index,
+                    y=drawdown_dollar.values,
+                    fill="tozeroy",
+                    mode="lines",
+                    line=dict(color="#DA3633", width=1),
+                    fillcolor="rgba(218, 54, 51, 0.15)",
+                    hovertemplate="%{x|%Y-%m-%d}<br>-$%{customdata:,.0f}<extra></extra>",
+                    customdata=-drawdown_dollar.values,
+                )
+            )
             fig_dd.update_layout(
                 yaxis_title="Dollar Drawdown" if lang == "en" else "美元回撤",
                 xaxis_title="",
@@ -343,8 +423,8 @@ if meta_kpi and cumret is not None and len(cumret) > 1:
                 insight=(
                     f"Worst drawdown: ${drawdown_dollar.min():,.0f} "
                     f"({drawdown_dollar.min() / _base:.1%} of capital)"
-                    if lang == "en" else
-                    f"最大回撤：${drawdown_dollar.min():,.0f}"
+                    if lang == "en"
+                    else f"最大回撤：${drawdown_dollar.min():,.0f}"
                     f"（占本金 {drawdown_dollar.min() / _base:.1%}）"
                 ),
             )
@@ -363,12 +443,14 @@ with col_left:
         for tk, var_contrib in top_risk:
             beta = report.betas.get(tk, float("nan"))
             beta_str = f"{beta:.2f}" if not np.isnan(beta) else "N/A"
-            risk_rows.append({
-                "Ticker": tk,
-                "VaR %": f"{var_contrib:.1%}",
-                "Weight": f"{weights.get(tk, 0):.1%}",
-                "Beta": beta_str,
-            })
+            risk_rows.append(
+                {
+                    "Ticker": tk,
+                    "VaR %": f"{var_contrib:.1%}",
+                    "Weight": f"{weights.get(tk, 0):.1%}",
+                    "Beta": beta_str,
+                }
+            )
         st.dataframe(pd.DataFrame(risk_rows), hide_index=True, use_container_width=True)
 
 with col_right:
@@ -378,20 +460,24 @@ with col_right:
         sector = get_sector(tk)
         sector_weights[sector] = sector_weights.get(sector, 0) + w
 
-    sector_df = pd.DataFrame({
-        "Sector": list(sector_weights.keys()),
-        "Weight": list(sector_weights.values()),
-    }).sort_values("Weight", ascending=False)
+    sector_df = pd.DataFrame(
+        {
+            "Sector": list(sector_weights.keys()),
+            "Weight": list(sector_weights.values()),
+        }
+    ).sort_values("Weight", ascending=False)
 
-    fig_sector = go.Figure(go.Bar(
-        x=sector_df["Weight"],
-        y=sector_df["Sector"],
-        orientation="h",
-        marker_color=CLR_ACCENT,
-        text=sector_df["Weight"].map("{:.1%}".format),
-        textposition="outside",
-        textfont=dict(color="#E6EDF3", size=12),
-    ))
+    fig_sector = go.Figure(
+        go.Bar(
+            x=sector_df["Weight"],
+            y=sector_df["Sector"],
+            orientation="h",
+            marker_color=CLR_ACCENT,
+            text=sector_df["Weight"].map("{:.1%}".format),
+            textposition="outside",
+            textfont=dict(color="#E6EDF3", size=12),
+        )
+    )
     fig_sector.update_layout(
         height=max(300, len(sector_df) * 32),
         xaxis=dict(tickformat=".0%", tickfont=dict(color="#8B949E")),
@@ -414,10 +500,17 @@ with exp_col1:
 with exp_col2:
     try:
         from report_generator import generate_pdf_report
+
         margin_info = report.margin_call_info if report.margin_call_info else None
         pdf_bytes = generate_pdf_report(
-            report, weights, mc_horizon, market_shock,
-            prices, SECTOR_MAP, margin_info, lang,
+            report,
+            weights,
+            mc_horizon,
+            market_shock,
+            prices,
+            SECTOR_MAP,
+            margin_info,
+            lang,
         )
         st.download_button(
             label="Export PDF" if lang == "en" else "导出PDF",
@@ -435,24 +528,36 @@ with exp_col2:
 with render_section("Drawdown Detail" if lang == "en" else "回撤详情", collapsed=True):
     dd = report.drawdown_series
     fig_dd = go.Figure()
-    fig_dd.add_trace(go.Scatter(
-        x=dd.index, y=dd.values, fill="tozeroy", mode="lines",
-        line=dict(color=CLR_DANGER), name="Drawdown",
-    ))
+    fig_dd.add_trace(
+        go.Scatter(
+            x=dd.index,
+            y=dd.values,
+            fill="tozeroy",
+            mode="lines",
+            line=dict(color=CLR_DANGER),
+            name="Drawdown",
+        )
+    )
     fig_dd.update_layout(
         yaxis_title="Drawdown" if lang == "en" else "回撤",
-        yaxis_tickformat=".1%", height=380,
+        yaxis_tickformat=".1%",
+        height=380,
     )
-    render_chart(fig_dd, insight="The deepest drawdown period indicates the worst peak-to-trough decline experienced.")
+    render_chart(
+        fig_dd,
+        insight="The deepest drawdown period indicates the worst peak-to-trough decline experienced.",
+    )
 
     if report.drawdown_stats:
         ds = report.drawdown_stats
-        render_metric_list([
-            {"label": "Episodes", "value": str(ds["num_episodes"])},
-            {"label": "Avg Duration", "value": f"{ds['avg_episode_days']} days"},
-            {"label": "Max Duration", "value": f"{ds['max_episode_days']} days"},
-            {"label": "Time Underwater", "value": f"{ds['pct_time_underwater']:.1f}%"},
-        ])
+        render_metric_list(
+            [
+                {"label": "Episodes", "value": str(ds["num_episodes"])},
+                {"label": "Avg Duration", "value": f"{ds['avg_episode_days']} days"},
+                {"label": "Max Duration", "value": f"{ds['max_episode_days']} days"},
+                {"label": "Time Underwater", "value": f"{ds['pct_time_underwater']:.1f}%"},
+            ]
+        )
         if ds["is_currently_underwater"]:
             st.warning(f"Currently underwater for {ds['current_episode_days']} days")
         if ds["episode_durations"]:
@@ -465,6 +570,7 @@ with render_section("Drawdown Detail" if lang == "en" else "回撤详情", colla
 # Floating AI Assistant
 try:
     from ui.floating_chat import render_floating_ai_chat
+
     render_floating_ai_chat()
-except Exception as e:
+except Exception:
     pass  # Silently fail if floating chat has issues

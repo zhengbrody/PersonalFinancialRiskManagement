@@ -15,7 +15,9 @@ import streamlit as st
 # ──────────────────────────────────────────────────────────────
 #  Self-contained LLM call (avoids circular import with app.py)
 # ──────────────────────────────────────────────────────────────
-def _chat_call_llm(prompt: str, system: str = "", max_tokens: int = 600, temperature: float = 0.3) -> str:
+def _chat_call_llm(
+    prompt: str, system: str = "", max_tokens: int = 600, temperature: float = 0.3
+) -> str:
     """
     Minimal LLM call that mirrors app.call_llm but lives in this module
     to avoid circular imports (app.py -> ui.floating_chat -> app.call_llm).
@@ -30,6 +32,7 @@ def _chat_call_llm(prompt: str, system: str = "", max_tokens: int = 600, tempera
 
     if model_provider == "Anthropic Claude" and api_key_input:
         import anthropic
+
         client = anthropic.Anthropic(api_key=api_key_input)
         for attempt in range(3):
             try:
@@ -50,6 +53,7 @@ def _chat_call_llm(prompt: str, system: str = "", max_tokens: int = 600, tempera
 
     elif model_provider == "DeepSeek API" and deepseek_key:
         from openai import OpenAI
+
         client = OpenAI(api_key=deepseek_key, base_url="https://api.deepseek.com/v1")
         messages = []
         if system:
@@ -65,6 +69,7 @@ def _chat_call_llm(prompt: str, system: str = "", max_tokens: int = 600, tempera
 
     elif model_provider == "Ollama (Local)":
         import requests as _requests
+
         payload = {
             "model": ollama_model,
             "messages": [{"role": "user", "content": prompt}],
@@ -82,8 +87,7 @@ def _chat_call_llm(prompt: str, system: str = "", max_tokens: int = 600, tempera
             )
 
     raise ValueError(
-        "No LLM backend configured. Please set an API key in the sidebar "
-        "(AI Provider section)."
+        "No LLM backend configured. Please set an API key in the sidebar " "(AI Provider section)."
     )
 
 
@@ -127,7 +131,8 @@ def _build_portfolio_context() -> str:
             try:
                 cvar_items = sorted(
                     ((t, float(v)) for t, v in report.component_var_pct.items()),
-                    key=lambda x: x[1], reverse=True,
+                    key=lambda x: x[1],
+                    reverse=True,
                 )[:5]
                 parts.append(
                     "Top VaR contributors: " + ", ".join(f"{t}={v:.1%}" for t, v in cvar_items)
@@ -177,9 +182,7 @@ def _open_chat_dialog():
     chat_container = st.container(height=420)
     with chat_container:
         if not st.session_state._fc_messages:
-            st.markdown(
-                "_No messages yet.  Type a question below or click a suggestion._"
-            )
+            st.markdown("_No messages yet.  Type a question below or click a suggestion._")
         for msg in st.session_state._fc_messages:
             with st.chat_message(msg["role"]):
                 st.markdown(msg["content"])
@@ -248,8 +251,7 @@ def _handle_user_input(user_input: str, chat_container):
                     response = f"**Configuration Error:** {e}"
                 except Exception as e:
                     response = (
-                        f"**Error:** {e}\n\n"
-                        "Try again or switch AI provider in the sidebar."
+                        f"**Error:** {e}\n\n" "Try again or switch AI provider in the sidebar."
                     )
             st.markdown(response)
 
@@ -281,7 +283,8 @@ def render_floating_ai_chat():
     """
 
     # ── CSS targets the keyed container via .st-key-fc_trigger_wrap ──
-    st.markdown(r"""
+    st.markdown(
+        r"""
 <style>
 /* Position the real Streamlit container at bottom-right */
 .st-key-fc_trigger_wrap {
@@ -349,12 +352,14 @@ def render_floating_ai_chat():
     }
 }
 </style>
-""", unsafe_allow_html=True)
+""",
+        unsafe_allow_html=True,
+    )
 
     # ── Real clickable button inside a keyed Streamlit container ──
     with st.container(key="fc_trigger_wrap"):
         open_chat = st.button(
-            "\U0001F4AC",
+            "\U0001f4ac",
             key="_fc_open_btn",
             help="Open AI Chat Assistant",
         )

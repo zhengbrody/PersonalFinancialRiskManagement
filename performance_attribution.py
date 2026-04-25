@@ -7,10 +7,10 @@ attribution · Daily/period PnL decomposition · Tracking error ·
 Information ratio · Hit ratio
 """
 
+from typing import Dict, List, Optional, Union
+
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Optional, Tuple, Union
-from scipy import stats
 
 from logging_config import get_logger
 
@@ -26,10 +26,10 @@ TRADING_DAYS = 252
 # (e.g. pages/9_Quant_Lab.py imports this name directly).
 from portfolio_config import SECTOR_MAP as DEFAULT_SECTOR_MAP  # noqa: F401
 
-
 # ══════════════════════════════════════════════════════════════
 #  Helper Functions
 # ══════════════════════════════════════════════════════════════
+
 
 def _tracking_error(active_returns: Union[pd.Series, np.ndarray]) -> float:
     """
@@ -103,6 +103,7 @@ def _hit_ratio(active_returns: Union[pd.Series, np.ndarray]) -> float:
 #  1. Brinson-Hood-Beebower Attribution
 # ══════════════════════════════════════════════════════════════
 
+
 def brinson_attribution(
     portfolio_weights: Dict[str, float],
     benchmark_weights: Dict[str, float],
@@ -161,8 +162,7 @@ def brinson_attribution(
 
     # Total benchmark return (computed once, used in allocation effect for all sectors)
     total_bm_return = sum(
-        benchmark_weights.get(t, 0.0) * benchmark_returns.get(t, 0.0)
-        for t in all_tickers
+        benchmark_weights.get(t, 0.0) * benchmark_returns.get(t, 0.0) for t in all_tickers
     )
 
     sector_rows = []
@@ -174,8 +174,7 @@ def brinson_attribution(
         # Portfolio aggregation
         pw_sector = sum(portfolio_weights.get(t, 0.0) for t in tickers_in_sector)
         pw_return_num = sum(
-            portfolio_weights.get(t, 0.0) * portfolio_returns.get(t, 0.0)
-            for t in tickers_in_sector
+            portfolio_weights.get(t, 0.0) * portfolio_returns.get(t, 0.0) for t in tickers_in_sector
         )
         # Guard against division by near-zero sector weight to avoid inf/NaN;
         # sectors with negligible total weight get a zero return attribution.
@@ -184,8 +183,7 @@ def brinson_attribution(
         # Benchmark aggregation
         bw_sector = sum(benchmark_weights.get(t, 0.0) for t in tickers_in_sector)
         bw_return_num = sum(
-            benchmark_weights.get(t, 0.0) * benchmark_returns.get(t, 0.0)
-            for t in tickers_in_sector
+            benchmark_weights.get(t, 0.0) * benchmark_returns.get(t, 0.0) for t in tickers_in_sector
         )
         # Guard against division by near-zero sector weight to avoid inf/NaN;
         # sectors with negligible total weight get a zero return attribution.
@@ -196,18 +194,20 @@ def brinson_attribution(
         selection = bw_sector * (pr_sector - br_sector)
         interaction = (pw_sector - bw_sector) * (pr_sector - br_sector)
 
-        sector_rows.append({
-            "sector": sector,
-            "portfolio_weight": pw_sector,
-            "benchmark_weight": bw_sector,
-            "weight_diff": pw_sector - bw_sector,
-            "portfolio_return": pr_sector,
-            "benchmark_return": br_sector,
-            "allocation_effect": allocation,
-            "selection_effect": selection,
-            "interaction_effect": interaction,
-            "total_effect": allocation + selection + interaction,
-        })
+        sector_rows.append(
+            {
+                "sector": sector,
+                "portfolio_weight": pw_sector,
+                "benchmark_weight": bw_sector,
+                "weight_diff": pw_sector - bw_sector,
+                "portfolio_return": pr_sector,
+                "benchmark_return": br_sector,
+                "allocation_effect": allocation,
+                "selection_effect": selection,
+                "interaction_effect": interaction,
+                "total_effect": allocation + selection + interaction,
+            }
+        )
 
     sector_df = pd.DataFrame(sector_rows).set_index("sector")
 
@@ -237,6 +237,7 @@ def brinson_attribution(
 # ══════════════════════════════════════════════════════════════
 #  2. Factor-Based Attribution (Multi-Factor Regression)
 # ══════════════════════════════════════════════════════════════
+
 
 def factor_attribution(
     returns: Union[pd.Series, np.ndarray],
@@ -322,7 +323,7 @@ def factor_attribution(
     eps = y - y_hat
 
     # R-squared
-    ss_res = np.sum(eps ** 2)
+    ss_res = np.sum(eps**2)
     ss_tot = np.sum((y - np.mean(y)) ** 2)
     r_squared = 1.0 - ss_res / ss_tot if ss_tot > 1e-16 else 0.0
 
@@ -338,31 +339,37 @@ def factor_attribution(
         contrib_annual = contrib_daily * TRADING_DAYS
         factor_betas_dict[fname] = beta_i
         factor_contributions[fname] = contrib_annual
-        rows.append({
-            "factor": fname,
-            "beta": beta_i,
-            "factor_mean_daily": factor_means[i],
-            "contribution_daily": contrib_daily,
-            "contribution_annual": contrib_annual,
-        })
+        rows.append(
+            {
+                "factor": fname,
+                "beta": beta_i,
+                "factor_mean_daily": factor_means[i],
+                "contribution_daily": contrib_daily,
+                "contribution_annual": contrib_annual,
+            }
+        )
 
     alpha_annual = float(alpha_daily * TRADING_DAYS)
     residual_annual = float(np.mean(eps) * TRADING_DAYS)
 
-    rows.append({
-        "factor": "Alpha",
-        "beta": np.nan,
-        "factor_mean_daily": np.nan,
-        "contribution_daily": alpha_daily,
-        "contribution_annual": alpha_annual,
-    })
-    rows.append({
-        "factor": "Residual",
-        "beta": np.nan,
-        "factor_mean_daily": np.nan,
-        "contribution_daily": np.mean(eps),
-        "contribution_annual": residual_annual,
-    })
+    rows.append(
+        {
+            "factor": "Alpha",
+            "beta": np.nan,
+            "factor_mean_daily": np.nan,
+            "contribution_daily": alpha_daily,
+            "contribution_annual": alpha_annual,
+        }
+    )
+    rows.append(
+        {
+            "factor": "Residual",
+            "beta": np.nan,
+            "factor_mean_daily": np.nan,
+            "contribution_daily": np.mean(eps),
+            "contribution_annual": residual_annual,
+        }
+    )
 
     attribution_df = pd.DataFrame(rows).set_index("factor")
 
@@ -386,6 +393,7 @@ def factor_attribution(
 # ══════════════════════════════════════════════════════════════
 #  3. Daily PnL Attribution
 # ══════════════════════════════════════════════════════════════
+
 
 def compute_daily_pnl_attribution(
     weights: pd.Series,
@@ -441,8 +449,9 @@ def compute_daily_pnl_attribution(
     logger.info(
         "attribution.daily_pnl.complete",
         n_days=len(pnl),
-        total_cumulative=round(float(pnl["cumulative_return"].iloc[-1]), 6)
-        if len(pnl) > 0 else 0.0,
+        total_cumulative=(
+            round(float(pnl["cumulative_return"].iloc[-1]), 6) if len(pnl) > 0 else 0.0
+        ),
     )
 
     return pnl
@@ -451,6 +460,7 @@ def compute_daily_pnl_attribution(
 # ══════════════════════════════════════════════════════════════
 #  4. Period Attribution (Monthly / Quarterly / Yearly)
 # ══════════════════════════════════════════════════════════════
+
 
 def compute_period_attribution(
     weights: pd.Series,
@@ -514,6 +524,7 @@ def compute_period_attribution(
 # ══════════════════════════════════════════════════════════════
 #  5. High-Level Attribution Summary
 # ══════════════════════════════════════════════════════════════
+
 
 def get_attribution_summary(
     weights: pd.Series,

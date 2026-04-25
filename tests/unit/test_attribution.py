@@ -5,23 +5,23 @@ Covers: brinson_attribution, factor_attribution,
         _tracking_error, _information_ratio
 """
 
-import pytest
 import numpy as np
 import pandas as pd
+import pytest
 
 from performance_attribution import (
+    TRADING_DAYS,
+    _hit_ratio,
+    _information_ratio,
+    _tracking_error,
     brinson_attribution,
     factor_attribution,
-    _tracking_error,
-    _information_ratio,
-    _hit_ratio,
-    TRADING_DAYS,
 )
-
 
 # ══════════════════════════════════════════════════════════════
 #  Fixtures
 # ══════════════════════════════════════════════════════════════
+
 
 @pytest.fixture
 def two_sector_data():
@@ -88,6 +88,7 @@ def active_returns_known():
 #  Brinson attribution tests
 # ══════════════════════════════════════════════════════════════
 
+
 class TestBrinsonAttribution:
     """Brinson-Hood-Beebower sector attribution."""
 
@@ -115,7 +116,9 @@ class TestBrinsonAttribution:
             benchmark_returns=two_sector_data["benchmark_returns"],
             sector_map=two_sector_data["sector_map"],
         )
-        total = result["allocation_effect"] + result["selection_effect"] + result["interaction_effect"]
+        total = (
+            result["allocation_effect"] + result["selection_effect"] + result["interaction_effect"]
+        )
         assert total == pytest.approx(result["total_active_return"], abs=1e-10)
 
     def test_active_return_matches_direct_calculation(self, two_sector_data):
@@ -168,6 +171,7 @@ class TestBrinsonAttribution:
 #  Factor attribution tests
 # ══════════════════════════════════════════════════════════════
 
+
 class TestFactorAttribution:
     """Multi-factor regression attribution."""
 
@@ -217,6 +221,7 @@ class TestFactorAttribution:
 # ══════════════════════════════════════════════════════════════
 #  Tracking error and information ratio tests
 # ══════════════════════════════════════════════════════════════
+
 
 class TestTrackingError:
     """_tracking_error tests."""

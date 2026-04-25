@@ -3,11 +3,11 @@ tests/unit/test_risk_calculations.py
 Comprehensive tests for core risk calculations (VaR, Beta, Sharpe, etc.)
 """
 
-import pytest
 import numpy as np
 import pandas as pd
+import pytest
+
 from risk_engine import RiskEngine
-from data_provider import DataProvider
 
 
 class TestMonteCarloVaR:
@@ -21,7 +21,7 @@ class TestMonteCarloVaR:
         n_assets = 3
         returns = pd.DataFrame(
             np.random.randn(n_days, n_assets) * 0.02,  # 2% daily vol
-            columns=['AAPL', 'GOOGL', 'MSFT']
+            columns=["AAPL", "GOOGL", "MSFT"],
         )
         return returns
 
@@ -61,7 +61,7 @@ class TestMonteCarloVaR:
     def test_var_deterministic_with_seed(self):
         """Test that VaR is deterministic with fixed seed"""
         np.random.seed(42)
-        returns = pd.DataFrame(np.random.randn(252, 2) * 0.01, columns=['A', 'B'])
+        returns = pd.DataFrame(np.random.randn(252, 2) * 0.01, columns=["A", "B"])
         weights = np.array([0.5, 0.5])
         cov = returns.cov().values
 
@@ -90,7 +90,7 @@ class TestMonteCarloVaR:
 
     def test_var_with_zero_volatility(self):
         """Test VaR when all returns are zero (edge case)"""
-        returns = pd.DataFrame(np.zeros((252, 2)), columns=['A', 'B'])
+        returns = pd.DataFrame(np.zeros((252, 2)), columns=["A", "B"])
         weights = np.array([0.5, 0.5])
         cov = returns.cov().values + np.eye(2) * 1e-8  # Small ridge
 
@@ -113,18 +113,22 @@ class TestBetaCalculation:
 
         # Use scipy for ground truth
         from scipy import stats
-        slope, intercept, r_value, p_value, std_err = stats.linregress(market_returns, asset_returns)
+
+        slope, intercept, r_value, p_value, std_err = stats.linregress(
+            market_returns, asset_returns
+        )
 
         # Test our implementation
         from risk_engine import RiskEngine
+
         engine = RiskEngine(None)
 
         # Our implementation - pass 1D arrays directly
         beta_result = engine._compute_beta_with_significance(asset_returns, market_returns)
 
         # Compare with scipy
-        assert abs(beta_result['beta'] - slope) < 0.01
-        assert abs(beta_result['p_value'] - p_value) < 0.01
+        assert abs(beta_result["beta"] - slope) < 0.01
+        assert abs(beta_result["p_value"] - p_value) < 0.01
 
     def test_beta_significance_detection(self):
         """Test that significance is correctly detected"""
@@ -137,8 +141,8 @@ class TestBetaCalculation:
         engine = RiskEngine(None)
         result_sig = engine._compute_beta_with_significance(asset_sig, market)
 
-        assert result_sig['is_significant'] == True
-        assert result_sig['p_value'] < 0.05
+        assert result_sig["is_significant"] == True
+        assert result_sig["p_value"] < 0.05
 
         # Case 2: Insignificant relationship (random noise)
         asset_insig = np.random.randn(252) * 0.02  # Pure noise
@@ -147,7 +151,7 @@ class TestBetaCalculation:
 
         # With pure noise, might or might not be significant
         # But beta should be close to zero
-        assert abs(result_insig['beta']) < 0.5
+        assert abs(result_insig["beta"]) < 0.5
 
     def test_beta_with_perfect_correlation(self):
         """Test beta when asset = market (should be 1.0)"""
@@ -157,8 +161,8 @@ class TestBetaCalculation:
         engine = RiskEngine(None)
         result = engine._compute_beta_with_significance(market, market)
 
-        assert abs(result['beta'] - 1.0) < 0.01
-        assert result['r_squared'] > 0.99
+        assert abs(result["beta"] - 1.0) < 0.01
+        assert result["r_squared"] > 0.99
 
 
 class TestSharpeRatio:
@@ -208,16 +212,14 @@ class TestCovarianceMatrix:
         # Generate returns with regime change
         early_returns = np.random.randn(126, 2) * 0.01  # Low vol
         recent_returns = np.random.randn(126, 2) * 0.03  # High vol
-        returns = pd.DataFrame(
-            np.vstack([early_returns, recent_returns]),
-            columns=['A', 'B']
-        )
+        returns = pd.DataFrame(np.vstack([early_returns, recent_returns]), columns=["A", "B"])
 
         # Simple covariance
         cov_simple = returns.cov().values
 
         # EWMA covariance
         from risk_engine import RiskEngine
+
         engine = RiskEngine(None)
         cov_ewma = engine._ewma_covariance(returns)
 
@@ -232,7 +234,7 @@ class TestEdgeCases:
     def test_single_asset_portfolio(self):
         """Test that calculations work with single asset"""
         np.random.seed(42)
-        returns = pd.DataFrame(np.random.randn(252, 1) * 0.02, columns=['AAPL'])
+        returns = pd.DataFrame(np.random.randn(252, 1) * 0.02, columns=["AAPL"])
         weights = np.array([1.0])
 
         engine = RiskEngine(None, mc_simulations=1000, mc_horizon=21)
@@ -246,7 +248,7 @@ class TestEdgeCases:
     def test_extreme_concentration(self):
         """Test with 99% concentrated in one asset"""
         np.random.seed(42)
-        returns = pd.DataFrame(np.random.randn(252, 3) * 0.02, columns=['A', 'B', 'C'])
+        returns = pd.DataFrame(np.random.randn(252, 3) * 0.02, columns=["A", "B", "C"])
         weights = np.array([0.99, 0.005, 0.005])
 
         engine = RiskEngine(None, mc_simulations=1000, mc_horizon=21)
@@ -267,11 +269,13 @@ class TestNumericalStability:
         # Create highly correlated assets
         np.random.seed(42)
         base = np.random.randn(252) * 0.02
-        returns = pd.DataFrame({
-            'A': base,
-            'B': base + np.random.randn(252) * 0.001,  # Almost identical to A
-            'C': base + np.random.randn(252) * 0.001
-        })
+        returns = pd.DataFrame(
+            {
+                "A": base,
+                "B": base + np.random.randn(252) * 0.001,  # Almost identical to A
+                "C": base + np.random.randn(252) * 0.001,
+            }
+        )
 
         weights = np.array([0.33, 0.33, 0.34])
         engine = RiskEngine(None, mc_simulations=1000, mc_horizon=21)

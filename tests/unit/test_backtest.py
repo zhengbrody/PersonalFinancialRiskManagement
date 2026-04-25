@@ -5,27 +5,27 @@ Covers: BacktestResult, _sharpe_ratio, _sortino_ratio, _calmar_ratio,
         _max_drawdown, _alpha_beta, run_backtest (mocked yfinance)
 """
 
-import pytest
+from unittest.mock import patch
+
 import numpy as np
 import pandas as pd
-from unittest.mock import patch, MagicMock
+import pytest
 
 from backtest_engine import (
     BacktestResult,
-    _sharpe_ratio,
-    _sortino_ratio,
+    _alpha_beta,
     _calmar_ratio,
     _max_drawdown,
-    _alpha_beta,
+    _sharpe_ratio,
+    _sortino_ratio,
     _win_rate,
     run_backtest,
-    TRADING_DAYS_PER_YEAR,
 )
-
 
 # ══════════════════════════════════════════════════════════════
 #  Fixtures
 # ══════════════════════════════════════════════════════════════
+
 
 @pytest.fixture
 def flat_returns():
@@ -53,10 +53,12 @@ def mixed_returns():
 @pytest.fixture
 def simple_equity():
     """Equity curve that rises from 100 to 80 (drawdown) then to 120."""
-    values = np.concatenate([
-        np.linspace(100, 80, 50),   # drawdown
-        np.linspace(80, 120, 50),   # recovery
-    ])
+    values = np.concatenate(
+        [
+            np.linspace(100, 80, 50),  # drawdown
+            np.linspace(80, 120, 50),  # recovery
+        ]
+    )
     dates = pd.date_range("2023-01-03", periods=100, freq="B")
     return pd.Series(values, index=dates)
 
@@ -64,6 +66,7 @@ def simple_equity():
 # ══════════════════════════════════════════════════════════════
 #  BacktestResult dataclass
 # ══════════════════════════════════════════════════════════════
+
 
 class TestBacktestResult:
     """BacktestResult construction and defaults."""
@@ -95,6 +98,7 @@ class TestBacktestResult:
 # ══════════════════════════════════════════════════════════════
 #  Performance metric helpers
 # ══════════════════════════════════════════════════════════════
+
 
 class TestSharpeRatio:
     """_sharpe_ratio tests."""
@@ -221,6 +225,7 @@ class TestWinRate:
 # ══════════════════════════════════════════════════════════════
 #  run_backtest with mocked yfinance
 # ══════════════════════════════════════════════════════════════
+
 
 class TestRunBacktest:
     """End-to-end backtest with mocked data download."""

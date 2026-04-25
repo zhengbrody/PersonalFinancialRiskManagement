@@ -7,12 +7,13 @@ risk_engine.py
       保证金预警 · 马科维茨有效前沿 · 成分 VaR · 回撤统计
 """
 
+import time
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
+
 import numpy as np
 import pandas as pd
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 from scipy.optimize import minimize
-import time
 
 from data_provider import DataProvider
 from logging_config import get_logger
@@ -26,6 +27,7 @@ logger = get_logger(__name__)
 @dataclass
 class RiskReport:
     """单次风险计算结果的容器。"""
+
     # VaR
     var_95: float = 0.0
     var_99: float = 0.0
@@ -130,7 +132,7 @@ class RiskEngine:
             "risk.run.start",
             benchmark=self.benchmark_ticker,
             mc_simulations=self.mc_simulations,
-            mc_horizon=self.mc_horizon
+            mc_horizon=self.mc_horizon,
         )
         run_start_time = time.time()
 
@@ -149,14 +151,17 @@ class RiskEngine:
         ewma_cov_daily = self._ewma_covariance(returns)
         report.cov_matrix_ewma = pd.DataFrame(
             ewma_cov_daily * self.TRADING_DAYS,
-            index=returns.columns, columns=returns.columns,
+            index=returns.columns,
+            columns=returns.columns,
         )
         std_diag = np.sqrt(np.diag(ewma_cov_daily))
         std_outer = np.outer(std_diag, std_diag)
         std_outer[std_outer == 0] = 1e-12
         ewma_corr = ewma_cov_daily / std_outer
         report.corr_matrix_ewma = pd.DataFrame(
-            ewma_corr, index=returns.columns, columns=returns.columns,
+            ewma_corr,
+            index=returns.columns,
+            columns=returns.columns,
         )
 
         # ── 蒙特卡洛 VaR / CVaR（使用 EWMA 协方差）─────────
@@ -187,12 +192,14 @@ class RiskEngine:
 
         # ── 多因子 Beta (SPY/QQQ/GLD/TLT) ───────────────────
         factor_result = self._compute_multi_factor_betas(returns)
-        report.factor_betas = factor_result['betas']
-        report.factor_betas_significance = factor_result['significance']
+        report.factor_betas = factor_result["betas"]
+        report.factor_betas_significance = factor_result["significance"]
 
         # ── 压力测试 (uses user-configured market_shock, not default) ───
         stress_loss, asset_losses = self._stress_test(
-            returns, weights, market_shock=self.market_shock,
+            returns,
+            weights,
+            market_shock=self.market_shock,
         )
         report.stress_loss = stress_loss
         report.stress_asset_losses = asset_losses
@@ -226,7 +233,7 @@ class RiskEngine:
             annual_volatility=report.annual_volatility,
             sharpe_ratio=report.sharpe_ratio,
             max_drawdown=report.max_drawdown,
-            duration_ms=round(run_duration, 2)
+            duration_ms=round(run_duration, 2),
         )
 
         self._report = report
@@ -243,7 +250,8 @@ class RiskEngine:
     ) -> dict:
         if margin_loan <= 0:
             return {
-                "has_margin": False, "leverage": 1.0,
+                "has_margin": False,
+                "leverage": 1.0,
                 "distance_to_call_pct": float("inf"),
                 "margin_call_portfolio_value": 0.0,
                 "current_equity_ratio": 1.0,
@@ -257,7 +265,8 @@ class RiskEngine:
         distance_pct = (total_long - call_value) / total_long if total_long > 0 else 0
         buffer_dollars = total_long - call_value
         return {
-            "has_margin": True, "leverage": leverage,
+            "has_margin": True,
+            "leverage": leverage,
             "distance_to_call_pct": distance_pct,
             "margin_call_portfolio_value": call_value,
             "current_equity_ratio": equity_ratio,
@@ -267,7 +276,10 @@ class RiskEngine:
         }
 
     def compute_efficient_frontier(
-        self, returns: pd.DataFrame, risk_free: float, n_points: int = 50,
+        self,
+        returns: pd.DataFrame,
+        risk_free: float,
+        n_points: int = 50,
     ) -> dict:
         mean_ret = returns.mean().values * self.TRADING_DAYS
         cov_ann = returns.cov().values * self.TRADING_DAYS
@@ -285,11 +297,23 @@ class RiskEngine:
             return -(ret - risk_free) / vol if vol > 1e-10 else 1e10
 
         w0 = np.ones(n) / n
-        res_minvar = minimize(port_vol, w0, bounds=bounds, constraints=constraints,
-                              method="SLSQP", options={"maxiter": 1000})
+        res_minvar = minimize(
+            port_vol,
+            w0,
+            bounds=bounds,
+            constraints=constraints,
+            method="SLSQP",
+            options={"maxiter": 1000},
+        )
         w_minvar = res_minvar.x
-        res_maxsharpe = minimize(neg_sharpe, w0, bounds=bounds, constraints=constraints,
-                                 method="SLSQP", options={"maxiter": 1000})
+        res_maxsharpe = minimize(
+            neg_sharpe,
+            w0,
+            bounds=bounds,
+            constraints=constraints,
+            method="SLSQP",
+            options={"maxiter": 1000},
+        )
         w_maxsharpe = res_maxsharpe.x
 
         min_ret = w_minvar @ mean_ret
@@ -301,15 +325,22 @@ class RiskEngine:
                 {"type": "eq", "fun": lambda w: np.sum(w) - 1.0},
                 {"type": "eq", "fun": lambda w, t=target: w @ mean_ret - t},
             ]
-            res = minimize(port_vol, w0, bounds=bounds, constraints=cons,
-                           method="SLSQP", options={"maxiter": 500})
+            res = minimize(
+                port_vol,
+                w0,
+                bounds=bounds,
+                constraints=cons,
+                method="SLSQP",
+                options={"maxiter": 500},
+            )
             if res.success:
                 frontier_vols.append(float(port_vol(res.x)))
                 frontier_rets.append(float(res.x @ mean_ret))
                 frontier_weights.append(res.x.tolist())
 
         return {
-            "frontier_vols": frontier_vols, "frontier_rets": frontier_rets,
+            "frontier_vols": frontier_vols,
+            "frontier_rets": frontier_rets,
             "frontier_weights": frontier_weights,
             "max_sharpe_weights": dict(zip(tickers, w_maxsharpe.tolist())),
             "max_sharpe_ret": float(w_maxsharpe @ mean_ret),
@@ -350,13 +381,15 @@ class RiskEngine:
         max_stock = rules.get("max_single_stock_weight", 0.15)
         for tk, w in proposed_weights.items():
             if w > max_stock + tol:
-                violations.append({
-                    "rule": "max_single_stock_weight",
-                    "limit": max_stock,
-                    "actual": w,
-                    "ticker": tk,
-                    "severity": "hard",
-                })
+                violations.append(
+                    {
+                        "rule": "max_single_stock_weight",
+                        "limit": max_stock,
+                        "actual": w,
+                        "ticker": tk,
+                        "severity": "hard",
+                    }
+                )
 
         # Sector limit
         max_sector = rules.get("max_sector_weight", 0.30)
@@ -366,13 +399,15 @@ class RiskEngine:
             sector_weights[s] = sector_weights.get(s, 0) + w
         for sector, w in sector_weights.items():
             if w > max_sector + tol:
-                violations.append({
-                    "rule": "max_sector_weight",
-                    "limit": max_sector,
-                    "actual": w,
-                    "sector": sector,
-                    "severity": "hard",
-                })
+                violations.append(
+                    {
+                        "rule": "max_sector_weight",
+                        "limit": max_sector,
+                        "actual": w,
+                        "sector": sector,
+                        "severity": "hard",
+                    }
+                )
 
         return violations
 
@@ -460,11 +495,11 @@ class RiskEngine:
 
     def compute_historical_scenarios(self, weights_dict: dict) -> pd.DataFrame:
         scenarios = [
-            ("2020 COVID Crash (Feb 19 – Mar 23, 2020)",   "2020-02-18", "2020-03-23"),
-            ("2022 Bear Market (Full Year 2022)",           "2021-12-31", "2022-12-30"),
-            ("2018 Q4 Selloff (Oct 1 – Dec 24, 2018)",     "2018-09-28", "2018-12-24"),
+            ("2020 COVID Crash (Feb 19 – Mar 23, 2020)", "2020-02-18", "2020-03-23"),
+            ("2022 Bear Market (Full Year 2022)", "2021-12-31", "2022-12-30"),
+            ("2018 Q4 Selloff (Oct 1 – Dec 24, 2018)", "2018-09-28", "2018-12-24"),
             ("2008 Financial Crisis (Jan 2008 – Mar 2009)", "2008-01-02", "2009-03-09"),
-            ("2022 Crypto Winter (Nov 2021 – Nov 2022)",   "2021-10-29", "2022-11-18"),
+            ("2022 Crypto Winter (Nov 2021 – Nov 2022)", "2021-10-29", "2022-11-18"),
         ]
         tickers = list(weights_dict.keys())
         results = []
@@ -489,13 +524,18 @@ class RiskEngine:
                     raise ValueError("Zero total weight")
                 norm_w = {t: w / total_w for t, w in avail_w.items()}
                 port_ret = sum(rets[t] * norm_w[t] for t in rets)
-                results.append({"Scenario": name, "Portfolio Return": port_ret,
-                                "Coverage": f"{len(rets)}/{len(tickers)} assets"})
+                results.append(
+                    {
+                        "Scenario": name,
+                        "Portfolio Return": port_ret,
+                        "Coverage": f"{len(rets)}/{len(tickers)} assets",
+                    }
+                )
             except Exception as e:
-                logger.warning(f"Historical scenario calculation failed: {name}",
-                             error=str(e), scenario=name)
-                results.append({"Scenario": name, "Portfolio Return": None,
-                                "Coverage": "N/A"})
+                logger.warning(
+                    f"Historical scenario calculation failed: {name}", error=str(e), scenario=name
+                )
+                results.append({"Scenario": name, "Portfolio Return": None, "Coverage": "N/A"})
         return pd.DataFrame(results)
 
     # ══════════════════════════════════════════════════════════
@@ -511,7 +551,8 @@ class RiskEngine:
         except Exception as e:
             logger.info(
                 "risk.rf.delegate_failed",
-                error=str(e), fallback=self.risk_free_rate_fallback,
+                error=str(e),
+                fallback=self.risk_free_rate_fallback,
             )
             return self.risk_free_rate_fallback
 
@@ -549,7 +590,7 @@ class RiskEngine:
             "risk.var.mc.start",
             mc_simulations=self.mc_simulations,
             mc_horizon=self.mc_horizon,
-            n_assets=len(weights)
+            n_assets=len(weights),
         )
         start_time = time.time()
 
@@ -597,7 +638,7 @@ class RiskEngine:
             var_95=float(var_95),
             var_99=float(var_99),
             duration_ms=round(duration_ms, 2),
-            speedup_note="Fully vectorized - no Python loops"
+            speedup_note="Fully vectorized - no Python loops",
         )
 
         return portfolio_returns
@@ -623,9 +664,7 @@ class RiskEngine:
 
         betas = {}
         for ticker in returns.columns:
-            aligned = pd.concat(
-                [returns[ticker], bench_ret], axis=1, join="inner"
-            ).dropna()
+            aligned = pd.concat([returns[ticker], bench_ret], axis=1, join="inner").dropna()
             if len(aligned) < 30:
                 betas[ticker] = np.nan
                 continue
@@ -637,15 +676,13 @@ class RiskEngine:
             "risk.beta.complete",
             benchmark=benchmark,
             tickers_calculated=len(betas),
-            duration_ms=round(duration_ms, 2)
+            duration_ms=round(duration_ms, 2),
         )
         return betas
 
     # ── Beta统计显著性检验 ───────────────────────────────────
     def _compute_beta_with_significance(
-        self,
-        asset_returns: np.ndarray,
-        factor_returns: np.ndarray
+        self, asset_returns: np.ndarray, factor_returns: np.ndarray
     ) -> dict:
         """
         计算Beta及统计显著性（单因子OLS回归）
@@ -678,10 +715,13 @@ class RiskEngine:
         except np.linalg.LinAlgError:
             # 奇异矩阵
             return {
-                'beta': np.nan, 'intercept': np.nan,
-                't_stat': np.nan, 'p_value': np.nan,
-                'is_significant': False,
-                'r_squared': np.nan, 'std_error': np.nan
+                "beta": np.nan,
+                "intercept": np.nan,
+                "t_stat": np.nan,
+                "p_value": np.nan,
+                "is_significant": False,
+                "r_squared": np.nan,
+                "std_error": np.nan,
             }
 
         # 计算统计量
@@ -698,11 +738,13 @@ class RiskEngine:
 
         if np.isnan(mse) or mse < 0:
             return {
-                'beta': float(beta_coefs[1]) if len(beta_coefs) > 1 else np.nan,
-                'intercept': float(beta_coefs[0]) if len(beta_coefs) > 0 else np.nan,
-                't_stat': np.nan, 'p_value': np.nan,
-                'is_significant': False,
-                'r_squared': np.nan, 'std_error': np.nan
+                "beta": float(beta_coefs[1]) if len(beta_coefs) > 1 else np.nan,
+                "intercept": float(beta_coefs[0]) if len(beta_coefs) > 0 else np.nan,
+                "t_stat": np.nan,
+                "p_value": np.nan,
+                "is_significant": False,
+                "r_squared": np.nan,
+                "std_error": np.nan,
             }
 
         # Beta的方差-协方差矩阵
@@ -727,18 +769,18 @@ class RiskEngine:
                 p_values[i] = 2 * (1 - stats.t.cdf(np.abs(t_stats[i]), df=n - k))
 
         # R²（拟合优度）
-        ss_total = np.sum((y - np.mean(y))**2)
-        ss_residual = np.sum((y - X @ beta_coefs)**2)
+        ss_total = np.sum((y - np.mean(y)) ** 2)
+        ss_residual = np.sum((y - X @ beta_coefs) ** 2)
         r_squared = 1 - (ss_residual / ss_total) if ss_total > 0 else 0
 
         return {
-            'beta': float(beta_coefs[1]),
-            'intercept': float(beta_coefs[0]),
-            't_stat': float(t_stats[1]),
-            'p_value': float(p_values[1]),
-            'is_significant': bool(p_values[1] < 0.05) if not np.isnan(p_values[1]) else False,
-            'r_squared': float(max(0, min(1, r_squared))),
-            'std_error': float(std_errors[1]) if len(std_errors) > 1 else np.nan
+            "beta": float(beta_coefs[1]),
+            "intercept": float(beta_coefs[0]),
+            "t_stat": float(t_stats[1]),
+            "p_value": float(p_values[1]),
+            "is_significant": bool(p_values[1] < 0.05) if not np.isnan(p_values[1]) else False,
+            "r_squared": float(max(0, min(1, r_squared))),
+            "std_error": float(std_errors[1]) if len(std_errors) > 1 else np.nan,
         }
 
     # ── 多因子 Beta (SPY/QQQ/GLD/TLT) ───────────────────────
@@ -762,13 +804,11 @@ class RiskEngine:
                 reason="no_data_from_provider",
             )
             empty_df = pd.DataFrame(
-                np.nan, index=returns.columns,
+                np.nan,
+                index=returns.columns,
                 columns=[self.FACTOR_TICKERS[f] for f in factor_tickers],
             )
-            return {
-                'betas': empty_df,
-                'significance': pd.DataFrame()
-            }
+            return {"betas": empty_df, "significance": pd.DataFrame()}
 
         aligned = pd.concat([returns, factor_ret], axis=1, join="inner").dropna()
         asset_cols = returns.columns
@@ -776,13 +816,11 @@ class RiskEngine:
 
         if len(aligned) < 60 or len(factor_cols) == 0:
             empty_df = pd.DataFrame(
-                np.nan, index=returns.columns,
+                np.nan,
+                index=returns.columns,
                 columns=[self.FACTOR_TICKERS.get(f, f) for f in factor_tickers],
             )
-            return {
-                'betas': empty_df,
-                'significance': pd.DataFrame()
-            }
+            return {"betas": empty_df, "significance": pd.DataFrame()}
 
         # 存储beta值和统计信息
         beta_result = {}
@@ -790,10 +828,7 @@ class RiskEngine:
 
         for ticker in asset_cols:
             if ticker not in aligned.columns:
-                beta_result[ticker] = {
-                    self.FACTOR_TICKERS.get(f, f): np.nan
-                    for f in factor_cols
-                }
+                beta_result[ticker] = {self.FACTOR_TICKERS.get(f, f): np.nan for f in factor_cols}
                 continue
 
             y = aligned[ticker].values
@@ -806,38 +841,43 @@ class RiskEngine:
 
                 try:
                     stats = self._compute_beta_with_significance(y, X_factor)
-                    beta_result[ticker][factor_name] = stats['beta']
+                    beta_result[ticker][factor_name] = stats["beta"]
 
                     # 记录统计信息
-                    sig_result.append({
-                        'Ticker': ticker,
-                        'Factor': factor_name,
-                        'Beta': stats['beta'],
-                        't_stat': stats['t_stat'],
-                        'p_value': stats['p_value'],
-                        'is_significant': stats['is_significant'],
-                        'r_squared': stats['r_squared'],
-                        'std_error': stats['std_error']
-                    })
+                    sig_result.append(
+                        {
+                            "Ticker": ticker,
+                            "Factor": factor_name,
+                            "Beta": stats["beta"],
+                            "t_stat": stats["t_stat"],
+                            "p_value": stats["p_value"],
+                            "is_significant": stats["is_significant"],
+                            "r_squared": stats["r_squared"],
+                            "std_error": stats["std_error"],
+                        }
+                    )
                 except Exception as e:
-                    logger.warning(f"Beta calculation failed for {ticker} vs {factor_name}",
-                                 error=str(e), ticker=ticker, factor=factor_name)
+                    logger.warning(
+                        f"Beta calculation failed for {ticker} vs {factor_name}",
+                        error=str(e),
+                        ticker=ticker,
+                        factor=factor_name,
+                    )
                     beta_result[ticker][factor_name] = np.nan
-                    sig_result.append({
-                        'Ticker': ticker,
-                        'Factor': factor_name,
-                        'Beta': np.nan,
-                        't_stat': np.nan,
-                        'p_value': np.nan,
-                        'is_significant': False,
-                        'r_squared': np.nan,
-                        'std_error': np.nan
-                    })
+                    sig_result.append(
+                        {
+                            "Ticker": ticker,
+                            "Factor": factor_name,
+                            "Beta": np.nan,
+                            "t_stat": np.nan,
+                            "p_value": np.nan,
+                            "is_significant": False,
+                            "r_squared": np.nan,
+                            "std_error": np.nan,
+                        }
+                    )
 
-        return {
-            'betas': pd.DataFrame(beta_result).T,
-            'significance': pd.DataFrame(sig_result)
-        }
+        return {"betas": pd.DataFrame(beta_result).T, "significance": pd.DataFrame(sig_result)}
 
     # ── Barra 风格因子风险归因 ────────────────────────────────
     def compute_factor_risk_attribution(
@@ -878,12 +918,15 @@ class RiskEngine:
             common_idx = returns.index.intersection(bench_ret.index)
             if len(common_idx) > 50:
                 bench_aligned = bench_ret.loc[common_idx].values
-                factor_aligned = factor_returns[-len(common_idx):]
+                factor_aligned = factor_returns[-len(common_idx) :]
 
                 label_map = {
-                    "SPY": "Market", "QQQ": "Growth/Momentum",
-                    "GLD": "Safe Haven", "TLT": "Duration",
-                    "IWM": "Size", "VTV": "Value",
+                    "SPY": "Market",
+                    "QQQ": "Growth/Momentum",
+                    "GLD": "Safe Haven",
+                    "TLT": "Duration",
+                    "IWM": "Size",
+                    "VTV": "Value",
                 }
                 used_factors = set()
                 for j, btk in enumerate(benchmark_tickers):
@@ -944,9 +987,7 @@ class RiskEngine:
         r_squared = 1 - ss_res / ss_tot if ss_tot > 0 else 0
 
         # Factor exposures DataFrame
-        exposure_df = pd.DataFrame(
-            loadings, index=returns.columns, columns=factor_names
-        )
+        exposure_df = pd.DataFrame(loadings, index=returns.columns, columns=factor_names)
 
         return {
             "factor_names": factor_names,
@@ -957,7 +998,9 @@ class RiskEngine:
             "r_squared": float(max(0, min(1, r_squared))),
             "factor_exposures": exposure_df,
             "explained_variance_ratio": [float(r) for r in explained_ratio],
-            "portfolio_exposures": {factor_names[k]: float(port_exposure[k]) for k in range(n_factors)},
+            "portfolio_exposures": {
+                factor_names[k]: float(port_exposure[k]) for k in range(n_factors)
+            },
         }
 
     # ── 压力测试 ──────────────────────────────────────────────
@@ -984,7 +1027,7 @@ class RiskEngine:
             "risk.stress.complete",
             market_shock=market_shock,
             portfolio_loss=float(port_loss),
-            duration_ms=round(duration_ms, 2)
+            duration_ms=round(duration_ms, 2),
         )
 
         return float(port_loss), asset_losses
@@ -1017,9 +1060,13 @@ class RiskEngine:
         # Filter scenario to tickers actually in portfolio
         observed = {tk: shock for tk, shock in scenario.items() if tk in tickers}
         if not observed:
-            return {"conditional_returns": {}, "portfolio_loss": 0.0,
-                    "propagation_chain": [], "observed_tickers": list(scenario.keys()),
-                    "warning": "No scenario tickers found in portfolio"}
+            return {
+                "conditional_returns": {},
+                "portfolio_loss": 0.0,
+                "propagation_chain": [],
+                "observed_tickers": list(scenario.keys()),
+                "warning": "No scenario tickers found in portfolio",
+            }
 
         # Get covariance and mean
         if use_ewma:
@@ -1066,8 +1113,7 @@ class RiskEngine:
         conditional_returns = {tickers[i]: float(full_returns[i]) for i in range(n)}
 
         # Propagation chain: unobserved assets sorted by absolute impact
-        propagation = [(tickers[idx], float(E_unobs[i]))
-                       for i, idx in enumerate(unobs_idx)]
+        propagation = [(tickers[idx], float(E_unobs[i])) for i, idx in enumerate(unobs_idx)]
         propagation.sort(key=lambda x: x[1])  # most negative first
 
         return {
@@ -1090,10 +1136,9 @@ class RiskEngine:
     # ── 滚动相关性 ───────────────────────────────────────────
     def _rolling_correlation_with_portfolio(self, returns, weights, window=60):
         port_ret = returns.dot(weights)
-        return pd.DataFrame({
-            col: returns[col].rolling(window).corr(port_ret)
-            for col in returns.columns
-        })
+        return pd.DataFrame(
+            {col: returns[col].rolling(window).corr(port_ret) for col in returns.columns}
+        )
 
     # ── 回撤统计 ─────────────────────────────────────────────
     def _drawdown_statistics(self, dd_series):
@@ -1148,8 +1193,7 @@ class RiskEngine:
         try:
             macro_ret = self.dp.get_macro_returns()
         except Exception as e:
-            logger.error("Failed to fetch macro returns data",
-                        error=str(e))
+            logger.error("Failed to fetch macro returns data", error=str(e))
             return self._empty_macro_result()
 
         # Degraded path: empty macro data (e.g. offline / provider failure)
@@ -1160,8 +1204,9 @@ class RiskEngine:
         port_daily = returns.dot(weights)
 
         # 对齐日期
-        aligned = pd.concat([port_daily.rename("Portfolio"), macro_ret],
-                            axis=1, join="inner").dropna()
+        aligned = pd.concat(
+            [port_daily.rename("Portfolio"), macro_ret], axis=1, join="inner"
+        ).dropna()
 
         if len(aligned) < 60:
             return self._empty_macro_result()
@@ -1170,8 +1215,8 @@ class RiskEngine:
         if not factor_names:
             return self._empty_macro_result()
 
-        y = aligned["Portfolio"].values         # (T,)
-        X = aligned[factor_names].values        # (T, k)
+        y = aligned["Portfolio"].values  # (T,)
+        X = aligned[factor_names].values  # (T, k)
         X_aug = np.column_stack([np.ones(len(X)), X])  # 加截距列
 
         # ── OLS：beta = (X'X)^{-1} X'y ──────────────────────
@@ -1205,9 +1250,7 @@ class RiskEngine:
         # ── 每个资产的宏观 beta ──────────────────────────────
         per_asset = {}
         for ticker in returns.columns:
-            asset_aligned = pd.concat(
-                [returns[ticker], macro_ret], axis=1, join="inner"
-            ).dropna()
+            asset_aligned = pd.concat([returns[ticker], macro_ret], axis=1, join="inner").dropna()
             if len(asset_aligned) < 30:
                 per_asset[ticker] = {fn: np.nan for fn in factor_names}
                 continue
@@ -1220,8 +1263,9 @@ class RiskEngine:
                     factor_names[i]: float(b_a[i + 1]) for i in range(len(factor_names))
                 }
             except Exception as e:
-                logger.warning(f"Macro beta calculation failed for {ticker}",
-                             error=str(e), ticker=ticker)
+                logger.warning(
+                    f"Macro beta calculation failed for {ticker}", error=str(e), ticker=ticker
+                )
                 per_asset[ticker] = {fn: np.nan for fn in factor_names}
 
         per_asset_df = pd.DataFrame(per_asset).T
@@ -1230,7 +1274,7 @@ class RiskEngine:
         return {
             "betas": factor_betas,
             "r_squared": r_squared,
-            "alpha": alpha * self.TRADING_DAYS,   # 年化
+            "alpha": alpha * self.TRADING_DAYS,  # 年化
             "residual_vol": residual_vol,
             "t_stats": t_stats,
             "per_asset": per_asset_df,
@@ -1239,8 +1283,11 @@ class RiskEngine:
     def _empty_macro_result(self) -> dict:
         """宏观数据不可用时的空结果。"""
         return {
-            "betas": {}, "r_squared": 0.0, "alpha": 0.0,
-            "residual_vol": 0.0, "t_stats": {},
+            "betas": {},
+            "r_squared": 0.0,
+            "alpha": 0.0,
+            "residual_vol": 0.0,
+            "t_stats": {},
             "per_asset": pd.DataFrame(),
         }
 
@@ -1265,25 +1312,25 @@ class RiskEngine:
             # 没有持仓股数信息，返回仅含 ADV 的表
             try:
                 adv = self.dp.get_adv_30d()
-                df = pd.DataFrame({
-                    "Ticker": adv.index,
-                    "ADV_30d": adv.values.astype(float),
-                })
+                df = pd.DataFrame(
+                    {
+                        "Ticker": adv.index,
+                        "ADV_30d": adv.values.astype(float),
+                    }
+                )
                 df["Shares"] = np.nan
                 df["Days_to_Liquidate"] = np.nan
                 df["Liquidity_Tier"] = "N/A (no share data)"
                 df["Weight"] = [self.dp.weights.get(tk, 0) for tk in df["Ticker"]]
                 return df.set_index("Ticker")
             except Exception as e:
-                logger.error("Failed to get ADV data (no holdings mode)",
-                           error=str(e))
+                logger.error("Failed to get ADV data (no holdings mode)", error=str(e))
                 return pd.DataFrame()
 
         try:
             adv = self.dp.get_adv_30d()
         except Exception as e:
-            logger.error("Failed to get ADV data for liquidity risk calculation",
-                       error=str(e))
+            logger.error("Failed to get ADV data for liquidity risk calculation", error=str(e))
             return pd.DataFrame()
 
         rows = []
@@ -1303,24 +1350,28 @@ class RiskEngine:
             if np.isnan(days_to_liq) or avg_vol == 0:
                 tier = "Unknown"
             elif days_to_liq < 0.01:
-                tier = "Instant"       # 秒级清仓
+                tier = "Instant"  # 秒级清仓
             elif days_to_liq < 0.1:
-                tier = "High"          # 分钟级
+                tier = "High"  # 分钟级
             elif days_to_liq < 1.0:
-                tier = "Good"          # 当日可清
+                tier = "Good"  # 当日可清
             elif days_to_liq < 5.0:
-                tier = "Moderate"      # 1-5 日
+                tier = "Moderate"  # 1-5 日
             else:
-                tier = "⚠️ Low"        # 超过 5 日
+                tier = "⚠️ Low"  # 超过 5 日
 
-            rows.append({
-                "Ticker": ticker,
-                "Shares": shares,
-                "ADV_30d": avg_vol,
-                "Days_to_Liquidate": round(days_to_liq, 3) if not np.isnan(days_to_liq) else np.nan,
-                "Liquidity_Tier": tier,
-                "Weight": weight,
-            })
+            rows.append(
+                {
+                    "Ticker": ticker,
+                    "Shares": shares,
+                    "ADV_30d": avg_vol,
+                    "Days_to_Liquidate": (
+                        round(days_to_liq, 3) if not np.isnan(days_to_liq) else np.nan
+                    ),
+                    "Liquidity_Tier": tier,
+                    "Weight": weight,
+                }
+            )
 
         df = pd.DataFrame(rows).set_index("Ticker")
         return df

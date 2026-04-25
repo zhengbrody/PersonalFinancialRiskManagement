@@ -19,6 +19,7 @@ Usage:
     streamlit run app.py --server.headless true --server.port 8610 &
     STREAMLIT_BASE_URL=http://localhost:8610 python scripts/capture_screenshots.py
 """
+
 from __future__ import annotations
 
 import os
@@ -26,7 +27,8 @@ import pathlib
 import sys
 import time
 
-from playwright.sync_api import sync_playwright, Page, TimeoutError as PlaywrightTimeout
+from playwright.sync_api import Page, sync_playwright
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
 BASE_URL = os.environ.get("STREAMLIT_BASE_URL", "http://localhost:8610")
 OUT_DIR = pathlib.Path(__file__).parent.parent / "docs" / "screenshots"
@@ -132,7 +134,9 @@ def _capture_ticker_research(page: Page, out: pathlib.Path, search_ticker: str =
 
     # Click the "Ticker Research" link in the multi-page nav
     try:
-        page.locator('a:has-text("Ticker Research"), a:has-text("Ticker_Research")').first.click(timeout=5000)
+        page.locator('a:has-text("Ticker Research"), a:has-text("Ticker_Research")').first.click(
+            timeout=5000
+        )
     except PlaywrightTimeout:
         print("  ! nav link to Ticker Research not found")
         return False
@@ -211,10 +215,10 @@ def _capture_trading_floor(page: Page, out: pathlib.Path) -> bool:
 
 
 TARGETS = [
-    ("01_landing.png",          _capture_landing),
-    ("02_tradingview.png",      _capture_tradingview),
-    ("03_ticker_research.png",  _capture_ticker_research),
-    ("04_trading_floor.png",    _capture_trading_floor),
+    ("01_landing.png", _capture_landing),
+    ("02_tradingview.png", _capture_tradingview),
+    ("03_ticker_research.png", _capture_ticker_research),
+    ("04_trading_floor.png", _capture_trading_floor),
 ]
 
 

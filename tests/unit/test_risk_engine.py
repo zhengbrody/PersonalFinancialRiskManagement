@@ -7,19 +7,19 @@ Covers: RiskReport, RiskEngine init, margin call, compliance checks,
         liquidity risk, factor risk attribution, and the full run() pipeline.
 """
 
-import pytest
+from unittest.mock import Mock, patch
+
 import numpy as np
 import pandas as pd
-from unittest.mock import Mock, patch
-from datetime import datetime, timedelta
+import pytest
 
-from risk_engine import RiskEngine, RiskReport
 from data_provider import DataProvider
-
+from risk_engine import RiskEngine, RiskReport
 
 # ══════════════════════════════════════════════════════════════
 #  Helpers / Fixtures
 # ══════════════════════════════════════════════════════════════
+
 
 @pytest.fixture
 def mock_dp():
@@ -258,8 +258,10 @@ class TestCheckTradeCompliance:
     def test_no_violations(self, engine):
         weights = {"AAPL": 0.10, "GOOGL": 0.10, "AMZN": 0.10, "TSLA": 0.10}
         sector_map = {
-            "AAPL": "Tech", "GOOGL": "Tech",
-            "AMZN": "Consumer", "TSLA": "Auto",
+            "AAPL": "Tech",
+            "GOOGL": "Tech",
+            "AMZN": "Consumer",
+            "TSLA": "Auto",
         }
         violations = engine.check_trade_compliance(weights, sector_map)
         assert violations == []
@@ -294,8 +296,10 @@ class TestCheckTradeCompliance:
     def test_custom_limits(self, engine):
         weights = {"AAPL": 0.25, "GOOGL": 0.25, "MSFT": 0.25, "AMZN": 0.25}
         sector_map = {
-            "AAPL": "Tech", "GOOGL": "Tech",
-            "MSFT": "Tech", "AMZN": "Retail",
+            "AAPL": "Tech",
+            "GOOGL": "Tech",
+            "MSFT": "Tech",
+            "AMZN": "Retail",
         }
         custom = {"max_single_stock_weight": 0.30, "max_sector_weight": 0.50}
         violations = engine.check_trade_compliance(weights, sector_map, limits=custom)
@@ -346,9 +350,7 @@ class TestAdjustWeightsForCompliance:
 
     def test_sector_clipping(self, engine):
         weights = {"AAPL": 0.15, "GOOGL": 0.15, "MSFT": 0.15, "AMZN": 0.55}
-        sector_map = {
-            "AAPL": "Tech", "GOOGL": "Tech", "MSFT": "Tech", "AMZN": "Retail"
-        }
+        sector_map = {"AAPL": "Tech", "GOOGL": "Tech", "MSFT": "Tech", "AMZN": "Retail"}
         adjusted = engine.adjust_weights_for_compliance(weights, sector_map)
         # Tech sector must be clipped to max_sector (default 0.30)
         tech_weight = sum(adjusted[t] for t in ("AAPL", "GOOGL", "MSFT"))
@@ -515,9 +517,13 @@ class TestDrawdownStatistics:
         dd = self._make_drawdown_series([0.0] * 10)
         stats = engine._drawdown_statistics(dd)
         expected_keys = {
-            "num_episodes", "avg_episode_days", "max_episode_days",
-            "median_episode_days", "pct_time_underwater",
-            "is_currently_underwater", "current_episode_days",
+            "num_episodes",
+            "avg_episode_days",
+            "max_episode_days",
+            "median_episode_days",
+            "pct_time_underwater",
+            "is_currently_underwater",
+            "current_episode_days",
             "episode_durations",
         }
         assert set(stats.keys()) == expected_keys
@@ -627,9 +633,7 @@ class TestConditionalStress:
 
     def test_return_structure(self, engine, sample_returns, sample_weights):
         scenario = {"AAPL": -0.10}
-        result = engine.compute_conditional_stress(
-            scenario, sample_returns, sample_weights
-        )
+        result = engine.compute_conditional_stress(scenario, sample_returns, sample_weights)
         assert "conditional_returns" in result
         assert "portfolio_loss" in result
         assert "propagation_chain" in result
@@ -696,9 +700,7 @@ class TestFetchRiskFreeRate:
         engine.dp.get_risk_free_rate.return_value = 0.042
         rate = engine._fetch_risk_free_rate()
         assert rate == 0.042
-        engine.dp.get_risk_free_rate.assert_called_once_with(
-            engine.risk_free_rate_fallback
-        )
+        engine.dp.get_risk_free_rate.assert_called_once_with(engine.risk_free_rate_fallback)
 
     def test_fallback_when_provider_raises(self, engine):
         engine.dp.get_risk_free_rate.side_effect = Exception("boom")
@@ -869,9 +871,9 @@ class TestComputeLiquidityRisk:
     def test_liquidity_tiers(self, engine):
         """Test that tiers are correctly assigned based on days_to_liquidate."""
         engine.dp.holdings = {
-            "A": {"shares": 1},         # tiny position => Instant
-            "B": {"shares": 500},        # moderate
-            "C": {"shares": 100_000},    # large position
+            "A": {"shares": 1},  # tiny position => Instant
+            "B": {"shares": 500},  # moderate
+            "C": {"shares": 100_000},  # large position
         }
         engine.dp.tickers = ["A", "B", "C"]
         engine.dp.weights = {"A": 0.33, "B": 0.34, "C": 0.33}
@@ -993,9 +995,7 @@ class TestFactorRiskAttribution:
         """Test PCA factor risk attribution returns correct structure."""
         mock_yf.side_effect = Exception("No network in tests")
 
-        result = engine.compute_factor_risk_attribution(
-            sample_returns, sample_weights, n_factors=3
-        )
+        result = engine.compute_factor_risk_attribution(sample_returns, sample_weights, n_factors=3)
 
         assert "factor_names" in result
         assert "factor_var_contrib" in result
@@ -1008,18 +1008,14 @@ class TestFactorRiskAttribution:
     @patch("yfinance.download")
     def test_variance_contrib_sums_to_one(self, mock_yf, engine, sample_returns, sample_weights):
         mock_yf.side_effect = Exception("No network")
-        result = engine.compute_factor_risk_attribution(
-            sample_returns, sample_weights, n_factors=3
-        )
+        result = engine.compute_factor_risk_attribution(sample_returns, sample_weights, n_factors=3)
         total = sum(result["factor_var_contrib"].values())
         assert abs(total - 1.0) < 0.05
 
     @patch("yfinance.download")
     def test_r_squared_range(self, mock_yf, engine, sample_returns, sample_weights):
         mock_yf.side_effect = Exception("No network")
-        result = engine.compute_factor_risk_attribution(
-            sample_returns, sample_weights, n_factors=3
-        )
+        result = engine.compute_factor_risk_attribution(sample_returns, sample_weights, n_factors=3)
         assert 0 <= result["r_squared"] <= 1
 
     @patch("yfinance.download")
@@ -1035,9 +1031,7 @@ class TestFactorRiskAttribution:
     @patch("yfinance.download")
     def test_exposures_shape(self, mock_yf, engine, sample_returns, sample_weights):
         mock_yf.side_effect = Exception("No network")
-        result = engine.compute_factor_risk_attribution(
-            sample_returns, sample_weights, n_factors=2
-        )
+        result = engine.compute_factor_risk_attribution(sample_returns, sample_weights, n_factors=2)
         exposure_df = result["factor_exposures"]
         assert isinstance(exposure_df, pd.DataFrame)
         assert exposure_df.shape == (3, 2)  # 3 assets, 2 factors
@@ -1177,7 +1171,10 @@ class TestRunPipeline:
 
         # Zero-return benchmarks via DataProvider stub
         zero_bench = pd.DataFrame(
-            {tk: np.zeros(len(sample_returns)) for tk in ["SPY", "QQQ", "GLD", "TLT", "IWM", "VTV"]},
+            {
+                tk: np.zeros(len(sample_returns))
+                for tk in ["SPY", "QQQ", "GLD", "TLT", "IWM", "VTV"]
+            },
             index=sample_returns.index,
         )
 
@@ -1203,9 +1200,7 @@ class TestRunPipeline:
         report2 = engine.run()
         assert report1 is report2
 
-    def test_run_ewma_corr_matrix_diagonal_is_one(
-        self, engine, sample_returns, sample_weights
-    ):
+    def test_run_ewma_corr_matrix_diagonal_is_one(self, engine, sample_returns, sample_weights):
         """EWMA correlation matrix diagonal should be 1."""
         engine.dp.get_daily_returns.return_value = sample_returns
         engine.dp.get_weight_array.return_value = sample_weights
@@ -1214,8 +1209,10 @@ class TestRunPipeline:
 
         np.random.seed(42)
         bench_df = pd.DataFrame(
-            {tk: np.random.randn(len(sample_returns)) * 0.01
-             for tk in ["SPY", "QQQ", "GLD", "TLT", "IWM", "VTV"]},
+            {
+                tk: np.random.randn(len(sample_returns)) * 0.01
+                for tk in ["SPY", "QQQ", "GLD", "TLT", "IWM", "VTV"]
+            },
             index=sample_returns.index,
         )
 
@@ -1253,10 +1250,12 @@ class TestMonteCarloEdgeCases:
         """Test that near-singular covariance triggers ridge fix."""
         np.random.seed(42)
         base = np.random.randn(252) * 0.02
-        returns = pd.DataFrame({
-            "A": base,
-            "B": base,  # Perfectly correlated => singular cov
-        })
+        returns = pd.DataFrame(
+            {
+                "A": base,
+                "B": base,  # Perfectly correlated => singular cov
+            }
+        )
         weights = np.array([0.5, 0.5])
         cov = returns.cov().values
 

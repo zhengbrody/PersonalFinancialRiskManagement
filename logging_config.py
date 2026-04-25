@@ -2,11 +2,12 @@
 结构化日志配置
 使用structlog提供JSON格式的日志
 """
+
 import logging
 import logging.handlers
-import os
-import structlog
 from pathlib import Path
+
+import structlog
 
 # 日志目录
 LOG_DIR = Path("logs")
@@ -26,26 +27,20 @@ def configure_standard_logging():
     # Console handler（开发时使用）
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
-    console_formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
+    console_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     console_handler.setFormatter(console_formatter)
     root_logger.addHandler(console_handler)
 
     # File handler（JSON格式，自动滚动）
     file_handler = logging.handlers.RotatingFileHandler(
-        LOG_DIR / "app.log",
-        maxBytes=10 * 1024 * 1024,  # 10MB
-        backupCount=5,
-        encoding='utf-8'
+        LOG_DIR / "app.log", maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"  # 10MB
     )
     file_handler.setLevel(logging.INFO)
 
     # JSON formatter（使用python-json-logger）
     from pythonjsonlogger import jsonlogger
-    json_formatter = jsonlogger.JsonFormatter(
-        '%(asctime)s %(name)s %(levelname)s %(message)s'
-    )
+
+    json_formatter = jsonlogger.JsonFormatter("%(asctime)s %(name)s %(levelname)s %(message)s")
     file_handler.setFormatter(json_formatter)
     root_logger.addHandler(file_handler)
 
@@ -69,7 +64,7 @@ def configure_structlog():
             # 格式化异常
             structlog.processors.format_exc_info,
             # 使用JSON渲染
-            structlog.processors.JSONRenderer()
+            structlog.processors.JSONRenderer(),
         ],
         wrapper_class=structlog.stdlib.BoundLogger,
         context_class=dict,

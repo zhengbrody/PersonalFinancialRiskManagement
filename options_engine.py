@@ -9,12 +9,13 @@ Strategy builder (10+ strategies) · Portfolio Greeks aggregation
 Dependencies: numpy, scipy, yfinance (all in requirements.txt)
 """
 
-import numpy as np
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple, Union
-from scipy.stats import norm
+
+import numpy as np
+import pandas as pd
 from scipy.optimize import brentq
-import warnings
+from scipy.stats import norm
 
 from logging_config import get_logger
 
@@ -34,6 +35,7 @@ _TRADING_DAYS_PER_YEAR = 252.0
 #  Section 1 — Black-Scholes Model
 # ══════════════════════════════════════════════════════════════
 
+
 def _d1(S: float, K: float, T: float, r: float, sigma: float) -> float:
     """Compute d1 in the Black-Scholes formula.
 
@@ -49,7 +51,7 @@ def _d1(S: float, K: float, T: float, r: float, sigma: float) -> float:
     -------
     float — d1 value.
     """
-    return (np.log(S / K) + (r + 0.5 * sigma ** 2) * T) / (sigma * np.sqrt(T))
+    return (np.log(S / K) + (r + 0.5 * sigma**2) * T) / (sigma * np.sqrt(T))
 
 
 def _d2(S: float, K: float, T: float, r: float, sigma: float) -> float:
@@ -292,6 +294,7 @@ def implied_volatility(
 #  Section 2 — Option Chain Data Provider (yfinance)
 # ══════════════════════════════════════════════════════════════
 
+
 def get_option_chain(ticker: str) -> Dict:
     """Fetch all available option expirations and their chains via yfinance.
 
@@ -356,9 +359,9 @@ def get_chain_with_greeks(
     dict — ``{calls: DataFrame, puts: DataFrame}`` with added columns:
            ``iv``, ``delta``, ``gamma``, ``theta``, ``vega``, ``rho``, ``bs_price``.
     """
-    import yfinance as yf
-    import pandas as pd
     from datetime import datetime
+
+    import yfinance as yf
 
     tk = yf.Ticker(ticker)
     chain = tk.option_chain(expiration)
@@ -437,9 +440,10 @@ def get_iv_surface(
     -------
     pd.DataFrame — Columns: ``strike``, ``expiration``, ``T``, ``iv``, ``option_type``.
     """
-    import yfinance as yf
-    import pandas as pd
     from datetime import datetime
+
+    import pandas as pd
+    import yfinance as yf
 
     tk = yf.Ticker(ticker)
     expirations = tk.options
@@ -478,13 +482,15 @@ def get_iv_surface(
                     if iv is None or iv <= 0 or iv > 5.0:
                         iv = np.nan
                 if iv and not np.isnan(iv):
-                    rows.append({
-                        "strike": K,
-                        "expiration": exp,
-                        "T": round(T, 4),
-                        "iv": round(iv, 6),
-                        "option_type": otype,
-                    })
+                    rows.append(
+                        {
+                            "strike": K,
+                            "expiration": exp,
+                            "T": round(T, 4),
+                            "iv": round(iv, 6),
+                            "option_type": otype,
+                        }
+                    )
 
     return pd.DataFrame(rows)
 
@@ -492,6 +498,7 @@ def get_iv_surface(
 # ══════════════════════════════════════════════════════════════
 #  Section 3 — Strategy Analysis
 # ══════════════════════════════════════════════════════════════
+
 
 @dataclass
 class OptionLeg:
@@ -507,6 +514,7 @@ class OptionLeg:
     premium : float — Per-share premium paid (positive) or received (negative).
     sigma : float — Volatility used for Greeks (IV or assumed).
     """
+
     strike: float
     expiry: str
     option_type: str  # 'call' or 'put'
@@ -525,6 +533,7 @@ class StockLeg:
     quantity : int — Number of shares (positive = long, negative = short).
     entry_price : float — Purchase / short-sale price.
     """
+
     quantity: int
     entry_price: float
 
@@ -542,6 +551,7 @@ class OptionStrategy:
     option_legs : list[OptionLeg] — Option legs.
     stock_legs : list[StockLeg] — Stock legs (for covered call, protective put, etc.).
     """
+
     name: str
     ticker: str
     spot: float
@@ -565,6 +575,7 @@ class OptionStrategy:
 def _time_to_expiry_years(expiry: str) -> float:
     """Parse expiry string and return T in years from now."""
     from datetime import datetime
+
     exp_date = datetime.strptime(expiry, "%Y-%m-%d")
     T = (exp_date - datetime.now()).total_seconds() / (365.25 * 24 * 3600)
     return max(T, 0.0)
@@ -620,8 +631,10 @@ def compute_pnl_at_expiry(
         #   Buy: payoff = intrinsic - premium_paid  (premium_paid > 0)
         #   Sell: payoff = premium_received - intrinsic  (premium_received > 0)
         # Using sign and premium as positive value:
-        leg_pnl = sign * intrinsic * leg.quantity * CONTRACT_MULTIPLIER \
-                   - sign * leg.premium * leg.quantity * CONTRACT_MULTIPLIER
+        leg_pnl = (
+            sign * intrinsic * leg.quantity * CONTRACT_MULTIPLIER
+            - sign * leg.premium * leg.quantity * CONTRACT_MULTIPLIER
+        )
         # But sign*premium_paid for buy = +premium (cost)
         # sign*premium_received for sell = -premium (income, but premium stored positive)
         # Simplify: premium is always stored as positive price paid/received.
@@ -654,8 +667,9 @@ def compute_strategy_greeks(strategy: OptionStrategy) -> Dict[str, float]:
     # Option legs
     for leg in strategy.option_legs:
         T = _time_to_expiry_years(leg.expiry)
-        g = bs_greeks(strategy.spot, leg.strike, T, strategy.risk_free_rate,
-                      leg.sigma, leg.option_type)
+        g = bs_greeks(
+            strategy.spot, leg.strike, T, strategy.risk_free_rate, leg.sigma, leg.option_type
+        )
         sign = 1.0 if leg.action == "buy" else -1.0
         multiplier = sign * leg.quantity * CONTRACT_MULTIPLIER
         for key in totals:
@@ -718,6 +732,7 @@ def strategy_metrics(
 # ──────────────────────────────────────────────────────────────
 #  Strategy Factory
 # ──────────────────────────────────────────────────────────────
+
 
 def build_strategy(
     strategy_name: str,
@@ -902,10 +917,8 @@ def build_strategy(
             spot=S,
             risk_free_rate=r,
             option_legs=[
-                OptionLeg(K_call, expiry, "call", qty, "buy",
-                          _premium(K_call, "call"), sigma),
-                OptionLeg(K_put, expiry, "put", qty, "buy",
-                          _premium(K_put, "put"), sigma),
+                OptionLeg(K_call, expiry, "call", qty, "buy", _premium(K_call, "call"), sigma),
+                OptionLeg(K_put, expiry, "put", qty, "buy", _premium(K_put, "put"), sigma),
             ],
         )
 
@@ -937,6 +950,7 @@ def build_strategy(
 #  Section 4 — Portfolio Greeks Aggregation
 # ══════════════════════════════════════════════════════════════
 
+
 @dataclass
 class StockPosition:
     """A stock holding for portfolio-level Greeks.
@@ -947,6 +961,7 @@ class StockPosition:
     shares : int — Number of shares (positive = long, negative = short).
     price : float — Current price per share.
     """
+
     ticker: str
     shares: int
     price: float
@@ -967,6 +982,7 @@ class OptionPosition:
     spot : float — Current spot price of the underlying.
     risk_free_rate : float — Risk-free rate.
     """
+
     ticker: str
     strike: float
     expiry: str
@@ -1009,8 +1025,7 @@ def compute_portfolio_greeks(
     # Option positions
     for op in option_positions:
         T = _time_to_expiry_years(op.expiry)
-        g = bs_greeks(op.spot, op.strike, T, op.risk_free_rate,
-                      op.sigma, op.option_type)
+        g = bs_greeks(op.spot, op.strike, T, op.risk_free_rate, op.sigma, op.option_type)
         multiplier = op.contracts * CONTRACT_MULTIPLIER
         for key in totals:
             totals[key] += g[key] * multiplier
@@ -1166,6 +1181,7 @@ STRATEGY_INFO: Dict[str, Dict[str, str]] = {
 #  Convenience / Quick-Analysis Functions
 # ══════════════════════════════════════════════════════════════
 
+
 def quick_bs_table(
     S: float,
     strikes: List[float],
@@ -1193,15 +1209,17 @@ def quick_bs_table(
     for K in strikes:
         price = bs_price(S, K, T, r, sigma, option_type)
         greeks = bs_greeks(S, K, T, r, sigma, option_type)
-        rows.append({
-            "strike": K,
-            "price": round(price, 4),
-            "delta": round(greeks["delta"], 4),
-            "gamma": round(greeks["gamma"], 6),
-            "theta": round(greeks["theta"], 4),
-            "vega": round(greeks["vega"], 4),
-            "rho": round(greeks["rho"], 4),
-        })
+        rows.append(
+            {
+                "strike": K,
+                "price": round(price, 4),
+                "delta": round(greeks["delta"], 4),
+                "gamma": round(greeks["gamma"], 6),
+                "theta": round(greeks["theta"], 4),
+                "vega": round(greeks["vega"], 4),
+                "rho": round(greeks["rho"], 4),
+            }
+        )
     return pd.DataFrame(rows)
 
 
