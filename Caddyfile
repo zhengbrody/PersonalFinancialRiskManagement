@@ -1,0 +1,35 @@
+# Caddyfile
+#
+# SITE_HOST is injected by docker compose from `.env`. Format: <eip-dashes>.nip.io
+# (nip.io is a free wildcard DNS that resolves any.matching.ip.nip.io back to
+# that IP; lets us get a real Let's Encrypt cert without owning a domain).
+#
+# Caddy auto-issues + auto-renews via the HTTP-01 challenge on :80, which
+# FoundationStack's SG already opens to the world.
+#
+# Streamlit needs the WebSocket upgrade headers (auto-handled by Caddy's
+# reverse_proxy when both ends speak WS). The longer read_timeout keeps the
+# server-sent-events stream alive during long-running analyses.
+
+{$SITE_HOST} {
+    encode gzip
+    log {
+        output stdout
+        format json
+    }
+
+    reverse_proxy app:8501 {
+        # Keep the WebSocket / SSE stream alive for slow analyses.
+        transport http {
+            read_timeout 300s
+            write_timeout 300s
+        }
+    }
+}
+
+# When SITE_HOST is unset (first boot, before deploy script writes .env),
+# serve a holding page on :80 so health probes don't bounce. Caddy can't
+# auto-TLS without a hostname so we don't expose :443 here.
+:80 {
+    respond "MindMarket bootstrap pending" 503
+}

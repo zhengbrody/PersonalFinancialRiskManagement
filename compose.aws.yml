@@ -1,0 +1,66 @@
+# compose.aws.yml
+#
+# Production-ish docker compose used on the EC2 instance (NOT for local dev —
+# local dev keeps the original docker-compose.yml).
+#
+# Differences from local:
+#   - Caddy sidecar terminates TLS via Let's Encrypt (HTTP-01 challenge)
+#     and reverse-proxies app:8501 → public 443. SITE_HOST is set per-deploy
+#     to <eip>.nip.io so we get a real cert without owning a domain.
+#   - awslogs log driver ships container stdout to CloudWatch Log groups
+#     /mindmarket/app and /mindmarket/caddy. Lets us debug the app from the
+#     CW console without SSHing in.
+#   - app no longer publishes :8501 to the host; only Caddy reaches it via
+#     the docker network. Defense in depth.
+#   - Healthchecks so docker compose ps shows real status.
+
+services:
+  app:
+    build: .
+    expose:
+      - "8501"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - FMP_API_KEY=${FMP_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: us-east-1
+        awslogs-group: /mindmarket/app
+        awslogs-stream: streamlit
+        awslogs-create-group: "true"
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - SITE_HOST=${SITE_HOST}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+    logging:
+      driver: awslogs
+      options:
+        awslogs-region: us-east-1
+        awslogs-group: /mindmarket/caddy
+        awslogs-stream: caddy
+        awslogs-create-group: "true"
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
