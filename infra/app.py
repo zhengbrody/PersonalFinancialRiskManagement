@@ -53,7 +53,7 @@ FoundationStack(
     "MindMarket-Foundation",
     operator_ip=operator_ip,
     env=env,
-    description="MindMarket AI — VPC, security group, S3 logs (Phase 1).",
+    description="MindMarket AI VPC, security group, S3 logs (Phase 1).",
 )
 
 app.synth()

@@ -85,7 +85,7 @@ class FoundationStack(Stack):
             self,
             "AppSg",
             vpc=self.vpc,
-            description="MindMarket app — public 80/443, ssh from operator only",
+            description="MindMarket app -- public 80/443, ssh from operator only",
             allow_all_outbound=True,
         )
         self.app_sg.add_ingress_rule(
@@ -96,7 +96,7 @@ class FoundationStack(Stack):
         self.app_sg.add_ingress_rule(
             peer=ec2.Peer.any_ipv4(),
             connection=ec2.Port.tcp(80),
-            description="HTTP — Caddy ACME HTTP-01 challenge",
+            description="HTTP - Caddy ACME HTTP-01 challenge",
         )
         self.app_sg.add_ingress_rule(
             peer=ec2.Peer.ipv4(f"{operator_ip}/32"),
