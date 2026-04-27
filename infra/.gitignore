@@ -8,3 +8,8 @@ __pycache__
 # CDK asset staging directory
 .cdk.staging
 cdk.out
+
+# Caches our AWS account ID and operator IP — not secrets per se, but
+# we don't want them in a public repo. CDK best practice is to commit
+# this for reproducibility; we accept slower synth on fresh clones.
+cdk.context.json

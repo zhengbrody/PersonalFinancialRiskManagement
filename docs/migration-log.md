@@ -16,3 +16,8 @@
 - Bootstrapped CDK Python project at `infra/` on new branch `aws-migration`.
 - Hard-pinned CDK env to account + region (no env-agnostic surprise deploys).
 - Wrote `infra/scripts/destroy.sh` stub before any deploy script — destroy-first habit.
+- Smoke-tested existing `docker-compose up` on Mac: 2.01 GB image, Streamlit serves :8501, HTTP 200. Dockerfile is fresh-environment safe — no surprises waiting for us on EC2.
+- Removed obsolete `version: '3.8'` from `docker-compose.yml` (Compose v2 ignores it).
+- Wrote `FoundationStack`: 2-AZ VPC at 10.0.0.0/16, public + private isolated subnets, **0 NAT gateways** (saves $32-64/mo), SG (443+80 world / 22 operator-only), CloudFront logs S3 bucket pre-provisioned (empty, 30-day lifecycle).
+- Wrote `docs/adr/0001-foundation-vpc-design.md` — full rationale + alternatives + anticipated changes.
+- `cdk synth` produces 27 resources, 3 outputs. SG ingress rules verified against spec. Pre-deploy review pending.
