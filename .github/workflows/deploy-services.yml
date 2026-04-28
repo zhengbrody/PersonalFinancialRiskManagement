@@ -1,0 +1,134 @@
+# .github/workflows/deploy-services.yml
+#
+# CI/CD for the Phase 2 Lambda services. Triggers on push to aws-migration:
+#   1. Run pytest on libs/ + each service's tests/
+#   2. (build + push to ECR + cdk deploy ApiStack) — gated behind manual
+#      approval until OIDC role is set up. We don't store long-lived
+#      AWS keys in GitHub Secrets; OIDC is the canonical pattern.
+#
+# To enable the AWS deploy job:
+#   1. Create an OIDC IAM role in the AWS account (one-time):
+#        - Trust policy: GitHub OIDC provider, conditioned on
+#          `repo:zhengbrody/PersonalFinancialRiskManagement:ref:refs/heads/aws-migration`
+#        - Permissions: ECR push, CloudFormation deploy on MindMarket-* stacks,
+#          Lambda + IAM + API Gateway as needed by CDK
+#   2. Set repo secret AWS_DEPLOY_ROLE_ARN to the role ARN
+#   3. Remove the `if: ${{ false }}` guard on the deploy job below
+
+name: Phase 2 Services CI/CD
+
+on:
+  push:
+    branches: [aws-migration]
+    paths:
+      - 'services/**'
+      - 'libs/**'
+      - 'infra/**'
+      - '.github/workflows/deploy-services.yml'
+  pull_request:
+    branches: [aws-migration]
+    paths:
+      - 'services/**'
+      - 'libs/**'
+      - 'infra/**'
+
+permissions:
+  id-token: write       # for AWS OIDC role assumption
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - risk-calculator
+          - options-pricer
+          - price-cache
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install service deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+          pip install -r services/${{ matrix.service }}/requirements.txt
+
+      - name: Run service tests
+        run: |
+          # Each service has its own handler.py; running each service's
+          # tests in isolation avoids the cross-service "handler" namespace
+          # collision pytest hits when scanning both at once.
+          pytest services/${{ matrix.service }}/tests/ -v
+
+  test-libs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install lib deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest numpy pandas scipy
+      - name: Run libs tests
+        run: pytest tests/unit/test_libs_*.py tests/unit/test_remote_compute.py -v
+
+  deploy:
+    needs: [test, test-libs]
+    runs-on: ubuntu-latest
+    if: ${{ false }}    # Re-enable after AWS_DEPLOY_ROLE_ARN secret exists
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install CDK + Python deps
+        run: |
+          npm install -g aws-cdk@2
+          cd infra
+          python -m pip install -r requirements.txt
+
+      - name: cdk diff (always log, never block)
+        run: |
+          cd infra
+          cdk diff MindMarket-Data MindMarket-Api \
+            --context operator_ip=0.0.0.0 || true
+
+      - name: cdk deploy MindMarket-Data MindMarket-Api
+        run: |
+          cd infra
+          cdk deploy MindMarket-Data MindMarket-Api \
+            --context operator_ip=0.0.0.0 \
+            --require-approval never \
+            --outputs-file cdk.out/outputs.json
+
+      - name: Smoke test (POST /var with synthetic returns)
+        run: |
+          API_URL=$(jq -r '.["MindMarket-Api"].ApiUrl' infra/cdk.out/outputs.json | sed 's:/$::')
+          KEY_ID=$(jq -r '.["MindMarket-Api"].ApiKeyId' infra/cdk.out/outputs.json)
+          API_KEY=$(aws apigateway get-api-key --api-key "$KEY_ID" --include-value \
+                    --query value --output text)
+          curl -fsS -X POST "$API_URL/var" \
+            -H "x-api-key: $API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"tickers":["A","B"],"weights":{"A":0.6,"B":0.4},
+                 "returns":[[0.001,0.002],[0.003,-0.001],[0.0,0.001]],
+                 "n_simulations":500,"horizon_days":5,"confidence":0.95}'

@@ -1,0 +1,4 @@
+# Options pricer needs scipy (for norm.cdf and brentq) but NOT pandas.
+# Skipping pandas saves ~70 MB of image size.
+numpy==1.26.4
+scipy==1.13.1

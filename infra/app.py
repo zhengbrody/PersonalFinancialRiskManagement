@@ -2,9 +2,13 @@
 """
 MindMarket AI -- CDK app entry point.
 
-Phase 1 stacks:
-    - MindMarket-Foundation : VPC + SG + S3 logs (~$0/mo)
-    - MindMarket-Compute    : EC2 + EIP + IAM     (~$9.30/mo when running)
+Stacks (deploy order driven by CDK dependency graph):
+    Phase 1:
+        - MindMarket-Foundation : VPC + SG + S3 logs (~$0/mo)
+        - MindMarket-Compute    : EC2 + EIP + IAM    (~$9.30/mo when running)
+    Phase 2:
+        - MindMarket-Data       : DynamoDB PriceCache (free at our scale)
+        - MindMarket-Api        : REST API + 3 Lambdas + usage plan (~$3-5/mo active)
 
 Run with explicit profile so we never accidentally deploy from the wrong
 identity:
@@ -26,7 +30,9 @@ import sys
 
 import aws_cdk as cdk
 
+from infra.api_stack import ApiStack
 from infra.compute_stack import ComputeStack
+from infra.data_stack import DataStack
 from infra.foundation_stack import FoundationStack
 
 ACCOUNT = "520622116862"
@@ -83,6 +89,22 @@ ComputeStack(
     public_key_material=ssh_pubkey,
     env=env,
     description="MindMarket AI EC2 instance running Streamlit (Phase 1).",
+)
+
+# Phase 2 — independent of Foundation/Compute, can deploy without EC2 running.
+data = DataStack(
+    app,
+    "MindMarket-Data",
+    env=env,
+    description="MindMarket DynamoDB tables (Phase 2).",
+)
+
+ApiStack(
+    app,
+    "MindMarket-Api",
+    price_cache_table=data.price_cache,
+    env=env,
+    description="MindMarket REST API + Lambdas + usage plan (Phase 2).",
 )
 
 app.synth()

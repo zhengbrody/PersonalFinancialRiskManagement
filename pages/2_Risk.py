@@ -131,6 +131,57 @@ vc1.metric(f"VaR 95% ({mc_horizon}d)", f"{report.var_95:.2%}")
 vc2.metric(f"VaR 99% ({mc_horizon}d)", f"{report.var_99:.2%}")
 vc3.metric(f"CVaR 95% ({mc_horizon}d)", f"{report.cvar_95:.2%}")
 
+# ── Phase 2 Remote Compute (USE_REMOTE_COMPUTE=1) ────────────
+# Side-by-side comparison: local VaR (computed above) vs Lambda VaR
+# (POST /var on the API Gateway). When the env var is unset this
+# section renders a hint instead of calling out, so local dev is
+# unaffected.
+from libs import remote_compute as _rc  # noqa: E402  (lazy: avoid Lambda dep)
+
+if _rc.is_remote_enabled():
+    with st.expander(
+        "🚀 Phase 2 Remote Compute — verify Lambda VaR vs local"
+        if lang == "en" else
+        "🚀 Phase 2 远程计算 — 对照 Lambda VaR vs 本地",
+        expanded=False,
+    ):
+        st.caption(
+            "USE_REMOTE_COMPUTE=1 detected. Click the button to call the "
+            "POST /var Lambda and compare results. Should match within 1-2%% "
+            "(Monte Carlo seed differs across processes)."
+        )
+        if st.button("Compute VaR remotely", key="remote_var_btn"):
+            try:
+                returns_df = prices.pct_change().dropna()
+                tickers = list(weights.keys())
+                payload = {
+                    "tickers": tickers,
+                    "weights": weights,
+                    "returns": returns_df[tickers].values.tolist(),
+                    "n_simulations": min(mc_sims, 10_000),
+                    "horizon_days": mc_horizon,
+                    "confidence": 0.95,
+                }
+                with st.spinner("POST /var to Lambda..."):
+                    import time
+                    t0 = time.time()
+                    out = _rc.post_var(payload)
+                    elapsed_ms = (time.time() - t0) * 1000
+
+                rc1, rc2, rc3 = st.columns(3)
+                rc1.metric("Remote VaR 95%", f"{out['var']:.2%}",
+                           delta=f"{(out['var'] - report.var_95) * 100:+.2f}pp vs local")
+                rc2.metric("Remote CVaR 95%", f"{out['cvar']:.2%}")
+                rc3.metric("Round-trip", f"{elapsed_ms:.0f} ms")
+            except _rc.RemoteComputeError as exc:
+                st.error(f"Remote compute failed: {exc}")
+else:
+    st.caption(
+        "💡 Phase 2 deployed? Set `USE_REMOTE_COMPUTE=1`, "
+        "`MINDMARKET_API_URL`, and `MINDMARKET_API_KEY` to compare "
+        "local VaR with the Lambda implementation."
+    )
+
 mc = report.mc_portfolio_returns
 fig_mc = go.Figure()
 fig_mc.add_trace(

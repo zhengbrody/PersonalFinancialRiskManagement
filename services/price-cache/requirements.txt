@@ -1,0 +1,6 @@
+# Price cache needs yfinance + pandas (yfinance pulls pandas anyway) +
+# boto3 (DynamoDB). The Lambda Python 3.11 base bundles boto3 but pinning
+# avoids surprise version drift.
+yfinance==0.2.50
+pandas==2.2.2
+boto3==1.35.55

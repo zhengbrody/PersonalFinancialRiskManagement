@@ -1,0 +1,5 @@
+# Pinned to known-working versions. Lambda Python 3.11 base image
+# already includes the AWS SDK; we don't need boto3 here (no DDB writes).
+numpy==1.26.4
+pandas==2.2.2
+scipy==1.13.1

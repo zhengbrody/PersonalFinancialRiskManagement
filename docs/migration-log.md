@@ -38,3 +38,14 @@
 - Drafted `docs/adr/0002-phase2-compute-design.md` (research done in parallel via subagent during deploy wait): Container Image Lambda > Zip+Layers (numpy/scipy/pandas blow 250 MB cap), single-table DynamoDB w/ `TICKER#sym` + `BAR#granularity#ts`, HTTP API + Lambda authorizer beats REST API, scheduled-warmer + Python SnapStart for cold starts. Phase 2 cost ~$8/mo.
 - **Destroy verified**: ComputeStack + FoundationStack gone in 3 min, no residue. CDKToolkit retained (~$0.02/mo standing). Unattached EIPs: 0 (the $3.60/mo trap was avoided).
 - Total Phase 1 spend: well under $1 (deploy + 30 min running + destroy across 2 deploys today). $99+ of $100 credits remain.
+- **Phase 2 code complete** — entered post-Phase-1 sprint with full architectural autonomy delegated by user.
+- Decision flipped HTTP API → **REST API** for Phase 2 (ADR-0002 finalized, status Accepted): native usage_plan + api_key beats $0.13/mo savings + custom Lambda authorizer.
+- Extracted `libs/mindmarket_core/` (5 modules, ~600 LOC, all pure compute, zero I/O): `constants`, `var`, `portfolio_math`, `black_scholes`, `data_prep`. Zero behavioral changes — existing risk_engine.py / options_engine.py / data_provider.py public API preserved verbatim.
+- 46 new unit tests against textbook references: BS price S=K=100 r=5% σ=20% T=1 → $10.4506 (Hull eq. 17.5), put-call parity holds 1e-6, IV roundtrip 1e-5 across [0.1, 0.6], VaR/CVaR sign+ordering invariants, drawdown episode counting, compliance tolerance 1e-6 no false positives.
+- Wrote 3 Lambda handlers: risk-calculator (POST /var, 3GB memory), options-pricer (POST /greeks, 512MB), price-cache (GET /price/{ticker}, 1GB, only DDB writer). All pass 19 local mock tests.
+- Wrote `Dockerfile` × 3 — `public.ecr.aws/lambda/python:3.11` base, build context = repo root so `COPY libs/` works. Added `**/cdk.out/`, `**/__pycache__/` to `.dockerignore` after CDK first-run blew up with ENAMETOOLONG (recursive copy).
+- Wrote `DataStack` (DynamoDB PriceCache, on-demand, TTL=expiresAt, no GSI per ADR-0002) and `ApiStack` (REST API + 3 DockerImageFunctions + UsagePlan 1000/day + ApiKey, least-privilege IAM: only price-cache can DDB-write, all 3 can DDB-read). Both stacks `cdk synth` clean.
+- Wrote `libs/remote_compute.py` (thin REST API client) + 14 tests, plus pages/2_Risk.py expander for side-by-side local-vs-Lambda VaR comparison gated on `USE_REMOTE_COMPUTE=1`.
+- Wrote `.github/workflows/deploy-services.yml` — matrix-tests each service, gates AWS deploy behind OIDC role + manual enable.
+- Tests: 656 pass (596 baseline + 46 libs + 14 remote_compute), services tests run separately (3 services × 7+7+5 = 19, namespace-isolated).
+- Pre-deploy state: nothing deployed in AWS yet. Phase 1 stacks already destroyed; only CDKToolkit standing (~$0.02/mo). Phase 2 deploy is task #9, gated on user confirmation since EC2-free Lambda+DDB+API GW deploy still costs ~$3-5/mo while running.

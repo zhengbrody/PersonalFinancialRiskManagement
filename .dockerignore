@@ -1,6 +1,8 @@
 .git
 .venv
+**/.venv
 __pycache__
+**/__pycache__
 *.pyc
 .DS_Store
 .cache
@@ -8,6 +10,25 @@ logs/
 htmlcov/
 .coverage
 .pytest_cache
+**/.pytest_cache
 *.egg-info
 build/
 dist/
+
+# CDK build artifacts — must be excluded or docker build (with repo root
+# context) recurses into asset.<hash>/ folders that themselves contain a
+# nested copy of repo, blowing up with ENAMETOOLONG.
+infra/cdk.out/
+infra/.venv/
+**/cdk.out/
+
+# Streamlit local secrets — never bake into a container image.
+.streamlit/secrets.toml
+
+# Phase 1 EC2 deploy detritus
+docs/screenshots/
+
+# Editor / OS noise
+.vscode/
+.idea/
+*.swp
