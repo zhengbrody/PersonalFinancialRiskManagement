@@ -1,12 +1,12 @@
 # ADR-0002 — Phase 2 Compute Design (Lambda + API Gateway + DynamoDB)
 
-- **Status:** Draft (research complete, not yet implemented)
+- **Status:** Accepted (overrules HTTP API recommendation in earlier draft)
 - **Date:** 2026-04-27
 - **Phase:** 2 (extract compute to Lambda)
 
 > Research drafted in parallel with Phase 1 deploy. Numbers verified against
-> current AWS pricing and PyPI wheel sizes. Will be promoted to "Accepted"
-> when Phase 2 implementation begins.
+> current AWS pricing and PyPI wheel sizes. Final decision flipped from
+> HTTP API to **REST API** — see "API Gateway type — final decision" below.
 
 ## Context
 
@@ -69,26 +69,42 @@ DynamoDB caps a single partition at 1000 WCU / 3000 RCU. Single-tenant Phase 2
   Doubles write cost (~$0.50/mo at our scale). Only build it when the
   cross-sectional query lands in product UI.
 
-### 3. HTTP API (not REST API, not AppSync)
+### 3. API Gateway type — final decision: **REST API**
 
 **Pricing per 1M requests:**
 
-| Gateway type | Cost / 1M | Our 50K/mo | Comments |
+| Gateway type | Cost / 1M | Our 50K/mo | Built-in throttle |
 |---|---|---|---|
-| REST API | $3.50 | $0.18 | Built-in usage plans |
-| HTTP API | **$1.00** | **$0.05** | No usage plans |
-| AppSync | $4.00 | $0.20 | GraphQL-first, overkill |
+| **REST API** | **$3.50** | **$0.18** | ✅ usage plans + API keys |
+| HTTP API | $1.00 | $0.05 | ❌ — need Lambda authorizer |
+| AppSync | $4.00 | $0.20 | n/a (GraphQL) |
 
-HTTP API supports Cognito JWT authorizers (Phase 3 ready), POST with JSON
-body, and adds <50 ms gateway overhead vs REST API's 50–100 ms.
+Initial draft recommended HTTP API on cost. **Decision flipped to REST API**
+after weighing the actual feature need:
 
-**The one feature gap:** HTTP API has no built-in API keys / usage plans.
-We need this for the 1000 req/day cap that Phase 2 spec requires.
-**Workaround:** Lambda authorizer backed by a DynamoDB counter row per API
-key (TTL=24h, conditional update). Adds ~5 ms latency, ~$0.01/mo cost.
+- Phase 2 spec mandates "1000 req/day throttle" to prevent runaway-cost.
+  REST API gives this **declaratively** via `UsagePlan` + `ApiKey`
+  resources in CDK. HTTP API gateway has no such concept; we'd
+  hand-roll a Lambda authorizer backed by a DynamoDB counter row,
+  TTL=24h, conditional update on increment. ~50 lines + ~5 ms latency
+  per request + a new failure mode (DDB throttle = whole API down).
 
-REST API would buy us throttling out of the box, but at 3.5× the per-request
-cost and worse latency. HTTP API + Lambda authorizer wins.
+- Cost difference at our scale (50K req/mo) is **$0.13/mo** —
+  rounding error against the budget.
+
+- REST API's `RequestValidator` does JSON-schema validation at the
+  gateway, before Lambda invocation. We pay nothing for malformed
+  requests. HTTP API has no equivalent.
+
+- Cognito authorizer (Phase 3) works on both; not a tiebreaker.
+
+- Latency cost (REST adds ~50 ms gateway overhead vs HTTP's ~20 ms)
+  is acceptable — we already budget P95 under 1 s and our compute
+  dominates (scipy import alone is ~600 ms cold).
+
+**Rejected alternative:** HTTP API + Lambda authorizer. Rebuilding
+something AWS already ships well, on a budget that doesn't justify
+optimizing the $0.13.
 
 ### 4. Cold start mitigation, in escalation order
 
@@ -119,7 +135,7 @@ adding 15+ minutes). 150 MB savings not worth it.
 | Lambda (50K req/mo, 3 GB mem, ~2s avg) | $0 (free tier covers) |
 | ECR (one private repo, ~900 MB) | $0.04 |
 | DynamoDB on-demand | ~$2 |
-| HTTP API (50K req) | $0.05 |
+| REST API (50K req) + usage plan | $0.18 |
 | CloudWatch logs + warmer + metrics | ~$1 |
 | Data transfer out | ~$2 |
 | Buffer for spikes | ~$3 |
