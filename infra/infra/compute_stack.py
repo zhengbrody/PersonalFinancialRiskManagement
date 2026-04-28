@@ -48,17 +48,30 @@ echo "==> bootstrap started $(date -u)"
 dnf update -y
 dnf install -y docker git amazon-cloudwatch-agent
 
-# Docker Compose v2 plugin (not in default AL2023 repos)
+# Docker Compose v2 plugin + Buildx (neither in default AL2023 repos).
+# Compose v2.31+ requires buildx 0.17+ at build time; AL2023's bundled
+# buildx is 0.12, so the build step fails with
+#   "compose build requires buildx 0.17.0 or later"
+# unless we install a fresh one alongside compose.
 mkdir -p /usr/libexec/docker/cli-plugins
 ARCH=$(uname -m)
 case "$ARCH" in
-  x86_64)  COMPOSE_BIN="docker-compose-linux-x86_64" ;;
-  aarch64) COMPOSE_BIN="docker-compose-linux-aarch64" ;;
+  x86_64)
+    COMPOSE_BIN="docker-compose-linux-x86_64"
+    BUILDX_BIN="buildx-v0.18.0.linux-amd64"
+    ;;
+  aarch64)
+    COMPOSE_BIN="docker-compose-linux-aarch64"
+    BUILDX_BIN="buildx-v0.18.0.linux-arm64"
+    ;;
   *) echo "Unsupported arch: $ARCH"; exit 1 ;;
 esac
 curl -fsSL "https://github.com/docker/compose/releases/latest/download/${COMPOSE_BIN}" \
   -o /usr/libexec/docker/cli-plugins/docker-compose
+curl -fsSL "https://github.com/docker/buildx/releases/download/v0.18.0/${BUILDX_BIN}" \
+  -o /usr/libexec/docker/cli-plugins/docker-buildx
 chmod +x /usr/libexec/docker/cli-plugins/docker-compose
+chmod +x /usr/libexec/docker/cli-plugins/docker-buildx
 
 # Allow ec2-user to talk to docker without sudo
 usermod -aG docker ec2-user

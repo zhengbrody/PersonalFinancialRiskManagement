@@ -23,8 +23,10 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - FMP_API_KEY=${FMP_API_KEY:-}
+    # python:3.10-slim doesn't include curl; use urllib (always present).
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8501/_stcore/health"]
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health').read()"]
       interval: 30s
       timeout: 5s
       retries: 5
