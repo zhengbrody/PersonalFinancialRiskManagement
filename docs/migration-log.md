@@ -31,3 +31,10 @@
 - Wrote `Caddyfile`: `{$SITE_HOST}` block with WebSocket-friendly read/write timeouts; `:80` fallback responds 503 during bootstrap.
 - Wrote `infra/scripts/deploy-phase-1.sh`: cdk deploy + poll bootstrap marker + scp secrets.toml + git checkout + compose up + healthcheck wait + print URL. Idempotent (rerun after code changes).
 - Wrote `docs/aws/phase-1-ec2.md` runbook: arch diagram, cost, deploy/destroy flows, top 6 common issues with copy-paste debugging commands.
+- **Phase 1 milestone hit**: end-to-end deploy via `./infra/scripts/deploy-phase-1.sh` succeeded. EC2 launched, user-data installed Docker + buildx 0.18 + Compose v2 + CloudWatch agent, repo cloned, app + Caddy compose stack came up, Caddy obtained Let's Encrypt cert via HTTP-01 challenge. Public HTTPS URL `https://75-101-197-112.nip.io` returned HTTP/2 200; cert issuer `Let's Encrypt E7`, valid 90 days; `_stcore/health` returned `ok` through the full chain.
+- Two real bugs found-and-fixed during deploy (committed in `a265d44`):
+  1. `compose build requires buildx 0.17.0 or later` — AL2023's bundled buildx is 0.12, pinned v0.18.0 in user-data.
+  2. healthcheck used `curl` but `python:3.10-slim` doesn't include it; switched to `python -c 'import urllib.request; ...'`.
+- Drafted `docs/adr/0002-phase2-compute-design.md` (research done in parallel via subagent during deploy wait): Container Image Lambda > Zip+Layers (numpy/scipy/pandas blow 250 MB cap), single-table DynamoDB w/ `TICKER#sym` + `BAR#granularity#ts`, HTTP API + Lambda authorizer beats REST API, scheduled-warmer + Python SnapStart for cold starts. Phase 2 cost ~$8/mo.
+- **Destroy verified**: ComputeStack + FoundationStack gone in 3 min, no residue. CDKToolkit retained (~$0.02/mo standing). Unattached EIPs: 0 (the $3.60/mo trap was avoided).
+- Total Phase 1 spend: well under $1 (deploy + 30 min running + destroy across 2 deploys today). $99+ of $100 credits remain.
