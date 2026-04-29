@@ -172,7 +172,134 @@ FMP_API_KEY       = "..."
 | **Testing** | pytest · pytest-cov · pytest-asyncio (unit · integration · performance) |
 | **Quality** | black · ruff · mypy · pre-commit · GitHub Actions CI |
 | **Logging** | structlog · python-json-logger |
-| **Deploy** | Docker · docker-compose · Streamlit Cloud |
+| **Deploy** | Docker · docker-compose · Streamlit Cloud · **AWS (CDK Python, see below)** |
+
+---
+
+## ☁️ AWS Migration (Phases 1–2 complete)
+
+The original Streamlit-only deployment is being migrated to a distributed AWS
+architecture with infrastructure-as-code. **Status:** Phase 1 + Phase 2
+designed, deployed end-to-end, smoke-tested, and torn back down. Live demo
+URL is available on demand — `./infra/scripts/deploy-phase-1.sh` brings it
+up in ~10 min.
+
+### Target architecture
+
+```
+                       ┌────────────────────┐
+       Users   ──────► │ CloudFront + WAF   │      (Phase 4)
+                       └─────────┬──────────┘
+                                 │
+                       ┌─────────▼──────────┐
+                       │  EC2 (Streamlit)   │      Phase 1
+                       │  Caddy auto-HTTPS  │      + Let's Encrypt
+                       │  CloudWatch Agent  │      via *.nip.io
+                       └─────────┬──────────┘
+                                 │ feature flag USE_REMOTE_COMPUTE
+                                 │
+                       ┌─────────▼──────────┐
+                       │  REST API Gateway  │      Phase 2
+                       │  api_key + 1k/day  │
+                       └─────────┬──────────┘
+                                 │
+        ┌────────────────────────┼────────────────────────┐
+        │                        │                        │
+   ┌────▼─────┐            ┌─────▼─────┐            ┌────▼─────┐
+   │ /var     │            │ /greeks   │            │ /price/* │
+   │ Lambda   │            │ Lambda    │            │ Lambda   │
+   │ MC VaR   │            │ BS+Greeks │            │ yfinance │
+   │ 3GB mem  │            │ 512MB     │            │ +DDB rw  │
+   └────┬─────┘            └───────────┘            └────┬─────┘
+        │                                                │
+        └──────────► DynamoDB PriceCache ◄───────────────┘
+                     pk=TICKER#sym
+                     sk=BAR#interval#period
+                     TTL=expiresAt
+```
+
+### Cost (US East 1, on-demand teardown pattern)
+
+| Stack | Idle | While running | Verified spend |
+|---|---|---|---|
+| Foundation (VPC + SG + S3 logs) | $0 | $0 | $0 |
+| Compute (EC2 t3.micro + EIP) | $0 | ~$9.30/mo | < $0.50 across 3 deploys |
+| Data (DynamoDB on-demand) | $0 | $0 (free tier) | $0 |
+| Api (3 Lambdas + REST API + UsagePlan) | $0 | ~$3-5/mo at 50K req | < $0.20 across 3 deploys |
+| CDKToolkit (one-time bootstrap) | ~$0.02/mo | ~$0.02/mo | $0.02 |
+
+**Total verified Phase 1 + Phase 2 spend: ~$0.70 of $200 Free Plan credits.**
+Strategy: deploy when demoing, destroy when not. Re-create takes ~10 min via
+`deploy-phase-1.sh` and `cdk deploy MindMarket-Data MindMarket-Api`.
+
+### Repo layout for the migration
+
+```
+infra/                              CDK Python (one-shot scaffold + 4 stacks)
+├── infra/foundation_stack.py       VPC, SG, S3 logs (Phase 1)
+├── infra/compute_stack.py          EC2 + EIP + IAM + user-data (Phase 1)
+├── infra/data_stack.py             DynamoDB PriceCache (Phase 2)
+├── infra/api_stack.py              REST API + 3 Lambdas + UsagePlan (Phase 2)
+└── scripts/{deploy-phase-1.sh, destroy.sh}
+
+libs/mindmarket_core/               Pure-compute primitives (no I/O)
+├── constants.py · var.py · portfolio_math.py · black_scholes.py · data_prep.py
+
+services/                           Lambda function bodies
+├── risk-calculator/   handler.py + Dockerfile + tests/   POST /var
+├── options-pricer/    handler.py + Dockerfile + tests/   POST /greeks
+└── price-cache/       handler.py + Dockerfile + tests/   GET  /price/{ticker}
+
+docs/adr/                           Architecture Decision Records
+├── 0001-foundation-vpc-design.md   Why 2 AZs, 0 NAT, port 80 for ACME
+└── 0002-phase2-compute-design.md   Why Container Image Lambda, REST not HTTP API
+docs/aws/phase-1-ec2.md             Operational runbook + 6 troubleshooting recipes
+docs/migration-log.md               Dated log of what shipped, by session
+```
+
+### Smoke-test results (verified during Phase 2 deploy)
+
+| Endpoint | Input | Output | Latency |
+|---|---|---|---|
+| `POST /greeks` | ATM 1Y call S=K=100 r=5% σ=20% | **price 10.4506, delta 0.6368** (matches Hull 17.5 to 4 dp) | 156 ms warm |
+| `POST /var` | 3-asset synthetic returns, 5K sims, 21d horizon | VaR95 6.12%, CVaR95 7.17% (CVaR ≥ VaR ✓) | 9 s cold, < 1 s warm |
+| `GET /price/{t}` | AAPL 5d 1d | Architecture verified; yfinance 0.2.50 ↔ Yahoo API drift returns empty df | 21 s cold |
+
+### What I Learned (real bugs found in real deploys)
+
+| Bug | Root cause | Lesson |
+|---|---|---|
+| `GroupDescription` rejected with em-dash `—` | EC2 SecurityGroup props are ASCII-only | Lint passes don't catch service-level constraints — only real CFN does |
+| `compose build requires buildx 0.17+` on AL2023 | Bundled buildx is 0.12; Compose v2.31 wants 0.17 | Always pin tooling versions in IaC; AMI bundles drift |
+| `OCI runtime exec failed: curl: file not found` | `python:3.10-slim` doesn't include curl | Healthchecks should use base-image-native tools (`python -c urllib`) |
+| `pip install` failed compiling NumPy from source in Lambda image | M-series Mac builds arm64; Lambda is x86_64; numpy 2.x lacks arm64 wheel | Always set `platform=LINUX_AMD64` on `DockerImageCode.from_image_asset` |
+| `Runtime.ImportModuleError: No module named 'pandas'` | Eager `__init__.py` `from . import var` forced every consumer to install pandas | Lazy package init when sub-modules have divergent transitive deps |
+| `JSONDecodeError` from yfinance for every ticker | Yahoo API contract drifted; yfinance 0.2.50 stale | External free data sources are fragile; production needs paid feed (FMP/Polygon) |
+
+### Quick deploy / destroy
+
+```bash
+# One-time per AWS account/region
+cd infra && python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cdk bootstrap aws://<account>/<region> --profile mindmarket
+
+# Deploy everything (~10 min)
+export OPERATOR_IP=$(curl -s -4 ifconfig.me)
+cdk deploy --all --profile mindmarket --context operator_ip=$OPERATOR_IP
+
+# Smoke test (URL + key from outputs.json)
+API_URL=$(jq -r '.["MindMarket-Api"].ApiUrl' cdk.out/outputs.json | sed 's:/$::')
+KEY_ID=$(jq -r '.["MindMarket-Api"].ApiKeyId' cdk.out/outputs.json)
+API_KEY=$(aws apigateway get-api-key --api-key $KEY_ID --include-value --profile mindmarket --query value --output text)
+curl -X POST "$API_URL/greeks" -H "x-api-key: $API_KEY" -H "Content-Type: application/json" \
+  -d '{"spot":100,"strike":100,"time_to_expiry_years":1,"risk_free_rate":0.05,"volatility":0.2,"option_type":"call"}'
+
+# Tear it all down (~3 min)
+./infra/scripts/destroy.sh --force
+```
+
+Full operational details in `docs/aws/phase-1-ec2.md`.
 
 ---
 
@@ -224,14 +351,30 @@ MindMarket AI/
 ├── tests/                          # unit · integration · performance
 │   ├── unit/ · integration/ · performance/
 │
+├── infra/                          # AWS CDK Python (Phase 1+2)
+│   ├── infra/{foundation,compute,data,api}_stack.py
+│   ├── scripts/{deploy-phase-1,destroy}.sh
+│   └── app.py · cdk.json · requirements.txt
+│
+├── libs/mindmarket_core/           # Pure-compute library (no I/O, Lambda-importable)
+│   └── constants · var · portfolio_math · black_scholes · data_prep
+│
+├── services/                       # Lambda functions (3)
+│   ├── risk-calculator/  handler · Dockerfile · tests
+│   ├── options-pricer/   handler · Dockerfile · tests
+│   └── price-cache/      handler · Dockerfile · tests
+│
 ├── docs/
+│   ├── adr/                        # Architecture Decision Records (2)
+│   ├── aws/phase-1-ec2.md          # AWS runbook + troubleshooting
+│   ├── migration-log.md            # Dated session log
 │   ├── user/                       # QUICK_START · SETUP · TROUBLESHOOT
 │   └── archive/                    # Historical implementation notes
 │
 ├── requirements.txt · requirements-dev.txt
-├── Dockerfile · docker-compose.yml
+├── Dockerfile · docker-compose.yml · compose.aws.yml · Caddyfile
 ├── pyproject.toml · pytest.ini · .pre-commit-config.yaml
-└── .github/workflows/ci.yml
+└── .github/workflows/{ci.yml, deploy-services.yml}
 ```
 
 ---
@@ -242,7 +385,11 @@ MindMarket AI/
 - [x] Multi-provider LLM integration with auto-detection
 - [x] Scenario simulator + cost-basis P&L tracking
 - [x] Standalone ticker research page
-- [ ] Multi-user auth (Supabase) + per-user portfolios
+- [x] **AWS Phase 1** — VPC + EC2 + Caddy auto-HTTPS + CloudWatch (Apr 2026)
+- [x] **AWS Phase 2** — REST API GW + 3 Lambda DockerImageFunctions + DynamoDB cache (Apr 2026)
+- [ ] AWS Phase 3 — Cognito auth · async backtest pipeline · observability dashboards
+- [ ] AWS Phase 4 — Cost optimization · 6-pager design doc · demo video
+- [ ] Multi-user auth (Cognito or Supabase) + per-user portfolios
 - [ ] Credit-based AI billing with Stripe
 - [ ] Custom domain @ **mindmarket.ai**
 - [ ] OAuth broker integration (Robinhood / Moomoo)
@@ -277,6 +424,24 @@ MIT. See [LICENSE](LICENSE).
 | 🔄 **状态识别 & 回测** | HMM（高斯混合 EM）· 向量化回测 · Brinson-Hood-Beebower 归因 |
 | 🤖 **AI 摘要** | 每页独立的 AI 叙述（Claude / DeepSeek / Ollama 自动检测） |
 | 🌏 **双语 UI** | 500+ 标签覆盖英文/中文 · 暗色主题设计系统 |
+
+---
+
+## ☁️ AWS 迁移(Phase 1+2 完成)
+
+原 Streamlit-only 部署正在迁往分布式 AWS 架构,IaC 全程 CDK。
+**当前状态**:Phase 1 + Phase 2 设计、部署、烟测、销毁回环已全部跑通,
+零残留。`./infra/scripts/deploy-phase-1.sh` ~10 分钟即可重建 demo URL。
+
+| 阶段 | 内容 | 月成本(运行中)|
+|---|---|---|
+| Phase 1 | EC2 + Caddy auto-HTTPS + CloudWatch | ~$9.30 |
+| Phase 2 | REST API + 3 Lambda + DynamoDB cache | ~$3-5 |
+| 空闲(已 destroy) | CDKToolkit + S3 logs | ~$0.02 |
+
+**真实部署验证**:`POST /greeks` 返回 ATM 1Y call 价格 10.4506(与 Hull 教材完全吻合,4 位小数),
+`POST /var` 返回 VaR95 6.12% / CVaR95 7.17%(CVaR ≥ VaR ✓)。
+完整运维 cookbook 在 [`docs/aws/operations.md`](docs/aws/operations.md)。
 
 ---
 
