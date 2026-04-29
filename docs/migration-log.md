@@ -49,3 +49,13 @@
 - Wrote `.github/workflows/deploy-services.yml` — matrix-tests each service, gates AWS deploy behind OIDC role + manual enable.
 - Tests: 656 pass (596 baseline + 46 libs + 14 remote_compute), services tests run separately (3 services × 7+7+5 = 19, namespace-isolated).
 - Pre-deploy state: nothing deployed in AWS yet. Phase 1 stacks already destroyed; only CDKToolkit standing (~$0.02/mo). Phase 2 deploy is task #9, gated on user confirmation since EC2-free Lambda+DDB+API GW deploy still costs ~$3-5/mo while running.
+- **Phase 2 milestone hit** — full deploy + smoke + destroy roundtrip. 3 real bugs surfaced during deploy:
+  1. **Cross-arch image (1st deploy fail)**: M-series Mac builds arm64 docker images by default but Lambda is x86_64. risk + options pushed silently as arm64 (would crash on first invoke); price-cache failed at `pip install` because numpy lacked an arm64 wheel and the Lambda base has no compiler. **Fix:** `platform=ecr_assets.Platform.LINUX_AMD64` on every `DockerImageCode.from_image_asset`.
+  2. **Eager `__init__.py` (2nd deploy fail)**: ApiStack deployed clean, but `/greeks` returned HTTP 502 with `Runtime.ImportModuleError: No module named 'pandas'`. Root cause: `libs/mindmarket_core/__init__.py` did `from . import var` and `var.py` imports pandas; options-pricer service deliberately omits pandas. **Fix:** empty `__init__.py`; consumers do `from libs.mindmarket_core import black_scholes` directly so only the needed submodule loads.
+  3. **yfinance 0.2.50 vs Yahoo API drift**: `/price/AAPL` returned `JSONDecodeError: Expecting value: line 1 column 1`. Same on MSFT/TSLA/SPY. yfinance pinned 6 months ago, Yahoo's HTML/API contract has shifted. **Triage:** architecture is sound (Lambda → DDB → external fetch chain works; error response shape correct). Mitigation deferred to Phase 4 cost-optimization sweep where we re-evaluate FMP/Polygon as primary feed.
+- Smoke test results (3rd deploy):
+  - `/greeks` ATM 1Y call S=K=100 r=5% σ=20% → **price 10.4506, delta 0.6368** (matches Hull 17.5 exactly), 156 ms warm
+  - `/var` 3-asset synthetic returns → **VaR 95% 6.12%, CVaR 95% 7.17%** (CVaR ≥ VaR ✓), 9 s cold (scipy+pandas import dominates), <1 s warm
+  - `/price/*` chain works architecturally; data source broken upstream
+- **Destroy verified clean** — 0 stacks except CDKToolkit, 0 Lambdas, 0 DDB tables, 0 unattached EIPs.
+- Total Phase 2 deploy spend: <$0.20 (3 docker pushes to ECR, ~30 minutes total Lambda/API/DDB running across 3 deploys, then teardown).

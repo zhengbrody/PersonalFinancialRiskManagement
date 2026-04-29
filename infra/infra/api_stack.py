@@ -36,6 +36,7 @@ from aws_cdk import (
     Stack,
     aws_apigateway as apigw,
     aws_dynamodb as ddb,
+    aws_ecr_assets as ecr_assets,
     aws_iam as iam,
     aws_lambda as _lambda,
     aws_logs as logs,
@@ -62,6 +63,13 @@ class ApiStack(Stack):
         super().__init__(scope, construct_id, **kwargs)
 
         # ── Risk calculator Lambda (no DDB write needed) ──────────
+        # `platform=LINUX_AMD64` forces docker buildx to cross-compile
+        # for x86_64 even when the operator runs on arm64 (M-series Mac).
+        # Without it: image builds for arm64, push silently succeeds, then
+        # Lambda errors at first invocation with "Runtime.InvalidEntrypoint".
+        # Worse: numpy/scipy may have wheels for the build arch but not
+        # the deploy arch, causing the build step to fall back to compiling
+        # from source and fail because the Lambda base image has no compiler.
         risk_fn = _lambda.DockerImageFunction(
             self,
             "RiskCalculatorFn",
@@ -69,6 +77,7 @@ class ApiStack(Stack):
             code=_lambda.DockerImageCode.from_image_asset(
                 directory=str(_REPO_ROOT),
                 file="services/risk-calculator/Dockerfile",
+                platform=ecr_assets.Platform.LINUX_AMD64,
             ),
             memory_size=3008,           # numpy + scipy + pandas; 3 GB gives ~2 vCPU
             timeout=Duration.seconds(30),
@@ -89,6 +98,7 @@ class ApiStack(Stack):
             code=_lambda.DockerImageCode.from_image_asset(
                 directory=str(_REPO_ROOT),
                 file="services/options-pricer/Dockerfile",
+                platform=ecr_assets.Platform.LINUX_AMD64,
             ),
             memory_size=512,            # Greeks are cheap; smaller mem = cheaper invokes
             timeout=Duration.seconds(15),
@@ -104,6 +114,7 @@ class ApiStack(Stack):
             code=_lambda.DockerImageCode.from_image_asset(
                 directory=str(_REPO_ROOT),
                 file="services/price-cache/Dockerfile",
+                platform=ecr_assets.Platform.LINUX_AMD64,
             ),
             memory_size=1024,
             timeout=Duration.seconds(30),       # yfinance can be slow

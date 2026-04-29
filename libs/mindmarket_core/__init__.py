@@ -1,34 +1,17 @@
 """
 mindmarket_core — pure-compute primitives for the MindMarket AI risk platform.
 
-This package is the **shared library** consumed by:
-  - The Streamlit monolith on EC2 (existing risk_engine.py / options_engine.py
-    delegate here)
-  - Phase 2 Lambda services (services/risk-calculator, services/options-pricer,
-    services/price-cache)
+Lazy-loading package: each submodule has different transitive deps
+(black_scholes only needs scipy; var needs pandas; data_prep needs pandas).
+Lambda services pin only what they use, so we MUST NOT eagerly import all
+submodules here — doing that would force every Lambda to install pandas,
+ballooning images and breaking options-pricer (which deliberately omits
+pandas to save 70 MB).
 
-Design contract:
-  - Every function is pure: no network I/O, no filesystem, no Streamlit, no
-    module-level logging that targets stdout. Inputs in, outputs out.
-  - Optional `logger` parameter where instrumentation matters.
-  - No imports from the parent project's I/O modules (data_provider, app, etc).
-  - Numpy/pandas/scipy only (and `dataclasses` for shared types).
+Consumers should import the specific submodule:
+    from libs.mindmarket_core import black_scholes
+    from libs.mindmarket_core import var
 
-Why this constraint: Lambda containers must be self-contained, must cold-start
-under a second on the import path, and must never depend on Streamlit's
-session_state. Every existing function that touches I/O stays in its original
-module; only the math moves here.
+Package-level exports kept minimal on purpose. If you need a curated public
+surface, use one of the explicit module imports above.
 """
-from . import constants
-from . import var
-from . import portfolio_math
-from . import black_scholes
-from . import data_prep
-
-__all__ = [
-    "constants",
-    "var",
-    "portfolio_math",
-    "black_scholes",
-    "data_prep",
-]
