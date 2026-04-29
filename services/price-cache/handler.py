@@ -52,7 +52,9 @@ from typing import Any
 import boto3
 from botocore.exceptions import ClientError
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+# abspath FIRST — under pytest discovery __file__ can be relative,
+# in which case 3x dirname collapses to "" instead of the repo root.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 
 # Module-level: re-used across warm invocations.

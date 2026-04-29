@@ -31,7 +31,9 @@ import os
 import sys
 from typing import Any
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+# abspath FIRST — under pytest discovery __file__ can be relative,
+# in which case 3x dirname collapses to "" instead of the repo root.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from libs.mindmarket_core import black_scholes as bs  # noqa: E402
 

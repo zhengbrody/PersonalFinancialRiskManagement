@@ -64,7 +64,13 @@ jobs:
           # Each service has its own handler.py; running each service's
           # tests in isolation avoids the cross-service "handler" namespace
           # collision pytest hits when scanning both at once.
-          pytest services/${{ matrix.service }}/tests/ -v
+          #
+          # --override-ini="addopts=" drops the repo-wide pytest.ini's
+          # `--cov=.` / `--cov-fail-under=60` flags. Coverage doesn't
+          # apply here (we install only the service's runtime deps,
+          # not the full repo source), and pytest-cov isn't installed
+          # in this minimal job.
+          pytest --override-ini="addopts=" services/${{ matrix.service }}/tests/ -v
 
   test-libs:
     runs-on: ubuntu-latest
@@ -76,9 +82,13 @@ jobs:
       - name: Install lib deps
         run: |
           python -m pip install --upgrade pip
-          pip install pytest numpy pandas scipy
+          pip install pytest pytest-mock requests numpy pandas scipy
       - name: Run libs tests
-        run: pytest tests/unit/test_libs_*.py tests/unit/test_remote_compute.py -v
+        # --override-ini="addopts=" drops --cov flags from repo pytest.ini
+        # (pytest-cov not installed here; coverage runs in main ci.yml only).
+        run: |
+          pytest --override-ini="addopts=" \
+            tests/unit/test_libs_*.py tests/unit/test_remote_compute.py -v
 
   deploy:
     needs: [test, test-libs]

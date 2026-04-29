@@ -32,7 +32,9 @@ import numpy as np
 import pandas as pd
 
 # libs/ is bind-mounted (or COPY'd) into /var/task/libs at image build time.
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+# abspath FIRST — under pytest discovery __file__ can be relative,
+# in which case 3x dirname collapses to "" instead of the repo root.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from libs.mindmarket_core import var as mv  # noqa: E402
 
