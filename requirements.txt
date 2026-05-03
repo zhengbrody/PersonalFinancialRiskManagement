@@ -14,3 +14,6 @@ requests>=2.31
 tradingview-ta>=3.3
 structlog>=24.1.0
 python-json-logger>=2.0.7
+
+# Auth + per-user portfolios (Supabase Postgres + Auth + RLS)
+supabase>=2.9
