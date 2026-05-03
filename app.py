@@ -1408,6 +1408,150 @@ if run_btn:
 
 
 # ══════════════════════════════════════════════════════════════
+#  Landing page (first-visit experience)
+# ──────────────────────────────────────────────────────────────
+#  Shown when no analysis has run AND the user hasn't dismissed it.
+#  Once they hit "Get Started" or run analysis from the sidebar, the
+#  landing disappears for the rest of the session.
+#
+#  Pure st.markdown(unsafe_allow_html=True) using design tokens — no
+#  new dependencies, no streamlit-components-v2. The "Get Started"
+#  CTA just sets _auto_run and rerun()s, reusing the existing run path.
+# ══════════════════════════════════════════════════════════════
+
+def _render_landing(lang_code: str) -> None:
+    """First-impression hero + features + CTA for unauth visitors."""
+    is_zh = lang_code == "zh"
+
+    # Hero
+    hero_title = "Institutional-grade portfolio risk, made accessible." if not is_zh \
+                 else "把机构级风险分析,带给散户。"
+    hero_sub = (
+        "Monte Carlo VaR · Black-Scholes Greeks · SEC 13F · AI risk digests"
+        " — one click, no spreadsheet."
+        if not is_zh else
+        "蒙特卡洛 VaR · Black-Scholes 希腊字母 · SEC 13F · AI 风险摘要"
+        " — 一键运行,告别 Excel。"
+    )
+    cta_label = "Run Demo Portfolio" if not is_zh else "运行 Demo 组合"
+    skip_label = "Skip to dashboard" if not is_zh else "跳过,直接看仪表盘"
+
+    st.markdown(
+        f"""
+<div style="text-align:center;padding:48px 16px 32px 16px;
+            background: linear-gradient(135deg,#0a0e14 0%,#111820 100%);
+            border:1px solid rgba(11,114,133,0.25);
+            border-radius:14px;margin:8px 0 24px 0;">
+  <div style="font-size:14px;letter-spacing:2px;color:#0B7285;
+              font-weight:700;text-transform:uppercase;margin-bottom:12px;">
+    MindMarket AI
+  </div>
+  <div style="font-size:34px;font-weight:800;color:#E6EDF3;
+              line-height:1.2;margin:0 auto;max-width:680px;">
+    {hero_title}
+  </div>
+  <div style="font-size:15px;color:#8B949E;margin:18px auto 0;
+              max-width:560px;line-height:1.6;">
+    {hero_sub}
+  </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    # Feature grid
+    features = [
+        ("🛡️", "Risk Engine" if not is_zh else "风险引擎",
+         "Monte Carlo VaR · EWMA covariance · component VaR · stress scenarios"
+         if not is_zh else
+         "蒙特卡洛 VaR · EWMA 协方差 · 边际 VaR · 压力测试"),
+        ("🎲", "Options Lab" if not is_zh else "期权实验室",
+         "Black-Scholes pricing · analytical Greeks · IV solver · 10 strategies"
+         if not is_zh else
+         "Black-Scholes 定价 · 解析希腊字母 · IV 求解 · 10 种策略"),
+        ("🏛️", "Smart Money" if not is_zh else "Smart Money",
+         "SEC 13F filings from 30+ top institutions · crowding · unusual flow"
+         if not is_zh else
+         "30+ 顶级机构 SEC 13F · 拥挤度 · 异常期权流"),
+        ("🤖", "AI Co-pilot" if not is_zh else "AI 副驾",
+         "Claude / DeepSeek narrative on every page · earnings transcripts · sentiment"
+         if not is_zh else
+         "每页 Claude / DeepSeek 叙述 · 财报电话会 · 情绪分析"),
+    ]
+    cols = st.columns(4)
+    for col, (icon, title, desc) in zip(cols, features):
+        with col:
+            st.markdown(
+                f"""
+<div style="background:#0a0e14;border:1px solid rgba(139,148,158,0.12);
+            border-radius:10px;padding:18px 16px;height:175px;
+            display:flex;flex-direction:column;">
+  <div style="font-size:24px;margin-bottom:8px;">{icon}</div>
+  <div style="font-size:14px;font-weight:700;color:#E6EDF3;
+              margin-bottom:6px;">{title}</div>
+  <div style="font-size:12px;color:#8B949E;line-height:1.5;">
+    {desc}
+  </div>
+</div>
+""",
+                unsafe_allow_html=True,
+            )
+
+    # CTA row
+    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+    cta_col1, cta_col2, cta_col3 = st.columns([1, 1, 2])
+    with cta_col1:
+        if st.button(cta_label, type="primary", use_container_width=True, key="landing_cta"):
+            st.session_state._auto_run = True
+            st.session_state._skip_landing = True
+            st.rerun()
+    with cta_col2:
+        if st.button(skip_label, use_container_width=True, key="landing_skip"):
+            st.session_state._skip_landing = True
+            st.rerun()
+    with cta_col3:
+        st.caption(
+            "💡 Demo uses the built-in portfolio. Configure your own holdings in "
+            "`portfolio_config.py` or via the sidebar JSON editor."
+            if not is_zh else
+            "💡 Demo 使用内置组合。可在 `portfolio_config.py` 编辑或侧边栏 JSON 中替换为你自己的持仓。"
+        )
+
+    # Footer micro-strip — tech stack + GitHub
+    st.markdown(
+        """
+<div style="margin-top:40px;padding-top:16px;
+            border-top:1px solid rgba(139,148,158,0.1);
+            display:flex;justify-content:space-between;align-items:center;
+            font-size:12px;color:#484F58;">
+  <div>Streamlit · NumPy · SciPy · Plotly · AWS Lambda · DynamoDB</div>
+  <div>
+    <a href="https://github.com/zhengbrody/PersonalFinancialRiskManagement"
+       style="color:#0B7285;text-decoration:none;">GitHub</a>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/zhengbrody/PersonalFinancialRiskManagement/blob/aws-migration/README.md#%EF%B8%8F-aws-migration-phases-12-complete"
+       style="color:#0B7285;text-decoration:none;">AWS Architecture</a>
+  </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+
+# Show landing only if (1) no analysis has been run yet AND
+# (2) user hasn't clicked through. Once dismissed, stays dismissed
+# for the session — re-running analysis won't bring it back.
+_show_landing = (
+    not st.session_state.get("analysis_ready", False)
+    and not st.session_state.get("_skip_landing", False)
+    and not run_btn
+)
+if _show_landing:
+    _render_landing(lang)
+    st.stop()  # don't render the run-analysis canvas under it
+
+
+# ══════════════════════════════════════════════════════════════
 #  Run Analysis
 # ══════════════════════════════════════════════════════════════
 if st.session_state.pop("_auto_run", False):
