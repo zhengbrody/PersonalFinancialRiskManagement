@@ -87,6 +87,25 @@ def render_shared_sidebar():
         _run_label_live = (
             "🚀 Refresh & Run Analysis" if current_lang == "en" else "🚀 刷新并运行分析"
         )
+        # Active-portfolio resolver: when user is logged in with a DB portfolio,
+        # use that; otherwise fall back to the hardcoded portfolio_config defaults.
+        # See libs/auth/active_portfolio.py for the decision tree.
+        try:
+            from libs.auth.active_portfolio import (
+                get_active_holdings,
+                get_active_margin_loan,
+                get_active_portfolio_meta,
+            )
+            _active_meta = get_active_portfolio_meta()
+        except Exception:
+            _active_meta = {"name": "Built-in demo portfolio", "source": "hardcoded"}
+
+        # Inline banner so user knows which portfolio is loaded
+        if _active_meta.get("source") == "supabase":
+            st.caption(f"📂 Active: **{_active_meta['name']}** (your DB portfolio)")
+        else:
+            st.caption(f"📂 Active: **{_active_meta['name']}**")
+
         if st.button(
             _run_label_live, type="primary", use_container_width=True, key="refresh_and_run"
         ):
@@ -98,12 +117,22 @@ def render_shared_sidebar():
                 import portfolio_config as _pc
 
                 importlib.reload(_pc)
-                PORTFOLIO_HOLDINGS = _pc.PORTFOLIO_HOLDINGS
-                MARGIN_LOAN = _pc.MARGIN_LOAN
+                # Resolved at click-time so changes to user's DB portfolio
+                # picked up without restarting Streamlit.
+                try:
+                    PORTFOLIO_HOLDINGS = get_active_holdings()
+                    MARGIN_LOAN = get_active_margin_loan()
+                except Exception:
+                    PORTFOLIO_HOLDINGS = _pc.PORTFOLIO_HOLDINGS
+                    MARGIN_LOAN = _pc.MARGIN_LOAN
                 from logging_config import get_logger
 
                 logger = get_logger(__name__)
-                logger.info("ui.button.refresh_and_run_clicked")
+                logger.info(
+                    "ui.button.refresh_and_run_clicked",
+                    portfolio_source=_active_meta.get("source"),
+                    portfolio_name=_active_meta.get("name"),
+                )
 
                 def _shares(t):
                     h = PORTFOLIO_HOLDINGS[t]
@@ -149,23 +178,35 @@ def render_shared_sidebar():
                         else None
                     )
 
-                    # Optional position P&L (only if avg_cost set on holdings).
-                    # Coverage computed by market value, not ticker count.
+                    # Position-level P&L from avg_cost (works for both DB and
+                    # hardcoded sources because PORTFOLIO_HOLDINGS is the unified
+                    # shape now).
                     position_pnl_dollar = None
                     position_pnl_pct = None
                     position_cost_info = None
                     try:
-                        pc_info = (
-                            _pc.position_cost_summary(market_values=values)
-                            if hasattr(_pc, "position_cost_summary")
-                            else None
-                        )
-                        if pc_info and pc_info["total_position_cost"] > 0:
-                            position_cost_info = pc_info
-                            known = set(pc_info["tickers_with_cost"])
+                        # Compute inline so we don't depend on portfolio_config's
+                        # `position_cost_summary` helper (which only sees the
+                        # hardcoded constants, not the user's DB rows).
+                        total_position_cost = 0.0
+                        tickers_with_cost = []
+                        for tk, h in PORTFOLIO_HOLDINGS.items():
+                            if isinstance(h, dict) and h.get("avg_cost") is not None:
+                                cost = float(h["shares"]) * float(h["avg_cost"])
+                                total_position_cost += cost
+                                tickers_with_cost.append(tk)
+                        if total_position_cost > 0:
+                            known = set(tickers_with_cost)
                             covered_long = sum(v for tk, v in values.items() if tk in known)
-                            position_pnl_dollar = covered_long - pc_info["total_position_cost"]
-                            position_pnl_pct = position_pnl_dollar / pc_info["total_position_cost"]
+                            position_pnl_dollar = covered_long - total_position_cost
+                            position_pnl_pct = position_pnl_dollar / total_position_cost
+                            position_cost_info = {
+                                "total_position_cost": total_position_cost,
+                                "tickers_with_cost": tickers_with_cost,
+                                "coverage_by_value": (
+                                    covered_long / total_value if total_value > 0 else 0
+                                ),
+                            }
                     except Exception:
                         pass
 

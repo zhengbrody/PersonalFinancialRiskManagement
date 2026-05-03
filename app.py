@@ -1780,289 +1780,39 @@ if run_btn:
 #  Welcome / Landing Page
 # ══════════════════════════════════════════════════════════════
 if not st.session_state.analysis_ready:
-    from ui.tokens import T
-
-    # ── Welcome Hero ──────────────────────────────────────────
-    _hero = (
-        f'<div style="text-align:center;padding:56px 0 24px 0">'
-        f'<div style="display:inline-block;padding:4px 12px;background:{T.accent_bg};'
-        f"border:1px solid {T.accent};border-radius:20px;{T.font_overline};"
-        f'color:{T.accent};margin-bottom:20px">INSTITUTIONAL-GRADE ANALYTICS</div>'
-        f'<h1 style="color:{T.text};font-size:56px;font-weight:800;letter-spacing:-1.5px;'
-        f'margin:0 0 16px 0;line-height:1.1">MindMarket <span style="color:{T.accent}">AI</span></h1>'
-        f'<p style="font-size:20px;font-weight:400;color:{T.text_secondary};'
-        f'max-width:640px;margin:0 auto 8px auto;line-height:1.5">'
-        f"Professional portfolio risk analytics with AI-powered insights, "
-        f"built on the quantitative stack used at hedge funds.</p>"
-        f'<p style="{T.font_caption};color:{T.text_muted};margin-top:12px">'
-        f"Monte Carlo VaR &nbsp;·&nbsp; Multi-Factor Attribution &nbsp;·&nbsp; "
-        f"Options Greeks &nbsp;·&nbsp; 13F Smart Money &nbsp;·&nbsp; Regime Detection</p>"
-        f"</div>"
+    # ── Pre-analysis state ────────────────────────────────────────
+    # The big marketing welcome / hero section that USED to live here
+    # has been replaced by the new Landing page (rendered earlier in
+    # this script via _render_landing(lang)). After "Skip to dashboard"
+    # the user lands here in the "no analysis yet" state — keep this
+    # ultra-light: one CTA, nothing flashy. Sidebar handles the actual
+    # Run button.
+    st.info(
+        "👈 Configure your portfolio and click **Refresh & Run Analysis** in the "
+        "sidebar to start. Results flow into Overview, Risk, Markets, Portfolio, "
+        "and 6 more pages. Logged-in users analyze their own DB-stored portfolio; "
+        "everyone else gets the built-in demo."
     )
-    st.markdown(_hero, unsafe_allow_html=True)
-
-    # ── Stats Strip ───────────────────────────────────────────
-    stat_cols = st.columns(4)
-    _stats = [
-        ("10", "Analytics Pages"),
-        ("522+", "Unit Tests"),
-        ("3", "LLM Backends"),
-        ("31", "Tracked 13F Filers"),
-    ]
-    for col, (num, label) in zip(stat_cols, _stats):
-        with col:
-            _card = (
-                f'<div style="text-align:center;background:{T.surface};'
-                f"border:1px solid {T.border_subtle};border-radius:{T.radius};"
-                f'padding:{T.sp_lg} {T.sp_md}">'
-                f'<div style="font-size:28px;font-weight:700;color:{T.accent};'
-                f'line-height:1;margin-bottom:6px">{num}</div>'
-                f'<div style="{T.font_caption};color:{T.text_secondary};'
-                f'text-transform:uppercase;letter-spacing:0.5px">{label}</div>'
-                f"</div>"
-            )
-            st.markdown(_card, unsafe_allow_html=True)
-
-    # ── Platform Capabilities (6-card grid) ───────────────────
-    render_section(
-        "Platform Capabilities",
-        subtitle="Production-grade quantitative tools on a single dashboard",
-    )
-    _features = [
-        (
-            "Risk Engine",
-            "Monte Carlo VaR/CVaR, EWMA covariance, Component VaR, stress testing, margin-call detection.",
-            "risk_engine.py · 1,301 lines",
-        ),
-        (
-            "Options Lab",
-            "Black-Scholes pricing, full Greeks, IV surface, 10 strategy types, portfolio-level exposure.",
-            "options_engine.py · 1,227 lines",
-        ),
-        (
-            "Factor Models",
-            "6-factor OLS with significance testing, macro sensitivities, Barra PCA attribution, rolling betas.",
-            "6 benchmark factors + 3 macro",
-        ),
-        (
-            "Institutional Intel",
-            "SEC 13F parser for 31 top institutions, smart-money overlap scoring, crowding detection.",
-            "institutional_tracker.py · 1,358 lines",
-        ),
-        (
-            "Regime & Backtest",
-            "HMM regime detection, vectorized backtesting, Brinson-Hood-Beebower attribution, tracking error.",
-            "regime_detector + backtest_engine",
-        ),
-        (
-            "AI Digests",
-            "Narrative analysis on every page via Claude, DeepSeek, or local Ollama (auto-detected).",
-            "3 pluggable LLM backends",
-        ),
-    ]
-    for row_idx in range(0, 6, 3):
-        cols = st.columns(3)
-        for col, (title, desc, meta) in zip(cols, _features[row_idx : row_idx + 3]):
-            with col:
-                _card = (
-                    f'<div style="background:{T.surface};border:1px solid {T.border_subtle};'
-                    f"border-radius:{T.radius};padding:{T.sp_lg};height:100%;"
-                    f'min-height:160px;display:flex;flex-direction:column">'
-                    f'<div style="{T.font_section};color:{T.text};margin-bottom:{T.sp_sm}">{title}</div>'
-                    f'<div style="{T.font_body};color:{T.text_secondary};line-height:1.6;'
-                    f'flex:1;margin-bottom:{T.sp_md}">{desc}</div>'
-                    f'<div style="{T.font_caption};color:{T.text_muted};'
-                    f"border-top:1px solid {T.border_subtle};padding-top:{T.sp_sm};"
-                    f'font-family:ui-monospace,SFMono-Regular,Consolas,monospace">{meta}</div>'
-                    f"</div>"
-                )
-                st.markdown(_card, unsafe_allow_html=True)
-
-    # ── Use Cases ─────────────────────────────────────────────
-    render_section("Who It's Built For")
-    _personas = [
-        (
-            "Active Investor",
-            "Track factor exposures, rebalance with the efficient frontier, stress-test scenarios before trading.",
-            [
-                "Efficient frontier optimization",
-                "Scenario simulator (-30% to +30%)",
-                "AI risk digests",
-            ],
-        ),
-        (
-            "Options Trader",
-            "Model complex strategies, monitor portfolio Greeks, scan unusual options flow from institutions.",
-            ["10 option strategies", "Live IV surface", "Smart-money options flow"],
-        ),
-        (
-            "Long-Term Allocator",
-            "Understand true factor exposure across equities, crypto, and ETFs. Watch institutional crowding.",
-            [
-                "6-factor + macro attribution",
-                "Regime-aware rebalancing",
-                "13F institutional overlap",
-            ],
-        ),
-    ]
-    pcols = st.columns(3)
-    for col, (name, desc, bullets) in zip(pcols, _personas):
-        with col:
-            _bullets_html = "".join(
-                [
-                    f'<li style="margin-bottom:4px;color:{T.text_secondary};{T.font_body}">{b}</li>'
-                    for b in bullets
-                ]
-            )
-            _card = (
-                f'<div style="background:{T.surface};border:1px solid {T.border_subtle};'
-                f'border-radius:{T.radius};padding:{T.sp_lg};height:100%">'
-                f'<div style="{T.font_overline};color:{T.accent};margin-bottom:{T.sp_sm}">For</div>'
-                f'<div style="{T.font_page_title};color:{T.text};margin-bottom:{T.sp_sm}">{name}</div>'
-                f'<div style="{T.font_body};color:{T.text_secondary};line-height:1.6;'
-                f'margin-bottom:{T.sp_md}">{desc}</div>'
-                f'<ul style="list-style:none;padding:0;margin:0;'
-                f'border-top:1px solid {T.border_subtle};padding-top:{T.sp_sm}">{_bullets_html}</ul>'
-                f"</div>"
-            )
-            st.markdown(_card, unsafe_allow_html=True)
-
-    # ── How It Works ──────────────────────────────────────────
-    render_section("How It Works")
-    hw_cols = st.columns(3)
-    _steps = [
-        (
-            "01",
-            "Configure",
-            "Enter portfolio weights in the sidebar, set Monte Carlo simulations, pick an AI provider.",
-        ),
-        (
-            "02",
-            "Analyze",
-            "Click Run Analysis. The engine pulls prices, computes VaR, fits factors, and runs stress scenarios.",
-        ),
-        (
-            "03",
-            "Explore",
-            "Navigate 10 pages of dashboards. AI digests summarize each section automatically.",
-        ),
-    ]
-    for col, (num, step, desc) in zip(hw_cols, _steps):
-        with col:
-            _card = (
-                f'<div style="background:{T.surface};border:1px solid {T.border_subtle};'
-                f'border-radius:{T.radius};padding:{T.sp_lg} {T.sp_xl};height:100%">'
-                f'<div style="font-size:32px;font-weight:800;color:{T.accent};'
-                f'opacity:0.6;line-height:1;margin-bottom:{T.sp_sm}">{num}</div>'
-                f'<div style="{T.font_section};color:{T.text};margin-bottom:{T.sp_sm}">{step}</div>'
-                f'<div style="{T.font_body};color:{T.text_secondary};line-height:1.6">{desc}</div>'
-                f"</div>"
-            )
-            st.markdown(_card, unsafe_allow_html=True)
-
-    # ── Example Portfolios ────────────────────────────────────
-    render_section(
-        "Try a Sample Portfolio",
-        subtitle="Click any preset to load it into the sidebar, then Run Analysis",
-    )
-    col_ex1, col_ex2, col_ex3 = st.columns(3)
-    _examples = [
-        (
-            "Tech-Heavy",
-            {"AAPL": 0.20, "GOOGL": 0.20, "MSFT": 0.20, "NVDA": 0.15, "META": 0.15, "TSLA": 0.10},
-            "High growth, concentrated in Big Tech",
-        ),
-        (
-            "Balanced",
-            {"SPY": 0.40, "TLT": 0.20, "GLD": 0.15, "QQQ": 0.15, "IWM": 0.10},
-            "Diversified across equities, bonds, commodities",
-        ),
-        (
-            "Crypto-Enhanced",
-            {"SPY": 0.30, "BTC-USD": 0.25, "ETH-USD": 0.20, "AAPL": 0.15, "GLD": 0.10},
-            "Traditional assets blended with digital currencies",
-        ),
-    ]
-    for col, (name, pf, desc) in zip([col_ex1, col_ex2, col_ex3], _examples):
-        with col:
-            if st.button(name, use_container_width=True, type="secondary", key=f"ex_{name}"):
-                st.session_state._example_portfolio = json.dumps(pf, indent=2)
-                st.rerun()
-            st.caption(desc)
-
-    # ── Tech Credibility Strip ────────────────────────────────
-    render_section("Under the Hood")
-    _badges = [
-        "Monte Carlo VaR",
-        "EWMA Covariance",
-        "Black-Scholes",
-        "Newton-Raphson IV",
-        "Gaussian Mixture HMM",
-        "Brinson Attribution",
-        "SEC 13F Parser",
-        "OLS Regression",
-        "Markowitz Optimization",
-        "Structured Logging",
-        "Pytest · 522 tests",
-        "Python 3.10+",
-    ]
-    _badge_html = "".join(
-        [
-            f'<span style="display:inline-block;padding:6px 12px;margin:4px;'
-            f"background:{T.surface};border:1px solid {T.border_default};"
-            f"border-radius:20px;{T.font_caption};color:{T.text_secondary};"
-            f'font-family:ui-monospace,SFMono-Regular,Consolas,monospace">{b}</span>'
-            for b in _badges
-        ]
-    )
-    st.markdown(
-        f'<div style="text-align:center;padding:{T.sp_md} 0 {T.sp_xl} 0">{_badge_html}</div>',
-        unsafe_allow_html=True,
-    )
-
-    # ── CTA ───────────────────────────────────────────────────
-    _cta = (
-        f'<div style="text-align:center;margin:{T.sp_2xl} auto {T.sp_xl} auto;'
-        f"max-width:560px;padding:{T.sp_xl};background:{T.accent_bg};"
-        f'border:1px solid {T.accent};border-radius:{T.radius_lg}">'
-        f'<div style="{T.font_section};color:{T.text};margin-bottom:{T.sp_sm}">'
-        f"Ready to analyze your portfolio?</div>"
-        f'<div style="{T.font_body};color:{T.text_secondary};line-height:1.6">'
-        f"Open the sidebar on the left, set your holdings and AI provider, "
-        f'then click <b style="color:{T.text}">Run Analysis</b>. '
-        f"Results stream into Overview, Risk, Markets and 7 other pages.</div>"
-        f"</div>"
-    )
-    st.markdown(_cta, unsafe_allow_html=True)
 
 else:
-    # ── Analysis Ready State ──────────────────────────────────
-    render_ai_digest(
-        "Analysis complete. Use the sidebar navigation to explore detailed results across Overview, Risk, Markets, and Portfolio pages.",
+    # ── Analysis Ready: redirect to the full Overview dashboard ──
+    # The home page used to render a 4-KPI mini-dashboard here, which
+    # semantically duplicated pages/1_Overview.py. Removed in favor of
+    # a clean "go to Overview" CTA — Overview is the single source of
+    # truth for the post-analysis dashboard.
+    st.success(
+        "✅ Analysis complete. **Open `Overview`** in the left sidebar for the "
+        "full dashboard — KPIs, cumulative returns, drawdown, P&L breakdown, "
+        "and the AI risk digest. Other pages (Risk, Markets, Options, etc.) "
+        "are also unlocked."
     )
-
-    if st.session_state.report:
-        report = st.session_state.report
-        render_section("Portfolio Summary")
-        render_kpi_row(
-            [
-                {
-                    "label": "Annual Return",
-                    "value": f"{report.annual_return:.2%}",
-                    "delta_color": "positive" if report.annual_return >= 0 else "negative",
-                },
-                {"label": "Volatility", "value": f"{report.annual_volatility:.2%}"},
-                {
-                    "label": "Sharpe Ratio",
-                    "value": f"{report.sharpe_ratio:.2f}",
-                    "tooltip": f"Rf={report.risk_free_rate:.2%}",
-                },
-                {
-                    "label": f"VaR 95% ({st.session_state.mc_horizon}d)",
-                    "value": f"{report.var_95:.2%}",
-                    "tooltip": f"CVaR: {report.cvar_95:.2%}",
-                },
-            ]
+    if st.session_state.get("report"):
+        _r = st.session_state.report
+        st.caption(
+            f"Quick stats: Annual Return {_r.annual_return:.2%}  ·  "
+            f"Vol {_r.annual_volatility:.2%}  ·  "
+            f"Sharpe {_r.sharpe_ratio:.2f}  ·  "
+            f"VaR 95% ({st.session_state.mc_horizon}d) {_r.var_95:.2%}"
         )
 
 
