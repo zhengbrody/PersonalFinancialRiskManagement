@@ -57,8 +57,21 @@ cdk deploy --all \
 # ── Step 2: extract Elastic IP from stack outputs ──────────
 EIP=$(jq -r '.["MindMarket-Compute"].PublicIp' cdk.out/outputs.json)
 INSTANCE_ID=$(jq -r '.["MindMarket-Compute"].InstanceId' cdk.out/outputs.json)
-SITE_HOST="${EIP//./-}.nip.io"
-echo "▶ EIP=$EIP  instance=$INSTANCE_ID  site_host=$SITE_HOST"
+
+# SITE_HOST: pass `DOMAIN=mindmarket.app ./deploy-phase-1.sh` to use a real
+# domain. Otherwise fall back to nip.io which works without DNS config but
+# gives an ugly URL. Caddy will request a Let's Encrypt cert for whichever
+# host name we pass — for a real domain you MUST point its DNS at the EIP
+# BEFORE this runs (or the ACME HTTP-01 challenge will fail).
+if [[ -n "${DOMAIN:-}" ]]; then
+    SITE_HOST="$DOMAIN"
+    echo "▶ EIP=$EIP  instance=$INSTANCE_ID  site_host=$SITE_HOST  (real domain)"
+    echo "   ⚠️  Verify DNS A-record for $SITE_HOST → $EIP is in place,"
+    echo "       otherwise Let's Encrypt cert issuance will fail."
+else
+    SITE_HOST="${EIP//./-}.nip.io"
+    echo "▶ EIP=$EIP  instance=$INSTANCE_ID  site_host=$SITE_HOST  (nip.io fallback)"
+fi
 
 # ── Step 3: wait for SSH availability + user-data marker ────
 echo "▶ waiting for SSH + bootstrap to complete (up to 5 min)..."
