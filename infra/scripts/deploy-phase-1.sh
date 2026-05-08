@@ -127,9 +127,12 @@ cat > .env <<ENVFILE
 SITE_HOST=${SITE_HOST}
 ENVFILE
 
-# Pull secrets into env vars too (compose.aws.yml expects them)
+# Pull secrets into env vars too (compose.aws.yml expects them).
+# Includes Supabase URL + anon key for the per-user auth flow.
+# Anon key is intentionally exposed (RLS enforces isolation server-side);
+# service-role key is NEVER copied here.
 {
-    grep -E '^(ANTHROPIC|DEEPSEEK|FMP)_API_KEY' .streamlit/secrets.toml \
+    grep -E '^(ANTHROPIC_API_KEY|DEEPSEEK_API_KEY|FMP_API_KEY|SUPABASE_URL|SUPABASE_ANON_KEY)' .streamlit/secrets.toml \
         | sed 's/ *= */=/; s/"//g' || true
 } >> .env
 

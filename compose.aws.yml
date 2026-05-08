@@ -23,6 +23,11 @@ services:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - FMP_API_KEY=${FMP_API_KEY:-}
+      # Supabase Auth + per-user portfolios. anon key is safe to expose
+      # (RLS at the DB enforces tenant isolation); service-role key is
+      # NEVER passed here — that's for admin scripts only.
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
     # python:3.10-slim doesn't include curl; use urllib (always present).
     healthcheck:
       test: ["CMD", "python", "-c",
