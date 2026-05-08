@@ -1388,498 +1388,508 @@ if "analysis_ready" not in st.session_state:
 #  Sidebar — Using Shared Component (Same as Pages)
 # ══════════════════════════════════════════════════════════════
 
-# Use the same shared sidebar component that pages use
-from ui.shared_sidebar import render_shared_sidebar
-
-lang, t = render_shared_sidebar()
-
-# Get values from session state (set by shared_sidebar)
-weights_input = st.session_state.get("weights_input", "")
-period_years = st.session_state.get("period_years", 2)
-mc_sims = st.session_state.get("mc_sims", 10000)
-mc_horizon = st.session_state.get("mc_horizon", 21)
-market_shock = st.session_state.get("market_shock", -0.10)
-risk_free_fallback = st.session_state.get("risk_free_fallback", 0.045)
-
-# Check if Run Analysis was triggered from sidebar
-run_btn = st.session_state.get("_run_trigger", False)
-if run_btn:
-    st.session_state._run_trigger = False  # Reset trigger
-
 
 # ══════════════════════════════════════════════════════════════
-#  Landing page (first-visit experience)
-# ──────────────────────────────────────────────────────────────
-#  Shown when no analysis has run AND the user hasn't dismissed it.
-#  Once they hit "Get Started" or run analysis from the sidebar, the
-#  landing disappears for the rest of the session.
-#
-#  Pure st.markdown(unsafe_allow_html=True) using design tokens — no
-#  new dependencies, no streamlit-components-v2. The "Get Started"
-#  CTA just sets _auto_run and rerun()s, reusing the existing run path.
+#  UI rendering — only fires when app.py is the streamlit entry,
+#  not when imported by a page (avoids duplicate sidebar widgets).
 # ══════════════════════════════════════════════════════════════
+def _main_ui():
+    # Use the same shared sidebar component that pages use
+    from ui.shared_sidebar import render_shared_sidebar
 
-def _render_landing(lang_code: str) -> None:
-    """First-impression hero + features + CTA for unauth visitors."""
-    is_zh = lang_code == "zh"
+    lang, t = render_shared_sidebar()
 
-    # Hero
-    hero_title = "Institutional-grade portfolio risk, made accessible." if not is_zh \
-                 else "把机构级风险分析,带给散户。"
-    hero_sub = (
-        "Monte Carlo VaR · Black-Scholes Greeks · SEC 13F · AI risk digests"
-        " — one click, no spreadsheet."
-        if not is_zh else
-        "蒙特卡洛 VaR · Black-Scholes 希腊字母 · SEC 13F · AI 风险摘要"
-        " — 一键运行,告别 Excel。"
-    )
-    cta_label = "Run Demo Portfolio" if not is_zh else "运行 Demo 组合"
-    skip_label = "Skip to dashboard" if not is_zh else "跳过,直接看仪表盘"
+    # Get values from session state (set by shared_sidebar)
+    weights_input = st.session_state.get("weights_input", "")
+    period_years = st.session_state.get("period_years", 2)
+    mc_sims = st.session_state.get("mc_sims", 10000)
+    mc_horizon = st.session_state.get("mc_horizon", 21)
+    market_shock = st.session_state.get("market_shock", -0.10)
+    risk_free_fallback = st.session_state.get("risk_free_fallback", 0.045)
 
-    st.markdown(
-        f"""
-<div style="text-align:center;padding:48px 16px 32px 16px;
-            background: linear-gradient(135deg,#0a0e14 0%,#111820 100%);
-            border:1px solid rgba(11,114,133,0.25);
-            border-radius:14px;margin:8px 0 24px 0;">
-  <div style="font-size:14px;letter-spacing:2px;color:#0B7285;
-              font-weight:700;text-transform:uppercase;margin-bottom:12px;">
-    MindMarket AI
-  </div>
-  <div style="font-size:34px;font-weight:800;color:#E6EDF3;
-              line-height:1.2;margin:0 auto;max-width:680px;">
-    {hero_title}
-  </div>
-  <div style="font-size:15px;color:#8B949E;margin:18px auto 0;
-              max-width:560px;line-height:1.6;">
-    {hero_sub}
-  </div>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
+    # Check if Run Analysis was triggered from sidebar
+    run_btn = st.session_state.get("_run_trigger", False)
+    if run_btn:
+        st.session_state._run_trigger = False  # Reset trigger
 
-    # Feature grid
-    features = [
-        ("🛡️", "Risk Engine" if not is_zh else "风险引擎",
-         "Monte Carlo VaR · EWMA covariance · component VaR · stress scenarios"
-         if not is_zh else
-         "蒙特卡洛 VaR · EWMA 协方差 · 边际 VaR · 压力测试"),
-        ("🎲", "Options Lab" if not is_zh else "期权实验室",
-         "Black-Scholes pricing · analytical Greeks · IV solver · 10 strategies"
-         if not is_zh else
-         "Black-Scholes 定价 · 解析希腊字母 · IV 求解 · 10 种策略"),
-        ("🏛️", "Smart Money" if not is_zh else "Smart Money",
-         "SEC 13F filings from 30+ top institutions · crowding · unusual flow"
-         if not is_zh else
-         "30+ 顶级机构 SEC 13F · 拥挤度 · 异常期权流"),
-        ("🤖", "AI Co-pilot" if not is_zh else "AI 副驾",
-         "Claude / DeepSeek narrative on every page · earnings transcripts · sentiment"
-         if not is_zh else
-         "每页 Claude / DeepSeek 叙述 · 财报电话会 · 情绪分析"),
-    ]
-    cols = st.columns(4)
-    for col, (icon, title, desc) in zip(cols, features):
-        with col:
-            st.markdown(
-                f"""
-<div style="background:#0a0e14;border:1px solid rgba(139,148,158,0.12);
-            border-radius:10px;padding:18px 16px;height:175px;
-            display:flex;flex-direction:column;">
-  <div style="font-size:24px;margin-bottom:8px;">{icon}</div>
-  <div style="font-size:14px;font-weight:700;color:#E6EDF3;
-              margin-bottom:6px;">{title}</div>
-  <div style="font-size:12px;color:#8B949E;line-height:1.5;">
-    {desc}
-  </div>
-</div>
-""",
-                unsafe_allow_html=True,
-            )
 
-    # CTA row
-    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
-    cta_col1, cta_col2, cta_col3 = st.columns([1, 1, 2])
-    with cta_col1:
-        if st.button(cta_label, type="primary", use_container_width=True, key="landing_cta"):
-            st.session_state._auto_run = True
-            st.session_state._skip_landing = True
-            st.rerun()
-    with cta_col2:
-        if st.button(skip_label, use_container_width=True, key="landing_skip"):
-            st.session_state._skip_landing = True
-            st.rerun()
-    with cta_col3:
-        st.caption(
-            "💡 Demo uses the built-in portfolio. Configure your own holdings in "
-            "`portfolio_config.py` or via the sidebar JSON editor."
+    # ══════════════════════════════════════════════════════════════
+    #  Landing page (first-visit experience)
+    # ──────────────────────────────────────────────────────────────
+    #  Shown when no analysis has run AND the user hasn't dismissed it.
+    #  Once they hit "Get Started" or run analysis from the sidebar, the
+    #  landing disappears for the rest of the session.
+    #
+    #  Pure st.markdown(unsafe_allow_html=True) using design tokens — no
+    #  new dependencies, no streamlit-components-v2. The "Get Started"
+    #  CTA just sets _auto_run and rerun()s, reusing the existing run path.
+    # ══════════════════════════════════════════════════════════════
+
+    def _render_landing(lang_code: str) -> None:
+        """First-impression hero + features + CTA for unauth visitors."""
+        is_zh = lang_code == "zh"
+
+        # Hero
+        hero_title = "Institutional-grade portfolio risk, made accessible." if not is_zh \
+                     else "把机构级风险分析,带给散户。"
+        hero_sub = (
+            "Monte Carlo VaR · Black-Scholes Greeks · SEC 13F · AI risk digests"
+            " — one click, no spreadsheet."
             if not is_zh else
-            "💡 Demo 使用内置组合。可在 `portfolio_config.py` 编辑或侧边栏 JSON 中替换为你自己的持仓。"
+            "蒙特卡洛 VaR · Black-Scholes 希腊字母 · SEC 13F · AI 风险摘要"
+            " — 一键运行,告别 Excel。"
+        )
+        cta_label = "Run Demo Portfolio" if not is_zh else "运行 Demo 组合"
+        skip_label = "Skip to dashboard" if not is_zh else "跳过,直接看仪表盘"
+
+        st.markdown(
+            f"""
+    <div style="text-align:center;padding:48px 16px 32px 16px;
+                background: linear-gradient(135deg,#0a0e14 0%,#111820 100%);
+                border:1px solid rgba(11,114,133,0.25);
+                border-radius:14px;margin:8px 0 24px 0;">
+      <div style="font-size:14px;letter-spacing:2px;color:#0B7285;
+                  font-weight:700;text-transform:uppercase;margin-bottom:12px;">
+        MindMarket AI
+      </div>
+      <div style="font-size:34px;font-weight:800;color:#E6EDF3;
+                  line-height:1.2;margin:0 auto;max-width:680px;">
+        {hero_title}
+      </div>
+      <div style="font-size:15px;color:#8B949E;margin:18px auto 0;
+                  max-width:560px;line-height:1.6;">
+        {hero_sub}
+      </div>
+    </div>
+    """,
+            unsafe_allow_html=True,
         )
 
-    # Footer micro-strip — tech stack + GitHub
-    st.markdown(
-        """
-<div style="margin-top:40px;padding-top:16px;
-            border-top:1px solid rgba(139,148,158,0.1);
-            display:flex;justify-content:space-between;align-items:center;
-            font-size:12px;color:#484F58;">
-  <div>Streamlit · NumPy · SciPy · Plotly · AWS Lambda · DynamoDB</div>
-  <div>
-    <a href="https://github.com/zhengbrody/PersonalFinancialRiskManagement"
-       style="color:#0B7285;text-decoration:none;">GitHub</a>
-    &nbsp;·&nbsp;
-    <a href="https://github.com/zhengbrody/PersonalFinancialRiskManagement/blob/aws-migration/README.md#%EF%B8%8F-aws-migration-phases-12-complete"
-       style="color:#0B7285;text-decoration:none;">AWS Architecture</a>
-  </div>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
-
-
-# Show landing only if (1) no analysis has been run yet AND
-# (2) user hasn't clicked through. Once dismissed, stays dismissed
-# for the session — re-running analysis won't bring it back.
-_show_landing = (
-    not st.session_state.get("analysis_ready", False)
-    and not st.session_state.get("_skip_landing", False)
-    and not run_btn
-)
-if _show_landing:
-    _render_landing(lang)
-    st.stop()  # don't render the run-analysis canvas under it
-
-
-# ══════════════════════════════════════════════════════════════
-#  Run Analysis
-# ══════════════════════════════════════════════════════════════
-if st.session_state.pop("_auto_run", False):
-    run_btn = True
-
-if run_btn:
-    import time
-
-    # Reload portfolio_config to pick up any file edits
-    _reload_portfolio_config()
-
-    logger.info("ui.button.run_analysis_clicked")
-
-    # ── Step 1: Parse JSON ────────────────────────────────────────────
-    try:
-        weights: dict = json.loads(weights_input)
-        logger.info("ui.weights.parsed", ticker_count=len(weights))
-    except json.JSONDecodeError as e:
-        logger.warning("ui.weights.invalid_json", error=str(e))
-        handle_json_error(e, weights_input)
-        st.stop()
-
-    # ── Step 2: Validate weights ──────────────────────────────────────
-    is_valid, normalized_weights, validation_msg = validate_weights(weights)
-
-    if not is_valid:
-        show_error(
-            ValueError(validation_msg or "权重验证失败"),
-            title="权重配置错误",
-            error_type="weight_error",
-        )
-        st.stop()
-
-    weights = normalized_weights
-    if validation_msg:
-        st.warning(validation_msg)
-
-    # ── Step 3: Validate tickers ──────────────────────────────────────
-    all_valid, valid_tickers, invalid_tickers = validate_tickers(list(weights.keys()))
-    if invalid_tickers:
-        show_warning(
-            f"以下ticker格式无效: {', '.join(invalid_tickers)}",
-            title="无效的股票代码",
-            suggestions=[
-                "确保代码只包含字母、数字和连字符（如 BTC-USD）",
-                "使用标准的美股代码（AAPL, GOOGL, MSFT等）",
-                "对于加密货币，使用 BTC-USD 格式而不是 BTC",
-            ],
-        )
-        st.stop()
-
-    # Convert weights to JSON for cache key (hashable)
-    weights_json = json.dumps(weights, sort_keys=True)
-
-    # Comprehensive cache-hit detection: any risk-analysis parameter change
-    # must invalidate the cache. Previously only weights were checked, which
-    # gave a misleading "using cache" banner when mc_sims / mc_horizon /
-    # market_shock / period_years / risk_free actually changed.
-    _cache_key = (
-        weights_json,
-        period_years,
-        mc_sims,
-        mc_horizon,
-        round(float(risk_free_fallback), 6),
-        round(float(market_shock), 6),
-    )
-    last_cache_key = st.session_state.get("_last_cache_key")
-    force_refresh_requested = bool(st.session_state.pop("_force_refresh", False))
-    using_cache = (
-        (not force_refresh_requested)
-        and (last_cache_key == _cache_key)
-        and st.session_state.get("analysis_ready")
-    )
-
-    # Stale-data banner: show when cached analysis is older than threshold.
-    STALE_THRESHOLD_SEC = 30 * 60  # 30 minutes
-    last_ts = st.session_state.get("_last_analysis_ts")
-    if using_cache and last_ts:
-        age_sec = time.time() - last_ts
-        if age_sec > STALE_THRESHOLD_SEC:
-            age_min = int(age_sec // 60)
-            st.warning(
-                f"⚠️ Analysis is {age_min} minutes old. Click Force Refresh for fresh data."
-                if lang == "en"
-                else f"⚠️ 分析结果已 {age_min} 分钟未更新。点击 Force Refresh 重新计算。"
-            )
-
-    if using_cache:
-        age_min = int((time.time() - last_ts) // 60) if last_ts else 0
-        st.info(
-            f"Using cached analysis ({age_min}m old). Click Force Refresh to recompute."
-            if lang == "en"
-            else f"使用缓存的分析结果（{age_min} 分钟前计算）。点击 Force Refresh 重新计算。"
-        )
-        logger.info("ui.analysis.cache_hit", age_min=age_min)
-    else:
-        analysis_start = time.time()
-
-        # ── Step 4: Load price data ───────────────────────────────────
-        try:
-            with st.spinner("正在下载市场数据（可能需要30-60秒）..."):
-                report, prices, cumret = run_portfolio_analysis(
-                    weights_json,
-                    period_years,
-                    mc_sims,
-                    mc_horizon,
-                    risk_free_fallback,
-                    market_shock,
+        # Feature grid
+        features = [
+            ("🛡️", "Risk Engine" if not is_zh else "风险引擎",
+             "Monte Carlo VaR · EWMA covariance · component VaR · stress scenarios"
+             if not is_zh else
+             "蒙特卡洛 VaR · EWMA 协方差 · 边际 VaR · 压力测试"),
+            ("🎲", "Options Lab" if not is_zh else "期权实验室",
+             "Black-Scholes pricing · analytical Greeks · IV solver · 10 strategies"
+             if not is_zh else
+             "Black-Scholes 定价 · 解析希腊字母 · IV 求解 · 10 种策略"),
+            ("🏛️", "Smart Money" if not is_zh else "Smart Money",
+             "SEC 13F filings from 30+ top institutions · crowding · unusual flow"
+             if not is_zh else
+             "30+ 顶级机构 SEC 13F · 拥挤度 · 异常期权流"),
+            ("🤖", "AI Co-pilot" if not is_zh else "AI 副驾",
+             "Claude / DeepSeek narrative on every page · earnings transcripts · sentiment"
+             if not is_zh else
+             "每页 Claude / DeepSeek 叙述 · 财报电话会 · 情绪分析"),
+        ]
+        cols = st.columns(4)
+        for col, (icon, title, desc) in zip(cols, features):
+            with col:
+                st.markdown(
+                    f"""
+    <div style="background:#0a0e14;border:1px solid rgba(139,148,158,0.12);
+                border-radius:10px;padding:18px 16px;height:175px;
+                display:flex;flex-direction:column;">
+      <div style="font-size:24px;margin-bottom:8px;">{icon}</div>
+      <div style="font-size:14px;font-weight:700;color:#E6EDF3;
+                  margin-bottom:6px;">{title}</div>
+      <div style="font-size:12px;color:#8B949E;line-height:1.5;">
+        {desc}
+      </div>
+    </div>
+    """,
+                    unsafe_allow_html=True,
                 )
-            show_success(f"成功加载 {len(prices.columns)} 个ticker的数据", title="数据加载完成")
-        except ValueError as e:
-            show_error(
-                e,
-                title="数据加载失败",
-                error_type="insufficient_data",
-            )
-            logger.error("ui.analysis.data_load_failed", error=str(e), exc_info=True)
-            st.stop()
-        except Exception as e:
-            error_str = str(e).lower()
-            if "linalg" in error_str or "singular" in error_str:
-                show_error(
-                    e,
-                    title="协方差矩阵计算失败",
-                    error_type="linear_algebra_error",
-                )
-            else:
-                show_error(
-                    e,
-                    title="分析失败",
-                )
-            logger.error("ui.analysis.failed", error=str(e), exc_info=True)
-            st.stop()
 
-        # ── Step 5: Build risk engine ─────────────────────────────────
-        try:
-            with st.spinner("正在构建风险引擎..."):
-                engine = build_engine_ref(
-                    weights,
-                    period_years,
-                    mc_sims,
-                    mc_horizon,
-                    risk_free_fallback,
-                    prices,
-                    market_shock,
-                )
-                st.session_state._engine = engine
-
-                meta_ss = getattr(st.session_state, "_portfolio_meta", None)
-                if meta_ss:
-                    report.margin_call_info = engine.compute_margin_call(
-                        meta_ss["total_long"], _pc.MARGIN_LOAN
-                    )
-            show_success("风险引擎构建完成", title="")
-        except Exception as e:
-            show_error(
-                e,
-                title="风险引擎构建失败",
-            )
-            logger.error("ui.engine.build_failed", error=str(e), exc_info=True)
-            st.stop()
-
-        analysis_duration_ms = (time.time() - analysis_start) * 1000
-        st.session_state.last_analysis_duration_ms = analysis_duration_ms
-        st.session_state.analysis_from_cache = False
-
-        st.session_state.update(
-            dict(
-                analysis_ready=True,
-                report=report,
-                weights=weights,
-                prices=prices,
-                cumret=cumret,
-                mc_horizon=mc_horizon,
-                mc_sims=mc_sims,
-                market_shock=market_shock,
-                period_years=period_years,
-                risk_free_fallback=risk_free_fallback,
-                risk_context=build_risk_context(
-                    report,
-                    weights,
-                    mc_horizon,
-                    market_shock,
-                    prices,
-                    sentiment=st.session_state.get("sentiment_data"),
-                    fund_data=st.session_state.get("fundamentals_data"),
-                    insider_data=st.session_state.get("insider_data"),
-                    technical_data=st.session_state.get("technical_data"),
-                ),
-                chat_messages=[],
-                historical_scenarios=None,
-                sim_result=None,
-                sentiment_data=None,
-                _ef_result=None,
-                last_weights_json=weights_json,
-                _last_cache_key=_cache_key,
-                _last_analysis_ts=time.time(),
-            )
-        )
-
-        # Display performance metrics
-        perf_col1, perf_col2 = st.columns(2)
-        with perf_col1:
+        # CTA row
+        st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+        cta_col1, cta_col2, cta_col3 = st.columns([1, 1, 2])
+        with cta_col1:
+            if st.button(cta_label, type="primary", use_container_width=True, key="landing_cta"):
+                st.session_state._auto_run = True
+                st.session_state._skip_landing = True
+                st.rerun()
+        with cta_col2:
+            if st.button(skip_label, use_container_width=True, key="landing_skip"):
+                st.session_state._skip_landing = True
+                st.rerun()
+        with cta_col3:
             st.caption(
-                f"Computation time: {analysis_duration_ms:.0f}ms"
-                if lang == "en"
-                else f"计算耗时: {analysis_duration_ms:.0f}ms"
-            )
-        with perf_col2:
-            status_emoji = "✓" if analysis_duration_ms < 10000 else "⚠"
-            st.caption(
-                f"{status_emoji} Target: <10s (cold), <3s (cached)"
-                if lang == "en"
-                else f"{status_emoji} 目标: <10秒(首次), <3秒(缓存)"
+                "💡 Demo uses the built-in portfolio. Configure your own holdings in "
+                "`portfolio_config.py` or via the sidebar JSON editor."
+                if not is_zh else
+                "💡 Demo 使用内置组合。可在 `portfolio_config.py` 编辑或侧边栏 JSON 中替换为你自己的持仓。"
             )
 
-        logger.info(
-            "ui.analysis.complete_with_timing",
-            duration_ms=round(analysis_duration_ms, 2),
-            ticker_count=len(weights),
-            from_cache=False,
+        # Footer micro-strip — tech stack + GitHub
+        st.markdown(
+            """
+    <div style="margin-top:40px;padding-top:16px;
+                border-top:1px solid rgba(139,148,158,0.1);
+                display:flex;justify-content:space-between;align-items:center;
+                font-size:12px;color:#484F58;">
+      <div>Streamlit · NumPy · SciPy · Plotly · AWS Lambda · DynamoDB</div>
+      <div>
+        <a href="https://github.com/zhengbrody/PersonalFinancialRiskManagement"
+           style="color:#0B7285;text-decoration:none;">GitHub</a>
+        &nbsp;·&nbsp;
+        <a href="https://github.com/zhengbrody/PersonalFinancialRiskManagement/blob/aws-migration/README.md#%EF%B8%8F-aws-migration-phases-12-complete"
+           style="color:#0B7285;text-decoration:none;">AWS Architecture</a>
+      </div>
+    </div>
+    """,
+            unsafe_allow_html=True,
         )
 
 
-# ══════════════════════════════════════════════════════════════
-#  Welcome / Landing Page
-# ══════════════════════════════════════════════════════════════
-if not st.session_state.analysis_ready:
-    # ── Pre-analysis state ────────────────────────────────────────
-    # The big marketing welcome / hero section that USED to live here
-    # has been replaced by the new Landing page (rendered earlier in
-    # this script via _render_landing(lang)). After "Skip to dashboard"
-    # the user lands here in the "no analysis yet" state — keep this
-    # ultra-light: one CTA, nothing flashy. Sidebar handles the actual
-    # Run button.
-    st.info(
-        "👈 Configure your portfolio and click **Refresh & Run Analysis** in the "
-        "sidebar to start. Results flow into Overview, Risk, Markets, Portfolio, "
-        "and 6 more pages. Logged-in users analyze their own DB-stored portfolio; "
-        "everyone else gets the built-in demo."
+    # Show landing only if (1) no analysis has been run yet AND
+    # (2) user hasn't clicked through. Once dismissed, stays dismissed
+    # for the session — re-running analysis won't bring it back.
+    _show_landing = (
+        not st.session_state.get("analysis_ready", False)
+        and not st.session_state.get("_skip_landing", False)
+        and not run_btn
     )
+    if _show_landing:
+        _render_landing(lang)
+        st.stop()  # don't render the run-analysis canvas under it
 
-else:
-    # ── Analysis Ready: redirect to the full Overview dashboard ──
-    # The home page used to render a 4-KPI mini-dashboard here, which
-    # semantically duplicated pages/1_Overview.py. Removed in favor of
-    # a clean "go to Overview" CTA — Overview is the single source of
-    # truth for the post-analysis dashboard.
-    st.success(
-        "✅ Analysis complete. **Open `Overview`** in the left sidebar for the "
-        "full dashboard — KPIs, cumulative returns, drawdown, P&L breakdown, "
-        "and the AI risk digest. Other pages (Risk, Markets, Options, etc.) "
-        "are also unlocked."
-    )
-    if st.session_state.get("report"):
-        _r = st.session_state.report
-        st.caption(
-            f"Quick stats: Annual Return {_r.annual_return:.2%}  ·  "
-            f"Vol {_r.annual_volatility:.2%}  ·  "
-            f"Sharpe {_r.sharpe_ratio:.2f}  ·  "
-            f"VaR 95% ({st.session_state.mc_horizon}d) {_r.var_95:.2%}"
+
+    # ══════════════════════════════════════════════════════════════
+    #  Run Analysis
+    # ══════════════════════════════════════════════════════════════
+    if st.session_state.pop("_auto_run", False):
+        run_btn = True
+
+    if run_btn:
+        import time
+
+        # Reload portfolio_config to pick up any file edits
+        _reload_portfolio_config()
+
+        logger.info("ui.button.run_analysis_clicked")
+
+        # ── Step 1: Parse JSON ────────────────────────────────────────────
+        try:
+            weights: dict = json.loads(weights_input)
+            logger.info("ui.weights.parsed", ticker_count=len(weights))
+        except json.JSONDecodeError as e:
+            logger.warning("ui.weights.invalid_json", error=str(e))
+            handle_json_error(e, weights_input)
+            st.stop()
+
+        # ── Step 2: Validate weights ──────────────────────────────────────
+        is_valid, normalized_weights, validation_msg = validate_weights(weights)
+
+        if not is_valid:
+            show_error(
+                ValueError(validation_msg or "权重验证失败"),
+                title="权重配置错误",
+                error_type="weight_error",
+            )
+            st.stop()
+
+        weights = normalized_weights
+        if validation_msg:
+            st.warning(validation_msg)
+
+        # ── Step 3: Validate tickers ──────────────────────────────────────
+        all_valid, valid_tickers, invalid_tickers = validate_tickers(list(weights.keys()))
+        if invalid_tickers:
+            show_warning(
+                f"以下ticker格式无效: {', '.join(invalid_tickers)}",
+                title="无效的股票代码",
+                suggestions=[
+                    "确保代码只包含字母、数字和连字符（如 BTC-USD）",
+                    "使用标准的美股代码（AAPL, GOOGL, MSFT等）",
+                    "对于加密货币，使用 BTC-USD 格式而不是 BTC",
+                ],
+            )
+            st.stop()
+
+        # Convert weights to JSON for cache key (hashable)
+        weights_json = json.dumps(weights, sort_keys=True)
+
+        # Comprehensive cache-hit detection: any risk-analysis parameter change
+        # must invalidate the cache. Previously only weights were checked, which
+        # gave a misleading "using cache" banner when mc_sims / mc_horizon /
+        # market_shock / period_years / risk_free actually changed.
+        _cache_key = (
+            weights_json,
+            period_years,
+            mc_sims,
+            mc_horizon,
+            round(float(risk_free_fallback), 6),
+            round(float(market_shock), 6),
+        )
+        last_cache_key = st.session_state.get("_last_cache_key")
+        force_refresh_requested = bool(st.session_state.pop("_force_refresh", False))
+        using_cache = (
+            (not force_refresh_requested)
+            and (last_cache_key == _cache_key)
+            and st.session_state.get("analysis_ready")
         )
 
+        # Stale-data banner: show when cached analysis is older than threshold.
+        STALE_THRESHOLD_SEC = 30 * 60  # 30 minutes
+        last_ts = st.session_state.get("_last_analysis_ts")
+        if using_cache and last_ts:
+            age_sec = time.time() - last_ts
+            if age_sec > STALE_THRESHOLD_SEC:
+                age_min = int(age_sec // 60)
+                st.warning(
+                    f"⚠️ Analysis is {age_min} minutes old. Click Force Refresh for fresh data."
+                    if lang == "en"
+                    else f"⚠️ 分析结果已 {age_min} 分钟未更新。点击 Force Refresh 重新计算。"
+                )
 
-# ══════════════════════════════════════════════════════════════
-#  Reusable Chat Popover (called from every page)
-# ══════════════════════════════════════════════════════════════
-def render_chat_popover(page_key: str = "home"):
-    """Add a chat popover to the bottom of any page. Call from each page file."""
-    with st.popover("💬 AI Chat", use_container_width=False):
-        st.markdown("**AI Risk Analyst**")
-        if st.session_state.get("analysis_ready"):
-            _input = st.text_input(
-                "Ask about your portfolio...",
-                key=f"quick_chat_{page_key}",
-                label_visibility="collapsed",
+        if using_cache:
+            age_min = int((time.time() - last_ts) // 60) if last_ts else 0
+            st.info(
+                f"Using cached analysis ({age_min}m old). Click Force Refresh to recompute."
+                if lang == "en"
+                else f"使用缓存的分析结果（{age_min} 分钟前计算）。点击 Force Refresh 重新计算。"
             )
-            if _input:
-                try:
-                    with st.spinner("AI分析中..."):
-                        _resp = call_llm(
-                            prompt=_input,
-                            system="You are a concise portfolio risk analyst. Answer in 2-3 sentences max. Be specific with numbers.",
-                            max_tokens=300,
-                        )
-                    st.markdown(_resp)
-                except ConnectionError as _e:
-                    show_error(
-                        _e,
-                        title="AI服务连接失败",
-                        error_type="connection_error",
-                    )
-                    logger.error("ui.chat.connection_error", error=str(_e))
-                except TimeoutError as _e:
-                    show_warning(
-                        "AI响应超时，请稍后重试",
-                        title="请求超时",
-                        suggestions=[
-                            "检查网络连接",
-                            "确保本地Ollama服务正常运行（如果使用）",
-                            "尝试切换到其他AI提供商",
-                        ],
-                    )
-                    logger.warning("ui.chat.timeout", error=str(_e))
-                except ValueError as _e:
-                    show_error(
-                        _e,
-                        title="AI配置错误",
-                        error_type="value_error",
-                    )
-                    logger.error("ui.chat.config_error", error=str(_e))
-                except Exception as _e:
-                    show_error(
-                        _e,
-                        title="AI分析失败",
-                    )
-                    logger.error("ui.chat.error", error=str(_e), exc_info=True)
+            logger.info("ui.analysis.cache_hit", age_min=age_min)
         else:
-            st.caption("运行分析以启用AI聊天")
+            analysis_start = time.time()
+
+            # ── Step 4: Load price data ───────────────────────────────────
+            try:
+                with st.spinner("正在下载市场数据（可能需要30-60秒）..."):
+                    report, prices, cumret = run_portfolio_analysis(
+                        weights_json,
+                        period_years,
+                        mc_sims,
+                        mc_horizon,
+                        risk_free_fallback,
+                        market_shock,
+                    )
+                show_success(f"成功加载 {len(prices.columns)} 个ticker的数据", title="数据加载完成")
+            except ValueError as e:
+                show_error(
+                    e,
+                    title="数据加载失败",
+                    error_type="insufficient_data",
+                )
+                logger.error("ui.analysis.data_load_failed", error=str(e), exc_info=True)
+                st.stop()
+            except Exception as e:
+                error_str = str(e).lower()
+                if "linalg" in error_str or "singular" in error_str:
+                    show_error(
+                        e,
+                        title="协方差矩阵计算失败",
+                        error_type="linear_algebra_error",
+                    )
+                else:
+                    show_error(
+                        e,
+                        title="分析失败",
+                    )
+                logger.error("ui.analysis.failed", error=str(e), exc_info=True)
+                st.stop()
+
+            # ── Step 5: Build risk engine ─────────────────────────────────
+            try:
+                with st.spinner("正在构建风险引擎..."):
+                    engine = build_engine_ref(
+                        weights,
+                        period_years,
+                        mc_sims,
+                        mc_horizon,
+                        risk_free_fallback,
+                        prices,
+                        market_shock,
+                    )
+                    st.session_state._engine = engine
+
+                    meta_ss = getattr(st.session_state, "_portfolio_meta", None)
+                    if meta_ss:
+                        report.margin_call_info = engine.compute_margin_call(
+                            meta_ss["total_long"], _pc.MARGIN_LOAN
+                        )
+                show_success("风险引擎构建完成", title="")
+            except Exception as e:
+                show_error(
+                    e,
+                    title="风险引擎构建失败",
+                )
+                logger.error("ui.engine.build_failed", error=str(e), exc_info=True)
+                st.stop()
+
+            analysis_duration_ms = (time.time() - analysis_start) * 1000
+            st.session_state.last_analysis_duration_ms = analysis_duration_ms
+            st.session_state.analysis_from_cache = False
+
+            st.session_state.update(
+                dict(
+                    analysis_ready=True,
+                    report=report,
+                    weights=weights,
+                    prices=prices,
+                    cumret=cumret,
+                    mc_horizon=mc_horizon,
+                    mc_sims=mc_sims,
+                    market_shock=market_shock,
+                    period_years=period_years,
+                    risk_free_fallback=risk_free_fallback,
+                    risk_context=build_risk_context(
+                        report,
+                        weights,
+                        mc_horizon,
+                        market_shock,
+                        prices,
+                        sentiment=st.session_state.get("sentiment_data"),
+                        fund_data=st.session_state.get("fundamentals_data"),
+                        insider_data=st.session_state.get("insider_data"),
+                        technical_data=st.session_state.get("technical_data"),
+                    ),
+                    chat_messages=[],
+                    historical_scenarios=None,
+                    sim_result=None,
+                    sentiment_data=None,
+                    _ef_result=None,
+                    last_weights_json=weights_json,
+                    _last_cache_key=_cache_key,
+                    _last_analysis_ts=time.time(),
+                )
+            )
+
+            # Display performance metrics
+            perf_col1, perf_col2 = st.columns(2)
+            with perf_col1:
+                st.caption(
+                    f"Computation time: {analysis_duration_ms:.0f}ms"
+                    if lang == "en"
+                    else f"计算耗时: {analysis_duration_ms:.0f}ms"
+                )
+            with perf_col2:
+                status_emoji = "✓" if analysis_duration_ms < 10000 else "⚠"
+                st.caption(
+                    f"{status_emoji} Target: <10s (cold), <3s (cached)"
+                    if lang == "en"
+                    else f"{status_emoji} 目标: <10秒(首次), <3秒(缓存)"
+                )
+
+            logger.info(
+                "ui.analysis.complete_with_timing",
+                duration_ms=round(analysis_duration_ms, 2),
+                ticker_count=len(weights),
+                from_cache=False,
+            )
 
 
-# ══════════════════════════════════════════════════════════════
-#  Floating AI Assistant (Always Visible - Replaces Chat Popover)
-# ══════════════════════════════════════════════════════════════
-try:
-    from ui.floating_chat import render_floating_ai_chat
+    # ══════════════════════════════════════════════════════════════
+    #  Welcome / Landing Page
+    # ══════════════════════════════════════════════════════════════
+    if not st.session_state.analysis_ready:
+        # ── Pre-analysis state ────────────────────────────────────────
+        # The big marketing welcome / hero section that USED to live here
+        # has been replaced by the new Landing page (rendered earlier in
+        # this script via _render_landing(lang)). After "Skip to dashboard"
+        # the user lands here in the "no analysis yet" state — keep this
+        # ultra-light: one CTA, nothing flashy. Sidebar handles the actual
+        # Run button.
+        st.info(
+            "👈 Configure your portfolio and click **Refresh & Run Analysis** in the "
+            "sidebar to start. Results flow into Overview, Risk, Markets, Portfolio, "
+            "and 6 more pages. Logged-in users analyze their own DB-stored portfolio; "
+            "everyone else gets the built-in demo."
+        )
 
-    render_floating_ai_chat()
-except Exception as e:
-    # Silently fail if floating chat has issues
-    logger.warning("floating_chat.render_failed", error=str(e))
+    else:
+        # ── Analysis Ready: redirect to the full Overview dashboard ──
+        # The home page used to render a 4-KPI mini-dashboard here, which
+        # semantically duplicated pages/1_Overview.py. Removed in favor of
+        # a clean "go to Overview" CTA — Overview is the single source of
+        # truth for the post-analysis dashboard.
+        st.success(
+            "✅ Analysis complete. **Open `Overview`** in the left sidebar for the "
+            "full dashboard — KPIs, cumulative returns, drawdown, P&L breakdown, "
+            "and the AI risk digest. Other pages (Risk, Markets, Options, etc.) "
+            "are also unlocked."
+        )
+        if st.session_state.get("report"):
+            _r = st.session_state.report
+            st.caption(
+                f"Quick stats: Annual Return {_r.annual_return:.2%}  ·  "
+                f"Vol {_r.annual_volatility:.2%}  ·  "
+                f"Sharpe {_r.sharpe_ratio:.2f}  ·  "
+                f"VaR 95% ({st.session_state.mc_horizon}d) {_r.var_95:.2%}"
+            )
+
+
+    # ══════════════════════════════════════════════════════════════
+    #  Reusable Chat Popover (called from every page)
+    # ══════════════════════════════════════════════════════════════
+    def render_chat_popover(page_key: str = "home"):
+        """Add a chat popover to the bottom of any page. Call from each page file."""
+        with st.popover("💬 AI Chat", use_container_width=False):
+            st.markdown("**AI Risk Analyst**")
+            if st.session_state.get("analysis_ready"):
+                _input = st.text_input(
+                    "Ask about your portfolio...",
+                    key=f"quick_chat_{page_key}",
+                    label_visibility="collapsed",
+                )
+                if _input:
+                    try:
+                        with st.spinner("AI分析中..."):
+                            _resp = call_llm(
+                                prompt=_input,
+                                system="You are a concise portfolio risk analyst. Answer in 2-3 sentences max. Be specific with numbers.",
+                                max_tokens=300,
+                            )
+                        st.markdown(_resp)
+                    except ConnectionError as _e:
+                        show_error(
+                            _e,
+                            title="AI服务连接失败",
+                            error_type="connection_error",
+                        )
+                        logger.error("ui.chat.connection_error", error=str(_e))
+                    except TimeoutError as _e:
+                        show_warning(
+                            "AI响应超时，请稍后重试",
+                            title="请求超时",
+                            suggestions=[
+                                "检查网络连接",
+                                "确保本地Ollama服务正常运行（如果使用）",
+                                "尝试切换到其他AI提供商",
+                            ],
+                        )
+                        logger.warning("ui.chat.timeout", error=str(_e))
+                    except ValueError as _e:
+                        show_error(
+                            _e,
+                            title="AI配置错误",
+                            error_type="value_error",
+                        )
+                        logger.error("ui.chat.config_error", error=str(_e))
+                    except Exception as _e:
+                        show_error(
+                            _e,
+                            title="AI分析失败",
+                        )
+                        logger.error("ui.chat.error", error=str(_e), exc_info=True)
+            else:
+                st.caption("运行分析以启用AI聊天")
+
+
+    # ══════════════════════════════════════════════════════════════
+    #  Floating AI Assistant (Always Visible - Replaces Chat Popover)
+    # ══════════════════════════════════════════════════════════════
+    try:
+        from ui.floating_chat import render_floating_ai_chat
+
+        render_floating_ai_chat()
+    except Exception as e:
+        # Silently fail if floating chat has issues
+        logger.warning("floating_chat.render_failed", error=str(e))
+
+
+if __name__ == "__main__":
+    _main_ui()
