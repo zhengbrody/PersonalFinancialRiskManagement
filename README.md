@@ -4,7 +4,8 @@
 
 ### Institutional-Grade Portfolio Risk Analytics · 机构级投资组合风险分析平台
 
-[![Live Demo](https://img.shields.io/badge/🔴_LIVE-mindmarketai.streamlit.app-FF4B4B?style=for-the-badge)](https://mindmarketai.streamlit.app/)
+[![Live Demo](https://img.shields.io/badge/🌐_LIVE-mindmarket.app-0B7285?style=for-the-badge)](https://mindmarket.app/)
+[![Streamlit Cloud](https://img.shields.io/badge/Backup-mindmarketai.streamlit.app-FF4B4B?style=flat-square)](https://mindmarketai.streamlit.app/)
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.30%2B-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)](https://streamlit.io)
@@ -65,7 +66,10 @@
 
 ## 🌐 Live Demo
 
-👉 **[mindmarketai.streamlit.app](https://mindmarketai.streamlit.app/)**
+👉 **Primary:** **[mindmarket.app](https://mindmarket.app/)** (AWS-hosted, deployed on demand)
+👉 **Backup:** [mindmarketai.streamlit.app](https://mindmarketai.streamlit.app/) (free Streamlit Cloud, always-on)
+
+The AWS deployment is the production-shape demo (EC2 + Caddy + Let's Encrypt + Lambda + DynamoDB). Spun up for recruiter demos and torn down between sessions to stay inside the Free Plan budget.
 
 ---
 
@@ -507,7 +511,7 @@ python -m pytest tests/ -v
 
 <div align="center">
 
-**🔗 [mindmarketai.streamlit.app](https://mindmarketai.streamlit.app/)**
+**🔗 [mindmarket.app](https://mindmarket.app/)**  ·  [Streamlit Cloud backup](https://mindmarketai.streamlit.app/)
 
 Built with ❤️ by [Zheng Dong](https://github.com/zhengbrody)
 

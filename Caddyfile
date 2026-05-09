@@ -11,12 +11,21 @@
 # reverse_proxy when both ends speak WS). The longer read_timeout keeps the
 # server-sent-events stream alive during long-running analyses.
 
-{$SITE_HOST} {
+# Listen on both apex (mindmarket.app) and the www subdomain so users
+# typing either URL get the same response. Caddy auto-signs separate
+# Let's Encrypt certs for each — one HTTP-01 challenge per name.
+# When SITE_HOST is the nip.io fallback, www.<eip>.nip.io also works
+# transparently since *.nip.io resolves the same way.
+{$SITE_HOST}, www.{$SITE_HOST} {
     encode gzip
     log {
         output stdout
         format json
     }
+
+    # Redirect www → apex so SEO + bookmarks settle on a single canonical URL.
+    @www host www.{$SITE_HOST}
+    redir @www https://{$SITE_HOST}{uri} permanent
 
     reverse_proxy app:8501 {
         # Keep the WebSocket / SSE stream alive for slow analyses.
