@@ -1389,25 +1389,31 @@ if "analysis_ready" not in st.session_state:
 # ══════════════════════════════════════════════════════════════
 
 
-# ══════════════════════════════════════════════════════════════
-#  UI rendering — only fires when app.py is the streamlit entry,
-#  not when imported by a page (avoids duplicate sidebar widgets).
-# ══════════════════════════════════════════════════════════════
-def _main_ui():
-    # Use the same shared sidebar component that pages use
-    from ui.shared_sidebar import render_shared_sidebar
 
-    lang, t = render_shared_sidebar()
+# ══════════════════════════════════════════════════════════════
+#  Module-level analysis trigger
+# ──────────────────────────────────────────────────────────────
+#  Callable from anywhere (app.py home page, shared sidebar after
+#  button click on a /pages/ route). Reads weights + params from
+#  session_state, writes report + analysis_ready=True back.
+# ══════════════════════════════════════════════════════════════
+def execute_analysis(force: bool = False) -> bool:
+    """Run portfolio analysis pipeline if _run_trigger set or force=True.
 
-    # Get values from session state (set by shared_sidebar)
+    Returns True if analysis ran (or used cache), False if skipped.
+    All inputs read from st.session_state; outputs written there.
+    """
+    import time
+    import json as _json
+
     weights_input = st.session_state.get("weights_input", "")
     period_years = st.session_state.get("period_years", 2)
     mc_sims = st.session_state.get("mc_sims", 10000)
     mc_horizon = st.session_state.get("mc_horizon", 21)
     market_shock = st.session_state.get("market_shock", -0.10)
     risk_free_fallback = st.session_state.get("risk_free_fallback", 0.045)
+    lang = st.session_state.get("_lang", "en")
 
-    # Check if Run Analysis was triggered from sidebar
     run_btn = st.session_state.get("_run_trigger", False)
     if run_btn:
         st.session_state._run_trigger = False  # Reset trigger
@@ -1780,6 +1786,31 @@ def _main_ui():
                 ticker_count=len(weights),
                 from_cache=False,
             )
+    return True
+
+# ══════════════════════════════════════════════════════════════
+#  UI rendering — only fires when app.py is the streamlit entry,
+#  not when imported by a page (avoids duplicate sidebar widgets).
+# ══════════════════════════════════════════════════════════════
+def _main_ui():
+    # Use the same shared sidebar component that pages use
+    from ui.shared_sidebar import render_shared_sidebar
+
+    lang, t = render_shared_sidebar()
+
+    # Get values from session state (set by shared_sidebar)
+    weights_input = st.session_state.get("weights_input", "")
+    period_years = st.session_state.get("period_years", 2)
+    mc_sims = st.session_state.get("mc_sims", 10000)
+    mc_horizon = st.session_state.get("mc_horizon", 21)
+    market_shock = st.session_state.get("market_shock", -0.10)
+    risk_free_fallback = st.session_state.get("risk_free_fallback", 0.045)
+
+    # Check if Run Analysis was triggered from sidebar
+    # Trigger analysis if _run_trigger flag set (legacy path; sidebar
+    # button handlers also call execute_analysis() directly).
+    execute_analysis()
+
 
 
     # ══════════════════════════════════════════════════════════════

@@ -241,6 +241,7 @@ def render_shared_sidebar():
                     }
 
                     st.session_state.weights_json = json.dumps(live_weights, indent=2)
+                    st.session_state.weights_input = st.session_state.weights_json
                     st.session_state._portfolio_meta = meta
                     st.session_state._run_trigger = True
                     st.session_state.last_weights_json = None
@@ -250,6 +251,13 @@ def render_shared_sidebar():
                         total_long=round(total_value, 2),
                         net_equity=round(net_equity, 2),
                     )
+                    # Run the analysis NOW so it works on every page (not just
+                    # when user is on home). Lazy-import to avoid circular dep.
+                    try:
+                        from app import execute_analysis
+                        execute_analysis(force=True)
+                    except Exception as _e:
+                        logger.warning("ui.execute_analysis_inline_failed", error=str(_e))
                     st.rerun()
             except Exception as e:
                 st.error(f"Failed: {str(e)}")
@@ -260,6 +268,11 @@ def render_shared_sidebar():
         )
         if st.button(_run_label_current, use_container_width=True, key="run_current_only"):
             st.session_state._run_trigger = True
+            try:
+                from app import execute_analysis
+                execute_analysis(force=True)
+            except Exception as _e:
+                logger.warning("ui.execute_analysis_inline_failed", error=str(_e))
             st.rerun()
 
         # Force Refresh — bypasses cache regardless of whether any param changed.
@@ -278,6 +291,11 @@ def render_shared_sidebar():
         ):
             st.session_state._force_refresh = True
             st.session_state._run_trigger = True
+            try:
+                from app import execute_analysis
+                execute_analysis(force=True)
+            except Exception as _e:
+                logger.warning("ui.execute_analysis_inline_failed", error=str(_e))
             st.rerun()
 
         # Portfolio Metadata (if available)
