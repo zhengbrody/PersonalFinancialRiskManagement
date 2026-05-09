@@ -109,6 +109,20 @@ systemctl enable --now amazon-cloudwatch-agent
   -a fetch-config -m ec2 -s \
   -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
 
+# 1 GB swap file. Without this, t3.micro's 1 GB RAM is exhausted by
+# `pip install scipy + pandas + supabase + ...` during `docker compose
+# build`, the OOM killer takes out random processes, and the whole
+# instance wedges. Verified live: rebuild took ~10 min on first try
+# (with swap) where it was OOM-wedging in <5 without. Cost: $0.10/mo
+# in EBS reserved space, vs. ~$8/mo to bump to t3.small.
+if [ ! -f /swapfile ]; then
+    dd if=/dev/zero of=/swapfile bs=1M count=1024 status=none
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+    echo "/swapfile none swap sw 0 0" >> /etc/fstab
+fi
+
 # Marker file. deploy-phase-1.sh polls for this to know bootstrap is done.
 touch /var/lib/mindmarket-bootstrap-complete
 echo "==> bootstrap finished $(date -u)"
