@@ -455,7 +455,7 @@ def render_shared_sidebar():
             or _safe_get_secret("MINDMARKET_ADMIN_MODE")
         )
 
-        st.markdown("### 🤖 AI Provider" + (" (admin)" if _admin_mode else ""))
+        st.markdown("### 🤖 AI Provider (admin)" if _admin_mode else "### 🤖 AI Access")
 
         # ── Detect if running in cloud/preview (localhost unreachable) ──
         # Check once per session to avoid slow repeated probes
@@ -550,9 +550,9 @@ def render_shared_sidebar():
                             + ("  ⚠️ exhausted" if c["exhausted"] else "")
                         )
                     if _qs["plan"] == "free":
-                        st.caption("💡 Upgrade to Basic ($10/mo) for 30 analyses + 100 chats")
+                        st.caption("💡 Beta access: paid plans are configured but not live yet.")
                 else:
-                    st.caption("🔐 Sign in to track usage.")
+                    st.caption("🔐 Sign in to use free monthly AI credits.")
             except Exception:
                 pass
 

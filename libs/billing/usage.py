@@ -55,7 +55,7 @@ class QuotaExceeded(RuntimeError):
         self.limit = limit
         super().__init__(
             f"Monthly {kind} limit reached for {plan} plan: {used}/{limit}. "
-            "Upgrade to continue."
+            "Paid plans are coming soon."
         )
 
 

@@ -1372,7 +1372,8 @@ def execute_analysis(force: bool = False) -> bool:
                 except QuotaExceeded as qe:
                     st.error(
                         f"⚠️ {qe}  \n\n"
-                        "💡 **Upgrade to Basic** ($10/mo) for 30 analyses + 100 AI chats per month."
+                        "💡 Paid plans are configured but not live yet. "
+                        "Contact MindMarket AI for beta access."
                     )
                     return False
             except Exception:
@@ -1447,9 +1448,9 @@ def execute_analysis(force: bool = False) -> bool:
              if not is_zh else
              "30+ 顶级机构 SEC 13F · 拥挤度 · 异常期权流"),
             ("🤖", "AI Co-pilot" if not is_zh else "AI 副驾",
-             "Claude / DeepSeek narrative on every page · earnings transcripts · sentiment"
+             "Owner-managed AI summaries · earnings transcripts · sentiment"
              if not is_zh else
-             "每页 Claude / DeepSeek 叙述 · 财报电话会 · 情绪分析"),
+             "平台统一管理 AI 摘要 · 财报电话会 · 情绪分析"),
         ]
         cols = st.columns(4)
         for col, (icon, title, desc) in zip(cols, features):
@@ -1484,10 +1485,10 @@ def execute_analysis(force: bool = False) -> bool:
                 st.rerun()
         with cta_col3:
             st.caption(
-                "💡 Demo uses the built-in portfolio. Configure your own holdings in "
-                "`portfolio_config.py` or via the sidebar JSON editor."
+                "💡 Demo runs with built-in sample holdings. Sign in to save and analyze "
+                "your own portfolio; API keys stay server-side."
                 if not is_zh else
-                "💡 Demo 使用内置组合。可在 `portfolio_config.py` 编辑或侧边栏 JSON 中替换为你自己的持仓。"
+                "💡 Demo 使用内置样例组合。登录后可保存并分析自己的组合；API key 由服务器统一管理。"
             )
 
         # Footer micro-strip — tech stack + GitHub

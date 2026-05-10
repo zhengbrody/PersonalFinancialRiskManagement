@@ -1,5 +1,5 @@
 """
-pages/0a_💼_Portfolios.py
+pages/0_💼_Portfolios.py
 
 Per-user portfolio CRUD. Visible only to logged-in users; unauth visitors
 see a sign-in nudge instead.

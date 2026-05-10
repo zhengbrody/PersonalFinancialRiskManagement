@@ -1045,7 +1045,8 @@ CONFIDENCE: [High / Medium / Low]"""
                 except QuotaExceeded as qe:
                     st.error(
                         f"⚠️ {qe}  \n\n"
-                        "💡 **Upgrade to Basic** ($10/mo) for 30 analyses + 100 AI chats per month."
+                        "💡 Paid plans are configured but not live yet. "
+                        "Contact MindMarket AI for beta access."
                     )
                     st.stop()
 

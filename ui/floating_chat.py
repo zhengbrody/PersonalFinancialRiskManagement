@@ -47,7 +47,11 @@ def _chat_call_llm(
                 return "🔐 Please sign in to use your free monthly AI chat credits."
             check_and_consume(_u["id"], "chat", provider="anthropic")
         except QuotaExceeded as _qe:
-            return f"⚠️ {_qe}\n\n💡 Upgrade to Basic ($10/mo) for 100 chats per month."
+            return (
+                f"⚠️ {_qe}\n\n"
+                "💡 Paid plans are configured but not live yet. "
+                "Contact MindMarket AI for beta access."
+            )
         except Exception:
             pass  # fail-open on billing wiring
 
@@ -124,7 +128,7 @@ def _chat_call_llm(
             )
 
     raise ValueError(
-        "No LLM backend configured. Please set an API key in the sidebar " "(AI Provider section)."
+        "No LLM backend configured. Ask the site owner to configure server-side AI keys."
     )
 
 

@@ -235,18 +235,18 @@ if meta_kpi and meta_kpi.get("contributed_capital", meta_kpi.get("cost_basis", 0
             st.caption(
                 f"🔍 Missing `avg_cost` for **{missing_n}** ticker(s): "
                 f"{', '.join(f'`{t}`' for t in _missing)}. "
-                f"Add them in portfolio_config.py to raise coverage."
+                f"Add cost basis in the Portfolios page to raise coverage."
                 if lang == "en"
                 else f"🔍 有 **{missing_n}** 只持仓缺少 `avg_cost`：{', '.join(f'`{t}`' for t in _missing)}。"
-                f"在 portfolio_config.py 补齐以提高覆盖率。"
+                f"在 Portfolios 页面补齐成本价以提高覆盖率。"
             )
     elif _pos_info and _pos_info.get("tickers_missing_cost"):
         # Friendly hint — user can add avg_cost to holdings to unlock metric B
         st.caption(
-            "💡 Add `avg_cost` to holdings in portfolio_config.py for Position P&L "
+            "💡 Add `avg_cost` in the Portfolios page for Position P&L "
             "(margin-independent). Current Return on Capital includes margin effects."
             if lang == "en"
-            else "💡 在 portfolio_config.py 为持仓添加 `avg_cost` 可显示持仓盈亏（不含融资影响）。"
+            else "💡 在 Portfolios 页面为持仓添加 `avg_cost` 可显示持仓盈亏（不含融资影响）。"
             "当前「本金收益」反映的是净资产相对本金变化，已包含融资成本。"
         )
 
