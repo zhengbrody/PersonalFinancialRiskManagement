@@ -84,6 +84,9 @@ create trigger subscriptions_touch_updated_at
 create index if not exists subscriptions_stripe_sub_idx
     on public.subscriptions (stripe_subscription_id);
 
+create index if not exists subscriptions_stripe_customer_idx
+    on public.subscriptions (stripe_customer_id);
+
 
 -- ─────────────────────────────────────────────────────────────────
 -- 3. usage_events — append-only log of every billable action

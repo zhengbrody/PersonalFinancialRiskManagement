@@ -10,6 +10,8 @@ Public surface:
                                   event and returns the new count
     get_quota_status(user_id)  — read-only summary for UI display
                                   ({plan, used, limit, remaining})
+    create_checkout_session(...) — create a Stripe Checkout session for
+                                  Basic / Pro upgrades
 
 Design notes:
 
@@ -35,6 +37,13 @@ from .usage import (
     record_event,
 )
 
+try:
+    from .stripe_checkout import CheckoutResult, StripeConfigError, create_checkout_session
+except Exception:  # pragma: no cover - keeps quota module importable without stripe extras
+    CheckoutResult = None
+    StripeConfigError = RuntimeError
+    create_checkout_session = None
+
 __all__ = [
     "PLAN_LIMITS",
     "PLAN_PRICING",
@@ -43,4 +52,7 @@ __all__ = [
     "get_quota_status",
     "get_user_plan",
     "record_event",
+    "CheckoutResult",
+    "StripeConfigError",
+    "create_checkout_session",
 ]

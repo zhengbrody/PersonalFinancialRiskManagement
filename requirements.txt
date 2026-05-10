@@ -17,3 +17,6 @@ python-json-logger>=2.0.7
 
 # Auth + per-user portfolios (Supabase Postgres + Auth + RLS)
 supabase>=2.9
+
+# Billing (Stripe Checkout + subscription webhooks)
+stripe>=10.0
