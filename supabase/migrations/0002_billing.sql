@@ -18,6 +18,17 @@
 -- Apply via Supabase SQL Editor (same pattern as 0001_init.sql). All
 -- statements are idempotent — safe to re-run.
 
+-- 0002 is safe to run even if 0001 was not applied in this project yet.
+create extension if not exists "uuid-ossp";
+
+create or replace function public.touch_updated_at()
+returns trigger as $$
+begin
+    new.updated_at = now();
+    return new;
+end;
+$$ language plpgsql;
+
 -- ─────────────────────────────────────────────────────────────────
 -- 1. profiles — extends auth.users with billing-relevant metadata
 -- ─────────────────────────────────────────────────────────────────
