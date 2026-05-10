@@ -444,18 +444,23 @@ def render_shared_sidebar():
         # ══════════════════════════════════════════════════════════
         #  Admin mode toggle
         # ──────────────────────────────────────────────────────────
-        # MINDMARKET_ADMIN_MODE=true exposes the raw API-key inputs +
-        # provider selector (the legacy local-dev experience).
-        # Anything else → end-user mode: keys are server-side only,
-        # users see a quota/plan card instead.
+        # MINDMARKET_ADMIN_MODE=true is only an owner/dev quota bypass.
+        # Raw API-key inputs stay hidden unless the owner explicitly sets
+        # MINDMARKET_SHOW_API_INPUTS=true for local debugging.
+        # Anything else → end-user mode: keys are server-side only.
         # ══════════════════════════════════════════════════════════
         import os as _os_admin
         _admin_mode = _truthy(
             _os_admin.environ.get("MINDMARKET_ADMIN_MODE", "")
             or _safe_get_secret("MINDMARKET_ADMIN_MODE")
         )
+        _show_api_inputs = _truthy(
+            _os_admin.environ.get("MINDMARKET_SHOW_API_INPUTS", "")
+            or _safe_get_secret("MINDMARKET_SHOW_API_INPUTS")
+        )
+        _api_ui_mode = _admin_mode and _show_api_inputs
 
-        st.markdown("### 🤖 AI Provider (admin)" if _admin_mode else "### 🤖 AI Access")
+        st.markdown("### 🤖 AI Provider (admin)" if _api_ui_mode else "### 🤖 AI Access")
 
         # ── Detect if running in cloud/preview (localhost unreachable) ──
         # Check once per session to avoid slow repeated probes
@@ -468,7 +473,7 @@ def render_shared_sidebar():
             except Exception:
                 st.session_state._ollama_reachable = False
 
-        if _admin_mode:
+        if _api_ui_mode:
             # Dynamically build the provider list — hide Ollama if unreachable
             # so cloud/preview users can't accidentally select it
             if st.session_state._ollama_reachable:
@@ -513,7 +518,7 @@ def render_shared_sidebar():
         import os
 
         _key_ok = False
-        if not _admin_mode:
+        if not _api_ui_mode:
             # End-user mode: read keys from server env/secrets only,
             # never let user input. Show quota card instead.
             if _os_admin.environ.get("ANTHROPIC_API_KEY") or _safe_get_secret(
@@ -593,19 +598,19 @@ def render_shared_sidebar():
 
         # Status indicator (admin mode only — non-admin already shows
         # a richer plan + quota card above)
-        if _admin_mode:
+        if _api_ui_mode:
             if _key_ok:
                 st.caption(f"✅ {model_provider} 已配置")
             else:
                 st.caption("⚠️ 请填写 API Key 以启用 AI 功能")
 
-            # Store provider in session state (admin chose it)
+            # Store provider in session state (owner chose it)
             st.session_state._model_provider = model_provider
             st.session_state._llm_configured = _key_ok
 
-        # ── FMP API key — admin mode only.
+        # ── FMP API key — hidden by default.
         # In end-user mode, FMP is server-controlled (set via env at deploy).
-        if _admin_mode:
+        if _api_ui_mode:
             _existing_fmp = (
                 os.environ.get("FMP_API_KEY", "")
                 or _safe_get_secret("FMP_API_KEY")
