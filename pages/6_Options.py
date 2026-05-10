@@ -724,3 +724,10 @@ try:
     render_floating_ai_chat()
 except Exception:
     pass
+
+try:
+    from ui.legal_footer import render_legal_footer
+
+    render_legal_footer()
+except Exception:
+    pass

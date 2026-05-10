@@ -252,115 +252,6 @@ lang = "en"  # default English; user can switch in sidebar
 t = get_translator(lang)
 
 
-# ══════════════════════════════════════════════════════════════
-#  Shared Functions — Live Weights
-# ══════════════════════════════════════════════════════════════
-@st.cache_data(ttl=300, show_spinner=False, max_entries=5)
-def fetch_live_weights() -> tuple[dict, dict]:
-    tickers = list(_pc.PORTFOLIO_HOLDINGS.keys())
-    raw = yf.download(tickers, period="5d", auto_adjust=True, progress=False)
-    if isinstance(raw.columns, pd.MultiIndex):
-        close = raw["Close"]
-        if isinstance(close.columns, pd.MultiIndex):
-            close = close.droplevel(0, axis=1)
-    else:
-        close = raw[["Close"]].rename(columns={"Close": tickers[0]})
-
-    values = {}
-    missing = []
-    for ticker, info in _pc.PORTFOLIO_HOLDINGS.items():
-        if ticker in close.columns:
-            col = close[ticker].dropna()
-            if not col.empty:
-                values[ticker] = float(col.iloc[-1]) * info["shares"]
-                continue
-        missing.append(ticker)
-    for ticker in missing:
-        try:
-            hist = yf.Ticker(ticker).history(period="5d", auto_adjust=True)
-            if not hist.empty:
-                values[ticker] = (
-                    float(hist["Close"].iloc[-1]) * _pc.PORTFOLIO_HOLDINGS[ticker]["shares"]
-                )
-        except Exception:
-            pass
-
-    total_long = sum(values.values())
-    net_equity = total_long - _pc.MARGIN_LOAN
-    weights = {k: round(v / total_long, 6) for k, v in values.items()}
-
-    # ── Capital / P&L metrics ────────────────────────────────────────────
-    # CONTRIBUTED_CAPITAL = self-funded principal (excludes margin draws).
-    # Old name TOTAL_COST_BASIS preserved as alias for backward compat.
-    contributed_capital = getattr(
-        _pc,
-        "CONTRIBUTED_CAPITAL",
-        getattr(_pc, "TOTAL_COST_BASIS", 0),
-    )
-
-    # Metric A: Return on Contributed Capital — "how did MY money do?"
-    # net_equity already excludes the margin loan, so this is the right
-    # thing to compare against contributed_capital.
-    return_on_capital_dollar = net_equity - contributed_capital if contributed_capital > 0 else None
-    return_on_capital_pct = (
-        (net_equity - contributed_capital) / contributed_capital
-        if contributed_capital > 0
-        else None
-    )
-
-    # Metric B: Position P&L — "how did the positions themselves do?"
-    # Independent of margin. Only available if avg_cost is set on holdings.
-    # Coverage now computed by market value (primary), not ticker count.
-    position_cost_info = None
-    position_pnl_dollar = None
-    position_pnl_pct = None
-    try:
-        pc_info = (
-            _pc.position_cost_summary(market_values=values)
-            if hasattr(_pc, "position_cost_summary")
-            else None
-        )
-        if pc_info and pc_info["total_position_cost"] > 0:
-            position_cost_info = pc_info
-            known = set(pc_info["tickers_with_cost"])
-            covered_long = sum(v for tk, v in values.items() if tk in known)
-            position_pnl_dollar = covered_long - pc_info["total_position_cost"]
-            position_pnl_pct = position_pnl_dollar / pc_info["total_position_cost"]
-    except Exception:
-        pass
-
-    # Per-account summary (margin vs crypto — separate leverage per account)
-    account_breakdown = {}
-    try:
-        if hasattr(_pc, "ACCOUNTS") and hasattr(_pc, "account_summary"):
-            for acct_name in _pc.ACCOUNTS:
-                account_breakdown[acct_name] = _pc.account_summary(acct_name, values)
-    except Exception:
-        pass
-
-    meta = {
-        "total_long": total_long,
-        "net_equity": net_equity,
-        "margin_loan": _pc.MARGIN_LOAN,
-        "leverage": total_long / net_equity if net_equity > 0 else float("inf"),
-        "missing": [tk for tk in tickers if tk not in values],
-        # Capital / P&L (new, clearer names — old keys kept for backward compat)
-        "contributed_capital": contributed_capital,
-        "return_on_capital_dollar": return_on_capital_dollar,
-        "return_on_capital_pct": return_on_capital_pct,
-        "position_pnl_dollar": position_pnl_dollar,
-        "position_pnl_pct": position_pnl_pct,
-        "position_cost_info": position_cost_info,
-        # Back-compat aliases (legacy readers)
-        "cost_basis": contributed_capital,
-        "total_pnl": return_on_capital_dollar,
-        "total_pnl_pct": return_on_capital_pct,
-        # Per-account view
-        "account_breakdown": account_breakdown,
-    }
-    return weights, meta
-
-
 @st.cache_resource(ttl=86400, show_spinner=False, max_entries=10)
 def get_data_provider(weights_json: str, period_years: int):
     """
@@ -379,7 +270,8 @@ def get_data_provider(weights_json: str, period_years: int):
     t0 = time.time()
 
     weights = json.loads(weights_json)
-    dp = DataProvider(weights, period_years=period_years, holdings=_pc.PORTFOLIO_HOLDINGS)
+    from libs.auth.active_portfolio import get_active_holdings
+    dp = DataProvider(weights, period_years=period_years, holdings=get_active_holdings())
     _ = dp.fetch_prices()  # Eagerly load and cache prices
 
     duration_ms = (time.time() - t0) * 1000
@@ -489,7 +381,8 @@ def build_engine_ref(
     market_shock: float = -0.10,
 ) -> RiskEngine:
     """Reconstruct a RiskEngine from cached price data for downstream operations."""
-    dp = DataProvider(weights, period_years=period_years, holdings=_pc.PORTFOLIO_HOLDINGS)
+    from libs.auth.active_portfolio import get_active_holdings
+    dp = DataProvider(weights, period_years=period_years, holdings=get_active_holdings())
     dp._prices = prices.copy()
     # Use SIMPLE returns (project-wide convention), not log.
     dp._returns = dp._prices.pct_change().dropna()
@@ -509,13 +402,56 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
     """
     Universal LLM call with retry logic for API overload errors.
     Includes friendly error messages and recovery suggestions.
+
+    Quota: in non-admin mode, every successful call decrements the
+    user's monthly chat counter. If the user is over their plan cap,
+    raises QuotaExceeded BEFORE making the (paid) provider call.
     """
+    import os as _os
     import time
 
+    _admin_mode = str(
+        _os.environ.get("MINDMARKET_ADMIN_MODE", "")
+        or _safe_get_secret("MINDMARKET_ADMIN_MODE")
+    ).strip().lower() in ("1", "true", "yes", "on")
     model_provider = st.session_state.get("_model_provider", "Ollama (Local)")
-    api_key_input = st.session_state.get("_api_key_input", "")
-    deepseek_key = st.session_state.get("_deepseek_key", "")
+
+    # Server-side keys when not admin; admin can still override via session.
+    api_key_input = (
+        _os.environ.get("ANTHROPIC_API_KEY", "")
+        or st.session_state.get("_api_key_input", "")
+    ) if not _admin_mode else st.session_state.get(
+        "_api_key_input", _os.environ.get("ANTHROPIC_API_KEY", "")
+    )
+    deepseek_key = (
+        _os.environ.get("DEEPSEEK_API_KEY", "")
+        or st.session_state.get("_deepseek_key", "")
+    ) if not _admin_mode else st.session_state.get(
+        "_deepseek_key", _os.environ.get("DEEPSEEK_API_KEY", "")
+    )
     ollama_model = st.session_state.get("_ollama_model", "deepseek-r1:14b")
+
+    # Quota check (non-admin only). Admin bypasses for local dev.
+    if not _admin_mode:
+        try:
+            from libs.auth.session import current_user
+            from libs.billing.usage import QuotaExceeded, check_and_consume
+            _u = current_user()
+            if not _u:
+                raise ValueError("Please sign in to use AI chat and analysis credits.")
+            check_and_consume(
+                _u["id"], "chat",
+                provider=model_provider.lower().split()[0] if model_provider else None,
+            )
+        except QuotaExceeded as _qe:
+            # Surface a clean error so the caller can show the upgrade CTA.
+            raise ValueError(str(_qe))
+        except ValueError:
+            raise
+        except Exception:
+            # Fail-open on billing errors so UI doesn't break.
+            # In production we'd alert on this rate.
+            pass
 
     try:
         if model_provider == "Anthropic Claude" and api_key_input:
@@ -1341,9 +1277,6 @@ def render_sentiment_tear_sheet(tk: str, data: dict, weight: float, lang: str = 
 # ══════════════════════════════════════════════════════════════
 from ui.components import (
     inject_global_css,
-    render_ai_digest,
-    render_kpi_row,
-    render_section,
 )
 
 inject_global_css()
@@ -1404,7 +1337,6 @@ def execute_analysis(force: bool = False) -> bool:
     All inputs read from st.session_state; outputs written there.
     """
     import time
-    import json as _json
 
     weights_input = st.session_state.get("weights_input", "")
     period_years = st.session_state.get("period_years", 2)
@@ -1415,8 +1347,37 @@ def execute_analysis(force: bool = False) -> bool:
     lang = st.session_state.get("_lang", "en")
 
     run_btn = st.session_state.get("_run_trigger", False)
+    if force:
+        run_btn = True
     if run_btn:
         st.session_state._run_trigger = False  # Reset trigger
+
+        # Analysis quota gate (non-admin only). Surfaces upgrade CTA on
+        # exhaustion; admin mode bypasses for local dev.
+        import os as _os_quota
+        _admin_mode = str(
+            _os_quota.environ.get("MINDMARKET_ADMIN_MODE", "")
+            or _safe_get_secret("MINDMARKET_ADMIN_MODE")
+        ).strip().lower() in ("1", "true", "yes", "on")
+        if not _admin_mode:
+            try:
+                from libs.auth.session import current_user
+                from libs.billing.usage import QuotaExceeded, check_and_consume
+                _u = current_user()
+                if not _u:
+                    st.warning("🔐 Please sign in to use your free monthly analysis credits.")
+                    return False
+                try:
+                    check_and_consume(_u["id"], "analysis")
+                except QuotaExceeded as qe:
+                    st.error(
+                        f"⚠️ {qe}  \n\n"
+                        "💡 **Upgrade to Basic** ($10/mo) for 30 analyses + 100 AI chats per month."
+                    )
+                    return False
+            except Exception:
+                # Fail-open on billing wiring errors so UX isn't blocked
+                pass
 
 
     # ══════════════════════════════════════════════════════════════
@@ -1715,7 +1676,7 @@ def execute_analysis(force: bool = False) -> bool:
                     meta_ss = getattr(st.session_state, "_portfolio_meta", None)
                     if meta_ss:
                         report.margin_call_info = engine.compute_margin_call(
-                            meta_ss["total_long"], _pc.MARGIN_LOAN
+                            meta_ss["total_long"], meta_ss.get("margin_loan", 0.0)
                         )
                 show_success("风险引擎构建完成", title="")
             except Exception as e:
@@ -1920,6 +1881,12 @@ def _main_ui():
     except Exception as e:
         # Silently fail if floating chat has issues
         logger.warning("floating_chat.render_failed", error=str(e))
+
+    try:
+        from ui.legal_footer import render_legal_footer
+        render_legal_footer()
+    except Exception as e:
+        logger.warning("legal_footer.render_failed", error=str(e))
 
 
 if __name__ == "__main__":

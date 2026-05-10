@@ -3,12 +3,9 @@ pages/4_Portfolio.py
 Portfolio Optimization and Action: What should I do?
 """
 
-import re
-
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-import requests
 import streamlit as st
 
 from app import (
@@ -24,7 +21,6 @@ from app import (
 from data_provider import DataProvider
 from i18n import get_translator
 from market_intelligence import build_ai_risk_briefing
-from portfolio_config import MARGIN_LOAN
 from risk_engine import RiskEngine
 from ui.components import (
     render_ai_digest,
@@ -37,6 +33,16 @@ from ui.components import (
 # Render shared sidebar
 from ui.shared_sidebar import render_shared_sidebar
 from ui.tokens import T
+
+
+def _active_margin_loan() -> float:
+    """Read user's margin loan from session-state portfolio meta.
+
+    Why: per-user portfolios — never read the demo MARGIN_LOAN constant.
+    """
+    meta = st.session_state.get("_portfolio_meta") or {}
+    return float(meta.get("margin_loan", 0.0))
+
 
 render_shared_sidebar()
 
@@ -69,10 +75,6 @@ prices = st.session_state.get("prices")
 mc_horizon = st.session_state.get("mc_horizon")
 mc_sims = st.session_state.get("mc_sims")
 market_shock = st.session_state.get("market_shock")
-model_provider = st.session_state.get("_model_provider", "Ollama (Local)")
-api_key_input = st.session_state.get("_api_key_input", "")
-deepseek_key = st.session_state.get("_deepseek_key", "")
-ollama_model = st.session_state.get("_ollama_model", "deepseek-r1:14b")
 
 meta_kpi = getattr(st.session_state, "_portfolio_meta", None)
 total_long_val = meta_kpi["total_long"] if meta_kpi else None
@@ -356,77 +358,18 @@ if run_brief:
     )
 
     with st.spinner(t("briefing_gen_spinner")):
-        if model_provider == "Anthropic Claude" and api_key_input:
-            import time as _time
-
-            import anthropic
-
-            client = anthropic.Anthropic(api_key=api_key_input)
-            briefing_text = None
-            for _attempt in range(3):
-                try:
-                    resp = client.messages.create(
-                        model="claude-sonnet-4-6",
-                        max_tokens=2048,
-                        system="You are an institutional-grade portfolio risk analyst generating a morning risk briefing.",
-                        messages=[{"role": "user", "content": briefing_prompt}],
-                    )
-                    briefing_text = resp.content[0].text
-                    break
-                except Exception as _e:
-                    if "overloaded" in str(_e).lower() or "529" in str(_e):
-                        if _attempt < 2:
-                            _time.sleep(3 * (_attempt + 1))
-                            continue
-                    st.error(f"Claude API error: {_e}")
-                    break
-            if briefing_text:
-                st.session_state.ai_briefing = briefing_text
-        elif model_provider == "DeepSeek API" and deepseek_key:
-            from openai import OpenAI
-
-            client = OpenAI(api_key=deepseek_key, base_url="https://api.deepseek.com/v1")
-            try:
-                resp = client.chat.completions.create(
-                    model="deepseek-chat",
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You are an institutional-grade portfolio risk analyst.",
-                        },
-                        {"role": "user", "content": briefing_prompt},
-                    ],
-                    max_tokens=2048,
-                    temperature=0.3,
-                )
-                raw = resp.choices[0].message.content.strip()
-                raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
-                st.session_state.ai_briefing = raw
-            except Exception as e:
-                st.error(f"DeepSeek error: {e}")
-        elif model_provider == "Ollama (Local)":
-            payload = {
-                "model": ollama_model,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "You are an institutional-grade portfolio risk analyst.",
-                    },
-                    {"role": "user", "content": briefing_prompt},
-                ],
-                "stream": False,
-                "options": {"temperature": 0.3, "num_predict": 1500},
-            }
-            try:
-                resp = requests.post("http://localhost:11434/api/chat", json=payload, timeout=120)
-                resp.raise_for_status()
-                raw = resp.json()["message"]["content"].strip()
-                raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
-                st.session_state.ai_briefing = raw
-            except Exception as e:
-                st.error(f"Ollama error: {e}")
-        else:
-            st.warning(t("briefing_no_backend"))
+        try:
+            st.session_state.ai_briefing = call_llm(
+                briefing_prompt,
+                system=(
+                    "You are an institutional-grade portfolio risk analyst "
+                    "generating a morning risk briefing."
+                ),
+                max_tokens=2048,
+                temperature=0.3,
+            )
+        except Exception as e:
+            st.error(f"AI briefing unavailable: {e}")
 
 briefing = st.session_state.get("ai_briefing")
 if briefing:
@@ -457,11 +400,11 @@ render_section(
 _sim_meta = st.session_state.get("_portfolio_meta")
 if _sim_meta and _sim_meta.get("total_long"):
     _sim_total_value = _sim_meta["total_long"]
-    _sim_margin_loan = _sim_meta.get("margin_loan", MARGIN_LOAN)
+    _sim_margin_loan = _sim_meta.get("margin_loan", 0.0)
     _sim_net_equity = _sim_meta.get("net_equity", _sim_total_value - _sim_margin_loan)
 else:
     _sim_total_value = total_long_val if total_long_val else 60000.0
-    _sim_margin_loan = MARGIN_LOAN
+    _sim_margin_loan = _active_margin_loan()
     _sim_net_equity = _sim_total_value - _sim_margin_loan
 
 # --- Market move slider ---
@@ -759,7 +702,7 @@ with render_section(
         total_portfolio_value = meta_ss["total_long"]
         m1, m2, m3, m4 = st.columns(4)
         m1.metric(t("cash_total_value"), f"${meta_ss['total_long']:,.0f}")
-        m2.metric(t("cash_margin"), f"${MARGIN_LOAN:,.0f}")
+        m2.metric(t("cash_margin"), f"${meta_ss.get('margin_loan', 0):,.0f}")
         m3.metric(t("cash_equity"), f"${meta_ss['net_equity']:,.0f}")
         m4.metric(t("cash_leverage"), f"{meta_ss['leverage']:.2f}x")
     else:
@@ -882,7 +825,7 @@ with render_section("Margin Monitor" if lang == "en" else "保证金监控", col
         total_long = mi["buffer_dollars"] + mi["margin_call_portfolio_value"]
         for drop in [5, 10, 15, 20, 25, 30]:
             new_val = total_long * (1 - drop / 100)
-            new_eq = new_val - MARGIN_LOAN
+            new_eq = new_val - _active_margin_loan()
             new_eq_ratio = new_eq / new_val if new_val > 0 else 0
             status = "Safe" if new_eq_ratio > mi["maintenance_ratio"] else "MARGIN CALL"
             scenarios_data.append(
@@ -905,3 +848,10 @@ try:
     render_floating_ai_chat()
 except Exception:
     pass  # Silently fail if floating chat has issues
+
+# Legal disclaimer footer (educational use only)
+try:
+    from ui.legal_footer import render_legal_footer
+    render_legal_footer()
+except Exception:
+    pass

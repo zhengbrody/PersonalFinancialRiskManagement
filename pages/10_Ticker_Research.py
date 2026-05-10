@@ -970,10 +970,14 @@ CONFIDENCE: [High / Medium / Low]"""
     )
 
     # Resolve both keys (FMP required for data, Anthropic required for analysis)
+    _admin_mode = str(
+        os.environ.get("MINDMARKET_ADMIN_MODE", "")
+        or _safe_get_secret("MINDMARKET_ADMIN_MODE")
+    ).strip().lower() in ("1", "true", "yes", "on")
     _anth_key = (
-        st.session_state.get("_api_key_input")
+        os.environ.get("ANTHROPIC_API_KEY", "")
         or _safe_get_secret("ANTHROPIC_API_KEY")
-        or os.environ.get("ANTHROPIC_API_KEY", "")
+        or (st.session_state.get("_api_key_input", "") if _admin_mode else "")
     )
     _fmp_key_for_report = (
         fmp_key or _safe_get_secret("FMP_API_KEY") or os.environ.get("FMP_API_KEY", "")
@@ -987,10 +991,10 @@ CONFIDENCE: [High / Medium / Low]"""
         if not _anth_key:
             missing.append("ANTHROPIC_API_KEY")
         st.info(
-            f"🔑 Configure {' + '.join(missing)} in the sidebar or secrets.toml "
+            f"🔑 Configure {' + '.join(missing)} in server secrets "
             f"to unlock the institutional analyst report."
             if lang == "en"
-            else f"🔑 在侧边栏或 secrets.toml 中配置 {' + '.join(missing)} 以解锁投行分析报告。"
+            else f"🔑 在服务器 secrets 中配置 {' + '.join(missing)} 以解锁投行分析报告。"
         )
     else:
         report_key = f"_analyst_report_{ticker.upper()}"
@@ -1018,6 +1022,32 @@ CONFIDENCE: [High / Medium / Low]"""
 
         if gen_clicked:
             from market_intelligence import generate_analyst_report
+
+            if not _admin_mode:
+                try:
+                    from libs.auth.session import current_user
+                    from libs.billing.usage import QuotaExceeded, check_and_consume
+                except Exception as e:
+                    st.error(f"Billing check failed: {e}")
+                    st.stop()
+                _u = current_user()
+                if not _u:
+                    st.warning("🔐 Please sign in to use your free monthly analysis credits.")
+                    st.stop()
+                try:
+                    check_and_consume(
+                        _u["id"],
+                        "analysis",
+                        provider="anthropic",
+                        model="claude-sonnet-4-5",
+                        metadata={"feature": "ticker_research_report", "ticker": ticker.upper()},
+                    )
+                except QuotaExceeded as qe:
+                    st.error(
+                        f"⚠️ {qe}  \n\n"
+                        "💡 **Upgrade to Basic** ($10/mo) for 30 analyses + 100 AI chats per month."
+                    )
+                    st.stop()
 
             with st.spinner(
                 f"📊 Aggregating institutional data for {ticker.upper()}..."
@@ -1066,3 +1096,10 @@ except Exception as e:
 
     with st.expander("Error Details"):
         st.code(traceback.format_exc())
+
+try:
+    from ui.legal_footer import render_legal_footer
+
+    render_legal_footer()
+except Exception:
+    pass

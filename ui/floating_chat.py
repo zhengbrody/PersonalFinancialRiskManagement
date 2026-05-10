@@ -22,12 +22,49 @@ def _chat_call_llm(
     Minimal LLM call that mirrors app.call_llm but lives in this module
     to avoid circular imports (app.py -> ui.floating_chat -> app.call_llm).
     Reads provider config from st.session_state set by shared_sidebar.
+
+    Quota: in non-admin mode, decrements the user's monthly chat counter.
+    Admin mode (MINDMARKET_ADMIN_MODE=true) bypasses quota for local dev.
     """
+    import os as _os
     import time
 
+    try:
+        _admin_secret = st.secrets.get("MINDMARKET_ADMIN_MODE", "")
+    except Exception:
+        _admin_secret = ""
+    _admin_mode = str(
+        _os.environ.get("MINDMARKET_ADMIN_MODE", "") or _admin_secret
+    ).strip().lower() in ("1", "true", "yes", "on")
+
+    # Quota gate (production only)
+    if not _admin_mode:
+        try:
+            from libs.auth.session import current_user
+            from libs.billing.usage import QuotaExceeded, check_and_consume
+            _u = current_user()
+            if not _u:
+                return "🔐 Please sign in to use your free monthly AI chat credits."
+            check_and_consume(_u["id"], "chat", provider="anthropic")
+        except QuotaExceeded as _qe:
+            return f"⚠️ {_qe}\n\n💡 Upgrade to Basic ($10/mo) for 100 chats per month."
+        except Exception:
+            pass  # fail-open on billing wiring
+
     model_provider = st.session_state.get("_model_provider", "Ollama (Local)")
-    api_key_input = st.session_state.get("_api_key_input", "")
-    deepseek_key = st.session_state.get("_deepseek_key", "")
+    # Server-controlled keys when not admin
+    api_key_input = (
+        _os.environ.get("ANTHROPIC_API_KEY", "")
+        or st.session_state.get("_api_key_input", "")
+    ) if not _admin_mode else st.session_state.get(
+        "_api_key_input", _os.environ.get("ANTHROPIC_API_KEY", "")
+    )
+    deepseek_key = (
+        _os.environ.get("DEEPSEEK_API_KEY", "")
+        or st.session_state.get("_deepseek_key", "")
+    ) if not _admin_mode else st.session_state.get(
+        "_deepseek_key", _os.environ.get("DEEPSEEK_API_KEY", "")
+    )
     ollama_model = st.session_state.get("_ollama_model", "deepseek-r1:14b")
 
     if model_provider == "Anthropic Claude" and api_key_input:
@@ -364,5 +401,12 @@ def render_floating_ai_chat():
             help="Open AI Chat Assistant",
         )
 
+    # Persist open state across reruns. st.chat_input + st.rerun() inside
+    # _handle_user_input cause the script to re-execute; without a sticky
+    # flag, `open_chat` is False on the rerun and the modal vanishes after
+    # every question (user has to click the button again).
     if open_chat:
+        st.session_state._fc_dialog_open = True
+
+    if st.session_state.get("_fc_dialog_open"):
         _open_chat_dialog()

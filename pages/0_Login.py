@@ -28,7 +28,6 @@ from libs.auth import (
 )
 from ui.shared_sidebar import render_shared_sidebar
 
-
 render_shared_sidebar()
 lang = st.session_state.get("_lang", "en")
 is_zh = lang == "zh"
@@ -107,6 +106,13 @@ with tab_login:
                 st.rerun()
             except AuthError as e:
                 st.error(str(e))
+
+try:
+    from ui.legal_footer import render_legal_footer
+
+    render_legal_footer()
+except Exception:
+    pass
 
 with tab_signup:
     with st.form("signup_form", clear_on_submit=False):

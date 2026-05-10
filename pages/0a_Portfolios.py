@@ -15,13 +15,13 @@ import json
 
 import streamlit as st
 
-from libs.auth import is_authenticated, current_user
+from libs.auth import current_user, is_authenticated
 from libs.auth.client import AuthError
 from libs.auth.portfolios import (
-    list_portfolios,
     create_portfolio,
-    update_portfolio,
     delete_portfolio,
+    list_portfolios,
+    update_portfolio,
 )
 from ui.shared_sidebar import render_shared_sidebar
 
@@ -273,3 +273,10 @@ if submitted:
             st.rerun()
         except (ValueError, AuthError) as e:
             st.error(str(e))
+
+try:
+    from ui.legal_footer import render_legal_footer
+
+    render_legal_footer()
+except Exception:
+    pass

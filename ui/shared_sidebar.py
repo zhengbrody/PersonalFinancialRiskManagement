@@ -18,6 +18,10 @@ def _safe_get_secret(key):
         return ""
 
 
+def _truthy(value) -> bool:
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
 def render_shared_sidebar():
     """
     Render the shared sidebar that appears on all pages.
@@ -437,7 +441,21 @@ def render_shared_sidebar():
         st.markdown("---")
 
         # ── AI Provider Configuration ─────────────────────────────
-        st.markdown("### 🤖 AI Provider")
+        # ══════════════════════════════════════════════════════════
+        #  Admin mode toggle
+        # ──────────────────────────────────────────────────────────
+        # MINDMARKET_ADMIN_MODE=true exposes the raw API-key inputs +
+        # provider selector (the legacy local-dev experience).
+        # Anything else → end-user mode: keys are server-side only,
+        # users see a quota/plan card instead.
+        # ══════════════════════════════════════════════════════════
+        import os as _os_admin
+        _admin_mode = _truthy(
+            _os_admin.environ.get("MINDMARKET_ADMIN_MODE", "")
+            or _safe_get_secret("MINDMARKET_ADMIN_MODE")
+        )
+
+        st.markdown("### 🤖 AI Provider" + (" (admin)" if _admin_mode else ""))
 
         # ── Detect if running in cloud/preview (localhost unreachable) ──
         # Check once per session to avoid slow repeated probes
@@ -450,47 +468,95 @@ def render_shared_sidebar():
             except Exception:
                 st.session_state._ollama_reachable = False
 
-        # Dynamically build the provider list — hide Ollama if unreachable
-        # so cloud/preview users can't accidentally select it
-        if st.session_state._ollama_reachable:
-            _provider_options = ["Anthropic Claude", "DeepSeek API", "Ollama (Local)"]
-        else:
-            _provider_options = ["Anthropic Claude", "DeepSeek API"]
-            # If previously selected Ollama but now unreachable, force reset
-            if st.session_state.get("model_provider_sidebar") == "Ollama (Local)":
-                st.session_state["model_provider_sidebar"] = "Anthropic Claude"
+        if _admin_mode:
+            # Dynamically build the provider list — hide Ollama if unreachable
+            # so cloud/preview users can't accidentally select it
+            if st.session_state._ollama_reachable:
+                _provider_options = ["Anthropic Claude", "DeepSeek API", "Ollama (Local)"]
+            else:
+                _provider_options = ["Anthropic Claude", "DeepSeek API"]
+                # If previously selected Ollama but now unreachable, force reset
+                if st.session_state.get("model_provider_sidebar") == "Ollama (Local)":
+                    st.session_state["model_provider_sidebar"] = "Anthropic Claude"
 
-        if st.session_state._ollama_reachable:
-            model_provider = st.selectbox(
-                "Provider",
-                _provider_options,
-                key="model_provider_sidebar",
-                label_visibility="collapsed",
-            )
-        else:
-            # Selectbox + tiny recheck icon in a compact row
-            col_sel, col_btn = st.columns([5, 1])
-            with col_sel:
+            if st.session_state._ollama_reachable:
                 model_provider = st.selectbox(
                     "Provider",
                     _provider_options,
                     key="model_provider_sidebar",
                     label_visibility="collapsed",
                 )
-            with col_btn:
-                if st.button(
-                    "🔄",
-                    key="recheck_ollama",
-                    help="重新检测本地 Ollama (启动 `ollama serve` 后点此)",
-                ):
-                    st.session_state.pop("_ollama_reachable", None)
-                    st.rerun()
+            else:
+                # Selectbox + tiny recheck icon in a compact row
+                col_sel, col_btn = st.columns([5, 1])
+                with col_sel:
+                    model_provider = st.selectbox(
+                        "Provider",
+                        _provider_options,
+                        key="model_provider_sidebar",
+                        label_visibility="collapsed",
+                    )
+                with col_btn:
+                    if st.button(
+                        "🔄",
+                        key="recheck_ollama",
+                        help="重新检测本地 Ollama (启动 `ollama serve` 后点此)",
+                    ):
+                        st.session_state.pop("_ollama_reachable", None)
+                        st.rerun()
+        else:
+            # End users should not see provider routing; owner controls it
+            # via server-side env/secrets.
+            model_provider = "Anthropic Claude"
 
         # API Key inputs based on provider
         import os
 
         _key_ok = False
-        if model_provider == "Anthropic Claude":
+        if not _admin_mode:
+            # End-user mode: read keys from server env/secrets only,
+            # never let user input. Show quota card instead.
+            if _os_admin.environ.get("ANTHROPIC_API_KEY") or _safe_get_secret(
+                "ANTHROPIC_API_KEY"
+            ):
+                st.session_state._model_provider = "Anthropic Claude"
+                _key_ok = True
+            elif _os_admin.environ.get("DEEPSEEK_API_KEY") or _safe_get_secret(
+                "DEEPSEEK_API_KEY"
+            ):
+                st.session_state._model_provider = "DeepSeek API"
+                _key_ok = True
+            st.session_state._llm_configured = _key_ok
+
+            # Plan + usage card
+            try:
+                from libs.auth.session import current_user
+                from libs.billing.usage import get_quota_status
+                _u = current_user()
+                if _u:
+                    _qs = get_quota_status(_u["id"])
+                    st.caption(f"📋 Plan: **{_qs['label']}**")
+                    _k = _qs["kinds"]
+                    if "analysis" in _k and _k["analysis"]["limit"] is not None:
+                        a = _k["analysis"]
+                        st.caption(
+                            f"📊 Analyses: **{a['used']}/{a['limit']}** this month"
+                            + ("  ⚠️ exhausted" if a["exhausted"] else "")
+                        )
+                    if "chat" in _k and _k["chat"]["limit"] is not None:
+                        c = _k["chat"]
+                        st.caption(
+                            f"💬 AI chats: **{c['used']}/{c['limit']}** this month"
+                            + ("  ⚠️ exhausted" if c["exhausted"] else "")
+                        )
+                    if _qs["plan"] == "free":
+                        st.caption("💡 Upgrade to Basic ($10/mo) for 30 analyses + 100 chats")
+                else:
+                    st.caption("🔐 Sign in to track usage.")
+            except Exception:
+                pass
+
+        elif model_provider == "Anthropic Claude":
             api_key = st.text_input(
                 "Claude API Key",
                 type="password",
@@ -525,56 +591,53 @@ def render_shared_sidebar():
             st.session_state._ollama_model = ollama_model
             _key_ok = st.session_state.get("_ollama_reachable", False)
 
-        # Status indicator: green check if configured, red warning if not
-        if _key_ok:
-            st.caption(f"✅ {model_provider} 已配置")
-        else:
-            st.caption("⚠️ 请填写 API Key 以启用 AI 功能")
-
-        # Store provider in session state
-        st.session_state._model_provider = model_provider
-        st.session_state._llm_configured = _key_ok
-
-        # ── FMP API key (separate from LLM — powers earnings data, price targets,
-        #     analyst reports, news supplement). Independent of provider choice.
-        _existing_fmp = (
-            os.environ.get("FMP_API_KEY", "")
-            or _safe_get_secret("FMP_API_KEY")
-            or st.session_state.get("_fmp_key", "")
-        )
-        fmp_key_input = st.text_input(
-            "FMP API Key (optional)",
-            type="password",
-            value=_existing_fmp,
-            placeholder="your FMP key",
-            key="fmp_api_key_sidebar",
-            help=(
-                "Powers earnings transcripts, analyst price targets, and the "
-                "Institutional Analyst Report on the Ticker Research page. "
-                "Get a free key at https://site.financialmodelingprep.com/"
-            ),
-        )
-        if fmp_key_input:
-            st.session_state._fmp_key = fmp_key_input
-            # Propagate to os.environ so every page that reads env picks it up
-            os.environ["FMP_API_KEY"] = fmp_key_input
-            # Flag keys that clearly belong to another service — a common
-            # paste mistake. FMP keys are 32-char alphanumeric tokens.
-            _looks_wrong = (
-                fmp_key_input.startswith("apify_")
-                or fmp_key_input.startswith("sk-")
-                or fmp_key_input.startswith("sk-ant-")
-                or len(fmp_key_input) < 20
-            )
-            if _looks_wrong:
-                st.caption(
-                    "⚠️ 这不像 FMP key(可能粘错了 Apify / OpenAI / Claude key)。"
-                    "FMP key 一般是 32 位字母数字字符串。"
-                )
+        # Status indicator (admin mode only — non-admin already shows
+        # a richer plan + quota card above)
+        if _admin_mode:
+            if _key_ok:
+                st.caption(f"✅ {model_provider} 已配置")
             else:
-                st.caption("✅ FMP 已配置（解锁投行分析报告 + 财报深度分析）")
-        else:
-            st.caption("ℹ️ FMP 未配置（投行分析报告 / 财报 AI 将不可用）")
+                st.caption("⚠️ 请填写 API Key 以启用 AI 功能")
+
+            # Store provider in session state (admin chose it)
+            st.session_state._model_provider = model_provider
+            st.session_state._llm_configured = _key_ok
+
+        # ── FMP API key — admin mode only.
+        # In end-user mode, FMP is server-controlled (set via env at deploy).
+        if _admin_mode:
+            _existing_fmp = (
+                os.environ.get("FMP_API_KEY", "")
+                or _safe_get_secret("FMP_API_KEY")
+                or st.session_state.get("_fmp_key", "")
+            )
+            fmp_key_input = st.text_input(
+                "FMP API Key (optional)",
+                type="password",
+                value=_existing_fmp,
+                placeholder="your FMP key",
+                key="fmp_api_key_sidebar",
+                help=(
+                    "Powers earnings transcripts, analyst price targets, and the "
+                    "Institutional Analyst Report on the Ticker Research page. "
+                    "Get a free key at https://site.financialmodelingprep.com/"
+                ),
+            )
+            if fmp_key_input:
+                st.session_state._fmp_key = fmp_key_input
+                os.environ["FMP_API_KEY"] = fmp_key_input
+                _looks_wrong = (
+                    fmp_key_input.startswith("apify_")
+                    or fmp_key_input.startswith("sk-")
+                    or fmp_key_input.startswith("sk-ant-")
+                    or len(fmp_key_input) < 20
+                )
+                if _looks_wrong:
+                    st.caption("⚠️ 这不像 FMP key(可能粘错了)。")
+                else:
+                    st.caption("✅ FMP 已配置")
+            else:
+                st.caption("ℹ️ FMP 未配置")
 
         st.markdown("---")
 
