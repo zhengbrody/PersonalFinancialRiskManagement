@@ -31,12 +31,18 @@ PLAN_LIMITS: dict[str, dict[str, Optional[int]]] = {
         "chat": 500,
         "tool_call": None,
     },
+    "owner": {
+        "analysis": None,
+        "chat": None,
+        "tool_call": None,
+    },
 }
 
 PLAN_PRICING: dict[str, dict[str, Any]] = {
     "free":  {"price_usd_per_month": 0,  "label": "Free"},
     "basic": {"price_usd_per_month": 10, "label": "Basic"},
     "pro":   {"price_usd_per_month": 29, "label": "Pro"},
+    "owner": {"price_usd_per_month": 0,  "label": "Owner"},
 }
 
 
@@ -85,12 +91,30 @@ def _start_of_month_iso() -> str:
     return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
 
 
+def is_owner_user(user_id: str) -> bool:
+    """True when the current Streamlit session belongs to the owner allow-list."""
+    try:
+        from libs.admin.status import is_owner_email
+        from libs.auth.session import current_user
+
+        user = current_user()
+        return bool(
+            user
+            and user.get("id") == user_id
+            and is_owner_email(user.get("email"))
+        )
+    except Exception:
+        return False
+
+
 # ── Public API ───────────────────────────────────────────────────
 
 
 def get_user_plan(user_id: str) -> str:
     """Return the user's current plan name. Defaults to 'free' on any
     DB failure — fail-closed for billing means free is the safe path."""
+    if is_owner_user(user_id):
+        return "owner"
     try:
         resp = (
             _client()

@@ -51,7 +51,9 @@ def mock_supabase(fake_streamlit, supabase_env):
 
 def test_plan_limits_match_schema_constraints():
     from libs.billing.usage import PLAN_LIMITS
-    assert set(PLAN_LIMITS.keys()) == {"free", "basic", "pro"}
+    assert {"free", "basic", "pro"}.issubset(PLAN_LIMITS)
+    assert PLAN_LIMITS["owner"]["analysis"] is None
+    assert PLAN_LIMITS["owner"]["chat"] is None
     for plan in PLAN_LIMITS.values():
         assert "analysis" in plan
         assert "chat" in plan
@@ -100,6 +102,15 @@ def test_get_user_plan_rejects_unknown_plan(mock_supabase):
     mock_supabase.execute.return_value = MagicMock(data=[{"plan": "enterprise"}])
     from libs.billing.usage import get_user_plan
     assert get_user_plan("user-1") == "free"
+
+
+def test_get_user_plan_owner_bypasses_db(mock_supabase, monkeypatch):
+    monkeypatch.setenv("MINDMARKET_OWNER_EMAILS", "x@y.com")
+
+    from libs.billing.usage import get_user_plan
+
+    assert get_user_plan("user-1") == "owner"
+    mock_supabase.table.assert_not_called()
 
 
 # ── get_used_this_month ──────────────────────────────────────
@@ -169,6 +180,26 @@ def test_consume_with_unlimited_kind_records_without_check(mock_supabase):
     from libs.billing.usage import check_and_consume
     status = check_and_consume("user-1", "tool_call")
     assert status is not None  # didn't raise
+
+
+def test_owner_consume_is_unlimited_but_records(mock_supabase, monkeypatch):
+    monkeypatch.setenv("MINDMARKET_OWNER_EMAILS", "x@y.com")
+    insert_resp = MagicMock(data=[{"id": "evt-1"}])
+    used_analysis = MagicMock(data=[], count=99)
+    used_chat = MagicMock(data=[], count=88)
+
+    mock_supabase.execute.side_effect = [
+        insert_resp,
+        used_analysis,
+        used_chat,
+    ]
+
+    from libs.billing.usage import check_and_consume
+
+    status = check_and_consume("user-1", "chat")
+    assert status["plan"] == "owner"
+    assert status["kinds"]["chat"]["limit"] is None
+    assert status["kinds"]["chat"]["exhausted"] is False
 
 
 # ── get_quota_status ─────────────────────────────────────────
