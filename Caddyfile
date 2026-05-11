@@ -27,11 +27,34 @@
     @www host www.{$SITE_HOST}
     redir @www https://{$SITE_HOST}{uri} permanent
 
-    reverse_proxy app:8501 {
-        # Keep the WebSocket / SSE stream alive for slow analyses.
-        transport http {
-            read_timeout 300s
-            write_timeout 300s
+    handle /robots.txt {
+        header Content-Type "text/plain; charset=utf-8"
+        respond `User-agent: *
+Allow: /
+Sitemap: https://{$SITE_HOST}/sitemap.xml
+`
+    }
+
+    handle /sitemap.xml {
+        header Content-Type "application/xml; charset=utf-8"
+        respond `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://{$SITE_HOST}/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>
+`
+    }
+
+    handle {
+        reverse_proxy app:8501 {
+            # Keep the WebSocket / SSE stream alive for slow analyses.
+            transport http {
+                read_timeout 300s
+                write_timeout 300s
+            }
         }
     }
 }
