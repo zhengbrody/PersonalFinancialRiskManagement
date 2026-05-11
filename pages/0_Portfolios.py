@@ -17,6 +17,7 @@ import streamlit as st
 
 from libs.auth import current_user, is_authenticated
 from libs.auth.client import AuthError
+from libs.auth.portfolio_csv import parse_holdings_csv
 from libs.auth.portfolios import (
     create_portfolio,
     delete_portfolio,
@@ -210,6 +211,84 @@ else:
         "No portfolios yet — create your first one below."
         if not is_zh else "还没有组合 — 在下方创建第一个。"
     )
+
+
+# ── CSV import ─────────────────────────────────────────────────────
+st.markdown("---")
+st.markdown(f"### {'Import from CSV' if not is_zh else '从 CSV 导入'}")
+st.caption(
+    "Accepted columns: ticker/symbol, shares/quantity, optional avg_cost/cost_basis."
+    if not is_zh else
+    "支持列名：ticker/symbol、shares/quantity，可选 avg_cost/cost_basis。"
+)
+
+uploaded_csv = st.file_uploader(
+    "Portfolio CSV" if not is_zh else "组合 CSV",
+    type=["csv"],
+    key="portfolio_csv_upload",
+)
+
+csv_holdings = None
+if uploaded_csv is not None:
+    try:
+        csv_holdings = parse_holdings_csv(uploaded_csv.getvalue())
+        preview_rows = [
+            {
+                "ticker": ticker,
+                "shares": data["shares"],
+                "avg_cost": data.get("avg_cost"),
+            }
+            for ticker, data in csv_holdings.items()
+        ]
+        st.dataframe(preview_rows, hide_index=True, use_container_width=True)
+    except ValueError as e:
+        st.error(str(e))
+
+if csv_holdings:
+    with st.form("csv_import_form", clear_on_submit=False):
+        csv_name = st.text_input(
+            "Portfolio name" if not is_zh else "组合名称",
+            value=uploaded_csv.name.rsplit(".", 1)[0] if uploaded_csv else "Imported Portfolio",
+            key="csv_portfolio_name",
+        )
+        csv_margin = st.number_input(
+            "Margin loan ($)" if not is_zh else "保证金贷款 ($)",
+            value=0.0,
+            min_value=0.0,
+            step=1000.0,
+            key="csv_margin_loan",
+        )
+        csv_is_default = st.checkbox(
+            "Set as default portfolio"
+            if not is_zh else "设为默认组合",
+            value=len(portfolios) == 0,
+            key="csv_is_default",
+        )
+        csv_submitted = st.form_submit_button(
+            "Import portfolio" if not is_zh else "导入组合",
+            type="primary",
+            use_container_width=True,
+        )
+
+    if csv_submitted:
+        if not csv_name.strip():
+            st.error("Name is required." if not is_zh else "请填名称。")
+        else:
+            try:
+                created = create_portfolio(
+                    name=csv_name.strip(),
+                    holdings=csv_holdings,
+                    margin_loan=float(csv_margin),
+                    is_default=csv_is_default,
+                )
+                st.success(
+                    f"Imported portfolio: {created['name']}"
+                    if not is_zh else
+                    f"已导入组合: {created['name']}"
+                )
+                st.rerun()
+            except AuthError as e:
+                st.error(str(e))
 
 
 # ── Create new portfolio ───────────────────────────────────────────
