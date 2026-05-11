@@ -1,4 +1,5 @@
 """CSV import helpers for per-user portfolios."""
+
 from __future__ import annotations
 
 import csv
@@ -15,10 +16,11 @@ _AVG_COST_COLUMNS = (
     "avg_price",
     "average_price",
 )
+_SECTOR_COLUMNS = ("sector", "industry", "category", "risk_bucket")
 
 
 def parse_holdings_csv(raw: bytes | str) -> dict:
-    """Parse holdings CSV into {TICKER: {shares, avg_cost?}}.
+    """Parse holdings CSV into {TICKER: {shares, avg_cost?, sector?}}.
 
     Required columns:
       - ticker/symbol/security/asset
@@ -26,6 +28,7 @@ def parse_holdings_csv(raw: bytes | str) -> dict:
 
     Optional:
       - avg_cost/average_cost/cost_basis/cost/avg_price/average_price
+      - sector/industry/category/risk_bucket
     """
     text = raw.decode("utf-8-sig") if isinstance(raw, bytes) else raw
     reader = csv.DictReader(io.StringIO(text))
@@ -36,6 +39,7 @@ def parse_holdings_csv(raw: bytes | str) -> dict:
     ticker_col = _first_present(normalized, _TICKER_COLUMNS)
     shares_col = _first_present(normalized, _SHARES_COLUMNS)
     avg_cost_col = _first_present(normalized, _AVG_COST_COLUMNS)
+    sector_col = _first_present(normalized, _SECTOR_COLUMNS)
 
     missing = []
     if ticker_col is None:
@@ -71,6 +75,11 @@ def parse_holdings_csv(raw: bytes | str) -> dict:
                         added_shares=shares,
                         added_cost=avg_cost,
                     )
+
+        if sector_col:
+            raw_sector = str(row.get(sector_col) or "").strip()
+            if raw_sector:
+                position.setdefault("sector", raw_sector)
 
     if row_count == 0:
         raise ValueError("CSV has a header but no data rows.")

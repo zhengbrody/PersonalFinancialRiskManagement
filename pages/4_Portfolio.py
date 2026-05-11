@@ -14,9 +14,9 @@ from app import (
     CLR_GOLD,
     CLR_GOOD,
     CLR_MUTED,
-    SECTOR_MAP,
     call_llm,
     get_conviction_multiplier,
+    get_sector_map,
 )
 from data_provider import DataProvider
 from i18n import get_translator
@@ -239,8 +239,9 @@ if ef:
     target_weights = adj_weights if adj_weights else msw
     if engine_ref:
         _user_limits = st.session_state.get("_risk_limits")
+        _sector_map = get_sector_map()
         violations = engine_ref.check_trade_compliance(
-            target_weights, SECTOR_MAP, limits=_user_limits
+            target_weights, _sector_map, limits=_user_limits
         )
         if violations:
             for v in violations:
@@ -253,7 +254,7 @@ if ef:
             # satisfied the CHECKED limits but violated the CORRECTED limits.
             corrected = engine_ref.adjust_weights_for_compliance(
                 target_weights,
-                SECTOR_MAP,
+                _sector_map,
                 limits=_user_limits,
             )
             st.caption(t("compliance_corrected"))
@@ -852,6 +853,7 @@ except Exception:
 # Legal disclaimer footer (educational use only)
 try:
     from ui.legal_footer import render_legal_footer
+
     render_legal_footer()
 except Exception:
     pass

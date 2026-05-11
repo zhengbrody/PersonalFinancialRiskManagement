@@ -28,6 +28,7 @@ from typing import Any, Dict, List, Optional
 #   account          key into ACCOUNTS; default "margin"
 #   asset_type       "equity" | "etf" | "inverse_etf" | "crypto" | "option" | "cash"
 #                    inferred from ticker suffix if omitted
+#   sector           optional display/risk bucket used by user-imported portfolios
 #   currency         default "USD"
 #   margin_eligible  default True for equity/etf, False for crypto/inverse_etf
 
@@ -41,7 +42,12 @@ PORTFOLIO_HOLDINGS: Dict[str, Dict[str, Any]] = {
     "TSM": {"shares": 5.39, "avg_cost": 181.45, "account": "margin", "asset_type": "equity"},
     "NFLX": {"shares": 18, "avg_cost": 94.7, "account": "margin", "asset_type": "equity"},
     "AVGO": {"shares": 4.02, "avg_cost": 324.19, "account": "margin", "asset_type": "equity"},
-    "AXP": {"shares": 6.00, "avg_cost": 323.90, "account": "margin", "asset_type": "equity"},  # avg_cost not tracked
+    "AXP": {
+        "shares": 6.00,
+        "avg_cost": 323.90,
+        "account": "margin",
+        "asset_type": "equity",
+    },  # avg_cost not tracked
     "IBM": {"shares": 3.00, "avg_cost": 228, "account": "margin", "asset_type": "equity"},
     "SOFI": {"shares": 45.00, "avg_cost": 13.80, "account": "margin", "asset_type": "equity"},
     "VST": {"shares": 5.01, "avg_cost": 156.28, "account": "margin", "asset_type": "equity"},
@@ -172,6 +178,7 @@ SECTOR_MAP: Dict[str, str] = {
     "AXP": "Financials",
     "JPM": "Financials",
     "GS": "Financials",
+    "IBM": "Technology / IT Services",
     "SOFI": "Fintech",
     "HOOD": "Fintech",
     "PYPL": "Fintech",
@@ -204,6 +211,14 @@ SECTOR_MAP: Dict[str, str] = {
     "BNB-USD": "Crypto",
 }
 
+ASSET_TYPE_SECTOR_DEFAULTS: Dict[str, str] = {
+    "crypto": "Crypto",
+    "etf": "ETF",
+    "inverse_etf": "Inverse ETF",
+    "option": "Options",
+    "cash": "Cash",
+}
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  Helpers
@@ -220,6 +235,37 @@ def _infer_asset_type(ticker: str) -> str:
     return "equity"
 
 
+def infer_sector(ticker: str, holding: Optional[Dict[str, Any]] = None) -> str:
+    """Return the best available sector bucket for a ticker.
+
+    Priority:
+      1. Per-holding metadata (`sector` or `industry`) from DB/CSV portfolios.
+      2. Canonical built-in `SECTOR_MAP`.
+      3. Asset-type fallback for ETFs, crypto, options, cash, etc.
+      4. `Unclassified` for unknown equities.
+    """
+    tk = str(ticker).strip().upper()
+    h = holding or {}
+
+    explicit = h.get("sector") or h.get("industry")
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip()
+
+    if tk in SECTOR_MAP:
+        return SECTOR_MAP[tk]
+
+    asset_type = h.get("asset_type") or _infer_asset_type(tk)
+    return ASSET_TYPE_SECTOR_DEFAULTS.get(str(asset_type), "Unclassified")
+
+
+def build_sector_map(
+    holdings: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, str]:
+    """Build a ticker -> sector map for hardcoded or user DB portfolios."""
+    source = holdings or PORTFOLIO_HOLDINGS
+    return {str(tk).upper(): infer_sector(str(tk), h) for tk, h in source.items()}
+
+
 def get_holding(ticker: str) -> Dict[str, Any]:
     """
     Return the full holding record with defaults filled in.
@@ -232,6 +278,7 @@ def get_holding(ticker: str) -> Dict[str, Any]:
     return {
         "shares": float(h.get("shares", 0.0)),
         "avg_cost": h.get("avg_cost"),
+        "sector": h.get("sector") or infer_sector(ticker, h),
         "account": h.get("account", "crypto" if is_crypto else "margin"),
         "asset_type": asset_type,
         "currency": h.get("currency", "USD"),
@@ -338,10 +385,10 @@ def validate_portfolio_config() -> List[str]:
         if shares is None or shares <= 0:
             issues.append(f"{tk}: shares must be > 0 (got {shares!r})")
 
-        if tk not in SECTOR_MAP:
+        if infer_sector(tk, h) == "Unclassified":
             issues.append(
-                f"{tk}: missing from SECTOR_MAP — will show as 'Other' and "
-                f"escape sector-concentration limits"
+                f"{tk}: sector metadata missing — grouped as 'Unclassified'. "
+                f"Add sector in the holding or SECTOR_MAP for sharper concentration checks."
             )
 
         # Crypto tickers should use the `-USD` suffix convention

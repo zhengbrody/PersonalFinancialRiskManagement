@@ -27,6 +27,7 @@ Caller pattern (in app.py / pages):
     holdings = get_active_holdings()
     margin = get_active_margin_loan()
 """
+
 from __future__ import annotations
 
 from typing import Any, Dict
@@ -109,6 +110,8 @@ def _resolve() -> tuple[Dict[str, Dict[str, Any]], float]:
         h: Dict[str, Any] = {"shares": float(v.get("shares", 0))}
         if "avg_cost" in v and v["avg_cost"] is not None:
             h["avg_cost"] = float(v["avg_cost"])
+        if "sector" in v and v["sector"]:
+            h["sector"] = str(v["sector"]).strip()
         h["account"] = v.get("account", "margin")
         h["asset_type"] = v.get("asset_type", _infer_asset_type(tk))
         h["currency"] = v.get("currency", "USD")

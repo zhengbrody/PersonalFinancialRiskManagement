@@ -9,6 +9,7 @@ Why a separate page (not in Login):
   - Streamlit's nav is alphabetical-ish per number prefix, so "0a_"
     keeps it just below 🔐 Login at the top.
 """
+
 from __future__ import annotations
 
 import json
@@ -57,8 +58,8 @@ st.markdown(
 if not is_authenticated():
     st.warning(
         "Sign in via the **🔐 Login** page to manage your portfolios."
-        if not is_zh else
-        "请先在左侧 **🔐 Login** 页面登录。"
+        if not is_zh
+        else "请先在左侧 **🔐 Login** 页面登录。"
     )
     st.stop()
 
@@ -107,6 +108,8 @@ def _parse_holdings_json(s: str) -> dict:
                 out["avg_cost"] = float(v["avg_cost"])
             except (TypeError, ValueError):
                 raise ValueError(f"{tk}: avg_cost must be a number")
+        if "sector" in v and v["sector"]:
+            out["sector"] = str(v["sector"]).strip()
         cleaned[tk.upper()] = out
     if not cleaned:
         raise ValueError("Portfolio is empty — add at least one position.")
@@ -123,7 +126,7 @@ def _server_config_portfolio() -> tuple[dict, float]:
     holdings = {}
     for ticker, raw in _pc.PORTFOLIO_HOLDINGS.items():
         row = {"shares": float(raw.get("shares", 0.0))}
-        for key in ("avg_cost", "account", "asset_type", "currency", "margin_eligible"):
+        for key in ("avg_cost", "sector", "account", "asset_type", "currency", "margin_eligible"):
             if key in raw and raw[key] is not None:
                 row[key] = raw[key]
         holdings[ticker.upper()] = row
@@ -156,10 +159,7 @@ except AuthError as e:
     st.stop()
 
 st.markdown("---")
-st.markdown(
-    f"### {'Existing portfolios' if not is_zh else '已有组合'}"
-    f"  ({len(portfolios)})"
-)
+st.markdown(f"### {'Existing portfolios' if not is_zh else '已有组合'}" f"  ({len(portfolios)})")
 
 if portfolios:
     for p in portfolios:
@@ -172,9 +172,7 @@ if portfolios:
             edit_col, action_col = st.columns([3, 1])
 
             with edit_col:
-                edited_name = st.text_input(
-                    "Name", value=p["name"], key=f"name_{p['id']}"
-                )
+                edited_name = st.text_input("Name", value=p["name"], key=f"name_{p['id']}")
                 edited_holdings_str = st.text_area(
                     "Holdings (JSON)",
                     value=_holdings_to_json_str(p.get("holdings", {})),
@@ -240,13 +238,13 @@ if portfolios:
                     else:
                         st.session_state[confirm_key] = True
                         st.warning(
-                            "Click delete again to confirm."
-                            if not is_zh else "再点一次确认删除。"
+                            "Click delete again to confirm." if not is_zh else "再点一次确认删除。"
                         )
 else:
     st.info(
         "No portfolios yet — create your first one below."
-        if not is_zh else "还没有组合 — 在下方创建第一个。"
+        if not is_zh
+        else "还没有组合 — 在下方创建第一个。"
     )
 
 
@@ -256,20 +254,22 @@ if is_owner_email(user.get("email")):
     with st.expander("Owner tools" if not is_zh else "Owner 工具", expanded=False):
         st.caption(
             "Sync the currently deployed portfolio_config.py into your default DB portfolio."
-            if not is_zh else
-            "把当前服务器上的 portfolio_config.py 同步为你的默认数据库组合。"
+            if not is_zh
+            else "把当前服务器上的 portfolio_config.py 同步为你的默认数据库组合。"
         )
         try:
             server_holdings, server_margin = _server_config_portfolio()
             st.caption(
                 f"{len(server_holdings)} positions · margin loan ${server_margin:,.0f}"
-                if not is_zh else
-                f"{len(server_holdings)} 个持仓 · 融资 ${server_margin:,.0f}"
+                if not is_zh
+                else f"{len(server_holdings)} 个持仓 · 融资 ${server_margin:,.0f}"
             )
             if st.button(
-                "Sync server config to my default portfolio"
-                if not is_zh else
-                "同步服务器配置到我的默认组合",
+                (
+                    "Sync server config to my default portfolio"
+                    if not is_zh
+                    else "同步服务器配置到我的默认组合"
+                ),
                 type="primary",
                 use_container_width=True,
             ):
@@ -280,8 +280,8 @@ if is_owner_email(user.get("email")):
                 )
                 st.success(
                     f"Default portfolio updated: {updated['name']}"
-                    if not is_zh else
-                    f"默认组合已更新: {updated['name']}"
+                    if not is_zh
+                    else f"默认组合已更新: {updated['name']}"
                 )
                 st.rerun()
         except Exception as e:
@@ -292,9 +292,9 @@ if is_owner_email(user.get("email")):
 st.markdown("---")
 st.markdown(f"### {'Import from CSV' if not is_zh else '从 CSV 导入'}")
 st.caption(
-    "Accepted columns: ticker/symbol, shares/quantity, optional avg_cost/cost_basis."
-    if not is_zh else
-    "支持列名：ticker/symbol、shares/quantity，可选 avg_cost/cost_basis。"
+    "Accepted columns: ticker/symbol, shares/quantity, optional avg_cost/cost_basis and sector."
+    if not is_zh
+    else "支持列名：ticker/symbol、shares/quantity，可选 avg_cost/cost_basis 和 sector。"
 )
 
 uploaded_csv = st.file_uploader(
@@ -334,8 +334,7 @@ if csv_holdings:
             key="csv_margin_loan",
         )
         csv_is_default = st.checkbox(
-            "Set as default portfolio"
-            if not is_zh else "设为默认组合",
+            "Set as default portfolio" if not is_zh else "设为默认组合",
             value=len(portfolios) == 0,
             key="csv_is_default",
         )
@@ -358,8 +357,8 @@ if csv_holdings:
                 )
                 st.success(
                     f"Imported portfolio: {created['name']}"
-                    if not is_zh else
-                    f"已导入组合: {created['name']}"
+                    if not is_zh
+                    else f"已导入组合: {created['name']}"
                 )
                 st.rerun()
             except AuthError as e:
@@ -385,20 +384,21 @@ with st.form("new_portfolio_form", clear_on_submit=True):
         value=_holdings_to_json_str(default_template),
         height=180,
         help=(
-            "Format: {\"TICKER\": {\"shares\": 100, \"avg_cost\": 175.4}}. "
-            "avg_cost is optional but enables cost-basis P&L."
-            if not is_zh else
-            "格式: {\"TICKER\": {\"shares\": 100, \"avg_cost\": 175.4}}。"
-            "avg_cost 可选,有了才能算成本-P&L。"
+            'Format: {"TICKER": {"shares": 100, "avg_cost": 175.4}}. '
+            "avg_cost enables cost-basis P&L; sector is optional for concentration checks."
+            if not is_zh
+            else '格式: {"TICKER": {"shares": 100, "avg_cost": 175.4}}。'
+            "avg_cost 用于计算成本-P&L；sector 可选，用于行业集中度检查。"
         ),
     )
     new_margin = st.number_input(
         "Margin loan ($)" if not is_zh else "保证金贷款 ($)",
-        value=0.0, min_value=0.0, step=1000.0,
+        value=0.0,
+        min_value=0.0,
+        step=1000.0,
     )
     new_is_default = st.checkbox(
-        "Set as default portfolio"
-        if not is_zh else "设为默认组合",
+        "Set as default portfolio" if not is_zh else "设为默认组合",
         value=len(portfolios) == 0,  # first portfolio = default automatically
     )
     submitted = st.form_submit_button(
@@ -421,8 +421,8 @@ if submitted:
             )
             st.success(
                 f"Created portfolio: {created['name']}"
-                if not is_zh else
-                f"已创建组合: {created['name']}"
+                if not is_zh
+                else f"已创建组合: {created['name']}"
             )
             st.rerun()
         except (ValueError, AuthError) as e:

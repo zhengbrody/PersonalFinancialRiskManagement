@@ -71,9 +71,7 @@ def render_shared_sidebar():
 
         # ── Language Toggle ───────────────────────────────────────
         if "lang_toggle_sidebar" not in st.session_state:
-            st.session_state["lang_toggle_sidebar"] = (
-                "CN" if current_lang == "zh" else "EN"
-            )
+            st.session_state["lang_toggle_sidebar"] = "CN" if current_lang == "zh" else "EN"
         _lang_choice = st.radio(
             "Language",
             ["EN", "CN"],
@@ -105,6 +103,7 @@ def render_shared_sidebar():
                 get_active_margin_loan,
                 get_active_portfolio_meta,
             )
+
             _active_meta = get_active_portfolio_meta()
         except Exception:
             _active_meta = {"name": "Built-in demo portfolio", "source": "hardcoded"}
@@ -242,6 +241,7 @@ def render_shared_sidebar():
                         "total_long": total_value,
                         "net_equity": net_equity,
                         "margin_loan": MARGIN_LOAN,
+                        "sector_map": _pc.build_sector_map(PORTFOLIO_HOLDINGS),
                         "leverage": total_value / net_equity if net_equity > 0 else float("inf"),
                         "missing": [t for t in tickers if t not in current_prices],
                         "contributed_capital": contributed_capital,
@@ -272,6 +272,7 @@ def render_shared_sidebar():
                     # when user is on home). Lazy-import to avoid circular dep.
                     try:
                         from app import execute_analysis
+
                         execute_analysis(force=True)
                     except Exception as _e:
                         logger.warning("ui.execute_analysis_inline_failed", error=str(_e))
@@ -287,6 +288,7 @@ def render_shared_sidebar():
             st.session_state._run_trigger = True
             try:
                 from app import execute_analysis
+
                 execute_analysis(force=True)
             except Exception as _e:
                 logger.warning("ui.execute_analysis_inline_failed", error=str(_e))
@@ -310,6 +312,7 @@ def render_shared_sidebar():
             st.session_state._run_trigger = True
             try:
                 from app import execute_analysis
+
                 execute_analysis(force=True)
             except Exception as _e:
                 logger.warning("ui.execute_analysis_inline_failed", error=str(_e))
@@ -370,7 +373,17 @@ def render_shared_sidebar():
                 st.session_state._portfolio_config_issues = []
                 st.session_state._portfolio_config_checked = True
         _cfg_issues = st.session_state.get("_portfolio_config_issues") or []
-        if _cfg_issues:
+        _show_cfg_issues = _truthy(_safe_get_secret("MINDMARKET_SHOW_CONFIG_WARNINGS"))
+        try:
+            from libs.admin.status import is_owner_email
+            from libs.auth.session import current_user
+
+            _show_cfg_issues = _show_cfg_issues or is_owner_email(
+                (current_user() or {}).get("email")
+            )
+        except Exception:
+            pass
+        if _cfg_issues and _show_cfg_issues:
             with st.expander(f"⚠️ Portfolio config: {len(_cfg_issues)} warning(s)", expanded=False):
                 for _iss in _cfg_issues:
                     st.caption(f"• {_iss}")
@@ -463,6 +476,7 @@ def render_shared_sidebar():
         # Anything else → end-user mode: keys are server-side only.
         # ══════════════════════════════════════════════════════════
         import os as _os_admin
+
         _admin_mode = _truthy(
             _os_admin.environ.get("MINDMARKET_ADMIN_MODE", "")
             or _safe_get_secret("MINDMARKET_ADMIN_MODE")
@@ -474,7 +488,9 @@ def render_shared_sidebar():
         _api_ui_mode = _admin_mode and _show_api_inputs
 
         if _api_ui_mode:
-            st.markdown("### 🤖 AI Provider (admin)" if current_lang == "en" else "### 🤖 AI 提供方 (admin)")
+            st.markdown(
+                "### 🤖 AI Provider (admin)" if current_lang == "en" else "### 🤖 AI 提供方 (admin)"
+            )
         else:
             st.markdown("### 🤖 AI Access" if current_lang == "en" else "### 🤖 AI 访问")
 
@@ -537,14 +553,10 @@ def render_shared_sidebar():
         if not _api_ui_mode:
             # End-user mode: read keys from server env/secrets only,
             # never let user input. Show quota card instead.
-            if _os_admin.environ.get("ANTHROPIC_API_KEY") or _safe_get_secret(
-                "ANTHROPIC_API_KEY"
-            ):
+            if _os_admin.environ.get("ANTHROPIC_API_KEY") or _safe_get_secret("ANTHROPIC_API_KEY"):
                 st.session_state._model_provider = "Anthropic Claude"
                 _key_ok = True
-            elif _os_admin.environ.get("DEEPSEEK_API_KEY") or _safe_get_secret(
-                "DEEPSEEK_API_KEY"
-            ):
+            elif _os_admin.environ.get("DEEPSEEK_API_KEY") or _safe_get_secret("DEEPSEEK_API_KEY"):
                 st.session_state._model_provider = "DeepSeek API"
                 _key_ok = True
             st.session_state._llm_configured = _key_ok
@@ -553,6 +565,7 @@ def render_shared_sidebar():
             try:
                 from libs.auth.session import current_user
                 from libs.billing.usage import get_quota_status
+
                 _u = current_user()
                 if _u:
                     _qs = get_quota_status(_u["id"])

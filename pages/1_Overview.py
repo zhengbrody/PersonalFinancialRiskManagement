@@ -12,11 +12,11 @@ import streamlit as st
 from app import (
     CLR_ACCENT,
     CLR_DANGER,
-    SECTOR_MAP,
     _fetch_daily_pnl,
     call_llm,
     create_excel_report,
     get_sector,
+    get_sector_map,
 )
 from i18n import get_translator
 from ui.components import (
@@ -508,7 +508,7 @@ with exp_col2:
             mc_horizon,
             market_shock,
             prices,
-            SECTOR_MAP,
+            get_sector_map(),
             margin_info,
             lang,
         )
@@ -578,6 +578,7 @@ except Exception:
 # Legal disclaimer footer (educational use only)
 try:
     from ui.legal_footer import render_legal_footer
+
     render_legal_footer()
 except Exception:
     pass

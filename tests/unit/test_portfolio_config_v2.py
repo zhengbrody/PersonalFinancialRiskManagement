@@ -215,7 +215,19 @@ def test_validation_clean_config_returns_empty():
 def test_validation_flags_missing_sector(monkeypatch):
     monkeypatch.setattr(_pc, "PORTFOLIO_HOLDINGS", {"UNKNOWN_TKR": {"shares": 10}})
     issues = _pc.validate_portfolio_config()
-    assert any("UNKNOWN_TKR" in i and "SECTOR_MAP" in i for i in issues)
+    assert any("UNKNOWN_TKR" in i and "sector metadata" in i for i in issues)
+
+
+def test_build_sector_map_uses_holding_sector_metadata():
+    holdings = {
+        "NEW": {"shares": 10, "sector": "Healthcare"},
+        "BTC-USD": {"shares": 1, "asset_type": "crypto"},
+    }
+
+    assert _pc.build_sector_map(holdings) == {
+        "NEW": "Healthcare",
+        "BTC-USD": "Crypto",
+    }
 
 
 def test_validation_flags_zero_shares(monkeypatch):

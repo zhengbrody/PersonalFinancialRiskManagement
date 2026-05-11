@@ -63,7 +63,20 @@ from portfolio_config import SECTOR_MAP
 
 
 def get_sector(ticker: str) -> str:
-    return SECTOR_MAP.get(ticker, "Other")
+    sector_map = get_sector_map()
+    return sector_map.get(str(ticker).upper(), _pc.infer_sector(str(ticker)))
+
+
+def get_sector_map() -> dict[str, str]:
+    """Return the active portfolio sector map when available."""
+    try:
+        meta = st.session_state.get("_portfolio_meta") or {}
+        active_map = meta.get("sector_map") or {}
+        if active_map:
+            return {str(k).upper(): str(v) for k, v in active_map.items()}
+    except Exception:
+        pass
+    return dict(SECTOR_MAP)
 
 
 def render_plotly(fig: go.Figure) -> None:
@@ -271,6 +284,7 @@ def get_data_provider(weights_json: str, period_years: int):
 
     weights = json.loads(weights_json)
     from libs.auth.active_portfolio import get_active_holdings
+
     dp = DataProvider(weights, period_years=period_years, holdings=get_active_holdings())
     _ = dp.fetch_prices()  # Eagerly load and cache prices
 
@@ -382,6 +396,7 @@ def build_engine_ref(
 ) -> RiskEngine:
     """Reconstruct a RiskEngine from cached price data for downstream operations."""
     from libs.auth.active_portfolio import get_active_holdings
+
     dp = DataProvider(weights, period_years=period_years, holdings=get_active_holdings())
     dp._prices = prices.copy()
     # Use SIMPLE returns (project-wide convention), not log.
@@ -411,23 +426,20 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
     import time
 
     _admin_mode = str(
-        _os.environ.get("MINDMARKET_ADMIN_MODE", "")
-        or _safe_get_secret("MINDMARKET_ADMIN_MODE")
+        _os.environ.get("MINDMARKET_ADMIN_MODE", "") or _safe_get_secret("MINDMARKET_ADMIN_MODE")
     ).strip().lower() in ("1", "true", "yes", "on")
     model_provider = st.session_state.get("_model_provider", "Ollama (Local)")
 
     # Server-side keys when not admin; admin can still override via session.
     api_key_input = (
-        _os.environ.get("ANTHROPIC_API_KEY", "")
-        or st.session_state.get("_api_key_input", "")
-    ) if not _admin_mode else st.session_state.get(
-        "_api_key_input", _os.environ.get("ANTHROPIC_API_KEY", "")
+        (_os.environ.get("ANTHROPIC_API_KEY", "") or st.session_state.get("_api_key_input", ""))
+        if not _admin_mode
+        else st.session_state.get("_api_key_input", _os.environ.get("ANTHROPIC_API_KEY", ""))
     )
     deepseek_key = (
-        _os.environ.get("DEEPSEEK_API_KEY", "")
-        or st.session_state.get("_deepseek_key", "")
-    ) if not _admin_mode else st.session_state.get(
-        "_deepseek_key", _os.environ.get("DEEPSEEK_API_KEY", "")
+        (_os.environ.get("DEEPSEEK_API_KEY", "") or st.session_state.get("_deepseek_key", ""))
+        if not _admin_mode
+        else st.session_state.get("_deepseek_key", _os.environ.get("DEEPSEEK_API_KEY", ""))
     )
     ollama_model = st.session_state.get("_ollama_model", "deepseek-r1:14b")
 
@@ -436,11 +448,13 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
         try:
             from libs.auth.session import current_user
             from libs.billing.usage import QuotaExceeded, check_and_consume
+
             _u = current_user()
             if not _u:
                 raise ValueError("Please sign in to use AI chat and analysis credits.")
             check_and_consume(
-                _u["id"], "chat",
+                _u["id"],
+                "chat",
                 provider=model_provider.lower().split()[0] if model_provider else None,
             )
         except QuotaExceeded as _qe:
@@ -1322,7 +1336,6 @@ if "analysis_ready" not in st.session_state:
 # ══════════════════════════════════════════════════════════════
 
 
-
 # ══════════════════════════════════════════════════════════════
 #  Module-level analysis trigger
 # ──────────────────────────────────────────────────────────────
@@ -1355,6 +1368,7 @@ def execute_analysis(force: bool = False) -> bool:
         # Analysis quota gate (non-admin only). Surfaces upgrade CTA on
         # exhaustion; admin mode bypasses for local dev.
         import os as _os_quota
+
         _admin_mode = str(
             _os_quota.environ.get("MINDMARKET_ADMIN_MODE", "")
             or _safe_get_secret("MINDMARKET_ADMIN_MODE")
@@ -1363,6 +1377,7 @@ def execute_analysis(force: bool = False) -> bool:
             try:
                 from libs.auth.session import current_user
                 from libs.billing.usage import QuotaExceeded, check_and_consume
+
                 _u = current_user()
                 if not _u:
                     st.warning("🔐 Please sign in to use your free monthly analysis credits.")
@@ -1379,7 +1394,6 @@ def execute_analysis(force: bool = False) -> bool:
             except Exception:
                 # Fail-open on billing wiring errors so UX isn't blocked
                 pass
-
 
     # ══════════════════════════════════════════════════════════════
     #  Landing page (first-visit experience)
@@ -1398,13 +1412,16 @@ def execute_analysis(force: bool = False) -> bool:
         is_zh = lang_code == "zh"
 
         # Hero
-        hero_title = "Institutional-grade portfolio risk, made accessible." if not is_zh \
-                     else "把机构级风险分析,带给散户。"
+        hero_title = (
+            "Institutional-grade portfolio risk, made accessible."
+            if not is_zh
+            else "把机构级风险分析,带给散户。"
+        )
         hero_sub = (
             "Monte Carlo VaR · Black-Scholes Greeks · SEC 13F · AI risk digests"
             " — one click, no spreadsheet."
-            if not is_zh else
-            "蒙特卡洛 VaR · Black-Scholes 希腊字母 · SEC 13F · AI 风险摘要"
+            if not is_zh
+            else "蒙特卡洛 VaR · Black-Scholes 希腊字母 · SEC 13F · AI 风险摘要"
             " — 一键运行,告别 Excel。"
         )
         cta_label = "Run Demo Portfolio" if not is_zh else "运行 Demo 组合"
@@ -1435,22 +1452,42 @@ def execute_analysis(force: bool = False) -> bool:
 
         # Feature grid
         features = [
-            ("🛡️", "Risk Engine" if not is_zh else "风险引擎",
-             "Monte Carlo VaR · EWMA covariance · component VaR · stress scenarios"
-             if not is_zh else
-             "蒙特卡洛 VaR · EWMA 协方差 · 边际 VaR · 压力测试"),
-            ("🎲", "Options Lab" if not is_zh else "期权实验室",
-             "Black-Scholes pricing · analytical Greeks · IV solver · 10 strategies"
-             if not is_zh else
-             "Black-Scholes 定价 · 解析希腊字母 · IV 求解 · 10 种策略"),
-            ("🏛️", "Smart Money" if not is_zh else "Smart Money",
-             "SEC 13F filings from 30+ top institutions · crowding · unusual flow"
-             if not is_zh else
-             "30+ 顶级机构 SEC 13F · 拥挤度 · 异常期权流"),
-            ("🤖", "AI Co-pilot" if not is_zh else "AI 副驾",
-             "Owner-managed AI summaries · earnings transcripts · sentiment"
-             if not is_zh else
-             "平台统一管理 AI 摘要 · 财报电话会 · 情绪分析"),
+            (
+                "🛡️",
+                "Risk Engine" if not is_zh else "风险引擎",
+                (
+                    "Monte Carlo VaR · EWMA covariance · component VaR · stress scenarios"
+                    if not is_zh
+                    else "蒙特卡洛 VaR · EWMA 协方差 · 边际 VaR · 压力测试"
+                ),
+            ),
+            (
+                "🎲",
+                "Options Lab" if not is_zh else "期权实验室",
+                (
+                    "Black-Scholes pricing · analytical Greeks · IV solver · 10 strategies"
+                    if not is_zh
+                    else "Black-Scholes 定价 · 解析希腊字母 · IV 求解 · 10 种策略"
+                ),
+            ),
+            (
+                "🏛️",
+                "Smart Money" if not is_zh else "Smart Money",
+                (
+                    "SEC 13F filings from 30+ top institutions · crowding · unusual flow"
+                    if not is_zh
+                    else "30+ 顶级机构 SEC 13F · 拥挤度 · 异常期权流"
+                ),
+            ),
+            (
+                "🤖",
+                "AI Co-pilot" if not is_zh else "AI 副驾",
+                (
+                    "Owner-managed AI summaries · earnings transcripts · sentiment"
+                    if not is_zh
+                    else "平台统一管理 AI 摘要 · 财报电话会 · 情绪分析"
+                ),
+            ),
         ]
         cols = st.columns(4)
         for col, (icon, title, desc) in zip(cols, features):
@@ -1487,8 +1524,8 @@ def execute_analysis(force: bool = False) -> bool:
             st.caption(
                 "💡 Demo runs with built-in sample holdings. Sign in to save and analyze "
                 "your own portfolio; API keys stay server-side."
-                if not is_zh else
-                "💡 Demo 使用内置样例组合。登录后可保存并分析自己的组合；API key 由服务器统一管理。"
+                if not is_zh
+                else "💡 Demo 使用内置样例组合。登录后可保存并分析自己的组合；API key 由服务器统一管理。"
             )
 
         # Footer micro-strip — tech stack + GitHub
@@ -1511,7 +1548,6 @@ def execute_analysis(force: bool = False) -> bool:
             unsafe_allow_html=True,
         )
 
-
     # Show landing only if (1) no analysis has been run yet AND
     # (2) user hasn't clicked through. Once dismissed, stays dismissed
     # for the session — re-running analysis won't bring it back.
@@ -1523,7 +1559,6 @@ def execute_analysis(force: bool = False) -> bool:
     if _show_landing:
         _render_landing(lang)
         st.stop()  # don't render the run-analysis canvas under it
-
 
     # ══════════════════════════════════════════════════════════════
     #  Run Analysis
@@ -1750,6 +1785,7 @@ def execute_analysis(force: bool = False) -> bool:
             )
     return True
 
+
 # ══════════════════════════════════════════════════════════════
 #  UI rendering — only fires when app.py is the streamlit entry,
 #  not when imported by a page (avoids duplicate sidebar widgets).
@@ -1772,8 +1808,6 @@ def _main_ui():
     # Trigger analysis if _run_trigger flag set (legacy path; sidebar
     # button handlers also call execute_analysis() directly).
     execute_analysis()
-
-
 
     # ══════════════════════════════════════════════════════════════
     #  Welcome / Landing Page
@@ -1813,7 +1847,6 @@ def _main_ui():
                 f"Sharpe {_r.sharpe_ratio:.2f}  ·  "
                 f"VaR 95% ({st.session_state.mc_horizon}d) {_r.var_95:.2%}"
             )
-
 
     # ══════════════════════════════════════════════════════════════
     #  Reusable Chat Popover (called from every page)
@@ -1871,7 +1904,6 @@ def _main_ui():
             else:
                 st.caption("运行分析以启用AI聊天")
 
-
     # ══════════════════════════════════════════════════════════════
     #  Floating AI Assistant (Always Visible - Replaces Chat Popover)
     # ══════════════════════════════════════════════════════════════
@@ -1885,6 +1917,7 @@ def _main_ui():
 
     try:
         from ui.legal_footer import render_legal_footer
+
         render_legal_footer()
     except Exception as e:
         logger.warning("legal_footer.render_failed", error=str(e))
