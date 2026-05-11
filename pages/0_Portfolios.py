@@ -15,12 +15,14 @@ import json
 
 import streamlit as st
 
+from libs.admin.status import is_owner_email
 from libs.auth import current_user, is_authenticated
 from libs.auth.client import AuthError
 from libs.auth.portfolio_csv import parse_holdings_csv
 from libs.auth.portfolios import (
     create_portfolio,
     delete_portfolio,
+    get_default_portfolio,
     list_portfolios,
     update_portfolio,
 )
@@ -109,6 +111,41 @@ def _parse_holdings_json(s: str) -> dict:
     if not cleaned:
         raise ValueError("Portfolio is empty — add at least one position.")
     return cleaned
+
+
+def _server_config_portfolio() -> tuple[dict, float]:
+    """Read the currently deployed portfolio_config.py into DB-ready shape."""
+    import importlib
+
+    import portfolio_config as _pc
+
+    importlib.reload(_pc)
+    holdings = {}
+    for ticker, raw in _pc.PORTFOLIO_HOLDINGS.items():
+        row = {"shares": float(raw.get("shares", 0.0))}
+        for key in ("avg_cost", "account", "asset_type", "currency", "margin_eligible"):
+            if key in raw and raw[key] is not None:
+                row[key] = raw[key]
+        holdings[ticker.upper()] = row
+    return holdings, float(_pc.MARGIN_LOAN)
+
+
+def _upsert_default_portfolio(name: str, holdings: dict, margin_loan: float) -> dict:
+    default_portfolio = get_default_portfolio()
+    if default_portfolio:
+        return update_portfolio(
+            default_portfolio["id"],
+            name=name,
+            holdings=holdings,
+            margin_loan=margin_loan,
+            is_default=True,
+        )
+    return create_portfolio(
+        name=name,
+        holdings=holdings,
+        margin_loan=margin_loan,
+        is_default=True,
+    )
 
 
 # ── List existing portfolios ───────────────────────────────────────
@@ -211,6 +248,44 @@ else:
         "No portfolios yet — create your first one below."
         if not is_zh else "还没有组合 — 在下方创建第一个。"
     )
+
+
+# ── Owner-only sync from deployed config ───────────────────────────
+if is_owner_email(user.get("email")):
+    st.markdown("---")
+    with st.expander("Owner tools" if not is_zh else "Owner 工具", expanded=False):
+        st.caption(
+            "Sync the currently deployed portfolio_config.py into your default DB portfolio."
+            if not is_zh else
+            "把当前服务器上的 portfolio_config.py 同步为你的默认数据库组合。"
+        )
+        try:
+            server_holdings, server_margin = _server_config_portfolio()
+            st.caption(
+                f"{len(server_holdings)} positions · margin loan ${server_margin:,.0f}"
+                if not is_zh else
+                f"{len(server_holdings)} 个持仓 · 融资 ${server_margin:,.0f}"
+            )
+            if st.button(
+                "Sync server config to my default portfolio"
+                if not is_zh else
+                "同步服务器配置到我的默认组合",
+                type="primary",
+                use_container_width=True,
+            ):
+                updated = _upsert_default_portfolio(
+                    "Owner Portfolio",
+                    server_holdings,
+                    server_margin,
+                )
+                st.success(
+                    f"Default portfolio updated: {updated['name']}"
+                    if not is_zh else
+                    f"默认组合已更新: {updated['name']}"
+                )
+                st.rerun()
+        except Exception as e:
+            st.error(f"Owner sync failed: {e}")
 
 
 # ── CSV import ─────────────────────────────────────────────────────
