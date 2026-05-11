@@ -12,6 +12,48 @@ LLM (Anthropic Claude, DeepSeek API, or local Ollama).
 import streamlit as st
 
 
+def _is_provider_auth_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return any(
+        marker in text
+        for marker in (
+            "invalid x-api-key",
+            "authentication_error",
+            "invalid api key",
+            "incorrect api key",
+            "401",
+        )
+    )
+
+
+def _mark_chat_dialog_closed():
+    st.session_state._fc_dialog_open = False
+
+
+def _call_deepseek(
+    *,
+    api_key: str,
+    prompt: str,
+    system: str,
+    max_tokens: int,
+    temperature: float,
+) -> str:
+    from openai import OpenAI
+
+    client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1")
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+    resp = client.chat.completions.create(
+        model="deepseek-chat",
+        messages=messages,
+        max_tokens=max_tokens,
+        temperature=temperature,
+    )
+    return resp.choices[0].message.content.strip()
+
+
 # ──────────────────────────────────────────────────────────────
 #  Self-contained LLM call (avoids circular import with app.py)
 # ──────────────────────────────────────────────────────────────
@@ -37,15 +79,22 @@ def _chat_call_llm(
         _os.environ.get("MINDMARKET_ADMIN_MODE", "") or _admin_secret
     ).strip().lower() in ("1", "true", "yes", "on")
 
+    model_provider = st.session_state.get("_model_provider", "Ollama (Local)")
+
     # Quota gate (production only)
     if not _admin_mode:
         try:
             from libs.auth.session import current_user
             from libs.billing.usage import QuotaExceeded, check_and_consume
+
             _u = current_user()
             if not _u:
                 return "🔐 Please sign in to use your free monthly AI chat credits."
-            check_and_consume(_u["id"], "chat", provider="anthropic")
+            check_and_consume(
+                _u["id"],
+                "chat",
+                provider=model_provider.lower().split()[0] if model_provider else None,
+            )
         except QuotaExceeded as _qe:
             return (
                 f"⚠️ {_qe}\n\n"
@@ -55,19 +104,16 @@ def _chat_call_llm(
         except Exception:
             pass  # fail-open on billing wiring
 
-    model_provider = st.session_state.get("_model_provider", "Ollama (Local)")
     # Server-controlled keys when not admin
     api_key_input = (
-        _os.environ.get("ANTHROPIC_API_KEY", "")
-        or st.session_state.get("_api_key_input", "")
-    ) if not _admin_mode else st.session_state.get(
-        "_api_key_input", _os.environ.get("ANTHROPIC_API_KEY", "")
+        (_os.environ.get("ANTHROPIC_API_KEY", "") or st.session_state.get("_api_key_input", ""))
+        if not _admin_mode
+        else st.session_state.get("_api_key_input", _os.environ.get("ANTHROPIC_API_KEY", ""))
     )
     deepseek_key = (
-        _os.environ.get("DEEPSEEK_API_KEY", "")
-        or st.session_state.get("_deepseek_key", "")
-    ) if not _admin_mode else st.session_state.get(
-        "_deepseek_key", _os.environ.get("DEEPSEEK_API_KEY", "")
+        (_os.environ.get("DEEPSEEK_API_KEY", "") or st.session_state.get("_deepseek_key", ""))
+        if not _admin_mode
+        else st.session_state.get("_deepseek_key", _os.environ.get("DEEPSEEK_API_KEY", ""))
     )
     ollama_model = st.session_state.get("_ollama_model", "deepseek-r1:14b")
 
@@ -86,6 +132,35 @@ def _chat_call_llm(
                 return resp.content[0].text.strip()
             except Exception as e:
                 err_str = str(e).lower()
+                if _is_provider_auth_error(e):
+                    if deepseek_key:
+                        try:
+                            fallback = _call_deepseek(
+                                api_key=deepseek_key,
+                                prompt=prompt,
+                                system=system,
+                                max_tokens=max_tokens,
+                                temperature=temperature,
+                            )
+                        except Exception as deepseek_exc:
+                            if _is_provider_auth_error(deepseek_exc):
+                                raise ValueError(
+                                    "Claude and DeepSeek are both unavailable because "
+                                    "their server-side API keys were rejected. Please "
+                                    "update ANTHROPIC_API_KEY and DEEPSEEK_API_KEY in "
+                                    "the deployment secrets."
+                                ) from deepseek_exc
+                            raise
+                        return (
+                            "Note: Claude is temporarily unavailable because the "
+                            "server-side Anthropic key was rejected. Answered via "
+                            "DeepSeek instead.\n\n" + fallback
+                        )
+                    raise ValueError(
+                        "Claude is not available because the server-side Anthropic "
+                        "API key was rejected. Please update ANTHROPIC_API_KEY in "
+                        "the deployment secrets, or use DeepSeek while Claude is fixed."
+                    )
                 if "overloaded" in err_str or "529" in err_str or "rate" in err_str:
                     if attempt < 2:
                         time.sleep(2 * (attempt + 1))
@@ -93,20 +168,22 @@ def _chat_call_llm(
                 raise
 
     elif model_provider == "DeepSeek API" and deepseek_key:
-        from openai import OpenAI
-
-        client = OpenAI(api_key=deepseek_key, base_url="https://api.deepseek.com/v1")
-        messages = []
-        if system:
-            messages.append({"role": "system", "content": system})
-        messages.append({"role": "user", "content": prompt})
-        resp = client.chat.completions.create(
-            model="deepseek-chat",
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=temperature,
-        )
-        return resp.choices[0].message.content.strip()
+        try:
+            return _call_deepseek(
+                api_key=deepseek_key,
+                prompt=prompt,
+                system=system,
+                max_tokens=max_tokens,
+                temperature=temperature,
+            )
+        except Exception as e:
+            if _is_provider_auth_error(e):
+                raise ValueError(
+                    "DeepSeek is not available because the server-side API key "
+                    "was rejected. Please update DEEPSEEK_API_KEY in the "
+                    "deployment secrets."
+                ) from e
+            raise
 
     elif model_provider == "Ollama (Local)":
         import requests as _requests
@@ -207,7 +284,11 @@ _SUGGESTION_PROMPTS = [
 # ──────────────────────────────────────────────────────────────
 #  The @st.dialog chat UI
 # ──────────────────────────────────────────────────────────────
-@st.dialog("AI Risk Analyst", width="large")
+@st.dialog(
+    "AI Risk Analyst",
+    width="large",
+    on_dismiss=_mark_chat_dialog_closed,
+)
 def _open_chat_dialog():
     """Full chat experience inside a Streamlit modal dialog."""
 
@@ -243,10 +324,14 @@ def _open_chat_dialog():
     if user_input:
         _handle_user_input(user_input, chat_container)
 
-    col_clear, col_info = st.columns([1, 3])
+    col_clear, col_close, col_info = st.columns([1, 1, 3])
     with col_clear:
         if st.button("Clear history", key="_fc_clear"):
             st.session_state._fc_messages = []
+            st.rerun()
+    with col_close:
+        if st.button("Close", key="_fc_close"):
+            _mark_chat_dialog_closed()
             st.rerun()
     with col_info:
         if st.session_state.get("analysis_ready"):

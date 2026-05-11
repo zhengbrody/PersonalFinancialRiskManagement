@@ -701,6 +701,12 @@ def get_options_flow_summary(tickers: List[str]) -> Dict:
     ticker_signals.sort(key=lambda d: d.get("ticker", ""))
 
     result = {
+        "data_provider": "Yahoo Finance via yfinance",
+        "data_quality": "delayed_snapshot_not_realtime",
+        "data_note": (
+            "Volume and open interest are public Yahoo/yfinance snapshots, not "
+            "OPRA/broker real-time options flow."
+        ),
         "call_volume_total": total_call_vol,
         "put_volume_total": total_put_vol,
         "overall_pc_ratio": overall_pc_ratio,

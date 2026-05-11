@@ -79,6 +79,44 @@ def get_sector_map() -> dict[str, str]:
     return dict(SECTOR_MAP)
 
 
+def _is_provider_auth_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return any(
+        marker in text
+        for marker in (
+            "invalid x-api-key",
+            "authentication_error",
+            "invalid api key",
+            "incorrect api key",
+            "401",
+        )
+    )
+
+
+def _call_deepseek(
+    *,
+    api_key: str,
+    prompt: str,
+    system: str,
+    max_tokens: int,
+    temperature: float,
+) -> str:
+    from openai import OpenAI
+
+    client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com/v1")
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": prompt})
+    resp = client.chat.completions.create(
+        model="deepseek-chat",
+        messages=messages,
+        max_tokens=max_tokens,
+        temperature=temperature,
+    )
+    return resp.choices[0].message.content.strip()
+
+
 def render_plotly(fig: go.Figure) -> None:
     """Render Plotly charts with transparent background for dark mode compatibility."""
     fig.update_layout(
@@ -483,6 +521,36 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
                     return resp.content[0].text.strip()
                 except Exception as e:
                     err_str = str(e).lower()
+                    if _is_provider_auth_error(e):
+                        logger.warning("llm.anthropic.auth_failed_fallback_deepseek")
+                        if deepseek_key:
+                            try:
+                                fallback = _call_deepseek(
+                                    api_key=deepseek_key,
+                                    prompt=prompt,
+                                    system=system,
+                                    max_tokens=max_tokens,
+                                    temperature=temperature,
+                                )
+                            except Exception as deepseek_exc:
+                                if _is_provider_auth_error(deepseek_exc):
+                                    raise ValueError(
+                                        "Claude and DeepSeek are both unavailable because "
+                                        "their server-side API keys were rejected. Please "
+                                        "update ANTHROPIC_API_KEY and DEEPSEEK_API_KEY in "
+                                        "the deployment secrets."
+                                    ) from deepseek_exc
+                                raise
+                            return (
+                                "Note: Claude is temporarily unavailable because the "
+                                "server-side Anthropic key was rejected. Answered via "
+                                "DeepSeek instead.\n\n" + fallback
+                            )
+                        raise ValueError(
+                            "Claude is not available because the server-side Anthropic "
+                            "API key was rejected. Please update ANTHROPIC_API_KEY in "
+                            "the deployment secrets, or use DeepSeek while Claude is fixed."
+                        )
                     if "overloaded" in err_str or "529" in err_str or "rate" in err_str:
                         if attempt < 2:
                             logger.info("llm.anthropic.rate_limit", attempt=attempt)
@@ -491,20 +559,22 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
                     raise
 
         elif model_provider == "DeepSeek API" and deepseek_key:
-            from openai import OpenAI
-
-            client = OpenAI(api_key=deepseek_key, base_url="https://api.deepseek.com/v1")
-            messages = []
-            if system:
-                messages.append({"role": "system", "content": system})
-            messages.append({"role": "user", "content": prompt})
-            resp = client.chat.completions.create(
-                model="deepseek-chat",
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature,
-            )
-            return resp.choices[0].message.content.strip()
+            try:
+                return _call_deepseek(
+                    api_key=deepseek_key,
+                    prompt=prompt,
+                    system=system,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                )
+            except Exception as e:
+                if _is_provider_auth_error(e):
+                    raise ValueError(
+                        "DeepSeek is not available because the server-side API key "
+                        "was rejected. Please update DEEPSEEK_API_KEY in the "
+                        "deployment secrets."
+                    ) from e
+                raise
 
         elif model_provider == "Ollama (Local)":
             payload = {

@@ -101,7 +101,7 @@ with tab_chain:
             selected_exp = None
 
     if spot > 0:
-        st.caption(f"Current Price: **${spot:,.2f}**")
+        st.caption(f"Latest yfinance close: **${spot:,.2f}**")
 
     # yfinance sources option chain data from Yahoo Finance's public endpoint,
     # which serves end-of-previous-session snapshots. Volume resets intraday
@@ -109,8 +109,10 @@ with tab_chain:
     # their broker's real-time feed will see divergence — this is a data
     # source limitation, not a bug in the app.
     st.caption(
-        "⚠️ Volume & Open Interest are from yfinance end-of-previous-session snapshots. "
-        "For real-time intraday V/OI, use your broker or a paid feed (Polygon / Tradier)."
+        "⚠️ Data source: Yahoo Finance via yfinance. Option chains, volume, and open "
+        "interest are delayed/snapshot data, not OPRA or broker real-time flow. Use this "
+        "page for rough analysis and education; for trading decisions, compare against "
+        "your broker or a paid feed such as Polygon / Tradier / CBOE."
     )
 
     if selected_exp:

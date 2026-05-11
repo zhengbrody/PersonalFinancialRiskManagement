@@ -512,8 +512,10 @@ with tab_options:
     )
 
     st.caption(
-        "⚠️ Volume & Open Interest come from yfinance end-of-previous-session snapshots. "
-        "Intraday real-time flow requires a paid feed (Polygon, Tradier, CBOE)."
+        "⚠️ Data source: Yahoo Finance via yfinance. Volume and Open Interest are "
+        "delayed/snapshot fields, not OPRA or broker real-time options flow. Treat this "
+        "as directional screening only; exact V/OI should be checked against Polygon, "
+        "Tradier, CBOE, or your broker."
     )
 
     try:
@@ -528,6 +530,13 @@ with tab_options:
                 "This may be due to market hours or data source limitations."
             )
         else:
+            provider = flow_summary.get("data_provider")
+            quality = flow_summary.get("data_quality")
+            if provider or quality:
+                st.caption(
+                    f"Data quality: {provider or 'unknown'} · "
+                    f"{(quality or 'unknown').replace('_', ' ')}"
+                )
             # ── Sentiment Gauge (render_kpi_row) ─────────────────────
             score = flow_summary.get("sentiment_score", 0)
             label = flow_summary.get("sentiment_label", "NEUTRAL")
@@ -672,7 +681,10 @@ with tab_options:
             scan_ts = flow_summary.get("scan_timestamp", "")
             if scan_ts:
                 st.markdown("")
-                st.caption(f"Options flow scanned at: {scan_ts}  |  Data cached for 30 minutes")
+                st.caption(
+                    f"Options flow scanned at: {scan_ts}  |  Data cached for 30 minutes  |  "
+                    "Not real-time order flow"
+                )
 
     except ImportError as exc:
         st.error(f"Module not available: {exc}")
@@ -695,6 +707,7 @@ except Exception:
 # Legal disclaimer footer (educational use only)
 try:
     from ui.legal_footer import render_legal_footer
+
     render_legal_footer()
 except Exception:
     pass
