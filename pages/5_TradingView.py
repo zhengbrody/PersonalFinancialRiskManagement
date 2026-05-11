@@ -6,7 +6,6 @@ TradingView Integration: Real-time charts, technical analysis, stock screener.
 import pandas as pd
 import streamlit as st
 
-from i18n import get_translator
 from ui.components import render_kpi_row, render_metric_list, render_section
 from ui.shared_sidebar import render_shared_sidebar
 from ui.tradingview import (
@@ -15,10 +14,8 @@ from ui.tradingview import (
     get_portfolio_ta,
     get_ta_summary,
     get_tv_symbol,
-    render_advanced_chart,
     render_fullpage_tradingview_with_watchlist,
     render_heatmap,
-    render_mini_chart,
     render_screener_widget,
     render_technical_analysis_widget,
     render_ticker_tape,
@@ -28,17 +25,80 @@ from ui.tradingview import (
 render_shared_sidebar()
 
 lang = st.session_state.get("_lang", "en")
-t = get_translator(lang)
 weights = st.session_state.get("weights")
+TV_TEXT = {
+    "en": {
+        "empty": (
+            "💡 No portfolio loaded yet. You can still explore charts, screeners, "
+            "and heatmaps below. Configure your portfolio in the sidebar and click "
+            "**Run Analysis** to see your own tickers first."
+        ),
+        "tab_my": "My TradingView",
+        "tab_ta": "Technical Analysis",
+        "tab_screener": "Screener",
+        "tab_heatmap": "Heatmap",
+        "pro_title": "TradingView Pro",
+        "pro_subtitle": (
+            "If you are logged into TradingView in this browser, your account "
+            "features will be available."
+        ),
+        "symbol": "Symbol",
+        "height": "Height",
+        "ta_title": "Technical Analysis Dashboard",
+        "select_ticker_ta": "Select Ticker for TA",
+        "interval": "Interval",
+        "fetching_ta": "Fetching TA data...",
+        "overall_signal": "Overall Signal",
+        "oscillators": "Oscillators",
+        "moving_avgs": "Moving Avgs",
+        "could_not_fetch": "Could not fetch TA for {ticker}: {error}",
+        "portfolio_scan": "Portfolio TA Scan",
+        "scan_all": "Scan All Holdings",
+        "scanning": "Scanning {count} tickers...",
+        "summary": "Summary: {buys} Buy, {sells} Sell, {neutral} Neutral",
+        "stock_screener": "Stock Screener",
+        "screen_type": "Screen Type",
+        "sp500_heatmap": "S&P 500 Heatmap",
+    },
+    "zh": {
+        "empty": (
+            "💡 暂未加载投资组合。你仍可浏览下方图表、筛选器和热力图。"
+            "在侧边栏配置组合并点击 **刷新并运行分析** 后，会优先显示你的持仓。"
+        ),
+        "tab_my": "我的 TradingView",
+        "tab_ta": "技术分析",
+        "tab_screener": "筛选器",
+        "tab_heatmap": "热力图",
+        "pro_title": "TradingView 专业图表",
+        "pro_subtitle": "如果你已在当前浏览器登录 TradingView，将可使用你的账户功能。",
+        "symbol": "标的",
+        "height": "高度",
+        "ta_title": "技术分析仪表盘",
+        "select_ticker_ta": "选择技术分析标的",
+        "interval": "周期",
+        "fetching_ta": "正在获取技术分析数据...",
+        "overall_signal": "综合信号",
+        "oscillators": "振荡指标",
+        "moving_avgs": "移动均线",
+        "could_not_fetch": "无法获取 {ticker} 的技术分析：{error}",
+        "portfolio_scan": "组合技术分析扫描",
+        "scan_all": "扫描全部持仓",
+        "scanning": "正在扫描 {count} 个标的...",
+        "summary": "汇总：{buys} 买入，{sells} 卖出，{neutral} 中性",
+        "stock_screener": "股票筛选器",
+        "screen_type": "筛选类型",
+        "sp500_heatmap": "标普 500 热力图",
+    },
+}
+
+
+def tv_text(key: str, **kwargs) -> str:
+    text = TV_TEXT.get(lang, TV_TEXT["en"]).get(key, TV_TEXT["en"].get(key, key))
+    return text.format(**kwargs) if kwargs else text
 
 # ── Empty-state hint (non-blocking) ───────────────────────────
 if not weights:
-    st.info(
-        "💡 No portfolio loaded yet. You can still explore charts, screeners, and heatmaps below. "
-        "Configure your portfolio in the sidebar and click **Run Analysis** to see your own tickers first."
-        if lang == "en"
-        else "💡 暂未加载投资组合。你仍可浏览下方的图表、筛选器和热力图。在侧边栏配置组合并点击 **Run Analysis** 即可优先查看自己的持仓。"
-    )
+    st.info(tv_text("empty"))
 
 # ── Ticker Tape (scrolling bar at top) ────────────────────────
 if weights:
@@ -54,8 +114,13 @@ if weights:
 # ══════════════════════════════════════════════════════════════
 #  Tabs
 # ══════════════════════════════════════════════════════════════
-tab_full, tab_chart, tab_ta, tab_screener, tab_heatmap = st.tabs(
-    ["My TradingView", "Charts", "Technical Analysis", "Screener", "Heatmap"]
+tab_full, tab_ta, tab_screener, tab_heatmap = st.tabs(
+    [
+        tv_text("tab_my"),
+        tv_text("tab_ta"),
+        tv_text("tab_screener"),
+        tv_text("tab_heatmap"),
+    ]
 )
 
 
@@ -64,14 +129,14 @@ tab_full, tab_chart, tab_ta, tab_screener, tab_heatmap = st.tabs(
 # ══════════════════════════════════════════════════════════════
 with tab_full:
     render_section(
-        "TradingView Pro",
-        subtitle="If you are logged into TradingView in this browser, your account features will be available",
+        tv_text("pro_title"),
+        subtitle=tv_text("pro_subtitle"),
     )
 
     col_sym, col_sz = st.columns([4, 1])
     with col_sym:
         full_ticker = st.selectbox(
-            "Symbol",
+            tv_text("symbol"),
             all_tickers,
             index=0,
             key="tv_full_ticker",
@@ -79,7 +144,7 @@ with tab_full:
         )
     with col_sz:
         chart_height = st.select_slider(
-            "Height",
+            tv_text("height"),
             options=[500, 600, 700, 800, 900, 1000],
             value=800,
             key="tv_full_height",
@@ -104,69 +169,15 @@ with tab_full:
 
 
 # ══════════════════════════════════════════════════════════════
-#  Tab 1: Advanced Chart (widget)
-# ══════════════════════════════════════════════════════════════
-with tab_chart:
-    render_section("Advanced Chart")
-
-    col_sel, col_interval = st.columns([4, 1])
-    with col_sel:
-        selected = st.selectbox(
-            "Select Ticker",
-            all_tickers,
-            index=0,
-            key="tv_chart_ticker",
-            label_visibility="collapsed",
-        )
-    with col_interval:
-        interval = st.selectbox(
-            "Interval",
-            ["1", "5", "15", "60", "240", "D", "W", "M"],
-            index=5,
-            key="tv_chart_interval",
-            format_func=lambda x: {
-                "1": "1m",
-                "5": "5m",
-                "15": "15m",
-                "60": "1H",
-                "240": "4H",
-                "D": "1D",
-                "W": "1W",
-                "M": "1M",
-            }.get(x, x),
-            label_visibility="collapsed",
-        )
-
-    exchange, _ = EXCHANGE_MAP.get(selected, ("NASDAQ", "america"))
-    tv_ticker = _CRYPTO_TV.get(selected, selected)
-    render_advanced_chart(tv_ticker, exchange=exchange, interval=interval, height=700)
-
-    # Mini charts for portfolio holdings (3 per row, bigger)
-    if weights and len(weights) > 1:
-        render_section("Portfolio Holdings")
-        holdings = list(weights.keys())[:15]
-        for i in range(0, len(holdings), 3):
-            cols = st.columns(3)
-            for j, col in enumerate(cols):
-                idx = i + j
-                if idx < len(holdings):
-                    tk = holdings[idx]
-                    ex, _ = EXCHANGE_MAP.get(tk, ("NASDAQ", "america"))
-                    tv_tk = _CRYPTO_TV.get(tk, tk)
-                    with col:
-                        render_mini_chart(tv_tk, exchange=ex, height=250)
-
-
-# ══════════════════════════════════════════════════════════════
-#  Tab 2: Technical Analysis
+#  Tab 1: Technical Analysis
 # ══════════════════════════════════════════════════════════════
 with tab_ta:
-    render_section("Technical Analysis Dashboard")
+    render_section(tv_text("ta_title"))
 
     col_ta_sel, col_ta_int = st.columns([4, 1])
     with col_ta_sel:
         ta_ticker = st.selectbox(
-            "Select Ticker for TA",
+            tv_text("select_ticker_ta"),
             all_tickers,
             index=0,
             key="tv_ta_ticker",
@@ -174,7 +185,7 @@ with tab_ta:
         )
     with col_ta_int:
         ta_interval = st.selectbox(
-            "Interval",
+            tv_text("interval"),
             ["1m", "5m", "15m", "1h", "4h", "1d", "1w", "1M"],
             index=5,
             key="tv_ta_interval",
@@ -190,7 +201,7 @@ with tab_ta:
         render_technical_analysis_widget(ta_tv_ticker, exchange=ta_exchange, height=500)
 
     with col_data:
-        with st.spinner("Fetching TA data..."):
+        with st.spinner(tv_text("fetching_ta")):
             ta_data = get_ta_summary(ta_ticker, interval=ta_interval)
 
         if ta_data and "error" not in ta_data:
@@ -205,13 +216,19 @@ with tab_ta:
             render_kpi_row(
                 [
                     {
-                        "label": "Overall Signal",
+                        "label": tv_text("overall_signal"),
                         "value": rec.replace("_", " "),
                         "delta": f"Buy:{ta_data['buy']} Sell:{ta_data['sell']} Neutral:{ta_data['neutral']}",
                         "delta_color": rec_color,
                     },
-                    {"label": "Oscillators", "value": ta_data["oscillators"].replace("_", " ")},
-                    {"label": "Moving Avgs", "value": ta_data["moving_averages"].replace("_", " ")},
+                    {
+                        "label": tv_text("oscillators"),
+                        "value": ta_data["oscillators"].replace("_", " "),
+                    },
+                    {
+                        "label": tv_text("moving_avgs"),
+                        "value": ta_data["moving_averages"].replace("_", " "),
+                    },
                 ]
             )
 
@@ -236,13 +253,13 @@ with tab_ta:
             )
         else:
             _err_msg = ta_data.get("error", "unknown") if ta_data else "no data returned"
-            st.warning(f"Could not fetch TA for {ta_ticker}: {_err_msg}")
+            st.warning(tv_text("could_not_fetch", ticker=ta_ticker, error=_err_msg))
 
     # Portfolio-wide TA scan
     if weights:
-        render_section("Portfolio TA Scan")
-        if st.button("Scan All Holdings", key="tv_scan_all", type="primary"):
-            with st.spinner(f"Scanning {len(weights)} tickers..."):
+        render_section(tv_text("portfolio_scan"))
+        if st.button(tv_text("scan_all"), key="tv_scan_all", type="primary"):
+            with st.spinner(tv_text("scanning", count=len(weights))):
                 portfolio_ta = get_portfolio_ta(list(weights.keys()), interval=ta_interval)
 
             rows = []
@@ -278,16 +295,23 @@ with tab_ta:
 
             buys = sum(1 for r in rows if "BUY" in r.get("Signal", ""))
             sells = sum(1 for r in rows if "SELL" in r.get("Signal", ""))
-            st.caption(f"Summary: {buys} Buy, {sells} Sell, {len(rows)-buys-sells} Neutral")
+            st.caption(
+                tv_text(
+                    "summary",
+                    buys=buys,
+                    sells=sells,
+                    neutral=len(rows) - buys - sells,
+                )
+            )
 
 
 # ══════════════════════════════════════════════════════════════
-#  Tab 3: Stock Screener
+#  Tab 2: Stock Screener
 # ══════════════════════════════════════════════════════════════
 with tab_screener:
-    render_section("Stock Screener")
+    render_section(tv_text("stock_screener"))
     screen_type = st.selectbox(
-        "Screen Type",
+        tv_text("screen_type"),
         [
             "most_capitalized",
             "volume_leaders",
@@ -306,10 +330,10 @@ with tab_screener:
 
 
 # ══════════════════════════════════════════════════════════════
-#  Tab 4: Market Heatmap
+#  Tab 3: Market Heatmap
 # ══════════════════════════════════════════════════════════════
 with tab_heatmap:
-    render_section("S&P 500 Heatmap")
+    render_section(tv_text("sp500_heatmap"))
     render_heatmap(height=650)
 
 

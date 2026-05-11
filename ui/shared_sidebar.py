@@ -70,6 +70,10 @@ def render_shared_sidebar():
         st.markdown("---")
 
         # ── Language Toggle ───────────────────────────────────────
+        if "lang_toggle_sidebar" not in st.session_state:
+            st.session_state["lang_toggle_sidebar"] = (
+                "CN" if current_lang == "zh" else "EN"
+            )
         _lang_choice = st.radio(
             "Language",
             ["EN", "CN"],
@@ -81,11 +85,12 @@ def render_shared_sidebar():
         if new_lang != st.session_state.get("_lang", "en"):
             st.session_state._lang = new_lang
             st.rerun()
+        current_lang = new_lang
 
         st.markdown("---")
 
         # ── Portfolio Configuration ───────────────────────────────
-        st.markdown("### 📊 Portfolio")
+        st.markdown("### 📊 " + ("Portfolio" if current_lang == "en" else "组合"))
 
         # Combined Refresh + Run button (replaces separate Refresh and Run Analysis)
         _run_label_live = (
@@ -106,9 +111,17 @@ def render_shared_sidebar():
 
         # Inline banner so user knows which portfolio is loaded
         if _active_meta.get("source") == "supabase":
-            st.caption(f"📂 Active: **{_active_meta['name']}** (your DB portfolio)")
+            st.caption(
+                f"📂 Active: **{_active_meta['name']}** (your DB portfolio)"
+                if current_lang == "en"
+                else f"📂 当前组合：**{_active_meta['name']}**（你的数据库组合）"
+            )
         else:
-            st.caption(f"📂 Active: **{_active_meta['name']}**")
+            st.caption(
+                f"📂 Active: **{_active_meta['name']}**"
+                if current_lang == "en"
+                else f"📂 当前组合：**{_active_meta['name']}**"
+            )
 
         if st.button(
             _run_label_live, type="primary", use_container_width=True, key="refresh_and_run"
@@ -374,9 +387,9 @@ def render_shared_sidebar():
             del st.session_state._example_portfolio
 
         # Weights Input
-        st.caption("Weights (JSON)")
+        st.caption("Weights (JSON)" if current_lang == "en" else "权重 (JSON)")
         weights_json = st.text_area(
-            "Portfolio Weights",
+            "Portfolio Weights" if current_lang == "en" else "组合权重",
             value=st.session_state.weights_json,
             height=120,
             label_visibility="collapsed",
@@ -385,12 +398,12 @@ def render_shared_sidebar():
         st.markdown("---")
 
         # ── Analysis Parameters ───────────────────────────────────
-        st.markdown("### ⚙️ Parameters")
+        st.markdown("### ⚙️ " + ("Parameters" if current_lang == "en" else "参数"))
 
         col1, col2 = st.columns(2)
         with col1:
             period_years = st.slider(
-                "History (yr)",
+                "History (yr)" if current_lang == "en" else "历史（年）",
                 min_value=1,
                 max_value=5,
                 value=st.session_state.get("period_years", 2),
@@ -399,7 +412,7 @@ def render_shared_sidebar():
 
         with col2:
             mc_sims = st.select_slider(
-                "MC Sims",
+                "MC Sims" if current_lang == "en" else "蒙特卡洛",
                 options=[1000, 5000, 10000, 20000, 50000],
                 value=st.session_state.get("mc_sims", 10000),
                 key="mc_sims_sidebar",
@@ -408,7 +421,7 @@ def render_shared_sidebar():
         col3, col4 = st.columns(2)
         with col3:
             mc_horizon = st.slider(
-                "Horizon (d)",
+                "Horizon (d)" if current_lang == "en" else "周期（天）",
                 min_value=5,
                 max_value=63,
                 value=st.session_state.get("mc_horizon", 21),
@@ -417,7 +430,7 @@ def render_shared_sidebar():
 
         with col4:
             market_shock_pct = st.slider(
-                "Shock (%)",
+                "Shock (%)" if current_lang == "en" else "冲击 (%)",
                 min_value=-30,
                 max_value=0,
                 value=int(st.session_state.get("market_shock", -0.10) * 100),
@@ -428,7 +441,7 @@ def render_shared_sidebar():
         # Risk-free rate
         risk_free_rate = (
             st.number_input(
-                "Risk-Free Rate (%)",
+                "Risk-Free Rate (%)" if current_lang == "en" else "无风险利率 (%)",
                 min_value=0.0,
                 max_value=15.0,
                 value=4.5,
@@ -460,7 +473,10 @@ def render_shared_sidebar():
         )
         _api_ui_mode = _admin_mode and _show_api_inputs
 
-        st.markdown("### 🤖 AI Provider (admin)" if _api_ui_mode else "### 🤖 AI Access")
+        if _api_ui_mode:
+            st.markdown("### 🤖 AI Provider (admin)" if current_lang == "en" else "### 🤖 AI 提供方 (admin)")
+        else:
+            st.markdown("### 🤖 AI Access" if current_lang == "en" else "### 🤖 AI 访问")
 
         # ── Detect if running in cloud/preview (localhost unreachable) ──
         # Check once per session to avoid slow repeated probes
@@ -555,9 +571,17 @@ def render_shared_sidebar():
                             + ("  ⚠️ exhausted" if c["exhausted"] else "")
                         )
                     if _qs["plan"] == "free":
-                        st.caption("💡 Beta access: paid plans are configured but not live yet.")
+                        st.caption(
+                            "💡 Beta access: paid plans are configured but not live yet."
+                            if current_lang == "en"
+                            else "💡 Beta 阶段：付费计划已配置，但暂未正式开放。"
+                        )
                 else:
-                    st.caption("🔐 Sign in to use free monthly AI credits.")
+                    st.caption(
+                        "🔐 Sign in to use free monthly AI credits."
+                        if current_lang == "en"
+                        else "🔐 登录后可使用每月免费 AI 额度。"
+                    )
             except Exception:
                 pass
 
