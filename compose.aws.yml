@@ -21,8 +21,17 @@ services:
       - "8501"
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-}
       - FMP_API_KEY=${FMP_API_KEY:-}
+      - MINDMARKET_OWNER_EMAIL=${MINDMARKET_OWNER_EMAIL:-}
+      - MINDMARKET_OWNER_EMAILS=${MINDMARKET_OWNER_EMAILS:-}
+      - MINDMARKET_APP_URL=${MINDMARKET_APP_URL:-}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_BASIC_PRICE_ID=${STRIPE_BASIC_PRICE_ID:-}
+      - STRIPE_PRO_PRICE_ID=${STRIPE_PRO_PRICE_ID:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
       # Supabase Auth + per-user portfolios. anon key is safe to expose
       # (RLS at the DB enforces tenant isolation); service-role key is
       # NEVER passed here — that's for admin scripts only.

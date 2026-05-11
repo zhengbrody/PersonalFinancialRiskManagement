@@ -132,7 +132,7 @@ ENVFILE
 # Anon key is intentionally exposed (RLS enforces isolation server-side);
 # service-role key is NEVER copied here.
 {
-    grep -E '^(ANTHROPIC_API_KEY|DEEPSEEK_API_KEY|FMP_API_KEY|SUPABASE_URL|SUPABASE_ANON_KEY)' .streamlit/secrets.toml \
+    grep -E '^(ANTHROPIC_API_KEY|ANTHROPIC_MODEL|DEEPSEEK_API_KEY|DEEPSEEK_BASE_URL|FMP_API_KEY|MINDMARKET_OWNER_EMAIL|MINDMARKET_OWNER_EMAILS|MINDMARKET_APP_URL|STRIPE_SECRET_KEY|STRIPE_BASIC_PRICE_ID|STRIPE_PRO_PRICE_ID|STRIPE_WEBHOOK_SECRET|SUPABASE_URL|SUPABASE_ANON_KEY)' .streamlit/secrets.toml \
         | sed 's/ *= */=/; s/"//g' || true
 } >> .env
 
