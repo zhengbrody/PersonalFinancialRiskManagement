@@ -1,9 +1,8 @@
 """
-pages/11_Pricing.py
+docs/product/pricing_page_draft.py
 
-Public pricing and beta-access page. Stripe Checkout code exists in
-libs/billing, but payment collection is intentionally disabled until the
-owner flips MINDMARKET_ENABLE_STRIPE_CHECKOUT=true.
+Draft pricing and beta-access page. Kept outside Streamlit's pages/
+directory so it is not publicly routable until pricing is ready.
 """
 
 from __future__ import annotations

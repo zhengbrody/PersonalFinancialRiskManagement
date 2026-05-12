@@ -105,7 +105,6 @@ The AWS deployment is the production-shaped preview (EC2 + Caddy + Let's Encrypt
 | 8 | 🏛️ **Institutions** | SEC 13F smart money · Institution deep dive · conviction and crowding analysis |
 | 9 | 🔬 **Quant Lab** | Backtesting · Performance attribution · Regime analysis |
 | 10 | 🔎 **Ticker Research** | Standalone any-ticker deep dive (10 data sources + AI recommendation) |
-| 11 | 💳 **Pricing** | Free / Basic / Pro beta pricing and subscription readiness |
 
 ---
 
