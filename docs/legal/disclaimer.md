@@ -38,4 +38,4 @@ may incur. By using this site, you acknowledge that you have read and agree
 to this disclaimer.
 
 ## Contact
-Questions: contact@mindmarket.app (placeholder — email not yet active)
+Questions: contact@mindmarket.app

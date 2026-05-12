@@ -2,8 +2,9 @@
 
 _Last updated: 2026-05-09_
 
-This is a placeholder privacy policy for MindMarket AI (mindmarket.app). It
-will be replaced with a lawyer-reviewed version before public launch.
+This privacy policy explains how MindMarket AI (mindmarket.app) handles data
+during the beta preview period. It may be updated before a broader public
+launch.
 
 ## What we collect
 
@@ -60,4 +61,4 @@ You can:
 We will post any changes here with an updated "Last updated" date.
 
 ## Contact
-contact@mindmarket.app (placeholder — email not yet active)
+contact@mindmarket.app

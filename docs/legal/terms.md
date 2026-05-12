@@ -2,9 +2,8 @@
 
 _Last updated: 2026-05-09_
 
-This is a placeholder terms-of-service document for MindMarket AI
-(mindmarket.app). It will be replaced with a lawyer-reviewed version before
-public launch.
+These beta terms govern use of MindMarket AI (mindmarket.app). They may be
+updated before a broader public launch.
 
 ## 1. Acceptance
 By creating an account or using MindMarket AI, you agree to these terms and
@@ -78,4 +77,4 @@ We may update these terms. Material changes will be announced in-app and
 via email. Continued use after the effective date constitutes acceptance.
 
 ## Contact
-contact@mindmarket.app (placeholder — email not yet active)
+contact@mindmarket.app

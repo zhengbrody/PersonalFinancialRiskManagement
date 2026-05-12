@@ -30,6 +30,7 @@ _NAV_GROUPS = [
             ("pages/0_Login.py", "Login"),
             ("pages/0_Portfolios.py", "Portfolios"),
             ("pages/6_Guided_Analysis.py", "Guided Analysis"),
+            ("pages/11_Pricing.py", "Pricing"),
         ],
     ),
     (

@@ -4,6 +4,7 @@ pages/99_Legal.py — Disclaimer / Privacy / Terms.
 Reads markdown from docs/legal/ so non-engineers can edit the copy without
 touching Python. Selects which doc to show via ?doc=disclaimer|privacy|terms.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -18,8 +19,8 @@ render_shared_sidebar()
 _LEGAL_DIR = Path(__file__).resolve().parent.parent / "docs" / "legal"
 _DOCS = {
     "disclaimer": ("Financial Disclaimer", "免责声明", "disclaimer.md"),
-    "privacy":    ("Privacy Policy",       "隐私政策", "privacy.md"),
-    "terms":      ("Terms of Service",     "服务条款", "terms.md"),
+    "privacy": ("Privacy Policy", "隐私政策", "privacy.md"),
+    "terms": ("Terms of Service", "服务条款", "terms.md"),
 }
 
 
@@ -46,10 +47,9 @@ for tab, key in zip(tabs, _DOCS.keys()):
         st.markdown(_read(key))
 
 st.caption(
-    "These documents are placeholders pending legal review. "
-    "Last updated: 2026-05-09."
+    "Beta legal documents. Last updated: 2026-05-09."
     if lang == "en"
-    else "以上文件为占位版本，等待法律审核。最近更新：2026-05-09。"
+    else "Beta 法律文件。最近更新：2026-05-09。"
 )
 
 try:
