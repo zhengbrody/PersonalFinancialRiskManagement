@@ -71,6 +71,10 @@ model_provider = st.session_state.get("_model_provider", "Ollama (Local)")
 api_key_input = st.session_state.get("_api_key_input", "")
 deepseek_key = st.session_state.get("_deepseek_key", "")
 ollama_model = st.session_state.get("_ollama_model", "deepseek-r1:14b")
+server_anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "") or _safe_get_secret(
+    "ANTHROPIC_API_KEY"
+)
+server_deepseek_key = os.environ.get("DEEPSEEK_API_KEY", "") or _safe_get_secret("DEEPSEEK_API_KEY")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -284,13 +288,17 @@ st.markdown("---")
 render_section("AI Sentiment" if lang == "en" else "AI 情绪分析")
 
 _llm_available = (
-    (model_provider == "Anthropic Claude" and api_key_input)
-    or (model_provider == "DeepSeek API" and deepseek_key)
+    (model_provider == "Anthropic Claude" and (api_key_input or server_anthropic_key))
+    or (model_provider == "DeepSeek API" and (deepseek_key or server_deepseek_key))
     or model_provider == "Ollama (Local)"
 )
 
 if not _llm_available:
-    st.info(t("sentiment_need_ollama"))
+    st.info(
+        "AI sentiment requires a configured server-side Claude/DeepSeek key, or local Ollama."
+        if lang == "en"
+        else "AI 情绪分析需要服务器端 Claude/DeepSeek key，或本地 Ollama。"
+    )
 else:
     # Universe = ALL portfolio holdings (stocks via yfinance + crypto via CryptoPanic).
     _all_by_weight = sorted(weights.keys(), key=lambda x: -weights[x])
@@ -331,7 +339,14 @@ else:
         except Exception:
             pass
         selected = _all_by_weight  # ALL holdings
-        progress_bar = st.progress(0, text=f"Fetching news for {len(selected)} tickers...")
+        progress_bar = st.progress(
+            0,
+            text=(
+                f"Fetching news for {len(selected)} tickers..."
+                if lang == "en"
+                else f"正在获取 {len(selected)} 只标的新闻..."
+            ),
+        )
         news_data = fetch_asset_news(tuple(selected))
 
         # Parallelize LLM scoring — each call is ~2-5s; serial means 10 tickers
@@ -342,10 +357,20 @@ else:
 
         sentiment_results: dict = {}
         completed = 0
-        with st.spinner(f"Scoring {len(selected)} tickers in parallel (max 5 at once)..."):
+        with st.spinner(
+            f"Scoring {len(selected)} tickers in parallel (max 5 at once)..."
+            if lang == "en"
+            else f"正在并行情绪评分 {len(selected)} 只标的（最多同时 5 个）..."
+        ):
             with ThreadPoolExecutor(max_workers=5) as ex:
                 future_to_tk = {
-                    ex.submit(score_sentiment_ollama, tk, news_data.get(tk, []), ollama_model): tk
+                    ex.submit(
+                        score_sentiment_ollama,
+                        tk,
+                        news_data.get(tk, []),
+                        ollama_model,
+                        lang,
+                    ): tk
                     for tk in selected
                 }
                 for fut in as_completed(future_to_tk):
@@ -365,7 +390,12 @@ else:
                     sentiment_results[tk] = scored
                     completed += 1
                     progress_bar.progress(
-                        completed / len(selected), text=f"Scored {completed}/{len(selected)}"
+                        completed / len(selected),
+                        text=(
+                            f"Scored {completed}/{len(selected)}"
+                            if lang == "en"
+                            else f"已评分 {completed}/{len(selected)}"
+                        ),
                     )
         progress_bar.empty()
 
@@ -443,7 +473,9 @@ else:
         fig_sent.add_hline(y=7, line_dash="dot", line_color=CLR_GOOD, opacity=0.4)
         fig_sent.add_hline(y=3, line_dash="dot", line_color=CLR_DANGER, opacity=0.4)
         fig_sent.update_layout(
-            title="Sentiment Score Overview", yaxis=dict(range=[0, 11]), height=300
+            title="Sentiment Score Overview" if lang == "en" else "情绪评分总览",
+            yaxis=dict(range=[0, 11]),
+            height=300,
         )
         render_chart(fig_sent)
 
@@ -603,6 +635,7 @@ except Exception:
 # Legal disclaimer footer (educational use only)
 try:
     from ui.legal_footer import render_legal_footer
+
     render_legal_footer()
 except Exception:
     pass

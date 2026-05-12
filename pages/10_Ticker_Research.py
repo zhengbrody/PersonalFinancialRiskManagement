@@ -883,6 +883,8 @@ try:
                 "Provide a structured, professional investment analysis. Be specific with numbers. "
                 "Do not use markdown headers (#). Use plain text with clear section labels."
             )
+            if lang == "zh":
+                ai_system += " Respond entirely in Simplified Chinese."
 
             ai_prompt = f"""Analyze the following stock data and provide a comprehensive investment summary.
 
@@ -911,6 +913,11 @@ INSTITUTIONAL SENTIMENT: [1 sentence on insider/institutional activity signals]
 
 RECOMMENDATION: [Strong Buy / Buy / Hold / Sell / Strong Sell]
 CONFIDENCE: [High / Medium / Low]"""
+            if lang == "zh":
+                ai_prompt += (
+                    "\n\n请使用简体中文输出所有段落标题、要点、风险、估值观点、技术观点、"
+                    "机构情绪、推荐结论和置信度。保留 ticker、百分比、价格等数字。"
+                )
 
             with st.spinner("Generating AI analysis..." if lang == "en" else "正在生成 AI 分析..."):
                 try:
@@ -925,7 +932,7 @@ CONFIDENCE: [High / Medium / Low]"""
                             ai_response,
                             sources=f"yfinance, FMP API | {ticker.upper()} | {datetime.now().strftime('%Y-%m-%d %H:%M')}",
                         )
-                        st.session_state[f"_ai_summary_{ticker}"] = ai_response
+                        st.session_state[f"_ai_summary_{lang}_{ticker}"] = ai_response
                     else:
                         st.warning(
                             "AI analysis returned empty. Check your LLM provider settings in the sidebar."
@@ -940,9 +947,9 @@ CONFIDENCE: [High / Medium / Low]"""
                     )
 
         # Show cached AI summary if available (only when button was NOT just clicked)
-        elif st.session_state.get(f"_ai_summary_{ticker}"):
+        elif st.session_state.get(f"_ai_summary_{lang}_{ticker}"):
             render_ai_digest(
-                st.session_state[f"_ai_summary_{ticker}"],
+                st.session_state[f"_ai_summary_{lang}_{ticker}"],
                 sources=f"yfinance, FMP API | {ticker.upper()} (cached)",
             )
     else:
@@ -971,8 +978,7 @@ CONFIDENCE: [High / Medium / Low]"""
 
     # Resolve both keys (FMP required for data, Anthropic required for analysis)
     _admin_mode = str(
-        os.environ.get("MINDMARKET_ADMIN_MODE", "")
-        or _safe_get_secret("MINDMARKET_ADMIN_MODE")
+        os.environ.get("MINDMARKET_ADMIN_MODE", "") or _safe_get_secret("MINDMARKET_ADMIN_MODE")
     ).strip().lower() in ("1", "true", "yes", "on")
     _anth_key = (
         os.environ.get("ANTHROPIC_API_KEY", "")
@@ -997,7 +1003,7 @@ CONFIDENCE: [High / Medium / Low]"""
             else f"🔑 在服务器 secrets 中配置 {' + '.join(missing)} 以解锁投行分析报告。"
         )
     else:
-        report_key = f"_analyst_report_{ticker.upper()}"
+        report_key = f"_analyst_report_{lang}_{ticker.upper()}"
         cached_report = st.session_state.get(report_key)
 
         bcol1, bcol2 = st.columns([1, 3])
@@ -1060,6 +1066,7 @@ CONFIDENCE: [High / Medium / Low]"""
                     fmp_key=_fmp_key_for_report,
                     anthropic_key=_anth_key,
                     claude_model="claude-sonnet-4-5",
+                    language=lang,
                 )
             if result.get("error"):
                 render_unified_error(

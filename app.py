@@ -696,7 +696,7 @@ def _confidence_from_count(n: int) -> str:
     return "Low"
 
 
-def score_sentiment_ollama(ticker: str, headlines: list[str], model: str) -> dict:
+def score_sentiment_ollama(ticker: str, headlines: list[str], model: str, lang: str = "en") -> dict:
     """Send news headlines to the active LLM for sentiment analysis."""
     if not headlines:
         return {
@@ -728,6 +728,8 @@ def score_sentiment_ollama(ticker: str, headlines: list[str], model: str) -> dic
             f'{{"score":7,"label":"Bullish","bull":["reason1","reason2"],"bear":["risk1","risk2"],"summary":"..."}}\n\n'
             f"Headlines:\n{headlines_text}\n\nJSON:"
         )
+        if lang == "zh":
+            prompt += "\nUse Simplified Chinese for every string value in the JSON."
     else:
         prompt = (
             f"You are a senior Wall Street equity research analyst writing a Sentiment Tear Sheet for {ticker}.\n"
@@ -747,6 +749,11 @@ def score_sentiment_ollama(ticker: str, headlines: list[str], model: str) -> dic
             f"}}\n\n"
             f"Headlines:\n{headlines_text}"
         )
+        if lang == "zh":
+            prompt += (
+                "\n\nReturn all narrative text, labels, bullet titles, and details in "
+                "Simplified Chinese. Keep JSON keys exactly as specified."
+            )
 
     try:
         raw = call_llm(prompt, max_tokens=800, temperature=0.1)

@@ -22,6 +22,55 @@ def _truthy(value) -> bool:
     return str(value).strip().lower() in ("1", "true", "yes", "on")
 
 
+_NAV_ITEMS = [
+    ("app.py", "Dashboard", "首页"),
+    ("pages/0_Login.py", "Login", "登录"),
+    ("pages/0_Portfolios.py", "Portfolios", "我的组合"),
+    ("pages/1_Overview.py", "Overview", "概览"),
+    ("pages/2_Risk.py", "Risk", "风险"),
+    ("pages/3_Markets.py", "Markets", "市场"),
+    ("pages/4_Portfolio.py", "Portfolio", "组合工具"),
+    ("pages/5_TradingView.py", "TradingView", "图表"),
+    ("pages/6_Options.py", "Options", "期权"),
+    ("pages/7_Trading_Floor.py", "Trading Floor", "交易台"),
+    ("pages/8_Institutions.py", "Institutions", "机构"),
+    ("pages/9_Quant_Lab.py", "Quant Lab", "量化实验室"),
+    ("pages/10_Ticker_Research.py", "Ticker Research", "个股研究"),
+    ("pages/97_Owner_Admin_Status.py", "Owner Admin Status", "Owner 状态"),
+    ("pages/99_Legal.py", "Legal", "法律条款"),
+]
+
+
+def _render_custom_navigation(current_lang: str) -> None:
+    """Render localized navigation because Streamlit's native page nav is static."""
+    try:
+        st.markdown(
+            """
+            <style>
+            [data-testid="stSidebarNav"] { display: none !important; }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+    except Exception:
+        pass
+
+    try:
+        from libs.admin.status import is_owner_email
+        from libs.auth.session import current_user
+
+        _user = current_user() or {}
+        show_owner = is_owner_email(_user.get("email"))
+    except Exception:
+        show_owner = False
+
+    st.markdown("### " + ("Navigation" if current_lang == "en" else "导航"))
+    for path, label_en, label_zh in _NAV_ITEMS:
+        if "97_Owner_Admin_Status.py" in path and not show_owner:
+            continue
+        st.page_link(path, label=label_en if current_lang == "en" else label_zh)
+
+
 def render_shared_sidebar():
     """
     Render the shared sidebar that appears on all pages.
@@ -52,6 +101,9 @@ def render_shared_sidebar():
     current_lang = st.session_state.get("_lang", "en")
 
     with st.sidebar:
+        _render_custom_navigation(current_lang)
+        st.markdown("---")
+
         # ── Logo and Title ────────────────────────────────────────
         st.markdown(
             """

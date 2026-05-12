@@ -1770,7 +1770,7 @@ def fetch_ticker_research(ticker: str, fmp_key: str = "") -> Dict:
         result["current_price"] = info.get("currentPrice") or info.get("regularMarketPrice")
         result["institutional_pct"] = info.get("heldPercentInstitutions")
     except Exception as e:
-        logger.warning("ticker_research.info_failed", ticker=ticker, error=str(e))
+        logger.warning(f"ticker_research.info_failed ticker={ticker} error={e}")
 
     # ── 2. Fundamentals via _fetch_single_fundamental ──
     try:
@@ -1779,13 +1779,13 @@ def fetch_ticker_research(ticker: str, fmp_key: str = "") -> Dict:
             _, fund_row = fund_result
             result["fundamentals"] = fund_row
     except Exception as e:
-        logger.warning("ticker_research.fundamentals_failed", ticker=ticker, error=str(e))
+        logger.warning(f"ticker_research.fundamentals_failed ticker={ticker} error={e}")
 
     # ── 3. Valuation via compute_advanced_dcf ──
     try:
         result["valuation"] = compute_advanced_dcf(ticker)
     except Exception as e:
-        logger.warning("ticker_research.dcf_failed", ticker=ticker, error=str(e))
+        logger.warning(f"ticker_research.dcf_failed ticker={ticker} error={e}")
 
     # ── 4. Insider activity via _fetch_single_insider ──
     try:
@@ -1794,7 +1794,7 @@ def fetch_ticker_research(ticker: str, fmp_key: str = "") -> Dict:
             _, insider_data = insider_result
             result["insider"] = insider_data
     except Exception as e:
-        logger.warning("ticker_research.insider_failed", ticker=ticker, error=str(e))
+        logger.warning(f"ticker_research.insider_failed ticker={ticker} error={e}")
 
     # ── 5. Analyst recommendations (latest consensus) ──
     try:
@@ -1827,7 +1827,7 @@ def fetch_ticker_research(ticker: str, fmp_key: str = "") -> Dict:
             else:
                 result["analyst_rating"] = "N/A"
     except Exception as e:
-        logger.warning("ticker_research.recommendations_failed", ticker=ticker, error=str(e))
+        logger.warning(f"ticker_research.recommendations_failed ticker={ticker} error={e}")
 
     # ── 6. Analyst upgrades / downgrades (recent 5) ──
     try:
@@ -1846,7 +1846,7 @@ def fetch_ticker_research(ticker: str, fmp_key: str = "") -> Dict:
                 upgrade_list.append(entry)
             result["recent_upgrades"] = upgrade_list
     except Exception as e:
-        logger.warning("ticker_research.upgrades_failed", ticker=ticker, error=str(e))
+        logger.warning(f"ticker_research.upgrades_failed ticker={ticker} error={e}")
 
     # ── 7. Price targets from FMP ──
     try:
@@ -1868,7 +1868,7 @@ def fetch_ticker_research(ticker: str, fmp_key: str = "") -> Dict:
             if yf_targets:
                 result["price_targets"] = yf_targets
     except Exception as e:
-        logger.warning("ticker_research.price_targets_failed", ticker=ticker, error=str(e))
+        logger.warning(f"ticker_research.price_targets_failed ticker={ticker} error={e}")
 
     # ── 8. Technicals: RSI(14), SMA50, SMA200, MACD, Bollinger Bands ──
     try:
@@ -1949,7 +1949,7 @@ def fetch_ticker_research(ticker: str, fmp_key: str = "") -> Dict:
                 "bb_pct": bb_pct,
             }
     except Exception as e:
-        logger.warning("ticker_research.technicals_failed", ticker=ticker, error=str(e))
+        logger.warning(f"ticker_research.technicals_failed ticker={ticker} error={e}")
 
     # ── 9. Institutional holders (top 10) ──
     try:
@@ -1976,7 +1976,7 @@ def fetch_ticker_research(ticker: str, fmp_key: str = "") -> Dict:
                 )
             result["top_institutions"] = holders_list
     except Exception as e:
-        logger.warning("ticker_research.institutions_failed", ticker=ticker, error=str(e))
+        logger.warning(f"ticker_research.institutions_failed ticker={ticker} error={e}")
 
     # ── 10. Build summary_context for LLM consumption ──
     try:
@@ -2109,7 +2109,7 @@ def fetch_ticker_research(ticker: str, fmp_key: str = "") -> Dict:
 
         result["summary_context"] = "\n".join(lines)
     except Exception as e:
-        logger.warning("ticker_research.summary_context_failed", ticker=ticker, error=str(e))
+        logger.warning(f"ticker_research.summary_context_failed ticker={ticker} error={e}")
         result["summary_context"] = f"Research data for {ticker} (summary generation failed)"
 
     return result
@@ -2138,20 +2138,20 @@ def _fmp_get(path: str, fmp_key: str, params: Optional[Dict] = None, timeout: in
             return resp.json()
         # Classify the failure so diagnostics aren't silent
         if resp.status_code == 401:
-            logger.warning("fmp.invalid_key", path=path)
+            logger.warning(f"fmp.invalid_key path={path}")
         elif resp.status_code == 402:
-            logger.info("fmp.premium_required", path=path)
+            logger.info(f"fmp.premium_required path={path}")
         elif resp.status_code == 403:
             logger.warning(
-                "fmp.legacy_endpoint", path=path, detail="Endpoint deprecated — migrate to /stable/"
+                f"fmp.legacy_endpoint path={path} detail=Endpoint deprecated; migrate to /stable/"
             )
         elif resp.status_code == 429:
-            logger.warning("fmp.rate_limited", path=path)
+            logger.warning(f"fmp.rate_limited path={path}")
         else:
-            logger.info("fmp.http_error", path=path, status=resp.status_code)
+            logger.info(f"fmp.http_error path={path} status={resp.status_code}")
         return None
     except Exception as e:
-        logger.info("fmp.get_failed", path=path, error=str(e))
+        logger.info(f"fmp.get_failed path={path} error={e}")
         return None
 
 
@@ -2290,7 +2290,7 @@ def _safe_num(x, nd: int = 2) -> str:
         return "-"
 
 
-def build_analyst_report_prompt(data: Dict) -> str:
+def build_analyst_report_prompt(data: Dict, language: str = "en") -> str:
     """Turn the FMP data blob into a tight prompt for Claude."""
     tk = data.get("ticker", "?")
     prof = data.get("profile", {}) or {}
@@ -2460,6 +2460,11 @@ Rules:
 - If a field cannot be computed from the data, use reasonable industry defaults
   and state that explicitly in the relevant `notes` field.
 """
+    if language == "zh":
+        prompt += (
+            "\n- Output every human-readable string value in Simplified Chinese. "
+            "Keep JSON keys, enum values, and ticker symbols exactly as specified."
+        )
     return prompt
 
 
@@ -2468,6 +2473,7 @@ def generate_analyst_report(
     fmp_key: str,
     anthropic_key: str,
     claude_model: str = "claude-sonnet-4-5",
+    language: str = "en",
 ) -> Dict:
     """
     End-to-end: fetch data + prompt Claude + parse structured JSON output.
@@ -2497,7 +2503,7 @@ def generate_analyst_report(
         return {"report": None, "raw_data": data, "error": f"No FMP data found for {ticker}"}
 
     # 2. Build prompt
-    prompt = build_analyst_report_prompt(data)
+    prompt = build_analyst_report_prompt(data, language=language)
 
     # 3. Call Claude
     try:
@@ -2511,13 +2517,18 @@ def generate_analyst_report(
             system=(
                 "You are a veteran sell-side equity research MD. You produce "
                 "concise, numeric, opinionated investment notes for institutional "
-                "clients. Output strict JSON only."
+                "clients. Output strict JSON only. "
+                + (
+                    "All human-readable string values must be in Simplified Chinese."
+                    if language == "zh"
+                    else ""
+                )
             ),
             messages=[{"role": "user", "content": prompt}],
         )
         raw = resp.content[0].text if resp.content else ""
     except Exception as e:
-        logger.error("analyst_report.claude_call_failed", ticker=ticker, error=str(e))
+        logger.error(f"analyst_report.claude_call_failed ticker={ticker} error={e}")
         return {"report": None, "raw_data": data, "error": f"Claude call failed: {e}"}
 
     # 4. Parse JSON (tolerate fence blocks / trailing text)
