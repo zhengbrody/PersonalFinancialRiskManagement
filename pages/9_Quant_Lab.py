@@ -52,8 +52,6 @@ if st.session_state.get("analysis_ready"):
 - Annual return: {report.annual_return:.2%} vs volatility: {report.annual_volatility:.2%}
 - Max drawdown: {report.max_drawdown:.2%}
 Comment on risk-adjusted performance quality and whether the return justifies the risk taken. Plain text only."""
-            if lang == "zh":
-                prompt += "\n请用中文回答。"
             with st.spinner("..."):
                 digest = call_llm(prompt, max_tokens=250, temperature=0.2)
             render_ai_digest(digest, sources="Quantitative Analysis Engine")

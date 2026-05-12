@@ -98,20 +98,25 @@ def _capture_landing(page: Page, out: pathlib.Path) -> bool:
     return True
 
 
-def _nav_to(page: Page, link_text: str, timeout: int = 5000) -> bool:
-    """Click a multi-page navigation link. Start from home first."""
-    page.goto(BASE_URL + "/", wait_until="domcontentloaded", timeout=25_000)
-    _wait_hydrated(page)
-    time.sleep(2)
+def _nav_to_path(page: Page, path: str) -> bool:
+    """Open a Streamlit multipage route directly.
+
+    The custom sidebar navigation is rendered client-side and has proven less
+    reliable under browser automation than direct page URLs. The routes
+    themselves are stable and map 1:1 to Streamlit page slugs.
+    """
+    target = BASE_URL.rstrip("/") + "/" + path.lstrip("/")
     try:
-        page.locator(f'a:has-text("{link_text}")').first.click(timeout=timeout)
+        page.goto(target, wait_until="domcontentloaded", timeout=25_000)
+        _wait_hydrated(page)
+        time.sleep(2)
         return True
     except PlaywrightTimeout:
         return False
 
 
 def _capture_tradingview(page: Page, out: pathlib.Path) -> bool:
-    if not _nav_to(page, "TradingView"):
+    if not _nav_to_path(page, "TradingView"):
         print("  ! nav to TradingView failed")
         return False
     time.sleep(7)  # TradingView widget iframe needs time
@@ -125,23 +130,9 @@ def _capture_tradingview(page: Page, out: pathlib.Path) -> bool:
 
 def _capture_ticker_research(page: Page, out: pathlib.Path, search_ticker: str = "NVDA") -> bool:
     """Auto-populate a ticker and run the search so the screenshot has data."""
-    # Start at home then click nav link — direct URL navigation is unreliable
-    # for Streamlit multi-page apps (falls back to home if internal router
-    # hasn't registered the page yet).
-    page.goto(BASE_URL + "/", wait_until="domcontentloaded", timeout=25_000)
-    _wait_hydrated(page)
-    time.sleep(2)
-
-    # Click the "Ticker Research" link in the multi-page nav
-    try:
-        page.locator('a:has-text("Ticker Research"), a:has-text("Ticker_Research")').first.click(
-            timeout=5000
-        )
-    except PlaywrightTimeout:
-        print("  ! nav link to Ticker Research not found")
+    if not _nav_to_path(page, "Ticker_Research"):
+        print("  ! nav to Ticker Research failed")
         return False
-
-    time.sleep(5)  # wait for page to hydrate
 
     # Find the page's own ticker input (aria-label="Ticker Symbol")
     filled = False
@@ -191,7 +182,7 @@ def _capture_ticker_research(page: Page, out: pathlib.Path, search_ticker: str =
 
 def _capture_trading_floor(page: Page, out: pathlib.Path) -> bool:
     """Click 'Load Market Data' button so the floor shows real content."""
-    if not _nav_to(page, "Trading Floor"):
+    if not _nav_to_path(page, "Trading_Floor"):
         print("  ! nav to Trading Floor failed")
         return False
     time.sleep(3)

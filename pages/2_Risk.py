@@ -104,9 +104,6 @@ FACTOR EXPOSURE:
 
 Identify the PRIMARY risk, explain its portfolio impact, and give ONE actionable mitigation. Plain text, no markdown."""
 
-    if lang == "zh":
-        prompt += "\n请用中文回答。"
-
     with st.spinner("Generating risk analysis..." if lang == "en" else "生成风险分析..."):
         digest = call_llm(prompt, max_tokens=400, temperature=0.2)
     render_ai_digest(digest, sources="VaR Model, Factor Analysis, Stress Testing")

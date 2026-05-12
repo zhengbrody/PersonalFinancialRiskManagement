@@ -22,27 +22,52 @@ def _truthy(value) -> bool:
     return str(value).strip().lower() in ("1", "true", "yes", "on")
 
 
-_NAV_ITEMS = [
-    ("app.py", "Dashboard", "首页"),
-    ("pages/0_Login.py", "Login", "登录"),
-    ("pages/0_Portfolios.py", "Portfolios", "我的组合"),
-    ("pages/1_Overview.py", "Overview", "概览"),
-    ("pages/2_Risk.py", "Risk", "风险"),
-    ("pages/3_Markets.py", "Markets", "市场"),
-    ("pages/4_Portfolio.py", "Portfolio", "组合工具"),
-    ("pages/5_TradingView.py", "TradingView", "图表"),
-    ("pages/6_Options.py", "Options", "期权"),
-    ("pages/7_Trading_Floor.py", "Trading Floor", "交易台"),
-    ("pages/8_Institutions.py", "Institutions", "机构"),
-    ("pages/9_Quant_Lab.py", "Quant Lab", "量化实验室"),
-    ("pages/10_Ticker_Research.py", "Ticker Research", "个股研究"),
-    ("pages/97_Owner_Admin_Status.py", "Owner Admin Status", "Owner 状态"),
-    ("pages/99_Legal.py", "Legal", "法律条款"),
+_NAV_GROUPS = [
+    (
+        "Start Here",
+        [
+            ("app.py", "Dashboard"),
+            ("pages/0_Login.py", "Login"),
+            ("pages/0_Portfolios.py", "Portfolios"),
+            ("pages/6_Guided_Analysis.py", "Guided Analysis"),
+        ],
+    ),
+    (
+        "Portfolio Risk",
+        [
+            ("pages/1_Overview.py", "Overview"),
+            ("pages/2_Risk.py", "Risk"),
+            ("pages/4_Portfolio.py", "Portfolio Actions"),
+        ],
+    ),
+    (
+        "Market Context",
+        [
+            ("pages/3_Markets.py", "Markets"),
+            ("pages/5_TradingView.py", "TradingView"),
+            ("pages/7_Trading_Floor.py", "Trading Floor"),
+        ],
+    ),
+    (
+        "Research",
+        [
+            ("pages/10_Ticker_Research.py", "Ticker Research"),
+            ("pages/8_Institutions.py", "Institutions"),
+            ("pages/9_Quant_Lab.py", "Quant Lab"),
+        ],
+    ),
+    (
+        "System",
+        [
+            ("pages/97_Owner_Admin_Status.py", "Owner Admin Status"),
+            ("pages/99_Legal.py", "Legal"),
+        ],
+    ),
 ]
 
 
-def _render_custom_navigation(current_lang: str) -> None:
-    """Render localized navigation because Streamlit's native page nav is static."""
+def _render_custom_navigation() -> None:
+    """Render custom English navigation because Streamlit's native page nav is static."""
     try:
         st.markdown(
             """
@@ -64,11 +89,40 @@ def _render_custom_navigation(current_lang: str) -> None:
     except Exception:
         show_owner = False
 
-    st.markdown("### " + ("Navigation" if current_lang == "en" else "导航"))
-    for path, label_en, label_zh in _NAV_ITEMS:
-        if "97_Owner_Admin_Status.py" in path and not show_owner:
-            continue
-        st.page_link(path, label=label_en if current_lang == "en" else label_zh)
+    st.markdown("### Navigation")
+    for group_label, items in _NAV_GROUPS:
+        st.markdown(
+            (
+                f"<div style='margin:12px 0 4px 0;color:#8B949E;font-size:11px;"
+                f"font-weight:600;text-transform:uppercase;letter-spacing:0.08em;'>"
+                f"{group_label}</div>"
+            ),
+            unsafe_allow_html=True,
+        )
+        for path, label in items:
+            if "97_Owner_Admin_Status.py" in path and not show_owner:
+                continue
+            st.page_link(path, label=label)
+
+
+def _queue_analysis_and_route(
+    *, force_refresh: bool = False, route_after: str = "pages/1_Overview.py"
+) -> None:
+    """Queue an analysis run and route through the dashboard executor.
+
+    Each Streamlit page script runs independently, so importing `app.py`
+    directly from page routes can produce inconsistent behavior. The sidebar
+    therefore only writes trigger flags here, then returns to `app.py` where
+    the canonical analysis execution path already lives.
+    """
+    st.session_state["_run_trigger"] = True
+    st.session_state["_route_after_analysis"] = route_after
+    if force_refresh:
+        st.session_state["_force_refresh"] = True
+    try:
+        st.switch_page("app.py")
+    except Exception:
+        st.rerun()
 
 
 def render_shared_sidebar():
@@ -91,17 +145,18 @@ def render_shared_sidebar():
         if _ctx is not None:
             _run_id = _ctx.script_run_id
             if st.session_state.get("_sidebar_run_id") == _run_id:
-                lang = st.session_state.get("_lang", "en")
-                return lang, get_translator(lang)
+                return "en", get_translator("en")
             st.session_state["_sidebar_run_id"] = _run_id
     except Exception:
         pass  # If we can't detect duplicate, just render
 
-    # Get current language from session state
-    current_lang = st.session_state.get("_lang", "en")
+    # Product simplification: keep the app UI in English only.
+    # Browser translation works better than maintaining a second visible UI layer.
+    st.session_state["_lang"] = "en"
+    current_lang = "en"
 
     with st.sidebar:
-        _render_custom_navigation(current_lang)
+        _render_custom_navigation()
         st.markdown("---")
 
         # ── Logo and Title ────────────────────────────────────────
@@ -118,24 +173,6 @@ def render_shared_sidebar():
         """,
             unsafe_allow_html=True,
         )
-
-        st.markdown("---")
-
-        # ── Language Toggle ───────────────────────────────────────
-        if "lang_toggle_sidebar" not in st.session_state:
-            st.session_state["lang_toggle_sidebar"] = "CN" if current_lang == "zh" else "EN"
-        _lang_choice = st.radio(
-            "Language",
-            ["EN", "CN"],
-            horizontal=True,
-            label_visibility="collapsed",
-            key="lang_toggle_sidebar",
-        )
-        new_lang = "zh" if _lang_choice == "CN" else "en"
-        if new_lang != st.session_state.get("_lang", "en"):
-            st.session_state._lang = new_lang
-            st.rerun()
-        current_lang = new_lang
 
         st.markdown("---")
 
@@ -312,7 +349,6 @@ def render_shared_sidebar():
                     st.session_state.weights_json = json.dumps(live_weights, indent=2)
                     st.session_state.weights_input = st.session_state.weights_json
                     st.session_state._portfolio_meta = meta
-                    st.session_state._run_trigger = True
                     st.session_state.last_weights_json = None
                     logger.info(
                         "ui.refresh_and_run.success",
@@ -320,15 +356,7 @@ def render_shared_sidebar():
                         total_long=round(total_value, 2),
                         net_equity=round(net_equity, 2),
                     )
-                    # Run the analysis NOW so it works on every page (not just
-                    # when user is on home). Lazy-import to avoid circular dep.
-                    try:
-                        from app import execute_analysis
-
-                        execute_analysis(force=True)
-                    except Exception as _e:
-                        logger.warning("ui.execute_analysis_inline_failed", error=str(_e))
-                    st.rerun()
+                    _queue_analysis_and_route(force_refresh=True)
             except Exception as e:
                 st.error(f"Failed: {str(e)}")
 
@@ -337,14 +365,7 @@ def render_shared_sidebar():
             "Run with Current Weights" if current_lang == "en" else "用当前权重运行"
         )
         if st.button(_run_label_current, use_container_width=True, key="run_current_only"):
-            st.session_state._run_trigger = True
-            try:
-                from app import execute_analysis
-
-                execute_analysis(force=True)
-            except Exception as _e:
-                logger.warning("ui.execute_analysis_inline_failed", error=str(_e))
-            st.rerun()
+            _queue_analysis_and_route(force_refresh=False)
 
         # Force Refresh — bypasses cache regardless of whether any param changed.
         # Useful when prices may have moved but analysis params haven't, or when
@@ -360,15 +381,7 @@ def render_shared_sidebar():
                 else "清除分析缓存并重新计算。"
             ),
         ):
-            st.session_state._force_refresh = True
-            st.session_state._run_trigger = True
-            try:
-                from app import execute_analysis
-
-                execute_analysis(force=True)
-            except Exception as _e:
-                logger.warning("ui.execute_analysis_inline_failed", error=str(_e))
-            st.rerun()
+            _queue_analysis_and_route(force_refresh=True)
 
         # Portfolio Metadata (if available)
         if meta := getattr(st.session_state, "_portfolio_meta", None):

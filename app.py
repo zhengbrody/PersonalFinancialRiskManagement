@@ -297,9 +297,9 @@ st.markdown(
 
 
 # ══════════════════════════════════════════════════════════════
-#  Language (auto-detect or simple toggle in sidebar)
+#  Presentation language
 # ══════════════════════════════════════════════════════════════
-lang = "en"  # default English; user can switch in sidebar
+lang = "en"  # English-first UI; browser translation handles other languages better
 t = get_translator(lang)
 
 
@@ -1368,6 +1368,7 @@ def render_sentiment_tear_sheet(tk: str, data: dict, weight: float, lang: str = 
 # ══════════════════════════════════════════════════════════════
 from ui.components import (
     inject_global_css,
+    render_section,
 )
 
 inject_global_css()
@@ -1495,11 +1496,10 @@ def execute_analysis(force: bool = False) -> bool:
             else "把机构级风险分析,带给散户。"
         )
         hero_sub = (
-            "Monte Carlo VaR · Black-Scholes Greeks · SEC 13F · AI risk digests"
-            " — one click, no spreadsheet."
+            "Start with the question that matters: capital protection, risk drivers, "
+            "allocation changes, or new ideas."
             if not is_zh
-            else "蒙特卡洛 VaR · Black-Scholes 希腊字母 · SEC 13F · AI 风险摘要"
-            " — 一键运行,告别 Excel。"
+            else "从最重要的问题开始：先看保本、风险来源、调仓动作，还是研究新机会。"
         )
         cta_label = "Run Demo Portfolio" if not is_zh else "运行 Demo 组合"
         skip_label = "Skip to dashboard" if not is_zh else "跳过,直接看仪表盘"
@@ -1531,38 +1531,38 @@ def execute_analysis(force: bool = False) -> bool:
         features = [
             (
                 "🛡️",
-                "Risk Engine" if not is_zh else "风险引擎",
+                "Protect Capital" if not is_zh else "先保住本金",
                 (
-                    "Monte Carlo VaR · EWMA covariance · component VaR · stress scenarios"
+                    "Overview + Risk first. Focus on net equity, drawdown, VaR, and margin distance."
                     if not is_zh
-                    else "蒙特卡洛 VaR · EWMA 协方差 · 边际 VaR · 压力测试"
+                    else "先看概览和风险页，抓净值、回撤、VaR、保证金安全边际。"
                 ),
             ),
             (
-                "🎲",
-                "Options Lab" if not is_zh else "期权实验室",
+                "🧭",
+                "Explain Drivers" if not is_zh else "解释风险来源",
                 (
-                    "Black-Scholes pricing · analytical Greeks · IV solver · 10 strategies"
+                    "Use factor exposure, component VaR, sector concentration, and macro sensitivity."
                     if not is_zh
-                    else "Black-Scholes 定价 · 解析希腊字母 · IV 求解 · 10 种策略"
+                    else "用因子暴露、边际 VaR、行业集中度、宏观敏感度解释问题。"
                 ),
             ),
             (
-                "🏛️",
-                "Smart Money" if not is_zh else "Smart Money",
+                "⚖️",
+                "Improve Allocation" if not is_zh else "优化组合动作",
                 (
-                    "SEC 13F filings from 30+ top institutions · crowding · unusual flow"
+                    "Portfolio Actions + Quant Lab. Compare current weights, scenario downside, and risk-adjusted return."
                     if not is_zh
-                    else "30+ 顶级机构 SEC 13F · 拥挤度 · 异常期权流"
+                    else "组合动作页和量化实验室结合，看当前权重、情景下行和风险调整收益。"
                 ),
             ),
             (
-                "🤖",
-                "AI Co-pilot" if not is_zh else "AI 副驾",
+                "🔎",
+                "Research New Ideas" if not is_zh else "研究新机会",
                 (
-                    "Owner-managed AI summaries · earnings transcripts · sentiment"
+                    "Ticker Research + Institutions + TradingView. Validate thesis before adding exposure."
                     if not is_zh
-                    else "平台统一管理 AI 摘要 · 财报电话会 · 情绪分析"
+                    else "个股研究、机构页和图表页联动，先验证逻辑，再加仓位。"
                 ),
             ),
         ]
@@ -1572,7 +1572,7 @@ def execute_analysis(force: bool = False) -> bool:
                 st.markdown(
                     f"""
     <div style="background:#0a0e14;border:1px solid rgba(139,148,158,0.12);
-                border-radius:10px;padding:18px 16px;height:175px;
+                border-radius:10px;padding:18px 16px;height:178px;
                 display:flex;flex-direction:column;">
       <div style="font-size:24px;margin-bottom:8px;">{icon}</div>
       <div style="font-size:14px;font-weight:700;color:#E6EDF3;
@@ -1585,12 +1585,69 @@ def execute_analysis(force: bool = False) -> bool:
                     unsafe_allow_html=True,
                 )
 
+        render_section(
+            "Recommended Workflow" if not is_zh else "建议使用路径",
+            (
+                "Start from the smallest set of metrics that changes decisions."
+                if not is_zh
+                else "先抓最少但真正会影响决策的指标。"
+            ),
+        )
+        workflow = [
+            (
+                "1. Overview",
+                (
+                    "Validate net equity, P&L coverage, and recent portfolio path."
+                    if not is_zh
+                    else "先确认净值、盈亏覆盖率和近期组合路径。"
+                ),
+            ),
+            (
+                "2. Risk",
+                (
+                    "Check VaR, drawdown, top risk contributors, and stress loss."
+                    if not is_zh
+                    else "再看 VaR、回撤、主要风险来源和压力损失。"
+                ),
+            ),
+            (
+                "3. Portfolio Actions",
+                (
+                    "Only after risk is understood, evaluate reweights and scenario trades."
+                    if not is_zh
+                    else "理解风险后，再做权重调整和情景调仓。"
+                ),
+            ),
+            (
+                "4. Research",
+                (
+                    "Use Markets, Ticker Research, and Institutions as evidence layers, not the starting point."
+                    if not is_zh
+                    else "市场、个股研究、机构页是验证层，不应成为起点。"
+                ),
+            ),
+        ]
+        wf_cols = st.columns(4)
+        for col, (label, desc) in zip(wf_cols, workflow):
+            with col:
+                st.markdown(
+                    f"""
+    <div style="background:#0f1319;border:1px solid rgba(139,148,158,0.10);
+                border-radius:10px;padding:14px 14px;min-height:120px;">
+      <div style="font-size:12px;font-weight:700;color:#E6EDF3;margin-bottom:6px;">{label}</div>
+      <div style="font-size:12px;color:#8B949E;line-height:1.5;">{desc}</div>
+    </div>
+    """,
+                    unsafe_allow_html=True,
+                )
+
         # CTA row
         st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
         cta_col1, cta_col2, cta_col3 = st.columns([1, 1, 2])
         with cta_col1:
             if st.button(cta_label, type="primary", use_container_width=True, key="landing_cta"):
                 st.session_state._auto_run = True
+                st.session_state._route_after_analysis = "pages/1_Overview.py"
                 st.session_state._skip_landing = True
                 st.rerun()
         with cta_col2:
@@ -1733,6 +1790,9 @@ def execute_analysis(force: bool = False) -> bool:
                 else f"使用缓存的分析结果（{age_min} 分钟前计算）。点击 Force Refresh 重新计算。"
             )
             logger.info("ui.analysis.cache_hit", age_min=age_min)
+            target = st.session_state.pop("_route_after_analysis", None)
+            if target:
+                st.switch_page(target)
         else:
             analysis_start = time.time()
 
@@ -1837,6 +1897,9 @@ def execute_analysis(force: bool = False) -> bool:
                     _last_analysis_ts=time.time(),
                 )
             )
+            target = st.session_state.pop("_route_after_analysis", None)
+            if target:
+                st.switch_page(target)
 
             # Display performance metrics
             perf_col1, perf_col2 = st.columns(2)
@@ -1899,8 +1962,8 @@ def _main_ui():
         # Run button.
         st.info(
             "👈 Configure your portfolio and click **Refresh & Run Analysis** in the "
-            "sidebar to start. Results flow into Overview, Risk, Markets, Portfolio, "
-            "and 6 more pages. Logged-in users analyze their own DB-stored portfolio; "
+            "sidebar to start. Begin with **Guided Analysis**, then move into Overview, "
+            "Risk, and Portfolio Actions. Logged-in users analyze their own DB-stored portfolio; "
             "everyone else gets the built-in demo."
         )
 
@@ -1913,7 +1976,7 @@ def _main_ui():
         st.success(
             "✅ Analysis complete. **Open `Overview`** in the left sidebar for the "
             "full dashboard — KPIs, cumulative returns, drawdown, P&L breakdown, "
-            "and the AI risk digest. Other pages (Risk, Markets, Options, etc.) "
+            "and the AI risk digest. Other pages (Risk, Guided Analysis, Markets, etc.) "
             "are also unlocked."
         )
         if st.session_state.get("report"):

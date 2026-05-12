@@ -2,9 +2,9 @@
 
 # 📊 MindMarket AI
 
-### Institutional-Grade Portfolio Risk Analytics · 机构级投资组合风险分析平台
+### Decision-First Portfolio Risk Analytics · 决策优先的投资组合风控平台
 
-[![Live Demo](https://img.shields.io/badge/🌐_LIVE-mindmarket.app-0B7285?style=for-the-badge)](https://mindmarket.app/)
+[![Preview](https://img.shields.io/badge/🌐_PREVIEW-mindmarket.app-0B7285?style=for-the-badge)](https://mindmarket.app/)
 [![Streamlit Cloud](https://img.shields.io/badge/Backup-mindmarketai.streamlit.app-FF4B4B?style=flat-square)](https://mindmarketai.streamlit.app/)
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
@@ -24,9 +24,25 @@
 
 ## ⚡ Overview
 
-**MindMarket AI** is an institutional-grade portfolio risk analytics platform built on a production-quality quantitative stack — Monte Carlo VaR, multi-factor attribution, options Greeks, regime detection, SEC 13F tracking, and AI-powered narrative summaries — delivered through a clean 10-page Streamlit dashboard.
+**MindMarket AI** is a portfolio risk platform for retail investors who want institutional-grade analytics without institutional-grade complexity.
 
-> Built to bridge professional hedge-fund analytics and retail-friendly UX.
+It is designed to answer three questions quickly:
+
+1. Is my capital safe right now?
+2. What is actually driving portfolio risk?
+3. What should I change next?
+
+Under the hood, the stack is still quantitative and serious: Monte Carlo VaR, multi-factor attribution, regime detection, SEC 13F tracking, and AI-powered narrative summaries. The difference is that the product flow is now organized around decisions, not around raw tools.
+
+> Built to bridge hedge-fund-style risk tooling and retail-friendly product UX.
+
+### Best First-Time Flow
+
+- `Run Demo Portfolio` to land directly in the executive dashboard.
+- `Overview` to validate net equity, concentration, and P&L coverage.
+- `Risk` to inspect VaR, drawdown, factor exposure, and stress loss.
+- `Portfolio Actions` only after the risk picture is clear.
+- `Ticker Research` and `Institutions` as evidence layers, not as the starting point.
 
 ---
 
@@ -56,20 +72,22 @@
 |---|---|
 | 🛡️ **Risk Engine** | Monte Carlo VaR/CVaR · EWMA covariance (λ=0.94) · Component VaR · Stress testing · Margin-call distance |
 | 📈 **Factor Models** | 6-factor OLS with t-statistics · Macro sensitivities (rates/USD/oil) · Barra PCA attribution |
-| 🎲 **Options Lab** | Black-Scholes + full Greeks · Newton-Raphson IV · 10 strategy builders · 3D IV surface |
-| 🏛️ **Institutional Intel** | SEC 13F parser (top ~30 filers) · Smart-money overlap · Crowding detection · Unusual options flow |
+| 🧭 **Guided Analysis** | Question-first workflow · goal-based page routing · priority metrics for retail users |
+| 🏛️ **Institutional Intel** | SEC 13F parser (top ~30 filers) · Smart-money overlap · crowding detection · conviction tracking |
 | 🔄 **Regime & Backtest** | HMM (Gaussian mixture EM) · Vectorized backtesting · Brinson-Hood-Beebower attribution |
 | 🤖 **AI Digests** | Narrative summaries on every page (Claude / DeepSeek / Ollama with auto-detection) |
-| 🌏 **Bilingual UI** | 500+ labels across EN/中文 · dark-mode design system |
+| 🌏 **Presentation Layer** | English-first UI · browser translation friendly · dark-mode design system |
 
 ---
 
-## 🌐 Live Demo
+## 🌐 Preview Environments
 
-👉 **Primary:** **[mindmarket.app](https://mindmarket.app/)** (AWS-hosted, deployed on demand)
-👉 **Backup:** [mindmarketai.streamlit.app](https://mindmarketai.streamlit.app/) (free Streamlit Cloud, always-on)
+👉 **Preview app:** **[mindmarket.app](https://mindmarket.app/)**  
+👉 **Always-on backup:** [mindmarketai.streamlit.app](https://mindmarketai.streamlit.app/)
 
-The AWS deployment is the production-shape demo (EC2 + Caddy + Let's Encrypt + Lambda + DynamoDB). Spun up for recruiter demos and torn down between sessions to stay inside the Free Plan budget.
+`mindmarket.app` is the recruiter / product-preview environment. The long-term public SaaS brand remains **mindmarket.ai**; the current repo is still in the transition from engineering demo to real multi-user product.
+
+The AWS deployment is the production-shaped preview (EC2 + Caddy + Let's Encrypt + Lambda + DynamoDB). It is brought up for demos and torn down between sessions to stay inside budget.
 
 ---
 
@@ -82,9 +100,9 @@ The AWS deployment is the production-shape demo (EC2 + Caddy + Let's Encrypt + L
 | 3 | 📰 **Markets** | VIX · Fear & Greed · Yield curve · Macro news · AI sentiment (all holdings) · Earnings AI |
 | 4 | 💼 **Portfolio** | Efficient frontier · Trade blotter · Scenario simulator (-30% ~ +30%) · Margin monitor |
 | 5 | 📉 **TradingView** | Embedded TradingView charts + technical analysis |
-| 6 | 🎲 **Options** | Strategy builder · Greeks · IV surface · Educational walkthroughs |
-| 7 | 🏙️ **Trading Floor** | Bloomberg-style regime + sectors + movers + options flow |
-| 8 | 🏛️ **Institutions** | SEC 13F smart money · Institution deep dive · Options flow intelligence |
+| 6 | 🧭 **Guided Analysis** | Decision-first workflow · which page to open next · what metrics matter most |
+| 7 | 🏙️ **Trading Floor** | Bloomberg-style regime + sectors + movers + next-read routing |
+| 8 | 🏛️ **Institutions** | SEC 13F smart money · Institution deep dive · conviction and crowding analysis |
 | 9 | 🔬 **Quant Lab** | Backtesting · Performance attribution · Regime analysis |
 | 10 | 🔎 **Ticker Research** | Standalone any-ticker deep dive (10 data sources + AI recommendation) |
 
@@ -411,9 +429,25 @@ MIT. See [LICENSE](LICENSE).
 
 ## ⚡ 项目概览
 
-**MindMarket AI** 是一个机构级投资组合风险分析平台，基于专业量化栈构建——蒙特卡洛 VaR、多因子归因、期权希腊字母、市场状态识别、SEC 13F 跟踪、AI 叙述摘要——通过简洁的 10 页 Streamlit 仪表盘呈现。
+**MindMarket AI** 是一个面向个人投资者的投资组合风控平台，底层是机构级量化能力，但产品路径是决策优先而不是工具堆砌。
 
-> 目标：把对冲基金级分析能力与零售友好的 UX 连接起来。
+它优先回答三个问题：
+
+1. 我的本金现在安全吗？
+2. 风险到底来自哪里？
+3. 下一步应该调整什么？
+
+底层仍然保持专业：蒙特卡洛 VaR、多因子归因、市场状态识别、SEC 13F 跟踪、AI 风险摘要都在，但页面结构已经围绕“先判断、再解释、最后动作”重组。
+
+> 目标：把对冲基金级分析能力和散户真正能用的产品 UX 接起来。
+
+### 首次使用建议路径
+
+- 先点 `Run Demo Portfolio`，直接进入执行驾驶舱。
+- 在 `Overview` 先看净值、集中度和盈亏覆盖率。
+- 到 `Risk` 看 VaR、回撤、因子暴露和压力损失。
+- 理解风险后，再进入 `Portfolio Actions` 做调仓讨论。
+- `Ticker Research` 和 `Institutions` 用来验证想法，不应该作为起点。
 
 ---
 
@@ -423,11 +457,11 @@ MIT. See [LICENSE](LICENSE).
 |---|---|
 | 🛡️ **风险引擎** | 蒙特卡洛 VaR/CVaR · EWMA 协方差（λ=0.94）· 边际 VaR · 压力测试 · 保证金追缴距离 |
 | 📈 **因子模型** | 6 因子 OLS（带 t 统计量）· 宏观敏感度（利率/美元/原油）· Barra PCA 归因 |
-| 🎲 **期权实验室** | Black-Scholes + 希腊字母 · Newton-Raphson IV · 10 种策略构建器 · 3D 隐波曲面 |
-| 🏛️ **机构情报** | SEC 13F 解析器（约 30 家头部机构）· Smart money 重合 · 拥挤度检测 · 异常期权流 |
+| 🧭 **分析路径** | 问题导向工作流 · 目标驱动页面入口 · 面向散户的优先指标 |
+| 🏛️ **机构情报** | SEC 13F 解析器（约 30 家头部机构）· Smart money 重合 · 拥挤度检测 · 机构信念跟踪 |
 | 🔄 **状态识别 & 回测** | HMM（高斯混合 EM）· 向量化回测 · Brinson-Hood-Beebower 归因 |
 | 🤖 **AI 摘要** | 每页独立的 AI 叙述（Claude / DeepSeek / Ollama 自动检测） |
-| 🌏 **双语 UI** | 500+ 标签覆盖英文/中文 · 暗色主题设计系统 |
+| 🌏 **展示层** | 英文主界面 · 便于浏览器翻译 · 暗色主题设计系统 |
 
 ---
 
@@ -511,7 +545,9 @@ python -m pytest tests/ -v
 
 <div align="center">
 
-**🔗 [mindmarket.app](https://mindmarket.app/)**  ·  [Streamlit Cloud backup](https://mindmarketai.streamlit.app/)
+**🔗 预览环境：[mindmarket.app](https://mindmarket.app/)**  ·  [Streamlit Cloud backup](https://mindmarketai.streamlit.app/)
+
+目标公开品牌域名：**mindmarket.ai**
 
 Built with ❤️ by [Zheng Dong](https://github.com/zhengbrody)
 

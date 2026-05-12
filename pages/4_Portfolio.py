@@ -663,8 +663,6 @@ if _scenario_market_move != 0:
     )
     if _new_portfolio_value > 0 and (_new_equity / _new_portfolio_value) < 0.30:
         _ai_scenario_prompt += "WARNING: Equity ratio falls below 30% maintenance margin.\n"
-    if lang == "zh":
-        _ai_scenario_prompt += "请用中文回答。"
 
     try:
         _ai_scenario_text = call_llm(_ai_scenario_prompt, max_tokens=300, temperature=0.2)

@@ -2,8 +2,8 @@
 pages/8_Institutions.py
 Institutional Flow & Smart Money -- Wall Street Research Terminal
 ------------------------------------------------------------------
-Bloomberg / Optiver-inspired dark terminal for tracking institutional
-positioning, 13F filings, and options flow intelligence.
+Bloomberg-inspired dark terminal for tracking institutional
+positioning and 13F conviction.
 
 REFACTORED: All raw HTML tables/grids replaced with Streamlit-native components
 (st.dataframe, st.columns, st.metric, render_kpi_row) for reliable rendering.
@@ -167,7 +167,7 @@ st.markdown(
     f"""
 <div class="terminal-header">
     <div class="title">INSTITUTIONAL FLOW & SMART MONEY</div>
-    <div class="subtitle">SEC 13F Filings  |  Options Flow Intelligence  |  Smart Money Tracking</div>
+    <div class="subtitle">SEC 13F Filings  |  Conviction Tracking  |  Smart Money Positioning</div>
     <div class="timestamp">LIVE  {now_str}</div>
 </div>
 """,
@@ -184,8 +184,6 @@ if st.session_state.get("analysis_ready") and st.session_state.get("smart_money_
 - {len(high_conviction)} have HIGH conviction (>20 institutions holding)
 - High conviction names: {', '.join(s['ticker'] for s in high_conviction[:5])}
 What does this institutional crowding tell us about risk? Plain text only."""
-        if lang == "zh":
-            prompt += "\n请用中文回答。"
         with st.spinner("..."):
             digest = call_llm(prompt, max_tokens=250, temperature=0.2)
         render_ai_digest(digest, sources="SEC 13F Filings")
@@ -197,11 +195,10 @@ What does this institutional crowding tell us about risk? Plain text only."""
 #  Tabs
 # ══════════════════════════════════════════════════════════════
 
-tab_smart, tab_deepdive, tab_options = st.tabs(
+tab_smart, tab_deepdive = st.tabs(
     [
         "Smart Money Dashboard",
         "Institution Deep Dive",
-        "Options Flow",
     ]
 )
 
@@ -498,202 +495,6 @@ with tab_deepdive:
         st.error(f"Failed to load institution data: {exc}")
         st.caption(
             "SEC EDGAR may be temporarily unavailable. Data is cached for 24 hours after first fetch."
-        )
-
-
-# ══════════════════════════════════════════════════════════════
-#  TAB 3: Options Flow
-# ══════════════════════════════════════════════════════════════
-
-with tab_options:
-    render_section(
-        "Options Flow Intelligence",
-        subtitle="Put/call ratios, unusual volume, and large premium trades for portfolio holdings",
-    )
-
-    st.caption(
-        "⚠️ Data source: Yahoo Finance via yfinance. Volume and Open Interest are "
-        "delayed/snapshot fields, not OPRA or broker real-time options flow. Treat this "
-        "as directional screening only; exact V/OI should be checked against Polygon, "
-        "Tradier, CBOE, or your broker."
-    )
-
-    try:
-        from options_flow import get_options_flow_summary
-
-        with st.spinner("Scanning options flow for portfolio holdings..."):
-            flow_summary = get_options_flow_summary(portfolio_tickers)
-
-        if not flow_summary:
-            st.info(
-                "Options flow data is unavailable. "
-                "This may be due to market hours or data source limitations."
-            )
-        else:
-            provider = flow_summary.get("data_provider")
-            quality = flow_summary.get("data_quality")
-            if provider or quality:
-                st.caption(
-                    f"Data quality: {provider or 'unknown'} · "
-                    f"{(quality or 'unknown').replace('_', ' ')}"
-                )
-            # ── Sentiment Gauge (render_kpi_row) ─────────────────────
-            score = flow_summary.get("sentiment_score", 0)
-            label = flow_summary.get("sentiment_label", "NEUTRAL")
-            overall_pc = flow_summary.get("overall_pc_ratio")
-            call_vol = flow_summary.get("call_volume_total", 0)
-            put_vol = flow_summary.get("put_volume_total", 0)
-
-            if score >= 15:
-                score_dc = "positive"
-            elif score <= -15:
-                score_dc = "negative"
-            else:
-                score_dc = "neutral"
-
-            render_kpi_row(
-                [
-                    {
-                        "label": "Options Sentiment",
-                        "value": f"{score:+d}",
-                        "delta": label.replace("_", " "),
-                        "delta_color": score_dc,
-                    },
-                    {
-                        "label": "Total Call Volume",
-                        "value": _fmt_number(call_vol),
-                        "delta_color": "positive",
-                    },
-                    {
-                        "label": "Total Put Volume",
-                        "value": _fmt_number(put_vol),
-                        "delta_color": "negative",
-                    },
-                    {
-                        "label": "P/C Ratio (Vol)",
-                        "value": _fmt_number(overall_pc, decimals=3) if overall_pc else "--",
-                    },
-                ]
-            )
-
-            # ── Per-Holding Put/Call Ratio Table -> st.dataframe ─────
-            st.markdown("")
-            render_section("Put/Call Ratio by Holding")
-
-            ticker_signals = flow_summary.get("ticker_signals", [])
-            if ticker_signals:
-                pc_rows = []
-                for ts in sorted(ticker_signals, key=lambda x: x.get("volume_pc_ratio") or 999):
-                    tk = ts.get("ticker", "")
-                    sig = ts.get("signal", "NO_DATA")
-                    vpc = ts.get("volume_pc_ratio")
-                    vpc_str = f"{vpc:.3f}" if vpc is not None else "--"
-
-                    pc_rows.append(
-                        {
-                            "Ticker": tk,
-                            "Vol P/C Ratio": vpc_str,
-                            "Signal": f"{_signal_emoji(sig)} {_badge_text(sig)}",
-                        }
-                    )
-
-                st.dataframe(
-                    pd.DataFrame(pc_rows),
-                    hide_index=True,
-                    use_container_width=True,
-                )
-
-                st.caption(
-                    "P/C > 1.2 = BEARISH (more puts) | P/C < 0.7 = BULLISH (more calls) | Otherwise NEUTRAL"
-                )
-            else:
-                st.info("No per-ticker put/call data available.")
-
-            # ── Unusual Volume Alerts -> st.dataframe ─────────────────
-            st.markdown("")
-            render_section("Unusual Volume Alerts")
-
-            unusual = flow_summary.get("top_unusual_volume", [])
-            if unusual:
-                uv_rows = []
-                for u in unusual:
-                    sent = u.get("sentiment", "NEUTRAL")
-                    uv_rows.append(
-                        {
-                            "Ticker": u.get("ticker", ""),
-                            "Expiry": u.get("expiry", ""),
-                            "Strike": f"${u.get('strike', 0):.1f}",
-                            "Type": (u.get("type", "") or "").upper(),
-                            "Volume": _fmt_number(u.get("volume", 0)),
-                            "OI": _fmt_number(u.get("oi", 0)),
-                            "Vol/OI": f"{u.get('vol_oi_ratio', 0):.1f}x",
-                            "Est Premium": _fmt_dollars(u.get("premium_est", 0)),
-                            "Moneyness": u.get("moneyness", ""),
-                            "Signal": f"{_signal_emoji(sent)} {_badge_text(sent)}",
-                        }
-                    )
-
-                st.dataframe(
-                    pd.DataFrame(uv_rows),
-                    hide_index=True,
-                    use_container_width=True,
-                )
-
-                st.caption(
-                    "Showing top 5 by volume/OI ratio. Vol/OI > 2.0 or volume > 5x OI flagged as unusual."
-                )
-            else:
-                st.info("No unusual volume detected across portfolio holdings.")
-
-            # ── Large Premium Trades -> st.dataframe ──────────────────
-            st.markdown("")
-            render_section("Large Premium Trades")
-
-            large_prem = flow_summary.get("top_large_premium", [])
-            if large_prem:
-                lp_rows = []
-                for lp in large_prem:
-                    sent = lp.get("sentiment", "NEUTRAL")
-                    lp_rows.append(
-                        {
-                            "Ticker": lp.get("ticker", ""),
-                            "Expiry": lp.get("expiry", ""),
-                            "Strike": f"${lp.get('strike', 0):.1f}",
-                            "Type": (lp.get("type", "") or "").upper(),
-                            "Volume": _fmt_number(lp.get("volume", 0)),
-                            "Est Premium": _fmt_dollars(lp.get("premium_est", 0)),
-                            "Moneyness": lp.get("moneyness", ""),
-                            "Signal": f"{_signal_emoji(sent)} {_badge_text(sent)}",
-                        }
-                    )
-
-                st.dataframe(
-                    pd.DataFrame(lp_rows),
-                    hide_index=True,
-                    use_container_width=True,
-                )
-
-                st.caption("Showing top 5 by estimated premium. Threshold: >$50,000 notional.")
-            else:
-                st.info("No large premium trades detected across portfolio holdings.")
-
-            # Timestamp footer
-            scan_ts = flow_summary.get("scan_timestamp", "")
-            if scan_ts:
-                st.markdown("")
-                st.caption(
-                    f"Options flow scanned at: {scan_ts}  |  Data cached for 30 minutes  |  "
-                    "Not real-time order flow"
-                )
-
-    except ImportError as exc:
-        st.error(f"Module not available: {exc}")
-        st.caption("Ensure options_flow.py is present in the project root.")
-    except Exception as exc:
-        st.error(f"Failed to load options flow data: {exc}")
-        st.caption(
-            "Options data requires market hours for live volume. "
-            "Cached results are served if available (30-minute TTL)."
         )
 
 # Floating AI Assistant

@@ -1,6 +1,6 @@
 """
 pages/7_Trading_Floor.py
-Daily Trading Floor Monitor -- Bloomberg Terminal / Optiver trading desk style.
+Daily Trading Floor Monitor -- Bloomberg Terminal / trading desk style.
 Information-dense, dark theme, monospace numbers, color-coded signals.
 
 REFACTORED: All raw HTML tables/grids replaced with Streamlit-native components
@@ -216,14 +216,6 @@ if load_data:
         except Exception:
             st.session_state._tf_market_regime = None
 
-        try:
-            tickers = _get_portfolio_tickers()
-            from options_flow import get_options_flow_summary
-
-            st.session_state._tf_options_flow = get_options_flow_summary(tickers)
-        except Exception:
-            st.session_state._tf_options_flow = None
-
     st.success("Market data loaded.")
 
 
@@ -340,8 +332,6 @@ if regime_data or market_data:
             prompt = f"""As a trading floor analyst, give a 2-3 sentence market briefing for traders based on:
 {bullets}
 What should traders watch for today? Comment on volatility regime and positioning. Plain text only."""
-            if lang == "zh":
-                prompt += "\n请用中文回答。"
             with st.spinner("..."):
                 digest = call_llm(prompt, max_tokens=250, temperature=0.2)
             render_ai_digest(digest, sources="Market Regime & Volatility Data")
@@ -461,13 +451,21 @@ st.markdown('<div class="tf-section-hdr">PORTFOLIO RISK FLASH</div>', unsafe_all
 
 report = st.session_state.get("report")
 
-if report and isinstance(report, dict):
-    var95 = report.get("var_95")
-    var99 = report.get("var_99")
-    sharpe = report.get("sharpe_ratio")
-    max_dd = report.get("max_drawdown")
-    ann_vol = report.get("annual_vol")
-    ann_ret = report.get("annual_return")
+if report:
+    if isinstance(report, dict):
+        var95 = report.get("var_95")
+        var99 = report.get("var_99")
+        sharpe = report.get("sharpe_ratio")
+        max_dd = report.get("max_drawdown")
+        ann_vol = report.get("annual_vol") or report.get("annual_volatility")
+        ann_ret = report.get("annual_return")
+    else:
+        var95 = getattr(report, "var_95", None)
+        var99 = getattr(report, "var_99", None)
+        sharpe = getattr(report, "sharpe_ratio", None)
+        max_dd = getattr(report, "max_drawdown", None)
+        ann_vol = getattr(report, "annual_volatility", None)
+        ann_ret = getattr(report, "annual_return", None)
 
     # Determine Sharpe color
     if sharpe is not None:
@@ -539,56 +537,60 @@ else:
 
 
 # ════════════════════════════════════════════════════════════
-#  SECTION 4: Options Flow Summary
+#  SECTION 4: Next Reads
 # ════════════════════════════════════════════════════════════
 
-st.markdown('<div class="tf-section-hdr">OPTIONS FLOW</div>', unsafe_allow_html=True)
+st.markdown('<div class="tf-section-hdr">NEXT READS</div>', unsafe_allow_html=True)
 
-flow = st.session_state.get("_tf_options_flow")
+meta = st.session_state.get("_portfolio_meta") or {}
+regime_note = (
+    "Open Markets next if today's regime banner is your main concern."
+    if lang == "en"
+    else "如果你最关心今天的市场状态，下一步去看 Markets。"
+)
+risk_note = (
+    "Open Risk next if VaR, drawdown, or leverage is what may change your position sizing."
+    if lang == "en"
+    else "如果 VaR、回撤或杠杆会改变你的仓位决策，下一步去看 Risk。"
+)
+research_note = (
+    "Open Ticker Research or Institutions only after you know what risk you are trying to confirm."
+    if lang == "en"
+    else "只有在你已经知道要验证什么风险后，再去看个股研究或机构页。"
+)
 
-if flow and isinstance(flow, dict):
-    pc_ratio = flow.get("overall_pc_ratio")
-    sentiment = flow.get("sentiment_score", 0)
-    sentiment_label = flow.get("sentiment_label", "NEUTRAL")
-    call_vol = flow.get("call_volume_total", 0)
-    put_vol = flow.get("put_volume_total", 0)
+dist = None
+if report and getattr(report, "margin_call_info", None):
+    try:
+        dist = float(report.margin_call_info.get("distance_to_call_pct", 0))
+    except Exception:
+        dist = None
 
-    if pc_ratio is not None:
-        pc_dc = "negative" if pc_ratio > 1.0 else ("positive" if pc_ratio < 0.7 else "neutral")
-        pc_str = f"{pc_ratio:.3f}"
-    else:
-        pc_dc = "neutral"
-        pc_str = "--"
-
-    sent_dc = "positive" if sentiment > 15 else ("negative" if sentiment < -15 else "neutral")
-
-    render_kpi_row(
-        [
-            {"label": "Put/Call Ratio", "value": pc_str, "delta_color": pc_dc},
-            {
-                "label": "Sentiment",
-                "value": f"{sentiment:+d}",
-                "delta": sentiment_label,
-                "delta_color": sent_dc,
-            },
-            {"label": "Call Volume", "value": f"{call_vol:,}", "delta_color": "positive"},
-            {"label": "Put Volume", "value": f"{put_vol:,}", "delta_color": "negative"},
-        ]
-    )
-
-    st.caption(
-        "For detailed options flow analysis (unusual volume, large premiums, per-ticker signals), "
-        "see the **Institutions** page → Options Flow tab."
+if dist is not None and dist < 0.30:
+    risk_note = (
+        f"Leverage deserves attention first: margin-call distance is {dist:.1%}. Open Risk before researching new names."
         if lang == "en"
-        else "如需详细期权流分析（异常成交量、大额期权、逐股信号），请查看 **机构** 页面 → 期权流选项卡。"
+        else f"杠杆应优先处理：距离保证金追缴仅 {dist:.1%}。先看 Risk，再研究新标的。"
     )
 
-else:
-    st.info(
-        "Click 'Load Market Data' above to scan options flow."
-        if lang == "en"
-        else "点击上方「加载市场数据」以扫描期权流。"
-    )
+cards = [
+    ("Markets", regime_note, "pages/3_Markets.py"),
+    ("Risk", risk_note, "pages/2_Risk.py"),
+    ("Research", research_note, "pages/10_Ticker_Research.py"),
+]
+cols = st.columns(3)
+for col, (title, body, path) in zip(cols, cards):
+    with col:
+        st.markdown(f"**{title}**")
+        st.caption(body)
+        st.page_link(
+            path,
+            label=(
+                f"Open {title}"
+                if lang == "en"
+                else {"Markets": "打开市场", "Risk": "打开风险", "Research": "打开个股研究"}[title]
+            ),
+        )
 
 
 # ════════════════════════════════════════════════════════════
@@ -599,7 +601,7 @@ st.markdown(
     f'<div style="margin-top:24px;padding-top:8px;border-top:1px solid rgba(139,148,158,0.1);'
     f'font-family:monospace;font-size:9px;color:#484F58;">'
     f"MINDMARKET AI TRADING FLOOR v1.0 &nbsp;|&nbsp; "
-    f"DATA CACHED 1HR &nbsp;|&nbsp; OPTIONS CACHED 30MIN &nbsp;|&nbsp; REGIME CACHED 4HR"
+    f"DATA CACHED 1HR &nbsp;|&nbsp; REGIME CACHED 4HR &nbsp;|&nbsp; USER FLOW PRIORITIZES RISK FIRST"
     f" &nbsp;|&nbsp; {now_str}</div>",
     unsafe_allow_html=True,
 )
@@ -615,6 +617,7 @@ except Exception:
 # Legal disclaimer footer (educational use only)
 try:
     from ui.legal_footer import render_legal_footer
+
     render_legal_footer()
 except Exception:
     pass
