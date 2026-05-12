@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 
 from market_intelligence import (
     _safe_num,
+    analyst_report_data_quality,
     build_analyst_report_prompt,
     fetch_analyst_report_data,
     generate_analyst_report,
@@ -166,6 +167,32 @@ def test_fetch_analyst_report_data_handles_http_error(monkeypatch):
     data = fetch_analyst_report_data("NVDA", fmp_key="dummy")
     assert data["profile"] == {}
     assert data["income_statement"] == []
+
+
+def test_analyst_report_data_quality_labels_coverage():
+    data = {
+        "profile": {"companyName": "NVIDIA"},
+        "quote": {"price": 950},
+        "income_statement": [{"revenue": 1}],
+        "balance_sheet": [],
+        "cash_flow": [],
+        "ratios": [],
+        "key_metrics": [],
+        "analyst_estimates": [],
+        "price_target_consensus": [],
+        "upgrades_downgrades": [],
+        "peers": [],
+        "peer_metrics": [],
+        "transcript": {},
+        "errors": [{"source": "transcript", "detail": "premium"}],
+    }
+    quality = analyst_report_data_quality(data)
+    assert quality["label"] == "Low"
+    assert quality["available"] == 3
+    assert quality["total"] >= quality["available"]
+    assert quality["checks"]["profile"] is True
+    assert quality["checks"]["transcript"] is False
+    assert quality["errors"][0]["source"] == "transcript"
 
 
 # ══════════════════════════════════════════════════════════════════════════════

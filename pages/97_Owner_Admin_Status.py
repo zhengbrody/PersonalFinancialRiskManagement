@@ -1,5 +1,8 @@
 """Owner-only diagnostics for server-managed API integrations."""
+
 from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
 
 import streamlit as st
 
@@ -41,6 +44,132 @@ def _render_status_rows(statuses: list[IntegrationStatus]) -> None:
         for item in statuses
     ]
     st.dataframe(rows, use_container_width=True, hide_index=True)
+
+
+def _usage_client():
+    """Prefer service-role for owner-wide cost visibility, fall back to own rows."""
+    try:
+        from libs.auth.admin_client import get_supabase_admin
+
+        return get_supabase_admin(), "all users"
+    except Exception:
+        from libs.auth import get_supabase
+        from libs.auth.session import access_token
+
+        sb = get_supabase()
+        token = access_token()
+        if token:
+            sb.postgrest.auth(token)
+        return sb, "current owner only"
+
+
+def _fetch_usage_rows(days: int = 30) -> tuple[str, list[dict], str | None]:
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    try:
+        sb, scope = _usage_client()
+        resp = (
+            sb.table("usage_events")
+            .select("created_at,user_id,kind,provider,model,tokens_in,tokens_out,cost_usd,metadata")
+            .gte("created_at", since)
+            .order("created_at", desc=True)
+            .limit(1000)
+            .execute()
+        )
+        return scope, resp.data or [], None
+    except Exception as e:
+        return "unavailable", [], str(e)
+
+
+def _fetch_profile_map() -> dict[str, dict]:
+    try:
+        sb, _ = _usage_client()
+        resp = sb.table("profiles").select("user_id,email,plan").limit(1000).execute()
+        return {row.get("user_id"): row for row in (resp.data or [])}
+    except Exception:
+        return {}
+
+
+def _render_usage_dashboard() -> None:
+    import pandas as pd
+
+    st.markdown("### Cost & Usage" if not is_zh else "### 成本与用量")
+    scope, rows, error = _fetch_usage_rows(days=30)
+    if error:
+        st.warning(f"Usage log unavailable: {error}")
+        return
+    if scope != "all users":
+        st.info(
+            "SUPABASE_SERVICE_KEY is not configured, so this view only shows the current "
+            "owner account's rows. Add the service-role key on the server to see all users."
+        )
+    if not rows:
+        st.caption("No usage events in the last 30 days.")
+        return
+
+    profile_map = _fetch_profile_map()
+    df = pd.DataFrame(rows)
+    for col in ("tokens_in", "tokens_out", "cost_usd"):
+        df[col] = pd.to_numeric(df.get(col, 0), errors="coerce").fillna(0)
+    df["email"] = df["user_id"].map(lambda uid: profile_map.get(uid, {}).get("email", uid))
+    df["plan"] = df["user_id"].map(lambda uid: profile_map.get(uid, {}).get("plan", "unknown"))
+    df["created_at"] = pd.to_datetime(df["created_at"], errors="coerce")
+
+    total_cost = float(df["cost_usd"].sum())
+    total_events = int(len(df))
+    total_tokens = int(df["tokens_in"].sum() + df["tokens_out"].sum())
+    avg_cost = total_cost / total_events if total_events else 0.0
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("30d est. cost", f"${total_cost:.4f}")
+    c2.metric("Events", f"{total_events:,}")
+    c3.metric("Tokens", f"{total_tokens:,}")
+    c4.metric("Avg / event", f"${avg_cost:.4f}")
+
+    by_kind = (
+        df.groupby("kind", dropna=False)
+        .agg(
+            events=("kind", "size"),
+            cost_usd=("cost_usd", "sum"),
+            tokens_in=("tokens_in", "sum"),
+            tokens_out=("tokens_out", "sum"),
+        )
+        .reset_index()
+        .sort_values("cost_usd", ascending=False)
+    )
+    by_kind["cost_usd"] = by_kind["cost_usd"].map(lambda x: round(float(x), 6))
+    st.markdown("#### By feature")
+    st.dataframe(by_kind, use_container_width=True, hide_index=True)
+
+    by_user = (
+        df.groupby(["email", "plan"], dropna=False)
+        .agg(
+            events=("kind", "size"),
+            cost_usd=("cost_usd", "sum"),
+            tokens_in=("tokens_in", "sum"),
+            tokens_out=("tokens_out", "sum"),
+        )
+        .reset_index()
+        .sort_values("cost_usd", ascending=False)
+        .head(20)
+    )
+    by_user["cost_usd"] = by_user["cost_usd"].map(lambda x: round(float(x), 6))
+    st.markdown("#### Top users")
+    st.dataframe(by_user, use_container_width=True, hide_index=True)
+
+    recent = df[
+        [
+            "created_at",
+            "email",
+            "kind",
+            "provider",
+            "model",
+            "tokens_in",
+            "tokens_out",
+            "cost_usd",
+        ]
+    ].head(50)
+    recent["cost_usd"] = recent["cost_usd"].map(lambda x: round(float(x), 6))
+    st.markdown("#### Recent events")
+    st.dataframe(recent, use_container_width=True, hide_index=True)
 
 
 def _anthropic_live() -> tuple[bool, str]:
@@ -159,6 +288,8 @@ configured = [
 st.markdown("### Configuration" if not is_zh else "### 配置状态")
 _render_status_rows(configured)
 
+_render_usage_dashboard()
+
 run_live = st.button(
     "Run live checks" if not is_zh else "运行实时检查",
     type="primary",
@@ -198,4 +329,3 @@ try:
     render_legal_footer()
 except Exception:
     pass
-

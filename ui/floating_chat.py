@@ -80,20 +80,44 @@ def _chat_call_llm(
     ).strip().lower() in ("1", "true", "yes", "on")
 
     model_provider = st.session_state.get("_model_provider", "Ollama (Local)")
+    provider_slug = model_provider.lower().split()[0] if model_provider else None
 
     # Quota gate (production only)
     if not _admin_mode:
         try:
             from libs.auth.session import current_user
+            from libs.billing.costs import estimate_llm_event
             from libs.billing.usage import QuotaExceeded, check_and_consume
 
             _u = current_user()
             if not _u:
                 return "🔐 Please sign in to use your free monthly AI chat credits."
+            pending_ollama_model = st.session_state.get("_ollama_model", "deepseek-r1:14b")
+            model_name = (
+                "claude-sonnet-4-6"
+                if model_provider == "Anthropic Claude"
+                else "deepseek-chat" if model_provider == "DeepSeek API" else pending_ollama_model
+            )
+            usage_estimate = estimate_llm_event(
+                prompt=prompt,
+                system=system,
+                provider=provider_slug,
+                model=model_name,
+                max_tokens=max_tokens,
+            )
             check_and_consume(
                 _u["id"],
                 "chat",
-                provider=model_provider.lower().split()[0] if model_provider else None,
+                provider=provider_slug,
+                model=model_name,
+                tokens_in=int(usage_estimate["tokens_in"]),
+                tokens_out=int(usage_estimate["tokens_out"]),
+                cost_usd=float(usage_estimate["cost_usd"]),
+                metadata={
+                    "feature": "floating_chat",
+                    "estimated": usage_estimate["estimated"],
+                    "max_tokens": max_tokens,
+                },
             )
         except QuotaExceeded as _qe:
             return (

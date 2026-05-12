@@ -1004,7 +1004,9 @@ CONFIDENCE: [High / Medium / Low]"""
         )
     else:
         report_key = f"_analyst_report_{lang}_{ticker.upper()}"
+        quality_key = f"_analyst_report_quality_{lang}_{ticker.upper()}"
         cached_report = st.session_state.get(report_key)
+        cached_quality = st.session_state.get(quality_key)
 
         bcol1, bcol2 = st.columns([1, 3])
         with bcol1:
@@ -1041,12 +1043,27 @@ CONFIDENCE: [High / Medium / Low]"""
                     st.warning("🔐 Please sign in to use your free monthly analysis credits.")
                     st.stop()
                 try:
+                    from libs.billing.costs import estimate_cost_usd
+
                     check_and_consume(
                         _u["id"],
                         "analysis",
                         provider="anthropic",
                         model="claude-sonnet-4-5",
-                        metadata={"feature": "ticker_research_report", "ticker": ticker.upper()},
+                        tokens_in=10000,
+                        tokens_out=6000,
+                        cost_usd=estimate_cost_usd(
+                            "anthropic",
+                            "claude-sonnet-4-5",
+                            tokens_in=10000,
+                            tokens_out=6000,
+                        ),
+                        metadata={
+                            "feature": "ticker_research_report",
+                            "ticker": ticker.upper(),
+                            "estimated": True,
+                            "note": "Conservative pre-call estimate for full analyst report.",
+                        },
                     )
                 except QuotaExceeded as qe:
                     st.error(
@@ -1083,10 +1100,25 @@ CONFIDENCE: [High / Medium / Low]"""
                 )
             else:
                 st.session_state[report_key] = result["report"]
+                st.session_state[quality_key] = result.get("data_quality")
                 st.success("Report generated successfully." if lang == "en" else "报告生成成功。")
                 cached_report = result["report"]
+                cached_quality = result.get("data_quality")
 
         if cached_report:
+            if cached_quality:
+                label = cached_quality.get("label", "Unknown")
+                available = cached_quality.get("available", 0)
+                total = cached_quality.get("total", 0)
+                checks = cached_quality.get("checks", {})
+                missing = [name for name, ok in checks.items() if not ok]
+                with st.expander(f"Data quality: {label} ({available}/{total} sources)"):
+                    if missing:
+                        st.caption("Missing or unavailable: " + ", ".join(missing))
+                    else:
+                        st.caption("All tracked FMP data sections were available.")
+                    if cached_quality.get("errors"):
+                        st.caption(f"Provider notes: {cached_quality['errors']}")
             cur_px = None
             try:
                 cur_px = float(research.get("fundamentals", {}).get("price", 0)) or None

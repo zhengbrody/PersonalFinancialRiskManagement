@@ -2273,6 +2273,42 @@ def fetch_analyst_report_data(ticker: str, fmp_key: str) -> Dict:
     return data
 
 
+def analyst_report_data_quality(data: Dict) -> Dict:
+    """Summarize data coverage behind the institutional analyst report."""
+    checks = {
+        "profile": bool(data.get("profile")),
+        "quote": bool(data.get("quote")),
+        "income_statement": bool(data.get("income_statement")),
+        "balance_sheet": bool(data.get("balance_sheet")),
+        "cash_flow": bool(data.get("cash_flow")),
+        "ratios": bool(data.get("ratios")),
+        "key_metrics": bool(data.get("key_metrics")),
+        "analyst_estimates": bool(data.get("analyst_estimates")),
+        "price_target_consensus": bool(data.get("price_target_consensus")),
+        "grades_historical": bool(data.get("upgrades_downgrades")),
+        "peers": bool(data.get("peers")),
+        "peer_metrics": bool(data.get("peer_metrics")),
+        "transcript": bool(data.get("transcript")),
+    }
+    available = sum(1 for ok in checks.values() if ok)
+    total = len(checks)
+    score = available / total if total else 0.0
+    if score >= 0.8:
+        label = "High"
+    elif score >= 0.55:
+        label = "Medium"
+    else:
+        label = "Low"
+    return {
+        "label": label,
+        "score": round(score, 3),
+        "available": available,
+        "total": total,
+        "checks": checks,
+        "errors": data.get("errors", []),
+    }
+
+
 def _safe_num(x, nd: int = 2) -> str:
     """Format a number safely; return '-' on any issue."""
     try:
@@ -2499,8 +2535,14 @@ def generate_analyst_report(
 
     # 1. Aggregate data
     data = fetch_analyst_report_data(ticker, fmp_key)
+    quality = analyst_report_data_quality(data)
     if not data.get("profile") and not data.get("quote"):
-        return {"report": None, "raw_data": data, "error": f"No FMP data found for {ticker}"}
+        return {
+            "report": None,
+            "raw_data": data,
+            "data_quality": quality,
+            "error": f"No FMP data found for {ticker}",
+        }
 
     # 2. Build prompt
     prompt = build_analyst_report_prompt(data, language=language)
@@ -2549,6 +2591,7 @@ def generate_analyst_report(
                 return {
                     "report": None,
                     "raw_data": data,
+                    "data_quality": quality,
                     "error": f"JSON parse failed: {e}",
                     "raw_response": raw,
                 }
@@ -2557,8 +2600,9 @@ def generate_analyst_report(
         return {
             "report": None,
             "raw_data": data,
+            "data_quality": quality,
             "error": "Could not parse Claude output",
             "raw_response": raw,
         }
 
-    return {"report": report, "raw_data": data, "error": None}
+    return {"report": report, "raw_data": data, "data_quality": quality, "error": None}

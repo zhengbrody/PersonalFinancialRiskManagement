@@ -480,20 +480,43 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
         else st.session_state.get("_deepseek_key", _os.environ.get("DEEPSEEK_API_KEY", ""))
     )
     ollama_model = st.session_state.get("_ollama_model", "deepseek-r1:14b")
+    provider_slug = model_provider.lower().split()[0] if model_provider else None
+    model_name = (
+        "claude-sonnet-4-6"
+        if model_provider == "Anthropic Claude"
+        else "deepseek-chat" if model_provider == "DeepSeek API" else ollama_model
+    )
 
     # Quota check (non-admin only). Admin bypasses for local dev.
     if not _admin_mode:
         try:
             from libs.auth.session import current_user
+            from libs.billing.costs import estimate_llm_event
             from libs.billing.usage import QuotaExceeded, check_and_consume
 
             _u = current_user()
             if not _u:
                 raise ValueError("Please sign in to use AI chat and analysis credits.")
+            usage_estimate = estimate_llm_event(
+                prompt=prompt,
+                system=system,
+                provider=provider_slug,
+                model=model_name,
+                max_tokens=max_tokens,
+            )
             check_and_consume(
                 _u["id"],
                 "chat",
-                provider=model_provider.lower().split()[0] if model_provider else None,
+                provider=provider_slug,
+                model=model_name,
+                tokens_in=int(usage_estimate["tokens_in"]),
+                tokens_out=int(usage_estimate["tokens_out"]),
+                cost_usd=float(usage_estimate["cost_usd"]),
+                metadata={
+                    "feature": "call_llm",
+                    "estimated": usage_estimate["estimated"],
+                    "max_tokens": max_tokens,
+                },
             )
         except QuotaExceeded as _qe:
             # Surface a clean error so the caller can show the upgrade CTA.
@@ -1454,6 +1477,7 @@ def execute_analysis(force: bool = False) -> bool:
         if not _admin_mode:
             try:
                 from libs.auth.session import current_user
+                from libs.billing.costs import estimate_cost_usd
                 from libs.billing.usage import QuotaExceeded, check_and_consume
 
                 _u = current_user()
@@ -1461,7 +1485,29 @@ def execute_analysis(force: bool = False) -> bool:
                     st.warning("🔐 Please sign in to use your free monthly analysis credits.")
                     return False
                 try:
-                    check_and_consume(_u["id"], "analysis")
+                    try:
+                        _quota_weights = json.loads(weights_input) if weights_input else {}
+                    except Exception:
+                        _quota_weights = {}
+                    check_and_consume(
+                        _u["id"],
+                        "analysis",
+                        provider="risk_engine",
+                        model="portfolio_analysis",
+                        cost_usd=estimate_cost_usd(
+                            "ollama",
+                            "portfolio_analysis",
+                            tokens_in=0,
+                            tokens_out=0,
+                        ),
+                        metadata={
+                            "feature": "portfolio_analysis",
+                            "tickers": sorted(_quota_weights.keys()),
+                            "period_years": period_years,
+                            "mc_sims": mc_sims,
+                            "mc_horizon": mc_horizon,
+                        },
+                    )
                 except QuotaExceeded as qe:
                     st.error(
                         f"⚠️ {qe}  \n\n"
