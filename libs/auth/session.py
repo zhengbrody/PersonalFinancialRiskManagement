@@ -25,9 +25,20 @@ Limitations of Streamlit auth:
 
 from __future__ import annotations
 
+import base64
+import json
+import logging
+import time
 from typing import Optional
 
 from .client import AuthError, get_supabase
+
+_logger = logging.getLogger(__name__)
+
+# Refresh the access token once it's within this many seconds of expiring.
+# Supabase JWTs default to 3600s lifetime; 60s buffer leaves room for the
+# refresh round-trip while still letting most calls reuse the cached token.
+_REFRESH_BUFFER_SEC = 60
 
 # Stable keys in st.session_state. Prefix with `_auth_` so other code
 # can't accidentally collide.
@@ -112,8 +123,57 @@ def sign_out() -> None:
 
 
 def access_token() -> Optional[str]:
-    """JWT for downstream API calls (e.g. Phase 3 Lambdas with Cognito-style validation)."""
+    """JWT for downstream API calls.
+
+    Auto-refreshes silently when the cached token is within
+    _REFRESH_BUFFER_SEC of expiry. Returns None if the user is signed out.
+    """
+    _maybe_refresh_token()
     return _ss().get(_KEY_ACCESS)
+
+
+def _jwt_expiry(token: str) -> Optional[int]:
+    """Read the `exp` claim from a JWT without verifying its signature.
+
+    We don't need to verify here — the server will verify on every request.
+    We only want to know whether to proactively refresh.
+    """
+    try:
+        _, payload_b64, _ = token.split(".")
+        padded = payload_b64 + "=" * (-len(payload_b64) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded))
+        exp = payload.get("exp")
+        return int(exp) if exp is not None else None
+    except Exception:
+        return None
+
+
+def _maybe_refresh_token() -> None:
+    """Refresh the access token via the refresh token when it's near expiry.
+
+    Without this, PostgREST starts returning 401 ~1 hour after login and
+    every Supabase call silently fails until the user re-signs-in.
+    """
+    state = _ss()
+    access = state.get(_KEY_ACCESS)
+    refresh = state.get(_KEY_REFRESH)
+    if not access or not refresh:
+        return
+    exp = _jwt_expiry(access)
+    if exp is None:
+        return
+    if exp - int(time.time()) > _REFRESH_BUFFER_SEC:
+        return
+    try:
+        resp = get_supabase().auth.refresh_session(refresh)
+        if resp and resp.session is not None:
+            state[_KEY_ACCESS] = resp.session.access_token
+            state[_KEY_REFRESH] = resp.session.refresh_token
+            _logger.info("auth.session.refreshed")
+    except Exception as e:
+        # Leave stale token in place — the next downstream 401 will surface
+        # to the user, who can sign back in. Better than a silent crash.
+        _logger.warning("auth.session.refresh_failed: %s", e)
 
 
 def _user_to_dict(user) -> dict:

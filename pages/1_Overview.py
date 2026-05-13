@@ -9,12 +9,11 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
-import portfolio_config as _pc
 from app import (
     CLR_ACCENT,
     CLR_DANGER,
     _fetch_daily_pnl,
-    call_llm,
+    cached_digest,
     create_excel_report,
     get_sector,
     get_sector_map,
@@ -257,12 +256,26 @@ def _build_account_scorecard(prices_df, weight_map, report_obj, meta):
     if returns.empty:
         return pd.DataFrame()
 
+    # Resolve ticker→account from the active portfolio (DB for authed users,
+    # hardcoded only for the anonymous demo). _pc.get_holding() reads the
+    # dev's holdings — would mis-attribute or drop a real user's tickers.
+    try:
+        from libs.auth.active_portfolio import get_active_holdings
+
+        _holdings = get_active_holdings() or {}
+    except Exception:
+        _holdings = {}
+
+    def _acct_for(tk):
+        h = _holdings.get(tk)
+        if isinstance(h, dict) and h.get("account"):
+            return h["account"]
+        return None
+
     rows = []
     for acct_name, acct_meta in acct_break.items():
         acct_tickers = [
-            tk
-            for tk in returns.columns
-            if tk in weight_map and _pc.get_holding(tk).get("account") == acct_name
+            tk for tk in returns.columns if tk in weight_map and _acct_for(tk) == acct_name
         ]
         if not acct_tickers:
             continue
@@ -528,7 +541,18 @@ Highlight the single most important risk and one practical next step. Plain text
         )
 
     with st.spinner("Generating AI risk digest..."):
-        digest = call_llm(prompt, max_tokens=300, temperature=0.3)
+        digest = cached_digest(
+            "overview_main",
+            prompt=prompt,
+            max_tokens=300,
+            temperature=0.3,
+            invalidate_on=(
+                lang,
+                round(report.var_95, 4),
+                round(report.sharpe_ratio, 3),
+                top_tk,
+            ),
+        )
     render_ai_digest(digest, sources="Monte Carlo VaR, Factor Model")
 except Exception:
     render_ai_digest(

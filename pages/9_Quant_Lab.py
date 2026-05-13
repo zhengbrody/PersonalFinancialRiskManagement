@@ -12,7 +12,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from app import call_llm
+from app import cached_digest
 from ui.components import render_ai_digest, render_kpi_row, render_section
 from ui.shared_sidebar import render_shared_sidebar
 from ui.tokens import T
@@ -53,7 +53,18 @@ if st.session_state.get("analysis_ready"):
 - Max drawdown: {report.max_drawdown:.2%}
 Comment on risk-adjusted performance quality and whether the return justifies the risk taken. Plain text only."""
             with st.spinner("..."):
-                digest = call_llm(prompt, max_tokens=250, temperature=0.2)
+                digest = cached_digest(
+                    "quant_lab_assessment",
+                    prompt=prompt,
+                    max_tokens=250,
+                    temperature=0.2,
+                    invalidate_on=(
+                        round(report.sharpe_ratio, 3),
+                        round(report.annual_return, 4),
+                        round(report.annual_volatility, 4),
+                        round(report.max_drawdown, 4),
+                    ),
+                )
             render_ai_digest(digest, sources="Quantitative Analysis Engine")
     except Exception:
         pass

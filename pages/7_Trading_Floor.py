@@ -13,7 +13,7 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-from app import call_llm
+from app import cached_digest
 from i18n import get_translator
 from ui.components import render_ai_digest, render_kpi_row, render_section
 from ui.shared_sidebar import render_shared_sidebar
@@ -333,7 +333,13 @@ if regime_data or market_data:
 {bullets}
 What should traders watch for today? Comment on volatility regime and positioning. Plain text only."""
             with st.spinner("..."):
-                digest = call_llm(prompt, max_tokens=250, temperature=0.2)
+                digest = cached_digest(
+                    "trading_floor_brief",
+                    prompt=prompt,
+                    max_tokens=250,
+                    temperature=0.2,
+                    invalidate_on=(regime_label, vix_level_str, sp500_change_str),
+                )
             render_ai_digest(digest, sources="Market Regime & Volatility Data")
     except Exception:
         pass

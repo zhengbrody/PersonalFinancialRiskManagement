@@ -146,3 +146,78 @@ def test_sign_up_returns_user(fake_streamlit, supabase_env):
     assert user["id"] == "new-user"
     # NB: sign-up does NOT auto-login (Supabase typically requires email confirm)
     assert "_auth_user" not in fake_streamlit.session_state
+
+
+def _make_jwt(exp_unix: int) -> str:
+    """Build a minimal unsigned JWT with the given exp claim."""
+    import base64
+    import json
+
+    header = base64.urlsafe_b64encode(b'{"alg":"none"}').rstrip(b"=").decode()
+    payload = base64.urlsafe_b64encode(json.dumps({"exp": exp_unix}).encode()).rstrip(b"=").decode()
+    return f"{header}.{payload}."
+
+
+def test_access_token_refreshes_when_near_expiry(fake_streamlit, supabase_env):
+    """JWT within the refresh buffer triggers refresh_session()."""
+    import time as _t
+
+    stale = _make_jwt(int(_t.time()) + 30)  # 30s left, under the 60s buffer
+    fresh = _make_jwt(int(_t.time()) + 3600)
+
+    fake_streamlit.session_state["_auth_user"] = {"id": "u", "email": "e"}
+    fake_streamlit.session_state["_auth_access_token"] = stale
+    fake_streamlit.session_state["_auth_refresh_token"] = "old-refresh"
+
+    fake_client = MagicMock()
+    fake_client.auth.refresh_session.return_value = MagicMock(
+        session=MagicMock(access_token=fresh, refresh_token="new-refresh"),
+    )
+
+    with patch("supabase.create_client", return_value=fake_client):
+        from libs.auth import session as auth_session
+
+        token = auth_session.access_token()
+
+    assert token == fresh
+    assert fake_streamlit.session_state["_auth_refresh_token"] == "new-refresh"
+    fake_client.auth.refresh_session.assert_called_once_with("old-refresh")
+
+
+def test_access_token_skips_refresh_when_far_from_expiry(fake_streamlit, supabase_env):
+    """Token with plenty of lifetime left should NOT trigger a refresh round-trip."""
+    import time as _t
+
+    fresh = _make_jwt(int(_t.time()) + 3600)
+    fake_streamlit.session_state["_auth_user"] = {"id": "u", "email": "e"}
+    fake_streamlit.session_state["_auth_access_token"] = fresh
+    fake_streamlit.session_state["_auth_refresh_token"] = "r"
+
+    fake_client = MagicMock()
+    with patch("supabase.create_client", return_value=fake_client):
+        from libs.auth import session as auth_session
+
+        token = auth_session.access_token()
+
+    assert token == fresh
+    fake_client.auth.refresh_session.assert_not_called()
+
+
+def test_access_token_swallows_refresh_failure(fake_streamlit, supabase_env):
+    """If refresh_session raises, fall back to the stale token rather than crash."""
+    import time as _t
+
+    stale = _make_jwt(int(_t.time()) + 5)
+    fake_streamlit.session_state["_auth_user"] = {"id": "u", "email": "e"}
+    fake_streamlit.session_state["_auth_access_token"] = stale
+    fake_streamlit.session_state["_auth_refresh_token"] = "r"
+
+    fake_client = MagicMock()
+    fake_client.auth.refresh_session.side_effect = Exception("network")
+    with patch("supabase.create_client", return_value=fake_client):
+        from libs.auth import session as auth_session
+
+        token = auth_session.access_token()
+
+    # Stale token is returned; downstream 401 will surface, but we don't crash.
+    assert token == stale

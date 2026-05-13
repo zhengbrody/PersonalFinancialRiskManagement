@@ -198,11 +198,24 @@ def render_shared_sidebar():
             _active_meta = {"name": "Built-in demo portfolio", "source": "hardcoded"}
 
         # Inline banner so user knows which portfolio is loaded
-        if _active_meta.get("source") == "supabase":
+        _active_source = _active_meta.get("source")
+        if _active_source == "supabase":
             st.caption(
                 f"📂 Active: **{_active_meta['name']}** (your DB portfolio)"
                 if current_lang == "en"
                 else f"📂 当前组合：**{_active_meta['name']}**（你的数据库组合）"
+            )
+        elif _active_source == "empty":
+            # Authed user with no portfolios — block analysis to avoid silently
+            # showing the dev's hardcoded holdings (data leak).
+            st.warning(
+                "No portfolio yet. Create one on the Portfolios page to enable analysis."
+                if current_lang == "en"
+                else "尚无组合。请先在「我的组合」页面创建后再运行分析。"
+            )
+            st.page_link(
+                "pages/0_Portfolios.py",
+                label=("→ Go to Portfolios" if current_lang == "en" else "→ 前往「我的组合」"),
             )
         else:
             st.caption(
@@ -211,8 +224,17 @@ def render_shared_sidebar():
                 else f"📂 当前组合：**{_active_meta['name']}**"
             )
 
-        if st.button(
-            _run_label_live, type="primary", use_container_width=True, key="refresh_and_run"
+        _block_run = _active_source == "empty"
+
+        if (
+            st.button(
+                _run_label_live,
+                type="primary",
+                use_container_width=True,
+                key="refresh_and_run",
+                disabled=_block_run,
+            )
+            and not _block_run
         ):
             try:
                 import importlib
@@ -269,11 +291,18 @@ def render_shared_sidebar():
                 else:
                     live_weights = {t: v / total_value for t, v in values.items() if v > 0}
                     net_equity = total_value - MARGIN_LOAN
-                    contributed_capital = getattr(
-                        _pc,
-                        "CONTRIBUTED_CAPITAL",
-                        getattr(_pc, "TOTAL_COST_BASIS", 0),
-                    )
+                    # Contributed-capital from portfolio_config is the dev's
+                    # principal. Only use it for the anonymous-demo source;
+                    # for real users we derive from holdings' avg_cost below
+                    # (Position P&L), and leave return-on-capital unset.
+                    if _active_meta.get("source") == "hardcoded":
+                        contributed_capital = getattr(
+                            _pc,
+                            "CONTRIBUTED_CAPITAL",
+                            getattr(_pc, "TOTAL_COST_BASIS", 0),
+                        )
+                    else:
+                        contributed_capital = 0
                     return_on_capital_dollar = (
                         net_equity - contributed_capital if contributed_capital > 0 else None
                     )
@@ -315,14 +344,43 @@ def render_shared_sidebar():
                     except Exception:
                         pass
 
-                    # Per-account breakdown
+                    # Per-account breakdown.
+                    # _pc.ACCOUNTS + _pc.account_summary() iterate the dev's
+                    # hardcoded holdings, so we only use that path for the
+                    # anonymous demo. For DB-backed users, group by each
+                    # holding's "account" key.
                     account_breakdown = {}
                     try:
-                        if hasattr(_pc, "ACCOUNTS") and hasattr(_pc, "account_summary"):
+                        if (
+                            _active_meta.get("source") == "hardcoded"
+                            and hasattr(_pc, "ACCOUNTS")
+                            and hasattr(_pc, "account_summary")
+                        ):
                             for acct_name in _pc.ACCOUNTS:
                                 account_breakdown[acct_name] = _pc.account_summary(
                                     acct_name, values
                                 )
+                        else:
+                            for tk, h in PORTFOLIO_HOLDINGS.items():
+                                if not isinstance(h, dict):
+                                    continue
+                                acct = h.get("account") or "default"
+                                bucket = account_breakdown.setdefault(
+                                    acct,
+                                    {
+                                        "total_long": 0.0,
+                                        "tickers": [],
+                                        "margin_loan": 0.0,
+                                    },
+                                )
+                                bucket["total_long"] += float(values.get(tk, 0.0))
+                                bucket["tickers"].append(tk)
+                            # Attribute the user's total margin loan to the
+                            # first account containing a margin-eligible
+                            # holding (single-loan model — keeps schema simple).
+                            if MARGIN_LOAN and account_breakdown:
+                                first_acct = next(iter(account_breakdown))
+                                account_breakdown[first_acct]["margin_loan"] = float(MARGIN_LOAN)
                     except Exception:
                         pass
 

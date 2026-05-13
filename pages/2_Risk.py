@@ -15,7 +15,7 @@ from app import (
     CLR_GOLD,
     CLR_MUTED,
     CLR_WARN,
-    call_llm,
+    cached_digest,
     get_sector,
 )
 from i18n import get_translator
@@ -105,7 +105,20 @@ FACTOR EXPOSURE:
 Identify the PRIMARY risk, explain its portfolio impact, and give ONE actionable mitigation. Plain text, no markdown."""
 
     with st.spinner("Generating risk analysis..." if lang == "en" else "生成风险分析..."):
-        digest = call_llm(prompt, max_tokens=400, temperature=0.2)
+        digest = cached_digest(
+            "risk_main",
+            prompt=prompt,
+            max_tokens=400,
+            temperature=0.2,
+            invalidate_on=(
+                lang,
+                round(report.var_95, 4),
+                round(report.cvar_95, 4),
+                round(report.stress_loss, 4),
+                mc_horizon,
+                market_shock,
+            ),
+        )
     render_ai_digest(digest, sources="VaR Model, Factor Analysis, Stress Testing")
 except Exception:
     render_ai_digest(

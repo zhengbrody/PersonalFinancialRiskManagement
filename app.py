@@ -499,6 +499,48 @@ def _infer_source_page() -> str:
     return "unknown"
 
 
+def cached_digest(
+    key: str,
+    *,
+    prompt: str,
+    system: str = "",
+    max_tokens: int = 400,
+    temperature: float = 0.1,
+    invalidate_on: tuple = (),
+) -> str:
+    """LLM digest cached in st.session_state, keyed by `key` + a fingerprint
+    of `invalidate_on` (e.g. weights JSON, ticker symbol, language).
+
+    Why: Streamlit re-runs the entire page on every widget interaction
+    (sidebar slider, tab switch, language toggle). Without this guard
+    each rerun re-fires the LLM — easily 5-10 seconds of waste per click.
+
+    Usage:
+        text = cached_digest(
+            "overview_main",
+            prompt=prompt, system=sys,
+            invalidate_on=(weights_json, st.session_state.get("_lang")),
+        )
+    """
+    fingerprint = hash((key, *invalidate_on))
+    cache_slot = f"_llm_cache::{key}::{fingerprint}"
+    if cache_slot in st.session_state:
+        return st.session_state[cache_slot]
+    text = call_llm(prompt, system=system, max_tokens=max_tokens, temperature=temperature)
+    st.session_state[cache_slot] = text
+    # Tag the slot in a registry so we can invalidate by key prefix on a
+    # new "Run Analysis" (which writes a fresh report → all digests stale).
+    st.session_state.setdefault("_llm_cache_keys", set()).add(cache_slot)
+    return text
+
+
+def invalidate_digest_cache() -> None:
+    """Drop all cached digests. Call after a fresh analysis run."""
+    keys = st.session_state.pop("_llm_cache_keys", set())
+    for k in keys:
+        st.session_state.pop(k, None)
+
+
 def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: float = 0.1) -> str:
     """
     Universal LLM call with retry logic for API overload errors.
@@ -529,8 +571,17 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
     )
     ollama_model = st.session_state.get("_ollama_model", "deepseek-r1:14b")
     provider_slug = model_provider.lower().split()[0] if model_provider else None
+    # Route short summaries (≤500 output tokens) to Haiku 4.5: 3-5× faster
+    # TTFT than Sonnet for the bullet-point digests that dominate page
+    # renders. Sonnet only handles the long-form reports (Portfolio AI
+    # briefing at 2048t, Ticker Research analyst report at 3500t+) where
+    # the reasoning quality difference is worth the extra latency.
+    if model_provider == "Anthropic Claude":
+        _claude_model = "claude-haiku-4-5" if max_tokens <= 500 else "claude-sonnet-4-6"
+    else:
+        _claude_model = "claude-sonnet-4-6"  # unused for non-Claude providers
     model_name = (
-        "claude-sonnet-4-6"
+        _claude_model
         if model_provider == "Anthropic Claude"
         else "deepseek-chat" if model_provider == "DeepSeek API" else ollama_model
     )
@@ -550,13 +601,20 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
             billing_user = _u
         except QuotaExceeded as _qe:
             # Surface a clean error so the caller can show the upgrade CTA.
-            raise ValueError(str(_qe))
+            raise ValueError(f"{_qe}\n\nEmail contact@mindmarket.app for beta access.")
         except ValueError:
             raise
-        except Exception:
-            # Fail-open on billing errors so UI doesn't break.
-            # In production we'd alert on this rate.
+        except ImportError:
+            # Billing module unavailable — deploy config issue, fail open.
             pass
+        except Exception as _quota_err:
+            # Quota service unreachable: fail CLOSED. The fail-closed
+            # design in libs/billing/usage.py only holds if callers don't
+            # swallow the exception. Surface a clean ValueError so pages
+            # render a transient-error notice instead of silently spending
+            # provider credits.
+            logger.warning("call_llm.quota_gate_failed", error=str(_quota_err))
+            raise ValueError("Quota service temporarily unavailable. Please retry in a moment.")
 
     def _record_llm_event(
         status: str,
@@ -632,7 +690,7 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
             for attempt in range(3):
                 try:
                     resp = client.messages.create(
-                        model="claude-sonnet-4-6",
+                        model=model_name,
                         max_tokens=max_tokens,
                         system=system if system else "You are a helpful financial analyst.",
                         messages=[{"role": "user", "content": prompt}],
@@ -1584,6 +1642,26 @@ def execute_analysis(force: bool = False) -> bool:
         run_btn = True
     if run_btn:
         st.session_state._run_trigger = False  # Reset trigger
+        # Fresh analysis → stale digest cache: drop every cached LLM
+        # summary so each page renders new commentary aligned with the
+        # new report. Without this, users see last run's narrative.
+        invalidate_digest_cache()
+
+        # Empty-portfolio gate: authed users with no DB portfolios must NOT
+        # be silently analyzed against the dev's hardcoded holdings.
+        try:
+            from libs.auth.active_portfolio import is_active_portfolio_empty
+
+            if is_active_portfolio_empty():
+                st.warning(
+                    "Create a portfolio on the Portfolios page before running analysis."
+                    if lang == "en"
+                    else "请先在「我的组合」页面创建组合，再运行分析。"
+                )
+                return False
+        except Exception:
+            pass  # resolver unavailable → behave like before (anonymous demo)
+
         analysis_billing_user = None
 
         def _record_analysis_event(
@@ -1646,13 +1724,19 @@ def execute_analysis(force: bool = False) -> bool:
             except QuotaExceeded as qe:
                 st.error(
                     f"⚠️ {qe}  \n\n"
-                    "💡 Paid plans are configured but not live yet. "
-                    "Contact MindMarket AI for beta access."
+                    "💡 Paid plans are configured but not live yet. Email "
+                    "[contact@mindmarket.app](mailto:contact@mindmarket.app) "
+                    "for beta access."
                 )
                 return False
-            except Exception:
-                # Fail-open on billing wiring errors so UX isn't blocked
-                pass
+            except ImportError:
+                pass  # billing module unavailable — fail open (deploy issue)
+            except Exception as _quota_err:
+                # Fail CLOSED on quota-service errors. Don't spend a real
+                # Monte-Carlo run + LLM digest on a user we can't bill.
+                logger.warning("execute_analysis.quota_gate_failed", error=str(_quota_err))
+                st.error("⚠️ Quota service temporarily unavailable. Please retry in a moment.")
+                return False
 
     # ══════════════════════════════════════════════════════════════
     #  Landing page (first-visit experience)

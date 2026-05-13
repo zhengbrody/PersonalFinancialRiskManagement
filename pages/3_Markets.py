@@ -339,6 +339,37 @@ else:
         except Exception:
             pass
         selected = _all_by_weight  # ALL holdings
+
+        # Preflight batch quota: each ticker burns 1 chat credit.
+        # Without this, 5 parallel workers can race past the per-call gate
+        # and overdraft a free user by ~4x.
+        try:
+            import os as _os_batch
+
+            from libs.auth.session import current_user as _cu
+            from libs.billing.usage import check_quota as _cq
+
+            _admin = str(_os_batch.environ.get("MINDMARKET_ADMIN_MODE", "")).strip().lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            )
+            _user = _cu()
+            if _user and not _admin:
+                _status = _cq(_user["id"], "chat")
+                _remaining = _status.get("remaining")
+                if _remaining is not None and _remaining < len(selected):
+                    st.error(
+                        f"⚠️ This batch needs {len(selected)} chat credits but you have "
+                        f"{_remaining} left this month. Reduce holdings or upgrade to continue."
+                    )
+                    st.stop()
+        except Exception:
+            # Per-call gate inside call_llm() still applies; this is a
+            # belt-and-suspenders preflight.
+            pass
+
         progress_bar = st.progress(
             0,
             text=(

@@ -6,13 +6,13 @@ Resolver for "which portfolio should the analysis use right now?"
 Decision tree:
   1. User authenticated AND has a default portfolio in DB → use that
   2. User authenticated, has portfolios but no default → use the most-recent
-  3. User authenticated, no portfolios → fall back to portfolio_config defaults
-  4. User not authenticated → fall back to portfolio_config defaults
-
-The fallback is intentionally generous: we DO NOT block unauthenticated
-visitors from seeing a working dashboard. Streamlit Cloud's public demo
-URL (mindmarketai.streamlit.app) needs to render something useful for
-the recruiter who lands on it without signing up.
+  3. User authenticated, no portfolios at all → EMPTY (source="empty").
+     We intentionally do NOT fall back to portfolio_config here: that file
+     contains the developer's real positions, and showing them to a brand-
+     new authenticated user is a data leak. The caller's job is to render
+     an empty-state CTA pointing at the Portfolios page.
+  4. User not authenticated → fall back to portfolio_config defaults.
+     This keeps the public demo URL meaningful for anonymous recruiters.
 
 Returned shape matches portfolio_config.PORTFOLIO_HOLDINGS so downstream
 code (data_provider, risk_engine) doesn't need any changes:
@@ -63,18 +63,19 @@ def get_active_margin_loan() -> float:
 def get_active_portfolio_meta() -> Dict[str, Any]:
     """Diagnostics: name + source + record id (if from DB).
 
-    Used by the sidebar to display 'using: <portfolio name> (DB)' vs
-    'using: built-in demo portfolio' so the user understands what
-    they're looking at.
+    Sources:
+      "supabase"  — user's own DB portfolio
+      "hardcoded" — anonymous visitor sees the demo
+      "empty"     — authed user has not created a portfolio yet
     """
     if not is_authenticated():
         return {"name": "Built-in demo portfolio", "source": "hardcoded", "id": None}
 
     portfolio = _fetch_db_portfolio()
-    if portfolio is None:
+    if portfolio is None or not (portfolio.get("holdings") or {}):
         return {
-            "name": "Built-in demo portfolio (no DB portfolios yet)",
-            "source": "hardcoded",
+            "name": "No portfolio yet",
+            "source": "empty",
             "id": None,
         }
     return {
@@ -82,6 +83,11 @@ def get_active_portfolio_meta() -> Dict[str, Any]:
         "source": "supabase",
         "id": portfolio["id"],
     }
+
+
+def is_active_portfolio_empty() -> bool:
+    """True when the caller is authed but has no DB portfolios (source='empty')."""
+    return get_active_portfolio_meta().get("source") == "empty"
 
 
 # ── Private resolver ────────────────────────────────────────────
@@ -94,11 +100,12 @@ def _resolve() -> tuple[Dict[str, Dict[str, Any]], float]:
 
     portfolio = _fetch_db_portfolio()
     if portfolio is None:
-        return _hardcoded_fallback()
+        # Authed but no portfolios — do NOT leak the dev's hardcoded holdings.
+        return ({}, 0.0)
 
     raw_holdings = portfolio.get("holdings") or {}
     if not raw_holdings:
-        return _hardcoded_fallback()
+        return ({}, 0.0)
 
     # Normalize DB shape → portfolio_config-compatible shape.
     # The Portfolios UI accepts {ticker: {shares, avg_cost?}}; downstream

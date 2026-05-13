@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import csv
 import io
+import math
+import re
 from typing import Iterable
 
 _TICKER_COLUMNS = ("ticker", "symbol", "security", "asset")
@@ -18,6 +20,16 @@ _AVG_COST_COLUMNS = (
 )
 _SECTOR_COLUMNS = ("sector", "industry", "category", "risk_bucket")
 
+# Hard limits — guard against malicious uploads.
+_MAX_CSV_BYTES = 1_000_000  # 1 MB; a typical real portfolio is <10 KB
+_MAX_ROWS = 5_000  # plenty for individuals, blocks DoS
+_MAX_SHARES = 1e9  # sanity cap; > total shares outstanding of any one company
+
+# Tickers we'll accept: 1–12 chars, alnum + `.` `-` `/` (for share classes
+# like BRK.B and crypto pairs like BTC-USD). Anything weirder is rejected
+# to prevent stored-XSS via downstream HTML rendering.
+_TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-/]{0,11}$")
+
 
 def parse_holdings_csv(raw: bytes | str) -> dict:
     """Parse holdings CSV into {TICKER: {shares, avg_cost?, sector?}}.
@@ -29,7 +41,19 @@ def parse_holdings_csv(raw: bytes | str) -> dict:
     Optional:
       - avg_cost/average_cost/cost_basis/cost/avg_price/average_price
       - sector/industry/category/risk_bucket
+
+    Rejects oversized files, malformed tickers, and non-finite or
+    negative share counts to avoid DoS / stored-XSS / short-position
+    confusion.
     """
+    # Size guard up-front; cheaper than reading the whole thing.
+    raw_size = len(raw) if isinstance(raw, (bytes, str)) else 0
+    if raw_size > _MAX_CSV_BYTES:
+        raise ValueError(
+            f"CSV is too large ({raw_size:,} bytes). Limit is "
+            f"{_MAX_CSV_BYTES:,} bytes (~{_MAX_CSV_BYTES // 1000} KB)."
+        )
+
     text = raw.decode("utf-8-sig") if isinstance(raw, bytes) else raw
     reader = csv.DictReader(io.StringIO(text))
     if not reader.fieldnames:
@@ -53,11 +77,29 @@ def parse_holdings_csv(raw: bytes | str) -> dict:
     row_count = 0
     for idx, row in enumerate(reader, start=2):
         row_count += 1
+        if row_count > _MAX_ROWS:
+            raise ValueError(
+                f"CSV has more than {_MAX_ROWS} rows. Please trim to your actual positions."
+            )
         ticker = str(row.get(ticker_col) or "").strip().upper()
         if not ticker:
             continue
+        if not _TICKER_RE.match(ticker):
+            raise ValueError(
+                f"Row {idx}: ticker {ticker!r} is not a recognizable symbol "
+                "(letters, digits, and . - / only; max 12 chars)."
+            )
 
         shares = _parse_number(row.get(shares_col), f"row {idx} shares")
+        if not math.isfinite(shares):
+            raise ValueError(f"Row {idx} shares must be a finite number.")
+        if shares < 0:
+            raise ValueError(
+                f"Row {idx}: negative shares ({shares}). Short positions are "
+                "not supported by the risk engine yet — remove the row."
+            )
+        if shares > _MAX_SHARES:
+            raise ValueError(f"Row {idx}: shares={shares:,.0f} is unreasonably large.")
         if shares == 0:
             continue
 

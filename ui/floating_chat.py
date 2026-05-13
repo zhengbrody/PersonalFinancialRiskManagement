@@ -122,11 +122,33 @@ def _chat_call_llm(
         except QuotaExceeded as _qe:
             return (
                 f"⚠️ {_qe}\n\n"
-                "💡 Paid plans are configured but not live yet. "
-                "Contact MindMarket AI for beta access."
+                "💡 Paid plans are configured but not live yet. Email "
+                "[contact@mindmarket.app](mailto:contact@mindmarket.app) "
+                "for beta access."
             )
-        except Exception:
-            pass  # fail-open on billing wiring
+        except ImportError:
+            # Billing module unavailable in this environment (e.g. running
+            # the public demo from a fork without libs/billing wired).
+            # Fail open ONLY for import errors — they reflect a deploy
+            # configuration issue, not a user trying to spam free LLM calls.
+            pass
+        except Exception as _quota_err:
+            # Any other failure (Supabase outage, transient HTTP error)
+            # fails CLOSED: we'd rather show the user an error than
+            # silently grant free LLM calls. The fail-closed design in
+            # libs/billing/usage.py only works if the outer caller does
+            # not swallow the exception.
+            import logging as _logging
+
+            _logging.getLogger(__name__).warning(
+                "floating_chat.quota_gate_failed", exc_info=_quota_err
+            )
+            return (
+                "⚠️ The quota service is temporarily unavailable, so we "
+                "can't process your chat right now. Please retry in a "
+                "minute. If this keeps happening, email "
+                "[contact@mindmarket.app](mailto:contact@mindmarket.app)."
+            )
 
     # Server-controlled keys when not admin
     api_key_input = (

@@ -252,34 +252,36 @@ def test_active_uses_db_when_authenticated(mock_supabase):
     assert meta["id"] == "p1"
 
 
-def test_active_falls_back_when_db_query_fails(fake_streamlit, supabase_env):
-    """If Supabase blows up, return hardcoded — never block the dashboard."""
+def test_active_returns_empty_when_db_query_fails(fake_streamlit, supabase_env):
+    """If Supabase blows up for an authed user, return empty — NOT the dev's
+    hardcoded holdings (which would be a data leak across users)."""
     from libs.auth import client as auth_client
 
     auth_client.reset_client_cache()
 
     sb = MagicMock()
-    # Simulate exception on any method call
     sb.table.side_effect = Exception("DB unreachable")
 
     with patch("supabase.create_client", return_value=sb):
         from libs.auth import active_portfolio as ap
 
         holdings = ap.get_active_holdings()
-        # Hardcoded fallback returned
-        assert len(holdings) > 0
+        assert holdings == {}
+
+        meta = ap.get_active_portfolio_meta()
+        assert meta["source"] == "empty"
     auth_client.reset_client_cache()
 
 
-def test_active_falls_back_when_user_has_no_portfolios(mock_supabase):
-    """Authenticated, but user hasn't created any portfolios yet."""
-    # First call (get_default) returns empty, then list returns empty
+def test_active_returns_empty_when_user_has_no_portfolios(mock_supabase):
+    """Authenticated but no portfolios → empty, not dev's hardcoded data."""
     mock_supabase.execute.return_value = MagicMock(data=[])
 
     from libs.auth import active_portfolio as ap
 
     holdings = ap.get_active_holdings()
-    assert len(holdings) > 0  # hardcoded fallback non-empty
+    assert holdings == {}
 
     meta = ap.get_active_portfolio_meta()
-    assert meta["source"] == "hardcoded"
+    assert meta["source"] == "empty"
+    assert ap.is_active_portfolio_empty() is True
