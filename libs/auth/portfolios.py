@@ -30,10 +30,57 @@ filters apply automatically.
 
 from __future__ import annotations
 
+import math
 from typing import Optional
 
 from .client import AuthError, get_supabase
 from .session import access_token, current_user
+
+
+def _finite_or_zero(v) -> float:
+    """Coerce v to a finite float, or 0 if it's NaN/Inf/garbage.
+
+    Why: PostgREST rejects JSON containing NaN/Inf with
+    'Out of range float values are not JSON compliant'. st.data_editor's
+    empty NumberColumn cells come through as float('nan'), so any path
+    that doesn't sanitize before insert will blow up at runtime.
+    """
+    try:
+        x = float(v) if v not in (None, "") else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+    return x if math.isfinite(x) else 0.0
+
+
+def _sanitize_holdings(holdings: dict) -> dict:
+    """Strip NaN/Inf from a holdings dict before sending to Supabase.
+
+    Belt-and-suspenders: callers (UI, CSV import, sync_from_server_config)
+    should already filter, but enforcing it here means a single forgotten
+    guard upstream can't poison the DB write.
+    """
+    if not isinstance(holdings, dict):
+        return {}
+    clean: dict = {}
+    for tk, h in holdings.items():
+        if not isinstance(h, dict):
+            continue
+        shares = _finite_or_zero(h.get("shares"))
+        if shares == 0:
+            continue
+        pos: dict = {"shares": shares}
+        ac = h.get("avg_cost")
+        if ac not in (None, ""):
+            ac_f = _finite_or_zero(ac)
+            if ac_f > 0:
+                pos["avg_cost"] = ac_f
+        for k in ("sector", "account", "asset_type", "currency"):
+            if h.get(k):
+                pos[k] = h[k]
+        if "margin_eligible" in h:
+            pos["margin_eligible"] = bool(h["margin_eligible"])
+        clean[str(tk).strip().upper()] = pos
+    return clean
 
 
 def _authed_client():
@@ -104,8 +151,8 @@ def create_portfolio(
         .insert(
             {
                 "name": name,
-                "holdings": holdings,
-                "margin_loan": margin_loan,
+                "holdings": _sanitize_holdings(holdings),
+                "margin_loan": _finite_or_zero(margin_loan),
                 "is_default": is_default,
             }
         )
@@ -123,6 +170,12 @@ def update_portfolio(portfolio_id: str, **fields) -> dict:
     bad = set(fields) - allowed
     if bad:
         raise ValueError(f"Cannot update fields: {bad}")
+
+    # Sanitize numeric/JSON fields so PostgREST never sees NaN/Inf.
+    if "holdings" in fields and fields["holdings"] is not None:
+        fields["holdings"] = _sanitize_holdings(fields["holdings"])
+    if "margin_loan" in fields and fields["margin_loan"] is not None:
+        fields["margin_loan"] = _finite_or_zero(fields["margin_loan"])
 
     sb = _authed_client()
     if fields.get("is_default"):

@@ -91,24 +91,38 @@ def _holdings_to_rows(h: dict) -> list[dict]:
 
 
 def _rows_to_holdings(rows) -> dict:
+    """Convert data_editor rows → {TICKER: {shares, avg_cost?, sector?}}.
+
+    NB: st.data_editor returns empty NumberColumn cells as float('nan'),
+    not None or "". Without `math.isfinite` guards, NaN leaks all the way
+    into the Supabase insert payload — PostgREST rejects with
+    "Out of range float values are not JSON compliant".
+    """
+    import math
+
     cleaned = {}
     for idx, row in enumerate(rows or [], start=1):
         ticker = str(row.get("ticker") or "").strip().upper()
         if not ticker:
             continue
+        raw_shares = row.get("shares")
         try:
-            shares = float(row.get("shares") or 0)
+            shares = float(raw_shares) if raw_shares not in (None, "") else 0.0
         except (TypeError, ValueError):
             raise ValueError(f"Row {idx}: shares must be a number.")
+        if not math.isfinite(shares):
+            shares = 0.0
         if shares == 0:
             continue
         position = {"shares": shares}
         avg_cost = row.get("avg_cost")
         if avg_cost not in (None, ""):
             try:
-                position["avg_cost"] = float(avg_cost)
+                ac = float(avg_cost)
             except (TypeError, ValueError):
                 raise ValueError(f"{ticker}: avg_cost must be a number.")
+            if math.isfinite(ac) and ac > 0:
+                position["avg_cost"] = ac
         sector = str(row.get("sector") or "").strip()
         if sector:
             position["sector"] = sector

@@ -129,6 +129,29 @@ def test_create_sends_insert_with_expected_fields(mock_supabase):
     assert "user_id" not in sent
 
 
+def test_create_strips_nan_avg_cost_before_insert(mock_supabase):
+    """Regression: st.data_editor returns empty NumberColumn cells as nan,
+    which PostgREST rejects. The DB layer must strip them defensively."""
+    mock_supabase.execute.return_value = MagicMock(data=[{"id": "new"}])
+    from libs.auth.portfolios import create_portfolio
+
+    create_portfolio(
+        name="test",
+        holdings={
+            "AAPL": {"shares": 10.0, "avg_cost": float("nan")},
+            "NVDA": {"shares": 5.0, "avg_cost": float("inf")},
+            "MSFT": {"shares": 3.0},
+        },
+        margin_loan=float("nan"),
+    )
+    sent = mock_supabase.insert.call_args[0][0]
+    # nan/inf avg_cost stripped, valid holdings kept, margin_loan defanged
+    assert sent["holdings"]["AAPL"] == {"shares": 10.0}
+    assert sent["holdings"]["NVDA"] == {"shares": 5.0}
+    assert sent["holdings"]["MSFT"] == {"shares": 3.0}
+    assert sent["margin_loan"] == 0.0
+
+
 def test_create_default_demotes_others_first(mock_supabase):
     mock_supabase.execute.return_value = MagicMock(data=[{"id": "p2", "is_default": True}])
     from libs.auth.portfolios import create_portfolio
