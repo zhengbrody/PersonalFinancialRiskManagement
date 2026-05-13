@@ -9,6 +9,7 @@ import io
 import json
 import os
 import re
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -35,6 +36,35 @@ from risk_engine import RiskEngine, RiskReport
 # Initialize logging system
 setup_logging()
 logger = get_logger(__name__)
+
+
+def _remove_retired_public_pages() -> None:
+    """Delete retired Streamlit pages that may linger on long-lived deploy hosts."""
+    pages_dir = Path(__file__).resolve().parent / "pages"
+    retired_pages = ("11_Pricing.py",)
+    for filename in retired_pages:
+        page_path = pages_dir / filename
+        if page_path.exists():
+            try:
+                page_path.unlink()
+                logger.warning("retired_page_removed", page=str(page_path))
+            except Exception as exc:
+                logger.warning(
+                    "retired_page_remove_failed",
+                    page=str(page_path),
+                    error=str(exc),
+                )
+
+        pycache_dir = pages_dir / "__pycache__"
+        if pycache_dir.exists():
+            for pyc_path in pycache_dir.glob(f"{page_path.stem}*.pyc"):
+                try:
+                    pyc_path.unlink()
+                except Exception:
+                    pass
+
+
+_remove_retired_public_pages()
 
 
 def _reload_portfolio_config():

@@ -47,3 +47,12 @@ def test_queue_analysis_force_refresh_falls_back_to_rerun(sidebar_module):
     assert fake_st.session_state["_force_refresh"] is True
     fake_st.switch_page.assert_called_once_with("app.py")
     fake_st.rerun.assert_called_once()
+
+
+def test_public_navigation_excludes_pricing(sidebar_module):
+    module, _fake_st = sidebar_module
+
+    nav_items = [item for _group, items in module._NAV_GROUPS for item in items]
+
+    assert all("Pricing" not in label for _path, label in nav_items)
+    assert all("pricing" not in path.lower() for path, _label in nav_items)

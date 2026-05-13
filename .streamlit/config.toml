@@ -25,5 +25,8 @@ textColor = "#E2E8F0"
 maxUploadSize = 10
 maxMessageSize = 200
 
+[client]
+showSidebarNavigation = false
+
 [browser]
 gatherUsageStats = false
