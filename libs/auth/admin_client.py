@@ -5,6 +5,7 @@ This module uses the service-role key and must only be imported from trusted
 server code such as Stripe webhooks, maintenance scripts, or local admin tools.
 Never import it from public Streamlit pages that render in end-user mode.
 """
+
 from __future__ import annotations
 
 import os

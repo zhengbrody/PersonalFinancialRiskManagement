@@ -24,6 +24,7 @@ POST /greeks
 Stateless, pure compute. Useful for live Greeks ribbons in the UI without
 roundtripping yfinance every keystroke.
 """
+
 from __future__ import annotations
 
 import json
@@ -99,7 +100,11 @@ def lambda_handler(event: dict, context: Any) -> dict:
         try:
             iv_solved = bs.implied_volatility(
                 market_price=float(market_price),
-                S=S, K=K, T=T, r=r, option_type=option_type,
+                S=S,
+                K=K,
+                T=T,
+                r=r,
+                option_type=option_type,
             )
         except (ValueError, TypeError) as e:
             return _bad_request(f"Failed to compute IV: {e}")
@@ -125,8 +130,12 @@ def lambda_handler(event: dict, context: Any) -> dict:
         "price": price,
         **greeks,
         "inputs_echoed": {
-            "spot": S, "strike": K, "time_to_expiry_years": T,
-            "risk_free_rate": r, "volatility": sigma, "option_type": option_type,
+            "spot": S,
+            "strike": K,
+            "time_to_expiry_years": T,
+            "risk_free_rate": r,
+            "volatility": sigma,
+            "option_type": option_type,
         },
     }
     if iv_solved is not None:

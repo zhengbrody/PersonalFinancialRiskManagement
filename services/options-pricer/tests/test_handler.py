@@ -1,4 +1,5 @@
 """Local unit tests for options-pricer handler. No AWS calls."""
+
 from __future__ import annotations
 
 import json
@@ -42,8 +43,11 @@ def test_put_returns_negative_delta():
 def test_iv_solved_when_only_market_price_given():
     """Pass market_price WITHOUT volatility — handler should solve IV."""
     body = {
-        "spot": 100.0, "strike": 100.0, "time_to_expiry_years": 1.0,
-        "risk_free_rate": 0.05, "option_type": "call",
+        "spot": 100.0,
+        "strike": 100.0,
+        "time_to_expiry_years": 1.0,
+        "risk_free_rate": 0.05,
+        "option_type": "call",
         "market_price": 10.4506,
     }
     resp = lambda_handler({"body": json.dumps(body)}, context=None)
@@ -55,8 +59,11 @@ def test_iv_solved_when_only_market_price_given():
 
 def test_iv_unsolvable_returns_400():
     body = {
-        "spot": 100.0, "strike": 100.0, "time_to_expiry_years": 1.0,
-        "risk_free_rate": 0.05, "option_type": "call",
+        "spot": 100.0,
+        "strike": 100.0,
+        "time_to_expiry_years": 1.0,
+        "risk_free_rate": 0.05,
+        "option_type": "call",
         "market_price": 200.0,  # impossible: above S
     }
     resp = lambda_handler({"body": json.dumps(body)}, context=None)
@@ -65,8 +72,11 @@ def test_iv_unsolvable_returns_400():
 
 def test_neither_volatility_nor_market_price_400():
     body = {
-        "spot": 100.0, "strike": 100.0, "time_to_expiry_years": 1.0,
-        "risk_free_rate": 0.05, "option_type": "call",
+        "spot": 100.0,
+        "strike": 100.0,
+        "time_to_expiry_years": 1.0,
+        "risk_free_rate": 0.05,
+        "option_type": "call",
     }
     resp = lambda_handler({"body": json.dumps(body)}, context=None)
     assert resp["statusCode"] == 400
@@ -80,9 +90,12 @@ def test_invalid_option_type_400():
 def test_expiry_iso_resolves_to_T():
     """Use future date string instead of T."""
     body = {
-        "spot": 100.0, "strike": 100.0,
+        "spot": 100.0,
+        "strike": 100.0,
         "expiry_iso": "2099-01-01",
-        "risk_free_rate": 0.05, "volatility": 0.2, "option_type": "call",
+        "risk_free_rate": 0.05,
+        "volatility": 0.2,
+        "option_type": "call",
     }
     resp = lambda_handler({"body": json.dumps(body)}, context=None)
     assert resp["statusCode"] == 200

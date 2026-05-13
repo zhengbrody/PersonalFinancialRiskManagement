@@ -1,4 +1,5 @@
 """Tests for libs/auth/session.py — no real Supabase, all mocked."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -6,7 +7,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from libs.auth import client as auth_client
-
 
 # ── Test scaffolding ────────────────────────────────────────────
 
@@ -27,6 +27,7 @@ def fake_streamlit(monkeypatch):
     fake_st.secrets.get.return_value = ""
 
     import sys
+
     monkeypatch.setitem(sys.modules, "streamlit", fake_st)
     return fake_st
 
@@ -59,7 +60,9 @@ def test_get_supabase_caches_singleton(fake_streamlit, supabase_env):
 def test_env_beats_streamlit_secrets(fake_streamlit, monkeypatch):
     monkeypatch.setenv("SUPABASE_URL", "https://from-env.supabase.co")
     monkeypatch.setenv("SUPABASE_ANON_KEY", "env-key")
-    fake_streamlit.secrets.get.side_effect = lambda k, d="": "https://from-secrets" if k == "SUPABASE_URL" else "secret-key"
+    fake_streamlit.secrets.get.side_effect = lambda k, d="": (
+        "https://from-secrets" if k == "SUPABASE_URL" else "secret-key"
+    )
     with patch("supabase.create_client") as mock_create:
         auth_client.get_supabase()
     args = mock_create.call_args[0]
@@ -80,6 +83,7 @@ def test_sign_in_stores_user_and_tokens(fake_streamlit, supabase_env):
 
     with patch("supabase.create_client", return_value=fake_client):
         from libs.auth import session as auth_session
+
         user = auth_session.sign_in_with_password("x@y.com", "pw12345678")
 
     assert user["email"] == "x@y.com"
@@ -97,6 +101,7 @@ def test_sign_in_failure_raises_authError(fake_streamlit, supabase_env):
 
     with patch("supabase.create_client", return_value=fake_client):
         from libs.auth import session as auth_session
+
         with pytest.raises(auth_client.AuthError, match="Invalid login credentials"):
             auth_session.sign_in_with_password("x@y.com", "wrong")
 
@@ -109,6 +114,7 @@ def test_sign_out_clears_session(fake_streamlit, supabase_env):
     fake_client = MagicMock()
     with patch("supabase.create_client", return_value=fake_client):
         from libs.auth import session as auth_session
+
         auth_session.sign_out()
 
     for k in ("_auth_user", "_auth_access_token", "_auth_refresh_token"):
@@ -118,19 +124,23 @@ def test_sign_out_clears_session(fake_streamlit, supabase_env):
 
 def test_is_authenticated_reflects_session(fake_streamlit):
     from libs.auth import session as auth_session
+
     assert auth_session.is_authenticated() is False
     fake_streamlit.session_state["_auth_user"] = {"id": "u", "email": "e"}
     assert auth_session.is_authenticated() is True
 
 
 def test_sign_up_returns_user(fake_streamlit, supabase_env):
-    fake_user = MagicMock(id="new-user", email="new@x.com", user_metadata={}, created_at="2026-01-01")
+    fake_user = MagicMock(
+        id="new-user", email="new@x.com", user_metadata={}, created_at="2026-01-01"
+    )
     fake_resp = MagicMock(user=fake_user)
     fake_client = MagicMock()
     fake_client.auth.sign_up.return_value = fake_resp
 
     with patch("supabase.create_client", return_value=fake_client):
         from libs.auth import session as auth_session
+
         user = auth_session.sign_up_with_password("new@x.com", "pw12345678")
 
     assert user["id"] == "new-user"

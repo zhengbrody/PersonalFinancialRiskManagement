@@ -20,6 +20,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from data_provider import DataProvider
 from risk_engine import RiskEngine
 
+pytestmark = pytest.mark.performance
+
 
 class TestCachePerformance:
     """Test Streamlit @st.cache_data/@st.cache_resource performance"""

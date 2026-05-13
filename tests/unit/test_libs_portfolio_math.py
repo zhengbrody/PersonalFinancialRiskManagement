@@ -1,4 +1,5 @@
 """Unit tests for libs.mindmarket_core.portfolio_math."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -6,7 +7,6 @@ import pandas as pd
 import pytest
 
 from libs.mindmarket_core import portfolio_math as pm
-
 
 # ── Sharpe ─────────────────────────────────────────────────
 
@@ -111,8 +111,14 @@ def test_frontier_returns_expected_keys():
     rng = np.random.default_rng(0)
     rets = pd.DataFrame(rng.normal(0, 0.01, (252, 4)), columns=["A", "B", "C", "D"])
     out = pm.efficient_frontier(rets, risk_free=0.04, n_points=10)
-    for key in ("frontier_vols", "frontier_rets", "frontier_weights",
-                "max_sharpe_weights", "min_var_weights", "tickers"):
+    for key in (
+        "frontier_vols",
+        "frontier_rets",
+        "frontier_weights",
+        "max_sharpe_weights",
+        "min_var_weights",
+        "tickers",
+    ):
         assert key in out
     assert len(out["tickers"]) == 4
     # Min-var and max-sharpe weights sum to 1

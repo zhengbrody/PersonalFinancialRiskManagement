@@ -3,6 +3,7 @@
 Pure functions, scipy.stats only. No yfinance, no Streamlit.
 options_engine.py delegates all of these so behavior is unchanged.
 """
+
 from __future__ import annotations
 
 from typing import Dict, Optional

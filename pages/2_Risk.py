@@ -137,9 +137,11 @@ from libs import remote_compute as _rc  # noqa: E402  (lazy: avoid Lambda dep)
 
 if _rc.is_remote_enabled():
     with st.expander(
-        "🚀 Phase 2 Remote Compute — verify Lambda VaR vs local"
-        if lang == "en" else
-        "🚀 Phase 2 远程计算 — 对照 Lambda VaR vs 本地",
+        (
+            "🚀 Phase 2 Remote Compute — verify Lambda VaR vs local"
+            if lang == "en"
+            else "🚀 Phase 2 远程计算 — 对照 Lambda VaR vs 本地"
+        ),
         expanded=False,
     ):
         st.caption(
@@ -161,13 +163,17 @@ if _rc.is_remote_enabled():
                 }
                 with st.spinner("POST /var to Lambda..."):
                     import time
+
                     t0 = time.time()
                     out = _rc.post_var(payload)
                     elapsed_ms = (time.time() - t0) * 1000
 
                 rc1, rc2, rc3 = st.columns(3)
-                rc1.metric("Remote VaR 95%", f"{out['var']:.2%}",
-                           delta=f"{(out['var'] - report.var_95) * 100:+.2f}pp vs local")
+                rc1.metric(
+                    "Remote VaR 95%",
+                    f"{out['var']:.2%}",
+                    delta=f"{(out['var'] - report.var_95) * 100:+.2f}pp vs local",
+                )
                 rc2.metric("Remote CVaR 95%", f"{out['cvar']:.2%}")
                 rc3.metric("Round-trip", f"{elapsed_ms:.0f} ms")
             except _rc.RemoteComputeError as exc:
@@ -961,6 +967,7 @@ except Exception:
 # Legal disclaimer footer (educational use only)
 try:
     from ui.legal_footer import render_legal_footer
+
     render_legal_footer()
 except Exception:
     pass

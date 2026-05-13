@@ -14,6 +14,7 @@ Why anon key only (no service-role here):
     need it (admin scripts, Lambda data-seeders), put it in a separate
     `admin_client.py` so it can't be accidentally imported into the UI.
 """
+
 from __future__ import annotations
 
 import os
@@ -73,9 +74,7 @@ def get_supabase():
     try:
         from supabase import create_client
     except ImportError as e:
-        raise AuthError(
-            "supabase-py not installed. Run `pip install supabase`."
-        ) from e
+        raise AuthError("supabase-py not installed. Run `pip install supabase`.") from e
 
     _client_cache = create_client(url, key)
     return _client_cache

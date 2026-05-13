@@ -1095,6 +1095,7 @@ except Exception:
 # Legal disclaimer footer (educational use only)
 try:
     from ui.legal_footer import render_legal_footer
+
     render_legal_footer()
 except Exception:
     pass

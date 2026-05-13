@@ -14,6 +14,7 @@ This page deliberately doesn't gate anything else yet. Wiring per-user
 portfolios into app.py + replacing portfolio_config.py is the NEXT
 commit; this commit just proves auth round-trips with Supabase.
 """
+
 from __future__ import annotations
 
 import streamlit as st
@@ -57,15 +58,14 @@ st.markdown(
 # ── Already signed in: show profile + sign-out button ──────────────────
 if is_authenticated():
     user = current_user()
-    st.success(
-        f"Signed in as **{user['email']}**" if not is_zh
-        else f"已登录: **{user['email']}**"
+    st.success(f"Signed in as **{user['email']}**" if not is_zh else f"已登录: **{user['email']}**")
+    st.json(
+        {
+            "id": user["id"],
+            "email": user["email"],
+            "created_at": user.get("created_at"),
+        }
     )
-    st.json({
-        "id": user["id"],
-        "email": user["email"],
-        "created_at": user.get("created_at"),
-    })
     if st.button("Sign out" if not is_zh else "登出", type="secondary"):
         sign_out()
         st.rerun()
@@ -73,10 +73,12 @@ if is_authenticated():
 
 
 # ── Not signed in: tabs for login + signup ────────────────────────────
-tab_login, tab_signup = st.tabs([
-    "Sign in" if not is_zh else "登录",
-    "Create account" if not is_zh else "注册",
-])
+tab_login, tab_signup = st.tabs(
+    [
+        "Sign in" if not is_zh else "登录",
+        "Create account" if not is_zh else "注册",
+    ]
+)
 
 with tab_login:
     with st.form("login_form", clear_on_submit=False):
@@ -97,8 +99,7 @@ with tab_login:
         )
     if submitted:
         if not email or not password:
-            st.error("Email and password are required."
-                     if not is_zh else "邮箱和密码都不能为空。")
+            st.error("Email and password are required." if not is_zh else "邮箱和密码都不能为空。")
         else:
             try:
                 with st.spinner("Authenticating..." if not is_zh else "登录中..."):
@@ -140,11 +141,11 @@ with tab_signup:
         if not email or not password:
             st.error("Email and password are required.")
         elif len(password) < 8:
-            st.error("Password must be at least 8 characters."
-                     if not is_zh else "密码至少 8 个字符。")
+            st.error(
+                "Password must be at least 8 characters." if not is_zh else "密码至少 8 个字符。"
+            )
         elif password != password2:
-            st.error("Passwords don't match."
-                     if not is_zh else "两次输入的密码不一致。")
+            st.error("Passwords don't match." if not is_zh else "两次输入的密码不一致。")
         else:
             try:
                 with st.spinner("Creating account..." if not is_zh else "创建账号..."):
@@ -152,8 +153,8 @@ with tab_signup:
                 st.success(
                     "Account created. Check your inbox for a confirmation email, "
                     "then come back and sign in."
-                    if not is_zh else
-                    "账号已创建。请查收邮箱内的验证邮件,确认后回来登录。"
+                    if not is_zh
+                    else "账号已创建。请查收邮箱内的验证邮件,确认后回来登录。"
                 )
             except AuthError as e:
                 st.error(str(e))

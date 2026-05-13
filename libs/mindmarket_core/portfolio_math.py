@@ -3,6 +3,7 @@
 All functions are pure. The orchestrating RiskEngine class in risk_engine.py
 delegates to these.
 """
+
 from __future__ import annotations
 
 from typing import Dict, List, Optional
@@ -85,13 +86,21 @@ def efficient_frontier(
 
     w0 = np.ones(n) / n
     res_minvar = minimize(
-        port_vol, w0, bounds=bounds, constraints=constraints,
-        method="SLSQP", options={"maxiter": 1000},
+        port_vol,
+        w0,
+        bounds=bounds,
+        constraints=constraints,
+        method="SLSQP",
+        options={"maxiter": 1000},
     )
     w_minvar = res_minvar.x
     res_maxsharpe = minimize(
-        neg_sharpe, w0, bounds=bounds, constraints=constraints,
-        method="SLSQP", options={"maxiter": 1000},
+        neg_sharpe,
+        w0,
+        bounds=bounds,
+        constraints=constraints,
+        method="SLSQP",
+        options={"maxiter": 1000},
     )
     w_maxsharpe = res_maxsharpe.x
 
@@ -105,8 +114,12 @@ def efficient_frontier(
             {"type": "eq", "fun": lambda w, t=target: w @ mean_ret - t},
         ]
         res = minimize(
-            port_vol, w0, bounds=bounds, constraints=cons,
-            method="SLSQP", options={"maxiter": 500},
+            port_vol,
+            w0,
+            bounds=bounds,
+            constraints=cons,
+            method="SLSQP",
+            options={"maxiter": 500},
         )
         if res.success:
             frontier_vols.append(port_vol(res.x))
@@ -143,13 +156,15 @@ def check_compliance(
     max_stock = rules.get("max_single_stock_weight", 0.15)
     for tk, w in proposed_weights.items():
         if w > max_stock + tol:
-            violations.append({
-                "rule": "max_single_stock_weight",
-                "limit": max_stock,
-                "actual": w,
-                "ticker": tk,
-                "severity": "hard",
-            })
+            violations.append(
+                {
+                    "rule": "max_single_stock_weight",
+                    "limit": max_stock,
+                    "actual": w,
+                    "ticker": tk,
+                    "severity": "hard",
+                }
+            )
 
     max_sector = rules.get("max_sector_weight", 0.30)
     sector_weights: Dict[str, float] = {}
@@ -158,13 +173,15 @@ def check_compliance(
         sector_weights[s] = sector_weights.get(s, 0.0) + w
     for sector, w in sector_weights.items():
         if w > max_sector + tol:
-            violations.append({
-                "rule": "max_sector_weight",
-                "limit": max_sector,
-                "actual": w,
-                "sector": sector,
-                "severity": "hard",
-            })
+            violations.append(
+                {
+                    "rule": "max_sector_weight",
+                    "limit": max_sector,
+                    "actual": w,
+                    "sector": sector,
+                    "severity": "hard",
+                }
+            )
 
     return violations
 

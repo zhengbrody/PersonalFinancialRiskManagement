@@ -27,12 +27,13 @@ When called from a Streamlit page, the Supabase client uses the
 authenticated user's JWT (from session.access_token()), so the RLS
 filters apply automatically.
 """
+
 from __future__ import annotations
 
 from typing import Optional
 
 from .client import AuthError, get_supabase
-from .session import current_user, access_token
+from .session import access_token, current_user
 
 
 def _authed_client():
@@ -69,13 +70,7 @@ def list_portfolios() -> list[dict]:
 def get_default_portfolio() -> Optional[dict]:
     """Return the user's default portfolio, or None if they haven't created one."""
     sb = _authed_client()
-    resp = (
-        sb.table("portfolios")
-        .select("*")
-        .eq("is_default", True)
-        .limit(1)
-        .execute()
-    )
+    resp = sb.table("portfolios").select("*").eq("is_default", True).limit(1).execute()
     rows = resp.data or []
     return rows[0] if rows else None
 
@@ -94,18 +89,18 @@ def create_portfolio(
         # Demote any existing default first — Postgres trigger could do this
         # transactionally, but a 2-step write is simpler and the race window
         # is irrelevant for a single user.
-        sb.table("portfolios").update({"is_default": False}).eq(
-            "is_default", True
-        ).execute()
+        sb.table("portfolios").update({"is_default": False}).eq("is_default", True).execute()
 
     resp = (
         sb.table("portfolios")
-        .insert({
-            "name": name,
-            "holdings": holdings,
-            "margin_loan": margin_loan,
-            "is_default": is_default,
-        })
+        .insert(
+            {
+                "name": name,
+                "holdings": holdings,
+                "margin_loan": margin_loan,
+                "is_default": is_default,
+            }
+        )
         .execute()
     )
     rows = resp.data or []
@@ -123,16 +118,11 @@ def update_portfolio(portfolio_id: str, **fields) -> dict:
 
     sb = _authed_client()
     if fields.get("is_default"):
-        sb.table("portfolios").update({"is_default": False}).eq(
-            "is_default", True
-        ).neq("id", portfolio_id).execute()
+        sb.table("portfolios").update({"is_default": False}).eq("is_default", True).neq(
+            "id", portfolio_id
+        ).execute()
 
-    resp = (
-        sb.table("portfolios")
-        .update(fields)
-        .eq("id", portfolio_id)
-        .execute()
-    )
+    resp = sb.table("portfolios").update(fields).eq("id", portfolio_id).execute()
     rows = resp.data or []
     if not rows:
         raise AuthError("No row updated — wrong id or RLS blocked you.")

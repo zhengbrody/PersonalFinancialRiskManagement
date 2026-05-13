@@ -7,6 +7,7 @@ All Stripe keys and price IDs are server-side settings:
     STRIPE_PRO_PRICE_ID
     MINDMARKET_APP_URL
 """
+
 from __future__ import annotations
 
 import os

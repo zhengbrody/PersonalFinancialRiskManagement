@@ -9,13 +9,15 @@ exclude = '''
   | __pycache__
   | build
   | dist
+  | cdk\.out
+  | htmlcov
   | \.cache
 )/
 '''
 
 [tool.ruff]
 line-length = 100
-exclude = [".git", ".venv", "__pycache__", "build", "dist"]
+exclude = [".git", ".venv", "__pycache__", "build", "dist", "cdk.out", "htmlcov"]
 
 [tool.ruff.lint]
 select = [

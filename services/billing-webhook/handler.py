@@ -14,6 +14,7 @@ Required env vars:
   STRIPE_BASIC_PRICE_ID
   STRIPE_PRO_PRICE_ID
 """
+
 from __future__ import annotations
 
 import base64

@@ -7,6 +7,7 @@ Streamlit / Lambda caller decides what to do on QuotaExceeded.
 Plan tiers below MUST stay in sync with the constraints in
 supabase/migrations/0002_billing.sql (the `plan` text CHECK).
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -19,7 +20,7 @@ PLAN_LIMITS: dict[str, dict[str, Optional[int]]] = {
     "free": {
         "analysis": 2,
         "chat": 2,
-        "tool_call": None,        # not rate-limited, just logged
+        "tool_call": None,  # not rate-limited, just logged
     },
     "basic": {
         "analysis": 30,
@@ -39,10 +40,10 @@ PLAN_LIMITS: dict[str, dict[str, Optional[int]]] = {
 }
 
 PLAN_PRICING: dict[str, dict[str, Any]] = {
-    "free":  {"price_usd_per_month": 0,  "label": "Free"},
+    "free": {"price_usd_per_month": 0, "label": "Free"},
     "basic": {"price_usd_per_month": 10, "label": "Basic"},
-    "pro":   {"price_usd_per_month": 29, "label": "Pro"},
-    "owner": {"price_usd_per_month": 0,  "label": "Owner"},
+    "pro": {"price_usd_per_month": 29, "label": "Pro"},
+    "owner": {"price_usd_per_month": 0, "label": "Owner"},
 }
 
 
@@ -98,11 +99,7 @@ def is_owner_user(user_id: str) -> bool:
         from libs.auth.session import current_user
 
         user = current_user()
-        return bool(
-            user
-            and user.get("id") == user_id
-            and is_owner_email(user.get("email"))
-        )
+        return bool(user and user.get("id") == user_id and is_owner_email(user.get("email")))
     except Exception:
         return False
 
@@ -116,14 +113,7 @@ def get_user_plan(user_id: str) -> str:
     if is_owner_user(user_id):
         return "owner"
     try:
-        resp = (
-            _client()
-            .table("profiles")
-            .select("plan")
-            .eq("user_id", user_id)
-            .limit(1)
-            .execute()
-        )
+        resp = _client().table("profiles").select("plan").eq("user_id", user_id).limit(1).execute()
         rows = resp.data or []
         if rows and rows[0].get("plan") in PLAN_LIMITS:
             return rows[0]["plan"]
@@ -177,7 +167,10 @@ def get_quota_status(user_id: str) -> dict[str, Any]:
         used = get_used_this_month(user_id, kind)
         if limit is None:
             out["kinds"][kind] = {
-                "used": used, "limit": None, "remaining": None, "exhausted": False
+                "used": used,
+                "limit": None,
+                "remaining": None,
+                "exhausted": False,
             }
         else:
             remaining = max(0, limit - used)
@@ -203,20 +196,23 @@ def record_event(
 ) -> None:
     """Insert a usage_events row. Caller responsible for cost calc."""
     try:
-        _client().table("usage_events").insert({
-            "user_id": user_id,
-            "kind": kind,
-            "provider": provider,
-            "model": model,
-            "tokens_in": int(tokens_in),
-            "tokens_out": int(tokens_out),
-            "cost_usd": float(cost_usd),
-            "metadata": metadata or {},
-        }).execute()
+        _client().table("usage_events").insert(
+            {
+                "user_id": user_id,
+                "kind": kind,
+                "provider": provider,
+                "model": model,
+                "tokens_in": int(tokens_in),
+                "tokens_out": int(tokens_out),
+                "cost_usd": float(cost_usd),
+                "metadata": metadata or {},
+            }
+        ).execute()
     except Exception as e:
         # Logging failure shouldn't break the user-visible action.
         # Caller's fallback: rely on app logs to detect this.
         import logging
+
         logging.getLogger(__name__).warning("usage.record_failed kind=%s err=%s", kind, e)
 
 
@@ -255,10 +251,14 @@ def check_and_consume(
     if limit is None:
         # Not rate-limited; just record + return.
         record_event(
-            user_id, kind,
-            provider=provider, model=model,
-            tokens_in=tokens_in, tokens_out=tokens_out,
-            cost_usd=cost_usd, metadata=metadata,
+            user_id,
+            kind,
+            provider=provider,
+            model=model,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost_usd=cost_usd,
+            metadata=metadata,
         )
         return get_quota_status(user_id)
 
@@ -267,9 +267,13 @@ def check_and_consume(
         raise QuotaExceeded(kind=kind, plan=plan, used=used, limit=limit)
 
     record_event(
-        user_id, kind,
-        provider=provider, model=model,
-        tokens_in=tokens_in, tokens_out=tokens_out,
-        cost_usd=cost_usd, metadata=metadata,
+        user_id,
+        kind,
+        provider=provider,
+        model=model,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        cost_usd=cost_usd,
+        metadata=metadata,
     )
     return get_quota_status(user_id)

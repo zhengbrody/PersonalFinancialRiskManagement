@@ -5,6 +5,7 @@ The webhook handler verifies Stripe signatures, then delegates here with the
 decoded event payload. Writes require the Supabase service-role client because
 regular users must not be able to self-edit `profiles.plan`.
 """
+
 from __future__ import annotations
 
 import os
@@ -115,7 +116,9 @@ def sync_subscription(subscription: dict[str, Any], *, deleted: bool = False) ->
         "stripe_customer_id": subscription.get("customer"),
         "stripe_subscription_id": subscription.get("id"),
         "plan": plan,
-        "status": status if status in ("active", "past_due", "canceled", "trialing") else "past_due",
+        "status": (
+            status if status in ("active", "past_due", "canceled", "trialing") else "past_due"
+        ),
         "current_period_start": _iso_from_unix(subscription.get("current_period_start")),
         "current_period_end": _iso_from_unix(subscription.get("current_period_end")),
         "cancel_at_period_end": bool(subscription.get("cancel_at_period_end", False)),

@@ -18,6 +18,7 @@ _BANNER_EN = (
     "AI-generated commentary may be inaccurate or delayed."
 )
 
+
 def render_legal_footer() -> None:
     """Render a compact English disclaimer banner + legal links."""
     banner = _BANNER_EN

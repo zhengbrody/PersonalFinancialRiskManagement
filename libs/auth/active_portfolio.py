@@ -33,7 +33,8 @@ from __future__ import annotations
 from typing import Any, Dict
 
 import portfolio_config as _pc
-from .session import current_user, is_authenticated
+
+from .session import is_authenticated
 
 
 def _hardcoded_fallback() -> tuple[Dict[str, Dict[str, Any]], float]:

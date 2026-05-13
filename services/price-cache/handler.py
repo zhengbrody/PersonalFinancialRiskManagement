@@ -39,6 +39,7 @@ Why this is a separate Lambda:
   - yfinance pulls a heavy dependency tree (pandas + lxml + html5lib)
     that risk + options don't need — keeps their cold start low.
 """
+
 from __future__ import annotations
 
 import json
@@ -64,16 +65,16 @@ _table = _dynamo.Table(os.environ.get("PRICE_CACHE_TABLE", "PriceCache"))
 
 # Granularity → cache TTL in seconds. Falls back to 1 hour if unrecognized.
 _TTL_SECONDS = {
-    "1m":   60 * 60,             # 1 hour for minute bars (volatile, fast-changing)
-    "5m":   60 * 60,
-    "15m":  60 * 60 * 4,
-    "30m":  60 * 60 * 4,
-    "60m":  60 * 60 * 6,
-    "1d":   60 * 60 * 24,        # 24 hours
-    "5d":   60 * 60 * 24,
-    "1wk":  60 * 60 * 24 * 7,    # 7 days
-    "1mo":  60 * 60 * 24 * 7,
-    "3mo":  60 * 60 * 24 * 7,
+    "1m": 60 * 60,  # 1 hour for minute bars (volatile, fast-changing)
+    "5m": 60 * 60,
+    "15m": 60 * 60 * 4,
+    "30m": 60 * 60 * 4,
+    "60m": 60 * 60 * 6,
+    "1d": 60 * 60 * 24,  # 24 hours
+    "5d": 60 * 60 * 24,
+    "1wk": 60 * 60 * 24 * 7,  # 7 days
+    "1mo": 60 * 60 * 24 * 7,
+    "3mo": 60 * 60 * 24 * 7,
 }
 
 
@@ -152,14 +153,16 @@ def _fetch_yfinance(ticker: str, period: str, interval: str) -> list[dict]:
 
     bars = []
     for idx, row in df.iterrows():
-        bars.append({
-            "date": idx.isoformat() if hasattr(idx, "isoformat") else str(idx),
-            "open": float(row.get("Open", 0) or 0),
-            "high": float(row.get("High", 0) or 0),
-            "low":  float(row.get("Low", 0) or 0),
-            "close": float(row.get("Close", 0) or 0),
-            "volume": int(row.get("Volume", 0) or 0),
-        })
+        bars.append(
+            {
+                "date": idx.isoformat() if hasattr(idx, "isoformat") else str(idx),
+                "open": float(row.get("Open", 0) or 0),
+                "high": float(row.get("High", 0) or 0),
+                "low": float(row.get("Low", 0) or 0),
+                "close": float(row.get("Close", 0) or 0),
+                "volume": int(row.get("Volume", 0) or 0),
+            }
+        )
     return bars
 
 
@@ -180,14 +183,16 @@ def lambda_handler(event: dict, context: Any) -> dict:
 
     cached = _read_cache(pk, sk)
     if cached is not None:
-        return _ok({
-            "ticker": ticker,
-            "period": period,
-            "interval": interval,
-            "bars": cached.get("bars", []),
-            "cached": True,
-            "rows": len(cached.get("bars", [])),
-        })
+        return _ok(
+            {
+                "ticker": ticker,
+                "period": period,
+                "interval": interval,
+                "bars": cached.get("bars", []),
+                "cached": True,
+                "rows": len(cached.get("bars", [])),
+            }
+        )
 
     bars = _fetch_yfinance(ticker, period, interval)
     if not bars:
@@ -196,11 +201,13 @@ def lambda_handler(event: dict, context: Any) -> dict:
     payload = {"bars": bars}
     _write_cache(pk, sk, payload, _ttl_for(interval))
 
-    return _ok({
-        "ticker": ticker,
-        "period": period,
-        "interval": interval,
-        "bars": bars,
-        "cached": False,
-        "rows": len(bars),
-    })
+    return _ok(
+        {
+            "ticker": ticker,
+            "period": period,
+            "interval": interval,
+            "bars": bars,
+            "cached": False,
+            "rows": len(bars),
+        }
+    )

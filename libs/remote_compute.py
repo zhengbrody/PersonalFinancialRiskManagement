@@ -16,6 +16,7 @@ network failure. Streamlit pages should catch and either fall back to
 the local function or display a clear error to the user — never silently
 return wrong data.
 """
+
 from __future__ import annotations
 
 import os
@@ -74,9 +75,7 @@ def post_var(payload: dict[str, Any]) -> dict[str, Any]:
         raise RemoteComputeError(f"Network error calling /var: {e}") from e
 
     if resp.status_code != 200:
-        raise RemoteComputeError(
-            f"/var returned {resp.status_code}: {resp.text[:300]}"
-        )
+        raise RemoteComputeError(f"/var returned {resp.status_code}: {resp.text[:300]}")
     return resp.json()
 
 
@@ -93,9 +92,7 @@ def post_greeks(payload: dict[str, Any]) -> dict[str, Any]:
         raise RemoteComputeError(f"Network error calling /greeks: {e}") from e
 
     if resp.status_code != 200:
-        raise RemoteComputeError(
-            f"/greeks returned {resp.status_code}: {resp.text[:300]}"
-        )
+        raise RemoteComputeError(f"/greeks returned {resp.status_code}: {resp.text[:300]}")
     return resp.json()
 
 
@@ -112,7 +109,5 @@ def get_price(ticker: str, period: str = "1mo", interval: str = "1d") -> dict[st
         raise RemoteComputeError(f"Network error calling /price: {e}") from e
 
     if resp.status_code != 200:
-        raise RemoteComputeError(
-            f"/price/{ticker} returned {resp.status_code}: {resp.text[:300]}"
-        )
+        raise RemoteComputeError(f"/price/{ticker} returned {resp.status_code}: {resp.text[:300]}")
     return resp.json()

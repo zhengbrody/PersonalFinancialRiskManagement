@@ -22,6 +22,7 @@ Inputs:
     ssh_pubkey_path      : path to the SSH pubkey to upload as EC2 KeyPair
                            (defaults to ~/.ssh/mindmarket_aws.pub)
 """
+
 from __future__ import annotations
 
 import os
@@ -29,7 +30,6 @@ import pathlib
 import sys
 
 import aws_cdk as cdk
-
 from infra.api_stack import ApiStack
 from infra.compute_stack import ComputeStack
 from infra.data_stack import DataStack

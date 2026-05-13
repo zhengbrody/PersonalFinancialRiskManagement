@@ -19,13 +19,13 @@ Env vars read (or st.secrets fallback):
                                                 "list all users" or seeding)
 """
 
-from .client import get_supabase, AuthError
+from .client import AuthError, get_supabase
 from .session import (
     current_user,
-    sign_in_with_password,
-    sign_up_with_password,
-    sign_out,
     is_authenticated,
+    sign_in_with_password,
+    sign_out,
+    sign_up_with_password,
 )
 
 __all__ = [

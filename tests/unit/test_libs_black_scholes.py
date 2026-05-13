@@ -3,15 +3,14 @@
 Strategy: textbook reference values + edge cases + IV roundtrip
 + put-call parity. No fixtures, no I/O.
 """
+
 from __future__ import annotations
 
 import math
 
-import numpy as np
 import pytest
 
 from libs.mindmarket_core import black_scholes as bs
-
 
 # ── Textbook reference: Hull 9th ed., Table 17.4 region ──────────
 
@@ -107,8 +106,17 @@ def test_iv_roundtrip_recovers_input_sigma():
 
 def test_iv_returns_none_for_impossible_price():
     # Below intrinsic
-    assert bs.implied_volatility(market_price=0.01, S=110, K=100, T=1.0, r=0.05, option_type="call") is None
+    assert (
+        bs.implied_volatility(market_price=0.01, S=110, K=100, T=1.0, r=0.05, option_type="call")
+        is None
+    )
     # Above max for call (≥ S)
-    assert bs.implied_volatility(market_price=200, S=100, K=100, T=1.0, r=0.05, option_type="call") is None
+    assert (
+        bs.implied_volatility(market_price=200, S=100, K=100, T=1.0, r=0.05, option_type="call")
+        is None
+    )
     # Negative price
-    assert bs.implied_volatility(market_price=-1, S=100, K=100, T=1.0, r=0.05, option_type="call") is None
+    assert (
+        bs.implied_volatility(market_price=-1, S=100, K=100, T=1.0, r=0.05, option_type="call")
+        is None
+    )

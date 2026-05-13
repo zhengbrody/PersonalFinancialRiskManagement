@@ -1,4 +1,5 @@
 """Local unit tests for risk-calculator handler. No AWS calls."""
+
 from __future__ import annotations
 
 import json
@@ -6,7 +7,6 @@ import os
 import sys
 
 import numpy as np
-import pytest
 
 # Allow `import handler` from this test file when run via pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -21,14 +21,16 @@ def _make_returns(days: int = 252, n: int = 3, seed: int = 0) -> list[list[float
 
 def _ok_event() -> dict:
     return {
-        "body": json.dumps({
-            "tickers": ["AAPL", "MSFT", "GOOGL"],
-            "weights": {"AAPL": 0.4, "MSFT": 0.3, "GOOGL": 0.3},
-            "returns": _make_returns(),
-            "n_simulations": 1000,
-            "horizon_days": 21,
-            "confidence": 0.95,
-        })
+        "body": json.dumps(
+            {
+                "tickers": ["AAPL", "MSFT", "GOOGL"],
+                "weights": {"AAPL": 0.4, "MSFT": 0.3, "GOOGL": 0.3},
+                "returns": _make_returns(),
+                "n_simulations": 1000,
+                "horizon_days": 21,
+                "confidence": 0.95,
+            }
+        )
     }
 
 

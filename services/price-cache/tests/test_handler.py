@@ -1,11 +1,12 @@
 """Local unit tests for price-cache handler with mocked DynamoDB + yfinance.
 No real AWS or network calls."""
+
 from __future__ import annotations
 
 import json
 import os
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pandas as pd
 import pytest
@@ -19,13 +20,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 @pytest.fixture
 def fake_yf_df():
-    return pd.DataFrame({
-        "Open":   [100.0, 101.5],
-        "High":   [102.0, 103.0],
-        "Low":    [99.0, 100.5],
-        "Close":  [101.0, 102.5],
-        "Volume": [1_000_000, 1_200_000],
-    }, index=pd.to_datetime(["2026-04-01", "2026-04-02"]))
+    return pd.DataFrame(
+        {
+            "Open": [100.0, 101.5],
+            "High": [102.0, 103.0],
+            "Low": [99.0, 100.5],
+            "Close": [101.0, 102.5],
+            "Volume": [1_000_000, 1_200_000],
+        },
+        index=pd.to_datetime(["2026-04-01", "2026-04-02"]),
+    )
 
 
 def _gateway_event(ticker: str, **qs) -> dict:
@@ -64,8 +68,9 @@ def test_cache_miss_calls_yfinance_and_writes(fake_yf_df, monkeypatch):
 
 
 def test_cache_hit_skips_yfinance(monkeypatch):
-    import handler
     import time
+
+    import handler
 
     fresh_payload = {"bars": [{"date": "2026-04-01", "close": 100.0}]}
     mock_table = MagicMock()
@@ -86,8 +91,9 @@ def test_cache_hit_skips_yfinance(monkeypatch):
 
 
 def test_expired_cache_treated_as_miss(fake_yf_df, monkeypatch):
-    import handler
     import time
+
+    import handler
 
     expired_payload = {"bars": [{"date": "2026-04-01", "close": 100.0}]}
     mock_table = MagicMock()
@@ -108,6 +114,7 @@ def test_expired_cache_treated_as_miss(fake_yf_df, monkeypatch):
 
 def test_invalid_ticker_400():
     import handler
+
     resp = handler.lambda_handler(_gateway_event("AAP$L"), None)
     assert resp["statusCode"] == 400
 

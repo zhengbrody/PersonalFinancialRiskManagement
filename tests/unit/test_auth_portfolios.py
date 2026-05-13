@@ -1,4 +1,5 @@
 """Tests for libs.auth.portfolios + libs.auth.active_portfolio."""
+
 from __future__ import annotations
 
 import sys
@@ -34,6 +35,7 @@ def supabase_env(monkeypatch):
 def mock_supabase(fake_streamlit, supabase_env):
     """A pre-authed mock Supabase client wired into get_supabase()."""
     from libs.auth import client as auth_client
+
     auth_client.reset_client_cache()
 
     sb = MagicMock()
@@ -57,11 +59,14 @@ def mock_supabase(fake_streamlit, supabase_env):
 
 
 def test_list_returns_db_rows(mock_supabase):
-    mock_supabase.execute.return_value = MagicMock(data=[
-        {"id": "p1", "name": "A", "is_default": True},
-        {"id": "p2", "name": "B", "is_default": False},
-    ])
+    mock_supabase.execute.return_value = MagicMock(
+        data=[
+            {"id": "p1", "name": "A", "is_default": True},
+            {"id": "p2", "name": "B", "is_default": False},
+        ]
+    )
     from libs.auth.portfolios import list_portfolios
+
     rows = list_portfolios()
     assert len(rows) == 2
     assert rows[0]["name"] == "A"
@@ -71,14 +76,18 @@ def test_list_returns_db_rows(mock_supabase):
 def test_list_returns_empty_list_when_no_rows(mock_supabase):
     mock_supabase.execute.return_value = MagicMock(data=None)
     from libs.auth.portfolios import list_portfolios
+
     assert list_portfolios() == []
 
 
 def test_get_default_returns_first_row(mock_supabase):
-    mock_supabase.execute.return_value = MagicMock(data=[
-        {"id": "p1", "name": "A", "is_default": True},
-    ])
+    mock_supabase.execute.return_value = MagicMock(
+        data=[
+            {"id": "p1", "name": "A", "is_default": True},
+        ]
+    )
     from libs.auth.portfolios import get_default_portfolio
+
     p = get_default_portfolio()
     assert p is not None
     assert p["name"] == "A"
@@ -87,14 +96,16 @@ def test_get_default_returns_first_row(mock_supabase):
 def test_get_default_returns_none_if_no_default(mock_supabase):
     mock_supabase.execute.return_value = MagicMock(data=[])
     from libs.auth.portfolios import get_default_portfolio
+
     assert get_default_portfolio() is None
 
 
 def test_create_sends_insert_with_expected_fields(mock_supabase):
-    mock_supabase.execute.return_value = MagicMock(data=[
-        {"id": "new", "name": "Tech", "holdings": {}, "margin_loan": 0, "is_default": False}
-    ])
+    mock_supabase.execute.return_value = MagicMock(
+        data=[{"id": "new", "name": "Tech", "holdings": {}, "margin_loan": 0, "is_default": False}]
+    )
     from libs.auth.portfolios import create_portfolio
+
     out = create_portfolio(
         name="Tech",
         holdings={"AAPL": {"shares": 10}},
@@ -113,6 +124,7 @@ def test_create_sends_insert_with_expected_fields(mock_supabase):
 def test_create_default_demotes_others_first(mock_supabase):
     mock_supabase.execute.return_value = MagicMock(data=[{"id": "p2", "is_default": True}])
     from libs.auth.portfolios import create_portfolio
+
     create_portfolio(name="A", holdings={"AAPL": {"shares": 1}}, is_default=True)
     # The first execute() is the "demote" UPDATE, the second is the INSERT.
     assert mock_supabase.execute.call_count >= 2
@@ -120,6 +132,7 @@ def test_create_default_demotes_others_first(mock_supabase):
 
 def test_update_rejects_unknown_fields():
     from libs.auth.portfolios import update_portfolio
+
     with pytest.raises(ValueError, match="Cannot update fields"):
         update_portfolio("p1", garbage="bad")
 
@@ -127,6 +140,7 @@ def test_update_rejects_unknown_fields():
 def test_delete_calls_supabase(mock_supabase):
     mock_supabase.execute.return_value = MagicMock(data=[])
     from libs.auth.portfolios import delete_portfolio
+
     delete_portfolio("p1")
     mock_supabase.eq.assert_called_with("id", "p1")
 
@@ -141,6 +155,7 @@ def test_active_falls_back_to_hardcoded_when_unauth(monkeypatch):
     monkeypatch.setitem(sys.modules, "streamlit", fake_st)
 
     from libs.auth import active_portfolio as ap
+
     holdings = ap.get_active_holdings()
     assert isinstance(holdings, dict)
     assert len(holdings) > 0  # hardcoded portfolio is non-empty
@@ -157,13 +172,17 @@ def test_active_uses_db_when_authenticated(mock_supabase):
         "BTC-USD": {"shares": 0.5},  # crypto: should auto-set asset_type
     }
     db_portfolio = {
-        "id": "p1", "name": "Tech", "holdings": db_holdings,
-        "margin_loan": 5000, "is_default": True,
+        "id": "p1",
+        "name": "Tech",
+        "holdings": db_holdings,
+        "margin_loan": 5000,
+        "is_default": True,
     }
     # get_default_portfolio() is the only call active_portfolio makes
     mock_supabase.execute.return_value = MagicMock(data=[db_portfolio])
 
     from libs.auth import active_portfolio as ap
+
     holdings = ap.get_active_holdings()
     assert "AAPL" in holdings
     assert holdings["AAPL"]["shares"] == 100.0
@@ -183,6 +202,7 @@ def test_active_uses_db_when_authenticated(mock_supabase):
 def test_active_falls_back_when_db_query_fails(fake_streamlit, supabase_env):
     """If Supabase blows up, return hardcoded — never block the dashboard."""
     from libs.auth import client as auth_client
+
     auth_client.reset_client_cache()
 
     sb = MagicMock()
@@ -191,6 +211,7 @@ def test_active_falls_back_when_db_query_fails(fake_streamlit, supabase_env):
 
     with patch("supabase.create_client", return_value=sb):
         from libs.auth import active_portfolio as ap
+
         holdings = ap.get_active_holdings()
         # Hardcoded fallback returned
         assert len(holdings) > 0
@@ -203,6 +224,7 @@ def test_active_falls_back_when_user_has_no_portfolios(mock_supabase):
     mock_supabase.execute.return_value = MagicMock(data=[])
 
     from libs.auth import active_portfolio as ap
+
     holdings = ap.get_active_holdings()
     assert len(holdings) > 0  # hardcoded fallback non-empty
 

@@ -22,12 +22,12 @@ Limitations of Streamlit auth:
     middleware. Acceptable risk: this is a personal-portfolio app, not
     a banking site.
 """
+
 from __future__ import annotations
 
 from typing import Optional
 
 from .client import AuthError, get_supabase
-
 
 # Stable keys in st.session_state. Prefix with `_auth_` so other code
 # can't accidentally collide.

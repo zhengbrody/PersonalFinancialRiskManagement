@@ -7,12 +7,12 @@ or the full DataProvider class.
 Logging is callers' responsibility; we expose a `logger` parameter where it
 helps, otherwise return values include enough context to log upstream.
 """
+
 from __future__ import annotations
 
 from typing import List, Tuple
 
 import pandas as pd
-
 
 # Common non-USD ticker suffix → currency name (informational, not authoritative)
 _FOREIGN_SUFFIX_TO_CURRENCY = {
@@ -134,9 +134,7 @@ def smart_fill_gaps(data: pd.Series, method: str = "auto") -> pd.Series:
         filled = data.copy()
         filled = filled.ffill()
         missing_runs = (
-            filled.isnull().astype(int)
-            .groupby(filled.notnull().astype(int).cumsum())
-            .cumsum()
+            filled.isnull().astype(int).groupby(filled.notnull().astype(int).cumsum()).cumsum()
         )
         small_gaps = missing_runs <= 3
         filled[small_gaps] = data[small_gaps].interpolate(method="linear")

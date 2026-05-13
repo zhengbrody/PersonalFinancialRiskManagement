@@ -96,6 +96,7 @@ def tv_text(key: str, **kwargs) -> str:
     text = TV_TEXT.get(lang, TV_TEXT["en"]).get(key, TV_TEXT["en"].get(key, key))
     return text.format(**kwargs) if kwargs else text
 
+
 # ── Empty-state hint (non-blocking) ───────────────────────────
 if not weights:
     st.info(tv_text("empty"))

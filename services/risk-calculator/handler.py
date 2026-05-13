@@ -21,6 +21,7 @@ the price-cache lambda becoming a hot dependency for every VaR call.
 
 Pure compute. No DynamoDB read here. Cold start dominated by scipy import.
 """
+
 from __future__ import annotations
 
 import json
@@ -113,11 +114,13 @@ def lambda_handler(event: dict, context: Any) -> dict:
     )
     var_value, cvar_value = mv.percentile_var_cvar(portfolio_returns, confidence)
 
-    return _ok({
-        "var": var_value,
-        "cvar": cvar_value,
-        "confidence": confidence,
-        "n_assets": len(tickers),
-        "n_simulations": n_simulations,
-        "horizon_days": horizon_days,
-    })
+    return _ok(
+        {
+            "var": var_value,
+            "cvar": cvar_value,
+            "confidence": confidence,
+            "n_assets": len(tickers),
+            "n_simulations": n_simulations,
+            "horizon_days": horizon_days,
+        }
+    )

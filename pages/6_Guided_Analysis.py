@@ -51,9 +51,7 @@ if report is not None:
     ]
     render_kpi_row(snapshot)
 else:
-    st.info(
-        "Run analysis once from the sidebar. This page will then tell you what to read first."
-    )
+    st.info("Run analysis once from the sidebar. This page will then tell you what to read first.")
 
 render_section(
     "Choose Your Goal",

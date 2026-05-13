@@ -1,4 +1,5 @@
 """Tests for Stripe checkout/session sync. No real Stripe or Supabase calls."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -97,12 +98,7 @@ def test_sync_deleted_subscription_downgrades_profile(monkeypatch):
 
 
 def _load_webhook_handler():
-    path = (
-        Path(__file__).resolve().parents[2]
-        / "services"
-        / "billing-webhook"
-        / "handler.py"
-    )
+    path = Path(__file__).resolve().parents[2] / "services" / "billing-webhook" / "handler.py"
     spec = importlib.util.spec_from_file_location("billing_webhook_handler", path)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
@@ -119,9 +115,7 @@ def test_webhook_handler_verifies_and_dispatches(monkeypatch):
         "data": {"object": {"client_reference_id": "user-1", "metadata": {"plan": "basic"}}},
     }
     fake_stripe = SimpleNamespace()
-    fake_stripe.Webhook = SimpleNamespace(
-        construct_event=MagicMock(return_value=fake_event)
-    )
+    fake_stripe.Webhook = SimpleNamespace(construct_event=MagicMock(return_value=fake_event))
     monkeypatch.setitem(sys.modules, "stripe", fake_stripe)
     monkeypatch.setattr(handler, "handle_stripe_event", lambda event: {"synced": event["type"]})
 

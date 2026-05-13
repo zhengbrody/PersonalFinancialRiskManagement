@@ -1,4 +1,5 @@
 """Owner-only status helpers for server-managed integrations."""
+
 from __future__ import annotations
 
 import os
@@ -102,4 +103,3 @@ def live_check(
         detail=detail,
         configured=True,
     )
-

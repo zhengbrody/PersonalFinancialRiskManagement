@@ -21,12 +21,15 @@ No GSI in Phase 2. ADR-0002 flagged the cross-sectional query
 ("all tickers' close on date Y") as not yet in the product surface;
 adding the GSI doubles write cost and is a one-line change when needed.
 """
+
 from __future__ import annotations
 
 from aws_cdk import (
     CfnOutput,
     RemovalPolicy,
     Stack,
+)
+from aws_cdk import (
     aws_dynamodb as ddb,
 )
 from constructs import Construct

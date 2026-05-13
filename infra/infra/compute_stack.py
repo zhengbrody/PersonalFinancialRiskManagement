@@ -22,18 +22,22 @@ It does NOT clone the repo or start the app. That's `deploy-phase-1.sh`'s
 job — separating bootstrap (rare, slow, baked-in) from app deploy
 (frequent, fast, scriptable) keeps iteration tight.
 """
+
 from __future__ import annotations
 
 from aws_cdk import (
     CfnOutput,
     Stack,
+)
+from aws_cdk import (
     aws_ec2 as ec2,
+)
+from aws_cdk import (
     aws_iam as iam,
 )
 from constructs import Construct
 
 from infra.foundation_stack import FoundationStack
-
 
 # Multi-line strings that go into AWS APIs MUST be ASCII-only.
 # Lesson learned the hard way in commit 22745cb.
@@ -161,13 +165,9 @@ class ComputeStack(Stack):
             description="MindMarket EC2: CloudWatch + SSM + scoped Secrets Manager read",
             managed_policies=[
                 # CW agent writes metrics + logs
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "CloudWatchAgentServerPolicy"
-                ),
+                iam.ManagedPolicy.from_aws_managed_policy_name("CloudWatchAgentServerPolicy"),
                 # Session Manager: shell access without inbound 22
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "AmazonSSMManagedInstanceCore"
-                ),
+                iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore"),
             ],
         )
         # Phase 3 will populate this prefix with real secrets. Granting

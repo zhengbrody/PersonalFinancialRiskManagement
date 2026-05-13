@@ -1,4 +1,5 @@
 """Unit tests for libs.mindmarket_core.data_prep."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -6,7 +7,6 @@ import pandas as pd
 import pytest
 
 from libs.mindmarket_core import data_prep as dp
-
 
 # ── Currency mixing ───────────────────────────────────────
 

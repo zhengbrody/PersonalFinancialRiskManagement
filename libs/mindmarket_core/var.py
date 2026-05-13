@@ -6,6 +6,7 @@ None of them touch I/O, logging, or st.session_state.
 Adapted from risk_engine.RiskEngine without behavioral changes — the
 existing class delegates here so Streamlit output is byte-identical.
 """
+
 from __future__ import annotations
 
 from typing import Iterable

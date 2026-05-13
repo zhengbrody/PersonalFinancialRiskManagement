@@ -26,6 +26,7 @@ all three Lambda integrations. Splitting would force cross-stack
 function ARN exports and 2x deploy time for what is essentially one
 "surface area."
 """
+
 from __future__ import annotations
 
 import pathlib
@@ -34,15 +35,23 @@ from aws_cdk import (
     CfnOutput,
     Duration,
     Stack,
+)
+from aws_cdk import (
     aws_apigateway as apigw,
+)
+from aws_cdk import (
     aws_dynamodb as ddb,
+)
+from aws_cdk import (
     aws_ecr_assets as ecr_assets,
-    aws_iam as iam,
+)
+from aws_cdk import (
     aws_lambda as _lambda,
+)
+from aws_cdk import (
     aws_logs as logs,
 )
 from constructs import Construct
-
 
 # Repo root, computed once: this file is at /infra/infra/api_stack.py,
 # so the repo root is two levels up.
@@ -79,7 +88,7 @@ class ApiStack(Stack):
                 file="services/risk-calculator/Dockerfile",
                 platform=ecr_assets.Platform.LINUX_AMD64,
             ),
-            memory_size=3008,           # numpy + scipy + pandas; 3 GB gives ~2 vCPU
+            memory_size=3008,  # numpy + scipy + pandas; 3 GB gives ~2 vCPU
             timeout=Duration.seconds(30),
             architecture=_lambda.Architecture.X86_64,
             log_retention=logs.RetentionDays.ONE_WEEK,
@@ -100,7 +109,7 @@ class ApiStack(Stack):
                 file="services/options-pricer/Dockerfile",
                 platform=ecr_assets.Platform.LINUX_AMD64,
             ),
-            memory_size=512,            # Greeks are cheap; smaller mem = cheaper invokes
+            memory_size=512,  # Greeks are cheap; smaller mem = cheaper invokes
             timeout=Duration.seconds(15),
             architecture=_lambda.Architecture.X86_64,
             log_retention=logs.RetentionDays.ONE_WEEK,
@@ -117,7 +126,7 @@ class ApiStack(Stack):
                 platform=ecr_assets.Platform.LINUX_AMD64,
             ),
             memory_size=1024,
-            timeout=Duration.seconds(30),       # yfinance can be slow
+            timeout=Duration.seconds(30),  # yfinance can be slow
             architecture=_lambda.Architecture.X86_64,
             log_retention=logs.RetentionDays.ONE_WEEK,
             environment={

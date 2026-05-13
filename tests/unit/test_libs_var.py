@@ -1,4 +1,5 @@
 """Unit tests for libs.mindmarket_core.var (EWMA + Monte Carlo)."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -49,7 +50,9 @@ def test_ewma_handles_short_series():
 def test_monte_carlo_returns_count_and_range(synthetic_returns):
     weights = np.array([0.5, 0.3, 0.2])
     cov = var.ewma_covariance(synthetic_returns)
-    out = var.monte_carlo_returns(synthetic_returns, weights, cov, n_simulations=5000, horizon_days=21)
+    out = var.monte_carlo_returns(
+        synthetic_returns, weights, cov, n_simulations=5000, horizon_days=21
+    )
     assert out.shape == (5000,)
     # Realistic 21-day return distribution: mostly within ±50%
     assert -0.5 < np.percentile(out, 1) < 0.5
