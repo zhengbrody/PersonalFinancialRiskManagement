@@ -4,6 +4,9 @@ libs.billing — quota + usage tracking for the freemium tier.
 Public surface:
     PLAN_LIMITS                — dict of plan name → kind → monthly cap
     QuotaExceeded              — raised when user hits their cap
+    check_quota(user_id, kind) — quota gate without recording; use when
+                                  the final success/failure event is logged
+                                  after the operation finishes
     check_and_consume(user_id, kind, **metadata)
                                 — atomic "I'm about to do this" call;
                                   raises QuotaExceeded or records the
@@ -33,6 +36,7 @@ from .usage import (
     PLAN_PRICING,
     QuotaExceeded,
     check_and_consume,
+    check_quota,
     get_quota_status,
     get_user_plan,
     record_event,
@@ -50,6 +54,7 @@ __all__ = [
     "PLAN_PRICING",
     "QuotaExceeded",
     "check_and_consume",
+    "check_quota",
     "get_quota_status",
     "get_user_plan",
     "record_event",

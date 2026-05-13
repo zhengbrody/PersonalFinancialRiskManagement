@@ -216,6 +216,37 @@ def record_event(
         logging.getLogger(__name__).warning("usage.record_failed kind=%s err=%s", kind, e)
 
 
+def check_quota(user_id: str, kind: str) -> dict[str, Any]:
+    """Check quota without recording an event.
+
+    Use this when the caller needs to log the final outcome after the
+    operation finishes. This avoids pre-recording a "successful" event for a
+    provider call that later fails.
+    """
+    plan = get_user_plan(user_id)
+    limit = PLAN_LIMITS.get(plan, {}).get(kind)
+
+    if limit is None:
+        return {
+            "plan": plan,
+            "used": get_used_this_month(user_id, kind),
+            "limit": None,
+            "remaining": None,
+            "exhausted": False,
+        }
+
+    used = get_used_this_month(user_id, kind)
+    if used >= limit:
+        raise QuotaExceeded(kind=kind, plan=plan, used=used, limit=limit)
+    return {
+        "plan": plan,
+        "used": used,
+        "limit": limit,
+        "remaining": max(0, limit - used),
+        "exhausted": False,
+    }
+
+
 def check_and_consume(
     user_id: str,
     kind: str,
@@ -245,26 +276,7 @@ def check_and_consume(
     NB: there's a small race window between the count and the insert.
     See module docstring.
     """
-    plan = get_user_plan(user_id)
-    limit = PLAN_LIMITS.get(plan, {}).get(kind)
-
-    if limit is None:
-        # Not rate-limited; just record + return.
-        record_event(
-            user_id,
-            kind,
-            provider=provider,
-            model=model,
-            tokens_in=tokens_in,
-            tokens_out=tokens_out,
-            cost_usd=cost_usd,
-            metadata=metadata,
-        )
-        return get_quota_status(user_id)
-
-    used = get_used_this_month(user_id, kind)
-    if used >= limit:
-        raise QuotaExceeded(kind=kind, plan=plan, used=used, limit=limit)
+    check_quota(user_id, kind)
 
     record_event(
         user_id,

@@ -113,6 +113,14 @@ def _render_usage_dashboard() -> None:
     df["email"] = df["user_id"].map(lambda uid: profile_map.get(uid, {}).get("email", uid))
     df["plan"] = df["user_id"].map(lambda uid: profile_map.get(uid, {}).get("plan", "unknown"))
     df["created_at"] = pd.to_datetime(df["created_at"], errors="coerce")
+    df["date"] = df["created_at"].dt.date
+    df["month"] = df["created_at"].dt.to_period("M").astype(str)
+    df["status"] = df["metadata"].map(
+        lambda m: (m or {}).get("status", "unknown") if isinstance(m, dict) else "unknown"
+    )
+    df["source_page"] = df["metadata"].map(
+        lambda m: (m or {}).get("source_page", "") if isinstance(m, dict) else ""
+    )
 
     total_cost = float(df["cost_usd"].sum())
     total_events = int(len(df))
@@ -123,6 +131,56 @@ def _render_usage_dashboard() -> None:
     c2.metric("Events", f"{total_events:,}")
     c3.metric("Tokens", f"{total_tokens:,}")
     c4.metric("Avg / event", f"${avg_cost:.4f}")
+
+    today = datetime.now(timezone.utc).date()
+    month_key = datetime.now(timezone.utc).strftime("%Y-%m")
+    today_cost = float(df.loc[df["date"] == today, "cost_usd"].sum())
+    month_cost = float(df.loc[df["month"] == month_key, "cost_usd"].sum())
+    today_events = int((df["date"] == today).sum())
+    month_events = int((df["month"] == month_key).sum())
+
+    def _limit(name: str, default: float) -> float:
+        try:
+            return float(read_secret(name) or default)
+        except Exception:
+            return default
+
+    daily_limit = _limit("MINDMARKET_DAILY_COST_LIMIT_USD", 2.0)
+    monthly_limit = _limit("MINDMARKET_MONTHLY_COST_LIMIT_USD", 50.0)
+
+    st.markdown("#### Current spend guardrails")
+    g1, g2, g3, g4 = st.columns(4)
+    g1.metric("Today cost", f"${today_cost:.4f}", f"{today_events} events")
+    g2.metric("Today limit", f"${daily_limit:.2f}")
+    g3.metric("Month cost", f"${month_cost:.4f}", f"{month_events} events")
+    g4.metric("Month limit", f"${monthly_limit:.2f}")
+    if today_cost >= daily_limit:
+        st.error(f"Daily cost limit exceeded: ${today_cost:.4f} / ${daily_limit:.2f}")
+    elif today_cost >= daily_limit * 0.8:
+        st.warning(f"Daily cost is near limit: ${today_cost:.4f} / ${daily_limit:.2f}")
+    if month_cost >= monthly_limit:
+        st.error(f"Monthly cost limit exceeded: ${month_cost:.4f} / ${monthly_limit:.2f}")
+    elif month_cost >= monthly_limit * 0.8:
+        st.warning(f"Monthly cost is near limit: ${month_cost:.4f} / ${monthly_limit:.2f}")
+
+    by_day = (
+        df.groupby("date", dropna=False)
+        .agg(events=("kind", "size"), cost_usd=("cost_usd", "sum"))
+        .reset_index()
+        .sort_values("date")
+    )
+    st.markdown("#### Daily cost trend")
+    st.bar_chart(by_day.set_index("date")["cost_usd"], use_container_width=True)
+
+    by_status = (
+        df.groupby(["kind", "status"], dropna=False)
+        .agg(events=("kind", "size"), cost_usd=("cost_usd", "sum"))
+        .reset_index()
+        .sort_values(["kind", "cost_usd"], ascending=[True, False])
+    )
+    by_status["cost_usd"] = by_status["cost_usd"].map(lambda x: round(float(x), 6))
+    st.markdown("#### Success / failure")
+    st.dataframe(by_status, use_container_width=True, hide_index=True)
 
     by_kind = (
         df.groupby("kind", dropna=False)
@@ -162,6 +220,8 @@ def _render_usage_dashboard() -> None:
             "kind",
             "provider",
             "model",
+            "status",
+            "source_page",
             "tokens_in",
             "tokens_out",
             "cost_usd",

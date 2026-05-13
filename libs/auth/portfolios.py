@@ -75,6 +75,14 @@ def get_default_portfolio() -> Optional[dict]:
     return rows[0] if rows else None
 
 
+def get_portfolio(portfolio_id: str) -> Optional[dict]:
+    """Return one owned portfolio by id, or None when RLS hides it."""
+    sb = _authed_client()
+    resp = sb.table("portfolios").select("*").eq("id", portfolio_id).limit(1).execute()
+    rows = resp.data or []
+    return rows[0] if rows else None
+
+
 def create_portfolio(
     name: str,
     holdings: dict,
@@ -133,3 +141,54 @@ def delete_portfolio(portfolio_id: str) -> None:
     """Delete a single portfolio. RLS prevents deleting others' rows."""
     sb = _authed_client()
     sb.table("portfolios").delete().eq("id", portfolio_id).execute()
+
+
+def upsert_holding(
+    portfolio_id: str,
+    ticker: str,
+    *,
+    shares: float,
+    avg_cost: Optional[float] = None,
+    sector: Optional[str] = None,
+) -> dict:
+    """Add or update one holding on an owned portfolio."""
+    symbol = str(ticker or "").strip().upper()
+    if not symbol:
+        raise ValueError("Ticker is required.")
+    try:
+        share_value = float(shares)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Shares must be numeric.") from exc
+    if share_value <= 0:
+        raise ValueError("Shares must be greater than zero.")
+
+    portfolio = get_portfolio(portfolio_id)
+    if not portfolio:
+        raise AuthError("Portfolio not found or RLS blocked you.")
+
+    holdings = dict(portfolio.get("holdings") or {})
+    row = {"shares": share_value}
+    if avg_cost not in (None, ""):
+        try:
+            row["avg_cost"] = float(avg_cost)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Avg cost must be numeric.") from exc
+    if sector:
+        row["sector"] = str(sector).strip()
+    holdings[symbol] = row
+    return update_portfolio(portfolio_id, holdings=holdings)
+
+
+def remove_holding(portfolio_id: str, ticker: str) -> dict:
+    """Remove one holding from an owned portfolio."""
+    symbol = str(ticker or "").strip().upper()
+    if not symbol:
+        raise ValueError("Ticker is required.")
+    portfolio = get_portfolio(portfolio_id)
+    if not portfolio:
+        raise AuthError("Portfolio not found or RLS blocked you.")
+    holdings = dict(portfolio.get("holdings") or {})
+    holdings.pop(symbol, None)
+    if not holdings:
+        raise ValueError("Portfolio must keep at least one holding.")
+    return update_portfolio(portfolio_id, holdings=holdings)

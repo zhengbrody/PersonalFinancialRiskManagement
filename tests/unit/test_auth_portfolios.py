@@ -100,6 +100,14 @@ def test_get_default_returns_none_if_no_default(mock_supabase):
     assert get_default_portfolio() is None
 
 
+def test_get_portfolio_returns_owned_row(mock_supabase):
+    mock_supabase.execute.return_value = MagicMock(data=[{"id": "p1", "name": "A"}])
+    from libs.auth.portfolios import get_portfolio
+
+    assert get_portfolio("p1")["id"] == "p1"
+    mock_supabase.eq.assert_called_with("id", "p1")
+
+
 def test_create_sends_insert_with_expected_fields(mock_supabase):
     mock_supabase.execute.return_value = MagicMock(
         data=[{"id": "new", "name": "Tech", "holdings": {}, "margin_loan": 0, "is_default": False}]
@@ -143,6 +151,51 @@ def test_delete_calls_supabase(mock_supabase):
 
     delete_portfolio("p1")
     mock_supabase.eq.assert_called_with("id", "p1")
+
+
+def test_upsert_holding_updates_one_position(mock_supabase):
+    existing = {
+        "id": "p1",
+        "holdings": {"AAPL": {"shares": 10, "avg_cost": 100}},
+    }
+    updated = {
+        "id": "p1",
+        "holdings": {
+            "AAPL": {"shares": 10, "avg_cost": 100},
+            "MSFT": {"shares": 5.0, "avg_cost": 300.0, "sector": "Technology"},
+        },
+    }
+    mock_supabase.execute.side_effect = [
+        MagicMock(data=[existing]),
+        MagicMock(data=[updated]),
+    ]
+    from libs.auth.portfolios import upsert_holding
+
+    out = upsert_holding("p1", "msft", shares=5, avg_cost=300, sector="Technology")
+    assert out["holdings"]["MSFT"]["shares"] == 5.0
+    sent = mock_supabase.update.call_args[0][0]
+    assert sent["holdings"]["MSFT"]["avg_cost"] == 300.0
+
+
+def test_remove_holding_keeps_portfolio_non_empty(mock_supabase):
+    existing = {
+        "id": "p1",
+        "holdings": {
+            "AAPL": {"shares": 10},
+            "MSFT": {"shares": 5},
+        },
+    }
+    updated = {"id": "p1", "holdings": {"AAPL": {"shares": 10}}}
+    mock_supabase.execute.side_effect = [
+        MagicMock(data=[existing]),
+        MagicMock(data=[updated]),
+    ]
+    from libs.auth.portfolios import remove_holding
+
+    out = remove_holding("p1", "MSFT")
+    assert "MSFT" not in out["holdings"]
+    sent = mock_supabase.update.call_args[0][0]
+    assert sent["holdings"] == {"AAPL": {"shares": 10}}
 
 
 # ── active_portfolio resolver ────────────────────────────────────

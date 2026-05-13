@@ -75,6 +75,49 @@ def _holdings_to_json_str(h: dict) -> str:
     return json.dumps(h, indent=2)
 
 
+def _holdings_to_rows(h: dict) -> list[dict]:
+    rows = []
+    for ticker, data in sorted((h or {}).items()):
+        data = data or {}
+        rows.append(
+            {
+                "ticker": ticker,
+                "shares": float(data.get("shares") or 0),
+                "avg_cost": data.get("avg_cost"),
+                "sector": data.get("sector", ""),
+            }
+        )
+    return rows
+
+
+def _rows_to_holdings(rows) -> dict:
+    cleaned = {}
+    for idx, row in enumerate(rows or [], start=1):
+        ticker = str(row.get("ticker") or "").strip().upper()
+        if not ticker:
+            continue
+        try:
+            shares = float(row.get("shares") or 0)
+        except (TypeError, ValueError):
+            raise ValueError(f"Row {idx}: shares must be a number.")
+        if shares == 0:
+            continue
+        position = {"shares": shares}
+        avg_cost = row.get("avg_cost")
+        if avg_cost not in (None, ""):
+            try:
+                position["avg_cost"] = float(avg_cost)
+            except (TypeError, ValueError):
+                raise ValueError(f"{ticker}: avg_cost must be a number.")
+        sector = str(row.get("sector") or "").strip()
+        if sector:
+            position["sector"] = sector
+        cleaned[ticker] = position
+    if not cleaned:
+        raise ValueError("Portfolio is empty — add at least one non-zero position.")
+    return cleaned
+
+
 def _parse_holdings_json(s: str) -> dict:
     """Strict parse + shape validation."""
     try:
@@ -173,12 +216,31 @@ if portfolios:
 
             with edit_col:
                 edited_name = st.text_input("Name", value=p["name"], key=f"name_{p['id']}")
-                edited_holdings_str = st.text_area(
-                    "Holdings (JSON)",
-                    value=_holdings_to_json_str(p.get("holdings", {})),
-                    height=180,
-                    key=f"holdings_{p['id']}",
+                edited_rows = st.data_editor(
+                    _holdings_to_rows(p.get("holdings", {})),
+                    column_config={
+                        "ticker": st.column_config.TextColumn("Ticker", required=True),
+                        "shares": st.column_config.NumberColumn(
+                            "Shares", min_value=0.0, step=1.0, format="%.6f", required=True
+                        ),
+                        "avg_cost": st.column_config.NumberColumn(
+                            "Avg cost", min_value=0.0, step=1.0, format="$%.4f"
+                        ),
+                        "sector": st.column_config.TextColumn("Sector"),
+                    },
+                    num_rows="dynamic",
+                    hide_index=True,
+                    use_container_width=True,
+                    key=f"holdings_table_{p['id']}",
                 )
+                with st.expander("Advanced JSON preview", expanded=False):
+                    try:
+                        st.code(
+                            _holdings_to_json_str(_rows_to_holdings(edited_rows)),
+                            language="json",
+                        )
+                    except ValueError as preview_error:
+                        st.caption(str(preview_error))
                 edited_margin = st.number_input(
                     "Margin loan ($)",
                     value=float(p.get("margin_loan") or 0),
@@ -195,7 +257,7 @@ if portfolios:
                     use_container_width=True,
                 ):
                     try:
-                        new_holdings = _parse_holdings_json(edited_holdings_str)
+                        new_holdings = _rows_to_holdings(edited_rows)
                         update_portfolio(
                             p["id"],
                             name=edited_name.strip(),
@@ -379,17 +441,22 @@ with st.form("new_portfolio_form", clear_on_submit=True):
         "MSFT": {"shares": 50, "avg_cost": 380.00},
         "NVDA": {"shares": 30},
     }
-    new_holdings_str = st.text_area(
-        "Holdings (JSON)" if not is_zh else "持仓 (JSON 格式)",
-        value=_holdings_to_json_str(default_template),
-        height=180,
-        help=(
-            'Format: {"TICKER": {"shares": 100, "avg_cost": 175.4}}. '
-            "avg_cost enables cost-basis P&L; sector is optional for concentration checks."
-            if not is_zh
-            else '格式: {"TICKER": {"shares": 100, "avg_cost": 175.4}}。'
-            "avg_cost 用于计算成本-P&L；sector 可选，用于行业集中度检查。"
-        ),
+    new_rows = st.data_editor(
+        _holdings_to_rows(default_template),
+        column_config={
+            "ticker": st.column_config.TextColumn("Ticker", required=True),
+            "shares": st.column_config.NumberColumn(
+                "Shares", min_value=0.0, step=1.0, format="%.6f", required=True
+            ),
+            "avg_cost": st.column_config.NumberColumn(
+                "Avg cost", min_value=0.0, step=1.0, format="$%.4f"
+            ),
+            "sector": st.column_config.TextColumn("Sector"),
+        },
+        num_rows="dynamic",
+        hide_index=True,
+        use_container_width=True,
+        key="new_portfolio_holdings_table",
     )
     new_margin = st.number_input(
         "Margin loan ($)" if not is_zh else "保证金贷款 ($)",
@@ -412,7 +479,7 @@ if submitted:
         st.error("Name is required." if not is_zh else "请填名称。")
     else:
         try:
-            holdings_dict = _parse_holdings_json(new_holdings_str)
+            holdings_dict = _rows_to_holdings(new_rows)
             created = create_portfolio(
                 name=new_name.strip(),
                 holdings=holdings_dict,

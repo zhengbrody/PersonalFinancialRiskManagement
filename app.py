@@ -481,6 +481,24 @@ def build_engine_ref(
 # ══════════════════════════════════════════════════════════════
 #  LLM Backend
 # ══════════════════════════════════════════════════════════════
+def _infer_source_page() -> str:
+    """Best-effort Streamlit page source for usage/cost logs."""
+    import inspect
+
+    root = Path(__file__).resolve().parent
+    for frame in inspect.stack()[1:]:
+        try:
+            path = Path(frame.filename).resolve()
+        except Exception:
+            continue
+        if path == root / "app.py" or path.parent == root / "pages":
+            try:
+                return str(path.relative_to(root))
+            except ValueError:
+                return path.name
+    return "unknown"
+
+
 def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: float = 0.1) -> str:
     """
     Universal LLM call with retry logic for API overload errors.
@@ -516,38 +534,20 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
         if model_provider == "Anthropic Claude"
         else "deepseek-chat" if model_provider == "DeepSeek API" else ollama_model
     )
+    source_page = _infer_source_page()
+    billing_user = None
 
     # Quota check (non-admin only). Admin bypasses for local dev.
     if not _admin_mode:
         try:
             from libs.auth.session import current_user
-            from libs.billing.costs import estimate_llm_event
-            from libs.billing.usage import QuotaExceeded, check_and_consume
+            from libs.billing.usage import QuotaExceeded, check_quota
 
             _u = current_user()
             if not _u:
                 raise ValueError("Please sign in to use AI chat and analysis credits.")
-            usage_estimate = estimate_llm_event(
-                prompt=prompt,
-                system=system,
-                provider=provider_slug,
-                model=model_name,
-                max_tokens=max_tokens,
-            )
-            check_and_consume(
-                _u["id"],
-                "chat",
-                provider=provider_slug,
-                model=model_name,
-                tokens_in=int(usage_estimate["tokens_in"]),
-                tokens_out=int(usage_estimate["tokens_out"]),
-                cost_usd=float(usage_estimate["cost_usd"]),
-                metadata={
-                    "feature": "call_llm",
-                    "estimated": usage_estimate["estimated"],
-                    "max_tokens": max_tokens,
-                },
-            )
+            check_quota(_u["id"], "chat")
+            billing_user = _u
         except QuotaExceeded as _qe:
             # Surface a clean error so the caller can show the upgrade CTA.
             raise ValueError(str(_qe))
@@ -556,6 +556,72 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
         except Exception:
             # Fail-open on billing errors so UI doesn't break.
             # In production we'd alert on this rate.
+            pass
+
+    def _record_llm_event(
+        status: str,
+        *,
+        response_text: str = "",
+        error_reason: str = "",
+        provider_override: Optional[str] = None,
+        model_override: Optional[str] = None,
+        tokens_in: Optional[int] = None,
+        tokens_out: Optional[int] = None,
+        metadata_extra: Optional[dict] = None,
+    ) -> None:
+        if _admin_mode or not billing_user:
+            return
+        try:
+            from libs.billing.costs import estimate_cost_usd, estimate_llm_event
+            from libs.billing.usage import record_event
+
+            event_provider = provider_override or provider_slug
+            event_model = model_override or model_name
+            if tokens_in is not None or tokens_out is not None:
+                est = {
+                    "tokens_in": int(tokens_in or 0),
+                    "tokens_out": int(tokens_out or 0),
+                    "cost_usd": estimate_cost_usd(
+                        event_provider,
+                        event_model,
+                        tokens_in=int(tokens_in or 0),
+                        tokens_out=int(tokens_out or 0),
+                    ),
+                    "estimated": False,
+                }
+            else:
+                est = estimate_llm_event(
+                    prompt=prompt,
+                    system=system,
+                    provider=event_provider,
+                    model=event_model,
+                    max_tokens=max_tokens,
+                    response_text=response_text,
+                )
+
+            metadata = {
+                "feature": "call_llm",
+                "status": status,
+                "success": status == "success",
+                "error_reason": error_reason[:500] if error_reason else "",
+                "source_page": source_page,
+                "email": billing_user.get("email"),
+                "estimated": est["estimated"],
+                "max_tokens": max_tokens,
+            }
+            if metadata_extra:
+                metadata.update(metadata_extra)
+            record_event(
+                billing_user["id"],
+                "chat",
+                provider=event_provider,
+                model=event_model,
+                tokens_in=int(est["tokens_in"]),
+                tokens_out=int(est["tokens_out"]),
+                cost_usd=float(est["cost_usd"]),
+                metadata=metadata,
+            )
+        except Exception:
             pass
 
     try:
@@ -571,7 +637,15 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
                         system=system if system else "You are a helpful financial analyst.",
                         messages=[{"role": "user", "content": prompt}],
                     )
-                    return resp.content[0].text.strip()
+                    text = resp.content[0].text.strip()
+                    usage = getattr(resp, "usage", None)
+                    _record_llm_event(
+                        "success",
+                        response_text=text,
+                        tokens_in=getattr(usage, "input_tokens", None),
+                        tokens_out=getattr(usage, "output_tokens", None),
+                    )
+                    return text
                 except Exception as e:
                     err_str = str(e).lower()
                     if _is_provider_auth_error(e):
@@ -594,6 +668,13 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
                                         "the deployment secrets."
                                     ) from deepseek_exc
                                 raise
+                            _record_llm_event(
+                                "success",
+                                response_text=fallback,
+                                provider_override="deepseek",
+                                model_override="deepseek-chat",
+                                metadata_extra={"fallback_from": "anthropic"},
+                            )
                             return (
                                 "Note: Claude is temporarily unavailable because the "
                                 "server-side Anthropic key was rejected. Answered via "
@@ -613,13 +694,15 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
 
         elif model_provider == "DeepSeek API" and deepseek_key:
             try:
-                return _call_deepseek(
+                text = _call_deepseek(
                     api_key=deepseek_key,
                     prompt=prompt,
                     system=system,
                     max_tokens=max_tokens,
                     temperature=temperature,
                 )
+                _record_llm_event("success", response_text=text)
+                return text
             except Exception as e:
                 if _is_provider_auth_error(e):
                     raise ValueError(
@@ -639,7 +722,9 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
             try:
                 resp = requests.post("http://localhost:11434/api/chat", json=payload, timeout=60)
                 resp.raise_for_status()
-                return resp.json()["message"]["content"].strip()
+                text = resp.json()["message"]["content"].strip()
+                _record_llm_event("success", response_text=text)
+                return text
             except requests.exceptions.ConnectionError as e:
                 logger.error("llm.ollama.connection_failed", error=str(e))
                 raise ConnectionError(
@@ -653,15 +738,19 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
         raise ValueError("未配置LLM后端。请在侧边栏设置API密钥。")
 
     except ConnectionError as e:
+        _record_llm_event("failure", error_reason=str(e))
         logger.error("llm.connection_error", error=str(e))
         raise
     except TimeoutError as e:
+        _record_llm_event("failure", error_reason=str(e))
         logger.error("llm.timeout", error=str(e))
         raise
     except ValueError as e:
+        _record_llm_event("failure", error_reason=str(e))
         logger.error("llm.config_error", error=str(e))
         raise
     except Exception as e:
+        _record_llm_event("failure", error_reason=str(e))
         logger.error("llm.unknown_error", error=str(e), exc_info=True)
         raise
 
@@ -1495,6 +1584,45 @@ def execute_analysis(force: bool = False) -> bool:
         run_btn = True
     if run_btn:
         st.session_state._run_trigger = False  # Reset trigger
+        analysis_billing_user = None
+
+        def _record_analysis_event(
+            status: str,
+            *,
+            error_reason: str = "",
+            metadata_extra: Optional[dict] = None,
+        ) -> None:
+            if _admin_mode or not analysis_billing_user:
+                return
+            try:
+                from libs.billing.usage import record_event
+
+                metadata = {
+                    "feature": "portfolio_analysis",
+                    "status": status,
+                    "success": status == "success",
+                    "error_reason": error_reason[:500] if error_reason else "",
+                    "source_page": "app.py",
+                    "email": analysis_billing_user.get("email"),
+                    "period_years": period_years,
+                    "mc_sims": mc_sims,
+                    "mc_horizon": mc_horizon,
+                    "market_shock": market_shock,
+                }
+                if metadata_extra:
+                    metadata.update(metadata_extra)
+                record_event(
+                    analysis_billing_user["id"],
+                    "analysis",
+                    provider="risk_engine",
+                    model="portfolio_analysis",
+                    tokens_in=0,
+                    tokens_out=0,
+                    cost_usd=0.0,
+                    metadata=metadata,
+                )
+            except Exception:
+                pass
 
         # Analysis quota gate (non-admin only). Surfaces upgrade CTA on
         # exhaustion; admin mode bypasses for local dev.
@@ -1507,44 +1635,21 @@ def execute_analysis(force: bool = False) -> bool:
         if not _admin_mode:
             try:
                 from libs.auth.session import current_user
-                from libs.billing.costs import estimate_cost_usd
-                from libs.billing.usage import QuotaExceeded, check_and_consume
+                from libs.billing.usage import QuotaExceeded, check_quota
 
                 _u = current_user()
                 if not _u:
                     st.warning("🔐 Please sign in to use your free monthly analysis credits.")
                     return False
-                try:
-                    try:
-                        _quota_weights = json.loads(weights_input) if weights_input else {}
-                    except Exception:
-                        _quota_weights = {}
-                    check_and_consume(
-                        _u["id"],
-                        "analysis",
-                        provider="risk_engine",
-                        model="portfolio_analysis",
-                        cost_usd=estimate_cost_usd(
-                            "ollama",
-                            "portfolio_analysis",
-                            tokens_in=0,
-                            tokens_out=0,
-                        ),
-                        metadata={
-                            "feature": "portfolio_analysis",
-                            "tickers": sorted(_quota_weights.keys()),
-                            "period_years": period_years,
-                            "mc_sims": mc_sims,
-                            "mc_horizon": mc_horizon,
-                        },
-                    )
-                except QuotaExceeded as qe:
-                    st.error(
-                        f"⚠️ {qe}  \n\n"
-                        "💡 Paid plans are configured but not live yet. "
-                        "Contact MindMarket AI for beta access."
-                    )
-                    return False
+                check_quota(_u["id"], "analysis")
+                analysis_billing_user = _u
+            except QuotaExceeded as qe:
+                st.error(
+                    f"⚠️ {qe}  \n\n"
+                    "💡 Paid plans are configured but not live yet. "
+                    "Contact MindMarket AI for beta access."
+                )
+                return False
             except Exception:
                 # Fail-open on billing wiring errors so UX isn't blocked
                 pass
@@ -1790,6 +1895,7 @@ def execute_analysis(force: bool = False) -> bool:
             logger.info("ui.weights.parsed", ticker_count=len(weights))
         except json.JSONDecodeError as e:
             logger.warning("ui.weights.invalid_json", error=str(e))
+            _record_analysis_event("failure", error_reason=f"invalid_json: {e}")
             handle_json_error(e, weights_input)
             st.stop()
 
@@ -1797,6 +1903,9 @@ def execute_analysis(force: bool = False) -> bool:
         is_valid, normalized_weights, validation_msg = validate_weights(weights)
 
         if not is_valid:
+            _record_analysis_event(
+                "failure", error_reason=validation_msg or "weight validation failed"
+            )
             show_error(
                 ValueError(validation_msg or "权重验证失败"),
                 title="权重配置错误",
@@ -1811,6 +1920,10 @@ def execute_analysis(force: bool = False) -> bool:
         # ── Step 3: Validate tickers ──────────────────────────────────────
         all_valid, valid_tickers, invalid_tickers = validate_tickers(list(weights.keys()))
         if invalid_tickers:
+            _record_analysis_event(
+                "failure",
+                error_reason=f"invalid_tickers: {', '.join(invalid_tickers)}",
+            )
             show_warning(
                 f"以下ticker格式无效: {', '.join(invalid_tickers)}",
                 title="无效的股票代码",
@@ -1866,6 +1979,14 @@ def execute_analysis(force: bool = False) -> bool:
                 else f"使用缓存的分析结果（{age_min} 分钟前计算）。点击 Force Refresh 重新计算。"
             )
             logger.info("ui.analysis.cache_hit", age_min=age_min)
+            _record_analysis_event(
+                "success",
+                metadata_extra={
+                    "cached": True,
+                    "age_min": age_min,
+                    "tickers": sorted(weights.keys()),
+                },
+            )
             target = st.session_state.pop("_route_after_analysis", None)
             if target:
                 st.switch_page(target)
@@ -1885,6 +2006,11 @@ def execute_analysis(force: bool = False) -> bool:
                     )
                 show_success(f"成功加载 {len(prices.columns)} 个ticker的数据", title="数据加载完成")
             except ValueError as e:
+                _record_analysis_event(
+                    "failure",
+                    error_reason=str(e),
+                    metadata_extra={"stage": "data_load", "tickers": sorted(weights.keys())},
+                )
                 show_error(
                     e,
                     title="数据加载失败",
@@ -1893,6 +2019,11 @@ def execute_analysis(force: bool = False) -> bool:
                 logger.error("ui.analysis.data_load_failed", error=str(e), exc_info=True)
                 st.stop()
             except Exception as e:
+                _record_analysis_event(
+                    "failure",
+                    error_reason=str(e),
+                    metadata_extra={"stage": "data_load", "tickers": sorted(weights.keys())},
+                )
                 error_str = str(e).lower()
                 if "linalg" in error_str or "singular" in error_str:
                     show_error(
@@ -1929,6 +2060,11 @@ def execute_analysis(force: bool = False) -> bool:
                         )
                 show_success("风险引擎构建完成", title="")
             except Exception as e:
+                _record_analysis_event(
+                    "failure",
+                    error_reason=str(e),
+                    metadata_extra={"stage": "engine_build", "tickers": sorted(weights.keys())},
+                )
                 show_error(
                     e,
                     title="风险引擎构建失败",
@@ -1998,6 +2134,14 @@ def execute_analysis(force: bool = False) -> bool:
                 duration_ms=round(analysis_duration_ms, 2),
                 ticker_count=len(weights),
                 from_cache=False,
+            )
+            _record_analysis_event(
+                "success",
+                metadata_extra={
+                    "cached": False,
+                    "duration_ms": round(analysis_duration_ms, 2),
+                    "tickers": sorted(weights.keys()),
+                },
             )
     return True
 

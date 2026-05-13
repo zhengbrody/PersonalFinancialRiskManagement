@@ -140,6 +140,21 @@ def test_get_used_returns_huge_on_failure(mock_supabase):
     assert get_used_this_month("user-1", "analysis") >= 999_999
 
 
+# ── check_quota ──────────────────────────────────────────────
+
+
+def test_check_quota_under_limit_does_not_record(mock_supabase):
+    plan_resp = MagicMock(data=[{"plan": "free"}])
+    count_resp = MagicMock(data=[], count=1)
+    mock_supabase.execute.side_effect = [plan_resp, count_resp]
+
+    from libs.billing.usage import check_quota
+
+    status = check_quota("user-1", "chat")
+    assert status["remaining"] == 1
+    mock_supabase.insert.assert_not_called()
+
+
 # ── check_and_consume ────────────────────────────────────────
 
 
@@ -190,6 +205,7 @@ def test_consume_with_unlimited_kind_records_without_check(mock_supabase):
 
     mock_supabase.execute.side_effect = [
         plan_resp,
+        count_resp,
         insert_resp,
         plan_resp,
         count_resp,
@@ -209,6 +225,7 @@ def test_owner_consume_is_unlimited_but_records(mock_supabase, monkeypatch):
     used_chat = MagicMock(data=[], count=88)
 
     mock_supabase.execute.side_effect = [
+        used_chat,
         insert_resp,
         used_analysis,
         used_chat,
