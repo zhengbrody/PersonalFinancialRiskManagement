@@ -53,7 +53,6 @@ omit = [
     "ui/*",
     "tests/*",
     "app.py",
-    "calc_weights.py",
     "market_intelligence.py",
 ]
 

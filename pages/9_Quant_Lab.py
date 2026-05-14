@@ -105,23 +105,29 @@ def _render_mono_kpi(label: str, value: str, color: str = T.text):
 # ══════════════════════════════════════════════════════════════
 
 
-def _get_portfolio_tickers():
-    """Extract tickers from the current portfolio weights in session state."""
-    try:
-        w_json = st.session_state.get("weights_json", "{}")
-        w = json.loads(w_json)
-        return list(w.keys())
-    except Exception:
-        return ["AAPL", "MSFT", "GOOGL", "NVDA", "META"]
+def _get_portfolio_weights() -> dict:
+    """Read the active portfolio weights from session state.
 
+    app.py writes weights as a dict under `weights`. The legacy
+    `weights_json` (string) is also populated by the sidebar's manual JSON
+    editor but is NOT updated by the "Run Analysis" flow — reading only
+    the JSON would silently default every user's backtest to FAANG.
 
-def _get_portfolio_weights():
-    """Extract ticker weights dict from session state."""
+    Returns the resolved dict, or {} when no analysis has run yet.
+    """
+    w = st.session_state.get("weights")
+    if isinstance(w, dict) and w:
+        return w
+    # Fallback to the sidebar's JSON editor input, if present.
     try:
-        w_json = st.session_state.get("weights_json", "{}")
-        return json.loads(w_json)
+        return json.loads(st.session_state.get("weights_json", "") or "{}")
     except Exception:
         return {}
+
+
+def _get_portfolio_tickers() -> list:
+    """Return the active portfolio's tickers, or [] when no analysis has run."""
+    return list(_get_portfolio_weights().keys())
 
 
 # ══════════════════════════════════════════════════════════════

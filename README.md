@@ -4,8 +4,7 @@
 
 ### Decision-First Portfolio Risk Analytics · 决策优先的投资组合风控平台
 
-[![Preview](https://img.shields.io/badge/🌐_PREVIEW-mindmarket.app-0B7285?style=for-the-badge)](https://mindmarket.app/)
-[![Streamlit Cloud](https://img.shields.io/badge/Backup-mindmarketai.streamlit.app-FF4B4B?style=flat-square)](https://mindmarketai.streamlit.app/)
+[![Live](https://img.shields.io/badge/🌐_LIVE-mindmarket.app-0B7285?style=for-the-badge)](https://mindmarket.app/)
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.30%2B-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)](https://streamlit.io)
@@ -80,14 +79,13 @@ Under the hood, the stack is still quantitative and serious: Monte Carlo VaR, mu
 
 ---
 
-## 🌐 Preview Environments
+## 🌐 Live Environment
 
-👉 **Preview app:** **[mindmarket.app](https://mindmarket.app/)**  
-👉 **Always-on backup:** [mindmarketai.streamlit.app](https://mindmarketai.streamlit.app/)
+👉 **Live app:** **[mindmarket.app](https://mindmarket.app/)**
 
-`mindmarket.app` is the recruiter / product-preview environment. The long-term public SaaS brand remains **mindmarket.ai**; the current repo is still in the transition from engineering demo to real multi-user product.
+`mindmarket.app` is the recruiter / product-preview environment running on AWS (EC2 + Caddy + Let's Encrypt + Lambda + DynamoDB). The long-term public SaaS brand remains **mindmarket.ai**; the current repo is still in the transition from engineering demo to real multi-user product.
 
-The AWS deployment is the production-shaped preview (EC2 + Caddy + Let's Encrypt + Lambda + DynamoDB). It is brought up for demos and torn down between sessions to stay inside budget.
+> _Previously hosted on Streamlit Cloud (`mindmarketai.streamlit.app`); migrated to AWS in 2026-04 for custom domain, per-user portfolios, and Supabase-backed auth. Streamlit Cloud deployment retired 2026-05._
 
 ---
 
@@ -545,7 +543,7 @@ python -m pytest tests/ -v
 
 <div align="center">
 
-**🔗 预览环境：[mindmarket.app](https://mindmarket.app/)**  ·  [Streamlit Cloud backup](https://mindmarketai.streamlit.app/)
+**🔗 在线访问：[mindmarket.app](https://mindmarket.app/)**
 
 目标公开品牌域名：**mindmarket.ai**
 

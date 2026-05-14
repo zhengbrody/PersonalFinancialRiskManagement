@@ -72,12 +72,17 @@ st.markdown(
 # ══════════════════════════════════════════════════════════════
 
 
-def _get_portfolio_tickers():
-    """Return portfolio tickers from session state or sensible defaults."""
+def _get_portfolio_tickers() -> list:
+    """Return the user's portfolio tickers, or [] if no analysis yet.
+
+    Previously fell back to a hardcoded FAANG list which displayed as if
+    it were the user's holdings — confusing and a data-attribution bug.
+    Callers must handle the empty case by showing an empty-state CTA.
+    """
     weights = st.session_state.get("weights")
     if weights:
         return sorted(weights.keys())
-    # Try parsing the JSON text input
+    # Sidebar's manual JSON editor input is a secondary fallback.
     import json
 
     try:
@@ -87,7 +92,7 @@ def _get_portfolio_tickers():
             return sorted(parsed.keys())
     except Exception:
         pass
-    return ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA"]
+    return []
 
 
 def _badge_text(signal: str) -> str:
@@ -225,14 +230,33 @@ with tab_smart:
         subtitle="Institutional conviction analysis for your portfolio holdings (SEC 13F)",
     )
 
+    if not portfolio_tickers:
+        st.info(
+            "Configure a portfolio and run analysis from the sidebar to see "
+            "institutional positioning for your specific holdings."
+        )
+        st.stop()
+
+    # 13F SEC EDGAR scan is expensive (multiple HTTP fetches per ticker).
+    # Cache the last result in session_state and only re-scan on explicit
+    # button click — previous behavior fired on every Streamlit rerun.
+    _scan_label = (
+        "🔄 Rescan 13F filings"
+        if st.session_state.get("smart_money_data")
+        else "📊 Scan 13F filings (SEC EDGAR)"
+    )
+    _rescan = st.button(_scan_label, key="institutions_rescan", type="primary")
+
     try:
-        with st.spinner("Scanning institutional 13F filings via SEC EDGAR..."):
-            from institutional_tracker import get_smart_money_signals
+        cached_signals = st.session_state.get("smart_money_data")
+        if cached_signals and not _rescan:
+            signals = cached_signals
+        else:
+            with st.spinner("Scanning institutional 13F filings via SEC EDGAR..."):
+                from institutional_tracker import get_smart_money_signals
 
-            signals = get_smart_money_signals(portfolio_tickers)
-
-        # Store for AI digest at top of page
-        st.session_state["smart_money_data"] = signals
+                signals = get_smart_money_signals(portfolio_tickers)
+            st.session_state["smart_money_data"] = signals
 
         if not signals:
             st.info(

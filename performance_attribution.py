@@ -21,10 +21,10 @@ logger = get_logger(__name__)
 # ══════════════════════════════════════════════════════════════
 TRADING_DAYS = 252
 
-# Canonical sector map lives in portfolio_config.py.
-# Re-exported here as DEFAULT_SECTOR_MAP for backward compatibility with callers
-# (e.g. pages/9_Quant_Lab.py imports this name directly).
-from portfolio_config import SECTOR_MAP as DEFAULT_SECTOR_MAP  # noqa: F401
+# Canonical sector map lives in portfolio_config.py; re-exported here as
+# DEFAULT_SECTOR_MAP for the public sector-attribution functions below
+# (and for pages/9_Quant_Lab.py which imports the name directly).
+from portfolio_config import SECTOR_MAP as DEFAULT_SECTOR_MAP
 
 # ══════════════════════════════════════════════════════════════
 #  Helper Functions

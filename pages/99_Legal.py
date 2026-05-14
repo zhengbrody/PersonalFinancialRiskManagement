@@ -13,7 +13,10 @@ import streamlit as st
 
 from ui.shared_sidebar import render_shared_sidebar
 
-st.set_page_config(page_title="Legal · MindMarket AI", layout="wide")
+# NB: do NOT call st.set_page_config here — app.py already sets it for the
+# whole multi-page session. Calling it again raises
+# StreamlitSetPageConfigMustBeFirstCommandError when users navigate from
+# another page.
 render_shared_sidebar()
 
 _LEGAL_DIR = Path(__file__).resolve().parent.parent / "docs" / "legal"

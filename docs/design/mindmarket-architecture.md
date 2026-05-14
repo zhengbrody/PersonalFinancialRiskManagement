@@ -13,7 +13,7 @@
 MindMarket AI is a portfolio risk-analytics platform with the analytical
 depth of an institutional risk system (Monte Carlo VaR, multi-factor
 attribution, options Greeks, regime detection, SEC 13F overlay) packaged as
-a 10-page Streamlit dashboard accessible to a retail investor. This document
+a 13-page Streamlit dashboard accessible to a retail investor. This document
 describes the system as it stands after a 4-week migration from a single-
 process Streamlit Cloud deployment to a distributed AWS architecture
 (VPC + EC2 + REST API Gateway + 3 containerized Lambdas + DynamoDB cache
@@ -258,13 +258,14 @@ FastAPI would buy us prettier UX and zero of the analytical functionality.
 The 4 weeks are better spent on the AWS migration story than rebuilding
 in JavaScript what already works in Python.
 
-**Why two Streamlit deployments — Streamlit Cloud and AWS?**
-The free Streamlit Cloud (`mindmarketai.streamlit.app`) is the always-on
-public demo. The AWS-hosted instance at `mindmarket.app` is the demo we
-spin up for recruiter demos and tear down to save credits. Same source,
-same `Dockerfile`, different deploy targets. The AWS instance is the
-one that gets the active-portfolio + Auth integration tested first
-because it's the production-shape rehearsal.
+**Why we retired Streamlit Cloud and consolidated on AWS**
+The original deployment was free-tier Streamlit Cloud at
+`mindmarketai.streamlit.app`. Once Auth + per-user portfolios + a paid
+domain landed, keeping two deploys created drift (auto-deploy vs manual
+ssh) and a UX trap (the Supabase Site URL can only point at one host;
+users signing up on either URL got confirmation links to the other).
+We retired Streamlit Cloud in 2026-05; `mindmarket.app` on AWS is the
+single source of truth. Same `Dockerfile`, no longer dual-targeted.
 
 **Why Supabase Auth, not AWS Cognito?**
 Free-tier generosity (50K MAU + 500 MB Postgres + RLS, all in one),

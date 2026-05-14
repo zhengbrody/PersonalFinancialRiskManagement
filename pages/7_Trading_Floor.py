@@ -7,7 +7,6 @@ REFACTORED: All raw HTML tables/grids replaced with Streamlit-native components
 (st.dataframe, st.columns, st.metric, render_kpi_row) for reliable rendering.
 """
 
-import json
 from datetime import datetime
 
 import pandas as pd
@@ -123,23 +122,6 @@ def _signal_emoji(signal_str):
     if s in ("BEARISH", "STRONGLY_BEARISH", "BEAR"):
         return "\U0001f534"  # red circle
     return "\U0001f7e1"  # yellow circle
-
-
-def _get_portfolio_tickers():
-    """Get tickers from session state weights or return defaults."""
-    weights = st.session_state.get("weights")
-    if weights and isinstance(weights, dict):
-        return list(weights.keys())
-    # Try from weights_json
-    wj = st.session_state.get("weights_json", "")
-    if wj:
-        try:
-            parsed = json.loads(wj)
-            if isinstance(parsed, dict) and parsed:
-                return list(parsed.keys())
-        except Exception:
-            pass
-    return ["AAPL", "TSLA", "NVDA", "GOOGL", "MSFT", "META", "AMZN", "SPY"]
 
 
 def _fmt_dollars(val):

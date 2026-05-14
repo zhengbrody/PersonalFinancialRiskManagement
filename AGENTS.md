@@ -9,7 +9,7 @@
 
 **MindMarket AI** is an institutional-grade portfolio risk analytics platform built with Streamlit.
 
-- **Current state**: Functional multi-page Streamlit app with 10 pages, deployed at `https://mindmarketai.streamlit.app`
+- **Current state**: Functional multi-page Streamlit app with 13 user-facing pages, deployed at `https://mindmarket.app` (AWS EC2 + Caddy + Let's Encrypt). Streamlit Cloud deployment retired 2026-05.
 - **Target state**: Public-facing SaaS at **mindmarket.ai** where individual users register, input their own portfolios, and get AI-powered risk analysis
 - **Core engine**: Monte Carlo VaR/CVaR, factor models (6-factor + macro), stress testing, performance attribution, regime detection
 - **AI integration**: LLM-powered summaries on every page (Codex / DeepSeek / Ollama backends)
@@ -120,9 +120,9 @@
 - Each "AI analysis" action = 1 credit deduction
 
 ### Deployment
-- **Platform**: Railway or Render (B option — ~$5-20/month, custom domain support)
-- **Domain**: mindmarket.ai (not yet registered — Q13 pending)
-- **Current**: Streamlit Cloud at `mindmarketai.streamlit.app`
+- **Platform**: AWS EC2 t3.micro + Caddy + Let's Encrypt + Docker Compose (~$9.30/mo)
+- **Domain**: mindmarket.app (registered at Porkbun; mindmarket.ai is the eventual brand)
+- **Current**: `https://mindmarket.app` on AWS. Streamlit Cloud deployment retired 2026-05.
 
 ### Legal / Branding
 - Legal pages (ToS, Privacy, Disclaimer) — later, after product is solid

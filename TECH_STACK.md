@@ -47,7 +47,7 @@ An institutional-grade portfolio risk analytics platform supporting 25+ equities
 ## 3. Python Application Development
 
 ### UI - Streamlit
-- Multi-page application architecture (10 pages)
+- Multi-page application architecture (13 user-facing pages, see `pages/`)
 - Session state management for cross-page data sharing
 - Custom CSS injection for professional dark-mode UI
 - Design system with centralized tokens (colors, typography, spacing)
@@ -130,7 +130,7 @@ An institutional-grade portfolio risk analytics platform supporting 25+ equities
 | **docker-compose** | Single-service app orchestration with env injection |
 | **GitHub Actions CI/CD** | Automated test suite + code quality checks on push/PR |
 | **Codecov** | Coverage tracking and PR reports |
-| **Streamlit Cloud** | Current production deployment at mindmarketai.streamlit.app |
+| **AWS EC2 + Caddy + Let's Encrypt** | Current production deployment at `https://mindmarket.app` (Streamlit Cloud retired 2026-05) |
 
 ---
 
