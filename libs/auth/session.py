@@ -69,12 +69,16 @@ def current_user() -> Optional[dict]:
 
 
 def sign_up_with_password(email: str, password: str) -> dict:
-    """Register a new account. Returns the user dict on success.
+    """Register a new account.
 
-    Supabase by default requires email confirmation — until the user
-    clicks the link in their inbox, sign-in will fail with
-    "Email not confirmed". Set this in Auth → Providers → Email if you
-    want to disable confirmation for dev (not recommended for production).
+    Returns a dict with the user info AND a flag `email_confirmed` that
+    tells the caller whether Supabase auto-confirmed the email (project
+    setting: Auth → Providers → Email → "Confirm email" = OFF) or whether
+    the user must click a link in their inbox before signing in.
+
+    Why we expose this flag: the success message changes by project mode.
+    Telling a user "check your inbox" when confirmation is OFF causes
+    them to wait forever for an email that will never arrive.
     """
     sb = get_supabase()
     try:
@@ -87,7 +91,36 @@ def sign_up_with_password(email: str, password: str) -> dict:
     if resp.user is None:
         raise AuthError("Sign-up returned no user — check Supabase logs.")
 
-    return _user_to_dict(resp.user)
+    user_dict = _user_to_dict(resp.user)
+    # If Supabase issued a session, email confirmation is disabled in the
+    # project and the user is already signed in.
+    user_dict["email_confirmed"] = resp.session is not None
+    if resp.session is not None:
+        state = _ss()
+        state[_KEY_USER] = user_dict
+        state[_KEY_ACCESS] = resp.session.access_token
+        state[_KEY_REFRESH] = resp.session.refresh_token
+    return user_dict
+
+
+def resend_confirmation_email(email: str) -> None:
+    """Re-send the signup confirmation email to a user who didn't get one.
+
+    Common reasons the original didn't arrive:
+      - Supabase free-tier SMTP rate limit (3 emails/hour)
+      - Email landed in spam (noreply@mail.app.supabase.io is heavily filtered)
+      - User typo'd their address
+
+    Errors raise AuthError with the Supabase-provided message so the UI
+    can render it directly. No-op on "already confirmed" — Supabase
+    returns 200 in that case.
+    """
+    sb = get_supabase()
+    try:
+        sb.auth.resend({"type": "signup", "email": email})
+    except Exception as e:
+        msg = getattr(e, "message", None) or str(e)
+        raise AuthError(msg)
 
 
 def sign_in_with_password(email: str, password: str) -> dict:

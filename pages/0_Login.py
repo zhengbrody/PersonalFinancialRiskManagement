@@ -23,6 +23,7 @@ from libs.auth import (
     AuthError,
     current_user,
     is_authenticated,
+    resend_confirmation_email,
     sign_in_with_password,
     sign_out,
     sign_up_with_password,
@@ -106,7 +107,31 @@ with tab_login:
                     sign_in_with_password(email, password)
                 st.rerun()
             except AuthError as e:
-                st.error(str(e))
+                err_text = str(e).lower()
+                # Supabase returns "Email not confirmed" when the user signed
+                # up but never clicked the confirmation link. Offer to resend.
+                if "not confirmed" in err_text or "email not confirmed" in err_text:
+                    st.error(
+                        "Your email isn't confirmed yet. Check your inbox (and spam folder), "
+                        "or use the button below to resend the link."
+                        if not is_zh
+                        else "邮箱尚未确认。请检查收件箱（包括垃圾邮件），或点下方按钮重发。"
+                    )
+                    if st.button(
+                        "📧 Resend confirmation email" if not is_zh else "📧 重发确认邮件",
+                        key="resend_after_login_fail",
+                    ):
+                        try:
+                            resend_confirmation_email(email)
+                            st.success(
+                                "Sent. The previous link is now invalid."
+                                if not is_zh
+                                else "已发送。之前的链接已失效。"
+                            )
+                        except AuthError as re:
+                            st.error(str(re))
+                else:
+                    st.error(str(e))
 
 try:
     from ui.legal_footer import render_legal_footer
@@ -149,12 +174,45 @@ with tab_signup:
         else:
             try:
                 with st.spinner("Creating account..." if not is_zh else "创建账号..."):
-                    sign_up_with_password(email, password)
-                st.success(
-                    "Account created. Check your inbox for a confirmation email, "
-                    "then come back and sign in."
-                    if not is_zh
-                    else "账号已创建。请查收邮箱内的验证邮件,确认后回来登录。"
-                )
+                    user_info = sign_up_with_password(email, password)
+                if user_info.get("email_confirmed"):
+                    # Project has Confirm Email = OFF → auto-signed-in.
+                    st.success(
+                        "Account created and signed in. Redirecting…"
+                        if not is_zh
+                        else "账号已创建并自动登录,跳转中…"
+                    )
+                    st.rerun()
+                else:
+                    # Project has Confirm Email = ON → user must click link.
+                    st.success(
+                        "Account created. Check your inbox (and spam folder) "
+                        "for a confirmation link, then come back and sign in."
+                        if not is_zh
+                        else "账号已创建。请检查邮箱（包括垃圾邮件）确认链接后回来登录。"
+                    )
+                    with st.expander("Didn't receive the email?" if not is_zh else "没收到邮件？"):
+                        st.caption(
+                            "Supabase's default SMTP is rate-limited to 3 emails/hour "
+                            "and many providers mark its sender address as spam. If "
+                            "the message hasn't arrived in 5 minutes, click resend "
+                            "below — or sign in once email confirmation is reconfigured."
+                            if not is_zh
+                            else "Supabase 默认 SMTP 限速每小时 3 封，且发件人常被识别为垃圾邮件。"
+                            "若 5 分钟未收到,可点击下方重发。"
+                        )
+                        if st.button(
+                            "📧 Resend confirmation email" if not is_zh else "📧 重发确认邮件",
+                            key="resend_after_signup",
+                        ):
+                            try:
+                                resend_confirmation_email(email)
+                                st.success(
+                                    "Sent. The previous link is now invalid."
+                                    if not is_zh
+                                    else "已发送。之前的链接已失效。"
+                                )
+                            except AuthError as re:
+                                st.error(str(re))
             except AuthError as e:
                 st.error(str(e))

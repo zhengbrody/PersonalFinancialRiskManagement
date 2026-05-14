@@ -130,11 +130,12 @@ def test_is_authenticated_reflects_session(fake_streamlit):
     assert auth_session.is_authenticated() is True
 
 
-def test_sign_up_returns_user(fake_streamlit, supabase_env):
+def test_sign_up_returns_user_pending_confirmation(fake_streamlit, supabase_env):
+    """Project has Confirm Email = ON: Supabase returns user but no session."""
     fake_user = MagicMock(
         id="new-user", email="new@x.com", user_metadata={}, created_at="2026-01-01"
     )
-    fake_resp = MagicMock(user=fake_user)
+    fake_resp = MagicMock(user=fake_user, session=None)
     fake_client = MagicMock()
     fake_client.auth.sign_up.return_value = fake_resp
 
@@ -144,8 +145,50 @@ def test_sign_up_returns_user(fake_streamlit, supabase_env):
         user = auth_session.sign_up_with_password("new@x.com", "pw12345678")
 
     assert user["id"] == "new-user"
-    # NB: sign-up does NOT auto-login (Supabase typically requires email confirm)
+    assert user["email_confirmed"] is False
+    # Pending confirmation → no auto-login
     assert "_auth_user" not in fake_streamlit.session_state
+
+
+def test_sign_up_auto_logs_in_when_confirm_email_disabled(fake_streamlit, supabase_env):
+    """Project has Confirm Email = OFF: Supabase returns a session, and we
+    write tokens to session_state so the user can immediately use the app."""
+    fake_user = MagicMock(
+        id="auto-user", email="a@b.com", user_metadata={}, created_at="2026-01-01"
+    )
+    fake_session = MagicMock(access_token="acc", refresh_token="ref")
+    fake_resp = MagicMock(user=fake_user, session=fake_session)
+    fake_client = MagicMock()
+    fake_client.auth.sign_up.return_value = fake_resp
+
+    with patch("supabase.create_client", return_value=fake_client):
+        from libs.auth import session as auth_session
+
+        user = auth_session.sign_up_with_password("a@b.com", "pw12345678")
+
+    assert user["email_confirmed"] is True
+    assert fake_streamlit.session_state["_auth_user"]["id"] == "auto-user"
+    assert fake_streamlit.session_state["_auth_access_token"] == "acc"
+
+
+def test_resend_confirmation_invokes_supabase(fake_streamlit, supabase_env):
+    fake_client = MagicMock()
+    with patch("supabase.create_client", return_value=fake_client):
+        from libs.auth import session as auth_session
+
+        auth_session.resend_confirmation_email("user@x.com")
+
+    fake_client.auth.resend.assert_called_once_with({"type": "signup", "email": "user@x.com"})
+
+
+def test_resend_confirmation_surfaces_auth_error(fake_streamlit, supabase_env):
+    fake_client = MagicMock()
+    fake_client.auth.resend.side_effect = Exception("Rate limit exceeded")
+    with patch("supabase.create_client", return_value=fake_client):
+        from libs.auth import session as auth_session
+
+        with pytest.raises(auth_client.AuthError, match="Rate limit"):
+            auth_session.resend_confirmation_email("user@x.com")
 
 
 def _make_jwt(exp_unix: int) -> str:
