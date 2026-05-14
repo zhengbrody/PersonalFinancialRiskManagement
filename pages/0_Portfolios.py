@@ -90,6 +90,28 @@ def _holdings_to_rows(h: dict) -> list[dict]:
     return rows
 
 
+def _holdings_editor_columns() -> dict:
+    return {
+        "ticker": st.column_config.TextColumn("Ticker", required=True),
+        "shares": st.column_config.NumberColumn(
+            "Shares",
+            min_value=0.0,
+            step=0.000001,
+            format="%.6f",
+            required=True,
+            help="Fractional shares are supported, for example 0.125.",
+        ),
+        "avg_cost": st.column_config.NumberColumn(
+            "Avg cost",
+            min_value=0.0,
+            step=0.01,
+            format="$%.4f",
+            help="Average cost per share. Leave blank if unknown.",
+        ),
+        "sector": st.column_config.TextColumn("Sector"),
+    }
+
+
 def _rows_to_holdings(rows) -> dict:
     """Convert data_editor rows → {TICKER: {shares, avg_cost?, sector?}}.
 
@@ -232,16 +254,7 @@ if portfolios:
                 edited_name = st.text_input("Name", value=p["name"], key=f"name_{p['id']}")
                 edited_rows = st.data_editor(
                     _holdings_to_rows(p.get("holdings", {})),
-                    column_config={
-                        "ticker": st.column_config.TextColumn("Ticker", required=True),
-                        "shares": st.column_config.NumberColumn(
-                            "Shares", min_value=0.0, step=1.0, format="%.6f", required=True
-                        ),
-                        "avg_cost": st.column_config.NumberColumn(
-                            "Avg cost", min_value=0.0, step=1.0, format="$%.4f"
-                        ),
-                        "sector": st.column_config.TextColumn("Sector"),
-                    },
+                    column_config=_holdings_editor_columns(),
                     num_rows="dynamic",
                     hide_index=True,
                     use_container_width=True,
@@ -457,16 +470,7 @@ with st.form("new_portfolio_form", clear_on_submit=True):
     }
     new_rows = st.data_editor(
         _holdings_to_rows(default_template),
-        column_config={
-            "ticker": st.column_config.TextColumn("Ticker", required=True),
-            "shares": st.column_config.NumberColumn(
-                "Shares", min_value=0.0, step=1.0, format="%.6f", required=True
-            ),
-            "avg_cost": st.column_config.NumberColumn(
-                "Avg cost", min_value=0.0, step=1.0, format="$%.4f"
-            ),
-            "sector": st.column_config.TextColumn("Sector"),
-        },
+        column_config=_holdings_editor_columns(),
         num_rows="dynamic",
         hide_index=True,
         use_container_width=True,
