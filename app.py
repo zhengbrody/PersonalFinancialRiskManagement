@@ -592,16 +592,30 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
     if not _admin_mode:
         try:
             from libs.auth.session import current_user
-            from libs.billing.usage import QuotaExceeded, check_quota
+            from libs.billing.costs import estimate_llm_event
+            from libs.billing.usage import CostLimitExceeded, QuotaExceeded, check_quota
 
             _u = current_user()
             if not _u:
                 raise ValueError("Please sign in to use AI chat and analysis credits.")
-            check_quota(_u["id"], "chat")
+            pending_estimate = estimate_llm_event(
+                prompt=prompt,
+                system=system,
+                provider=provider_slug,
+                model=model_name,
+                max_tokens=max_tokens,
+            )
+            check_quota(
+                _u["id"],
+                "chat",
+                estimated_cost_usd=float(pending_estimate["cost_usd"]),
+            )
             billing_user = _u
         except QuotaExceeded as _qe:
             # Surface a clean error so the caller can show the upgrade CTA.
             raise ValueError(f"{_qe}\n\nEmail contact@mindmarket.app for beta access.")
+        except CostLimitExceeded as _ce:
+            raise ValueError(f"{_ce}\n\nEmail contact@mindmarket.app for beta access.")
         except ValueError:
             raise
         except ImportError:

@@ -27,6 +27,12 @@ MODEL_PRICING: dict[str, ModelPricing] = {
     "ollama": ModelPricing(input_per_million=0.00, output_per_million=0.00),
 }
 
+MODEL_PRICING_BY_MODEL: dict[str, ModelPricing] = {
+    "claude-haiku": ModelPricing(input_per_million=1.00, output_per_million=5.00),
+    "claude-sonnet": ModelPricing(input_per_million=3.00, output_per_million=15.00),
+    "deepseek-chat": ModelPricing(input_per_million=0.55, output_per_million=2.19),
+}
+
 
 def estimate_tokens(text: Optional[str]) -> int:
     """Estimate tokens from text using a simple 4 chars/token heuristic."""
@@ -54,8 +60,16 @@ def estimate_cost_usd(
     tokens_out: int,
 ) -> float:
     """Estimate USD cost from provider/model and token counts."""
+    model_key = (model or "").strip().lower()
+    for prefix, model_pricing in MODEL_PRICING_BY_MODEL.items():
+        if model_key.startswith(prefix):
+            pricing = model_pricing
+            break
+    else:
+        pricing = None
+
     normalized = normalize_provider(provider, model)
-    pricing = MODEL_PRICING.get(normalized)
+    pricing = pricing or MODEL_PRICING.get(normalized)
     if pricing is None:
         return 0.0
     cost = (

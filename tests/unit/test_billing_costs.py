@@ -30,6 +30,18 @@ def test_estimate_cost_usd_for_anthropic():
     )
 
 
+def test_estimate_cost_usd_uses_haiku_model_pricing():
+    assert (
+        estimate_cost_usd(
+            "anthropic",
+            "claude-haiku-4-5",
+            tokens_in=1_000_000,
+            tokens_out=1_000_000,
+        )
+        == 6.0
+    )
+
+
 def test_estimate_llm_event_uses_max_tokens_before_response():
     event = estimate_llm_event(
         prompt="hello world",

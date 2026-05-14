@@ -146,12 +146,47 @@ def test_get_used_returns_huge_on_failure(mock_supabase):
 def test_check_quota_under_limit_does_not_record(mock_supabase):
     plan_resp = MagicMock(data=[{"plan": "free"}])
     count_resp = MagicMock(data=[], count=1)
-    mock_supabase.execute.side_effect = [plan_resp, count_resp]
+    daily_cost_resp = MagicMock(data=[{"cost_usd": 0.01}])
+    month_cost_resp = MagicMock(data=[{"cost_usd": 0.20}])
+    mock_supabase.execute.side_effect = [plan_resp, count_resp, daily_cost_resp, month_cost_resp]
 
     from libs.billing.usage import check_quota
 
     status = check_quota("user-1", "chat")
     assert status["remaining"] == 1
+    mock_supabase.insert.assert_not_called()
+
+
+def test_check_quota_raises_when_daily_cost_limit_hit(mock_supabase, monkeypatch):
+    monkeypatch.setenv("MINDMARKET_DAILY_COST_LIMIT_USD", "0.05")
+    monkeypatch.setenv("MINDMARKET_MONTHLY_COST_LIMIT_USD", "50")
+    plan_resp = MagicMock(data=[{"plan": "free"}])
+    count_resp = MagicMock(data=[], count=0)
+    daily_cost_resp = MagicMock(data=[{"cost_usd": 0.04}])
+    month_cost_resp = MagicMock(data=[{"cost_usd": 1.00}])
+    mock_supabase.execute.side_effect = [plan_resp, count_resp, daily_cost_resp, month_cost_resp]
+
+    from libs.billing.usage import CostLimitExceeded, check_quota
+
+    with pytest.raises(CostLimitExceeded) as exc_info:
+        check_quota("user-1", "chat", estimated_cost_usd=0.02)
+    assert exc_info.value.scope == "daily"
+
+
+def test_check_and_consume_checks_cost_before_insert(mock_supabase, monkeypatch):
+    monkeypatch.setenv("MINDMARKET_DAILY_COST_LIMIT_USD", "2")
+    monkeypatch.setenv("MINDMARKET_MONTHLY_COST_LIMIT_USD", "1")
+    plan_resp = MagicMock(data=[{"plan": "free"}])
+    count_resp = MagicMock(data=[], count=0)
+    daily_cost_resp = MagicMock(data=[{"cost_usd": 0.10}])
+    month_cost_resp = MagicMock(data=[{"cost_usd": 0.99}])
+    mock_supabase.execute.side_effect = [plan_resp, count_resp, daily_cost_resp, month_cost_resp]
+
+    from libs.billing.usage import CostLimitExceeded, check_and_consume
+
+    with pytest.raises(CostLimitExceeded) as exc_info:
+        check_and_consume("user-1", "chat", cost_usd=0.02)
+    assert exc_info.value.scope == "monthly"
     mock_supabase.insert.assert_not_called()
 
 

@@ -87,14 +87,14 @@ def _chat_call_llm(
         try:
             from libs.auth.session import current_user
             from libs.billing.costs import estimate_llm_event
-            from libs.billing.usage import QuotaExceeded, check_and_consume
+            from libs.billing.usage import CostLimitExceeded, QuotaExceeded, check_and_consume
 
             _u = current_user()
             if not _u:
                 return "🔐 Please sign in to use your free monthly AI chat credits."
             pending_ollama_model = st.session_state.get("_ollama_model", "deepseek-r1:14b")
             model_name = (
-                "claude-sonnet-4-6"
+                ("claude-haiku-4-5" if max_tokens <= 700 else "claude-sonnet-4-6")
                 if model_provider == "Anthropic Claude"
                 else "deepseek-chat" if model_provider == "DeepSeek API" else pending_ollama_model
             )
@@ -123,6 +123,13 @@ def _chat_call_llm(
             return (
                 f"⚠️ {_qe}\n\n"
                 "💡 Paid plans are configured but not live yet. Email "
+                "[contact@mindmarket.app](mailto:contact@mindmarket.app) "
+                "for beta access."
+            )
+        except CostLimitExceeded as _ce:
+            return (
+                f"⚠️ {_ce}\n\n"
+                "💡 Owner spend guardrails are active. Email "
                 "[contact@mindmarket.app](mailto:contact@mindmarket.app) "
                 "for beta access."
             )
@@ -167,10 +174,11 @@ def _chat_call_llm(
         import anthropic
 
         client = anthropic.Anthropic(api_key=api_key_input)
+        claude_model = "claude-haiku-4-5" if max_tokens <= 700 else "claude-sonnet-4-6"
         for attempt in range(3):
             try:
                 resp = client.messages.create(
-                    model="claude-sonnet-4-6",
+                    model=claude_model,
                     max_tokens=max_tokens,
                     system=system or "You are a helpful financial analyst.",
                     messages=[{"role": "user", "content": prompt}],

@@ -66,6 +66,28 @@ class QuotaExceeded(RuntimeError):
         )
 
 
+class CostLimitExceeded(RuntimeError):
+    """Raised when owner-configured daily/monthly AI spend guardrails are hit."""
+
+    def __init__(
+        self,
+        *,
+        scope: str,
+        current_cost: float,
+        estimated_cost: float,
+        limit: float,
+    ):
+        self.scope = scope
+        self.current_cost = current_cost
+        self.estimated_cost = estimated_cost
+        self.limit = limit
+        super().__init__(
+            f"{scope.capitalize()} AI cost limit reached: "
+            f"${current_cost + estimated_cost:.4f}/${limit:.2f}. "
+            "Please retry later or contact MindMarket AI for beta access."
+        )
+
+
 # ── Internal helpers ─────────────────────────────────────────────
 
 
@@ -85,11 +107,40 @@ def _client():
     return sb
 
 
+def _cost_client() -> tuple[Any, bool]:
+    """Return a client for spend guardrails.
+
+    Prefer service-role so daily/monthly cost limits protect total platform
+    spend. If unavailable, fall back to the current user's RLS-scoped rows.
+    """
+    try:
+        from libs.auth.admin_client import get_supabase_admin
+
+        return get_supabase_admin(), True
+    except Exception:
+        return _client(), False
+
+
 def _start_of_month_iso() -> str:
     """Return ISO-8601 midnight of the current month UTC. The view
     uses date_trunc('month', created_at), matching this."""
     now = datetime.now(timezone.utc)
     return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+
+def _start_of_day_iso() -> str:
+    now = datetime.now(timezone.utc)
+    return now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+
+def _secret_float(name: str, default: float) -> float:
+    try:
+        from libs.admin.status import read_secret
+
+        raw = read_secret(name)
+        return float(raw) if raw not in (None, "") else default
+    except Exception:
+        return default
 
 
 def is_owner_user(user_id: str) -> bool:
@@ -120,6 +171,83 @@ def get_user_plan(user_id: str) -> str:
     except Exception:
         pass
     return "free"
+
+
+def get_cost_since(user_id: str, since_iso: str) -> float:
+    """Return summed usage_events.cost_usd since an ISO timestamp.
+
+    Supabase's PostgREST client is intentionally kept simple here: fetch the
+    recent cost rows and sum in Python. Cost logs are tiny at current scale,
+    and this avoids depending on RPC functions before the schema needs them.
+    """
+    try:
+        sb, global_scope = _cost_client()
+        query = sb.table("usage_events").select("cost_usd").gte("created_at", since_iso)
+        if not global_scope:
+            query = query.eq("user_id", user_id)
+        resp = query.limit(10_000).execute()
+        total = 0.0
+        for row in resp.data or []:
+            try:
+                total += float(row.get("cost_usd") or 0.0)
+            except (TypeError, ValueError):
+                continue
+        return total
+    except Exception:
+        # Fail closed for cost controls; if we cannot read spend, do not
+        # accidentally allow unlimited paid-provider calls.
+        return float("inf")
+
+
+def get_spend_status(user_id: str, *, estimated_cost_usd: float = 0.0) -> dict[str, Any]:
+    """Return current daily/monthly spend against owner-configured limits."""
+    daily_limit = _secret_float("MINDMARKET_DAILY_COST_LIMIT_USD", 2.0)
+    monthly_limit = _secret_float("MINDMARKET_MONTHLY_COST_LIMIT_USD", 50.0)
+    try:
+        _, global_scope = _cost_client()
+    except Exception:
+        global_scope = False
+    today_cost = get_cost_since(user_id, _start_of_day_iso())
+    month_cost = get_cost_since(user_id, _start_of_month_iso())
+    estimate = max(0.0, float(estimated_cost_usd or 0.0))
+    return {
+        "scope": "all_users" if global_scope else "current_user",
+        "daily": {
+            "used": today_cost,
+            "limit": daily_limit,
+            "projected": today_cost + estimate,
+            "exceeded": today_cost + estimate >= daily_limit,
+        },
+        "monthly": {
+            "used": month_cost,
+            "limit": monthly_limit,
+            "projected": month_cost + estimate,
+            "exceeded": month_cost + estimate >= monthly_limit,
+        },
+    }
+
+
+def check_spend_limit(user_id: str, *, estimated_cost_usd: float = 0.0) -> dict[str, Any]:
+    """Raise if the next AI/data-provider call would exceed spend limits."""
+    if is_owner_user(user_id):
+        return get_spend_status(user_id, estimated_cost_usd=estimated_cost_usd)
+
+    status = get_spend_status(user_id, estimated_cost_usd=estimated_cost_usd)
+    if status["daily"]["exceeded"]:
+        raise CostLimitExceeded(
+            scope="daily",
+            current_cost=float(status["daily"]["used"]),
+            estimated_cost=max(0.0, float(estimated_cost_usd or 0.0)),
+            limit=float(status["daily"]["limit"]),
+        )
+    if status["monthly"]["exceeded"]:
+        raise CostLimitExceeded(
+            scope="monthly",
+            current_cost=float(status["monthly"]["used"]),
+            estimated_cost=max(0.0, float(estimated_cost_usd or 0.0)),
+            limit=float(status["monthly"]["limit"]),
+        )
+    return status
 
 
 def get_used_this_month(user_id: str, kind: str) -> int:
@@ -216,7 +344,12 @@ def record_event(
         logging.getLogger(__name__).warning("usage.record_failed kind=%s err=%s", kind, e)
 
 
-def check_quota(user_id: str, kind: str) -> dict[str, Any]:
+def check_quota(
+    user_id: str,
+    kind: str,
+    *,
+    estimated_cost_usd: float = 0.0,
+) -> dict[str, Any]:
     """Check quota without recording an event.
 
     Use this when the caller needs to log the final outcome after the
@@ -227,6 +360,7 @@ def check_quota(user_id: str, kind: str) -> dict[str, Any]:
     limit = PLAN_LIMITS.get(plan, {}).get(kind)
 
     if limit is None:
+        check_spend_limit(user_id, estimated_cost_usd=estimated_cost_usd)
         return {
             "plan": plan,
             "used": get_used_this_month(user_id, kind),
@@ -238,6 +372,7 @@ def check_quota(user_id: str, kind: str) -> dict[str, Any]:
     used = get_used_this_month(user_id, kind)
     if used >= limit:
         raise QuotaExceeded(kind=kind, plan=plan, used=used, limit=limit)
+    check_spend_limit(user_id, estimated_cost_usd=estimated_cost_usd)
     return {
         "plan": plan,
         "used": used,
@@ -276,7 +411,7 @@ def check_and_consume(
     NB: there's a small race window between the count and the insert.
     See module docstring.
     """
-    check_quota(user_id, kind)
+    check_quota(user_id, kind, estimated_cost_usd=cost_usd)
 
     record_event(
         user_id,
