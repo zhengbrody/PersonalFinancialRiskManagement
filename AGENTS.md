@@ -1,7 +1,7 @@
 # MindMarket AI — Project Context & Decisions
 
 > This file is the single source of truth for project context across Codex sessions.
-> Last updated: 2026-05-11
+> Last updated: 2026-05-14
 
 ---
 
@@ -9,11 +9,11 @@
 
 **MindMarket AI** is an institutional-grade portfolio risk analytics platform built with Streamlit.
 
-- **Current state**: Functional multi-page Streamlit app with 13 user-facing pages, deployed at `https://mindmarket.app` (AWS EC2 + Caddy + Let's Encrypt). Streamlit Cloud deployment retired 2026-05.
+- **Current state**: Functional multi-page Streamlit app with 12 user-facing pages, deployed at `https://mindmarket.app` (AWS EC2 + Caddy + Let's Encrypt). Streamlit Cloud deployment retired 2026-05.
 - **Target state**: Public-facing SaaS at **mindmarket.ai** where individual users register, input their own portfolios, and get AI-powered risk analysis
 - **Core engine**: Monte Carlo VaR/CVaR, factor models (6-factor + macro), stress testing, performance attribution, regime detection
 - **AI integration**: LLM-powered summaries on every page (Codex / DeepSeek / Ollama backends)
-- **Languages**: English + Chinese (i18n via `i18n.py`)
+- **Languages**: English-first UI. The in-app language switch is intentionally disabled; use browser translation for non-English UI.
 - **Owner**: zhengbrody (GitHub)
 
 ### Key Files
@@ -33,7 +33,6 @@
 | 3_Markets | Market regime (VIX/Yield/F&G), macro news, AI sentiment, earnings call AI |
 | 4_Portfolio | Efficient frontier, trade blotter, scenario simulator (-30%~+30%), cash deployment, margin monitor |
 | 5_TradingView | Embedded TradingView charts |
-| 6_Guided_Analysis | Question-first workflow: maps user goals to pages and priority metrics |
 | 7_Trading_Floor | Bloomberg Terminal style: regime, sectors, movers, next-read routing |
 | 8_Institutions | SEC 13F smart money, institution deep dive, conviction and crowding analysis |
 | 9_Quant_Lab | Backtesting, performance attribution, regime analysis |
@@ -52,7 +51,8 @@
 | Ollama auto-detection: probe `localhost:11434` once per session | Hide Ollama from provider list if unreachable (cloud/preview) |
 | Merged "Refresh Live Data" + "Run Analysis" into one button | Reduce user friction; secondary "Run with Current Weights" for manual JSON edits |
 | AI digests on ALL pages (1-9) with try/except fallback | Each page has LLM summary with static fallback on failure |
-| Retired the user-facing Options page; replaced page 6 with Guided Analysis | Options data quality wasn't reliable enough for primary UX; navigation now starts from user goals |
+| Retired the user-facing Options page and later removed Guided Analysis | Options data quality wasn't reliable enough for primary UX; Guided Analysis duplicated Dashboard onboarding/sidebar routing |
+| Locked UI to English and started removing Chinese UI branches | Browser translation is lower-maintenance than a second visible UI layer |
 
 ### Deduplication
 | What was duplicated | Resolution |
@@ -84,7 +84,8 @@
 | Markets sentiment tear sheet showed only SELECTED ticker → misleading | pages/3_Markets.py | Cross-portfolio table + bar chart is primary; selected-ticker detail is a collapsed drill-down |
 | Markets sentiment scored holdings serially (~30s for 10 tickers) | pages/3_Markets.py | `ThreadPoolExecutor(max_workers=5)` — ~6s for same batch; progress bar updates as futures resolve |
 | FMP + external calls had no 429/5xx retry → "too many requests" bubbled up | market_intelligence.py | Module-level `_http_session` with `urllib3.Retry(total=3, backoff=1.5, force_list=[429,500,502,503,504])`; connection pooling too |
-| Options page created too much noise for retail users given current data quality | pages/6_Guided_Analysis.py, pages/7_Trading_Floor.py, pages/8_Institutions.py, ui/shared_sidebar.py, app.py, README.md | Replaced page 6 with a guided analysis hub and removed options-focused UX from the primary user workflow |
+| Options page created too much noise for retail users given current data quality | pages/7_Trading_Floor.py, pages/8_Institutions.py, ui/shared_sidebar.py, app.py, README.md | Removed options-focused UX from the primary user workflow |
+| Guided Analysis duplicated dashboard onboarding and sidebar routing | pages/6_Guided_Analysis.py, ui/shared_sidebar.py, app.py, README.md | Deleted the page and routed new users through Dashboard → Overview → Risk → Portfolio Actions |
 | CI red: 9 integration tests mocked `risk_engine.yf.download` — but `risk_engine` stopped importing yfinance in commit 5f5f6fc (DataProvider owns it now) | tests/integration/test_risk_pipeline.py | `@patch("risk_engine.yf.download"...)` → `@patch("data_provider.yf.download"...)` (19 occurrences) |
 | `test_adjust_weights` asserted renormalized sum≈1.0 — but the function now deliberately leaves residual as implicit cash (docstring says "do NOT blindly renormalize") | tests/integration/test_risk_pipeline.py | Assertions updated to match current feasibility semantics (caps respected, sum ≤ 1) |
 | code-quality CI step red since project inception (57 unformatted files + 379 ruff errors) | repo-wide | `black .` (57 files reformatted); ruff auto-fix (207 of 381); 4 real bugs fixed: pandas import in options_engine.py, 5 duplicate dict keys in CUSIP_TO_TICKER (2 wrong CUSIPs were silently overriding correct INTC/ABBV mappings); ruff config ignores N-rules (project uses uppercase locals/args by design) |
@@ -302,7 +303,7 @@ python -m pytest tests/unit/ -x -q
 | `_ollama_model` | str | shared_sidebar.py | call_llm() (Ollama) |
 | `_ollama_reachable` | bool | shared_sidebar.py | Provider list filtering |
 | `_llm_configured` | bool | shared_sidebar.py | UI status indicator |
-| `_lang` | str | shared_sidebar.py | i18n across all pages |
+| `_lang` | str | shared_sidebar.py | Always `"en"`; retained only for cache/backward compatibility |
 | `smart_money_data` | list | pages/8_Institutions.py | AI institutional digest |
 
 ### Cost Basis / P&L Calculation

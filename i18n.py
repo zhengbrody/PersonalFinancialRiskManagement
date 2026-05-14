@@ -442,13 +442,6 @@ LABELS = {
         "dcf_overvalued": "高估",
         "dcf_fair": "合理",
         "dcf_na": "数据不足",
-        # ── Page 6: Guided Analysis ──
-        "page_options_lab": "分析导航",
-        "tab_option_chain": "重点指标",
-        "tab_strategy_builder": "风险解释",
-        "tab_iv_surface": "组合动作",
-        "tab_portfolio_greeks": "账户对比",
-        "tab_learn": "上手指南",
         # ── Page 7: Trading Floor ──
         "page_trading_floor": "交易大厅",
         "tf_market_regime": "市场状态",
@@ -1010,13 +1003,6 @@ You have full access to the analysis report below, which includes:
         "dcf_overvalued": "Overvalued",
         "dcf_fair": "Fair Value",
         "dcf_na": "Insufficient Data",
-        # ── Page 6: Guided Analysis ──
-        "page_options_lab": "Guided Analysis",
-        "tab_option_chain": "Key Metrics",
-        "tab_strategy_builder": "Explain Risk",
-        "tab_iv_surface": "Portfolio Actions",
-        "tab_portfolio_greeks": "Account Comparison",
-        "tab_learn": "Getting Started",
         # ── Page 7: Trading Floor ──
         "page_trading_floor": "Trading Floor",
         "tf_market_regime": "Market Regime",

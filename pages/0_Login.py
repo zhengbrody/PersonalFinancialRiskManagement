@@ -31,24 +31,20 @@ from libs.auth import (
 from ui.shared_sidebar import render_shared_sidebar
 
 render_shared_sidebar()
-lang = st.session_state.get("_lang", "en")
-is_zh = lang == "zh"
 
 
 st.markdown(
-    f"""
+    """
 <div style="padding:32px 16px 16px 16px;">
   <div style="font-size:11px;letter-spacing:2px;color:#0B7285;
               font-weight:700;text-transform:uppercase;">
-    {"Account" if not is_zh else "账号"}
+    Account
   </div>
   <div style="font-size:26px;font-weight:700;color:#E6EDF3;margin-top:6px;">
-    {"Sign in to MindMarket" if not is_zh else "登录 MindMarket"}
+    Sign in to MindMarket
   </div>
   <div style="font-size:13px;color:#8B949E;margin-top:6px;">
-    {"Multi-user portfolios are powered by Supabase Auth + Postgres + Row Level Security."
-     if not is_zh else
-     "多用户组合基于 Supabase Auth + Postgres + 行级权限。"}
+    Multi-user portfolios are powered by Supabase Auth + Postgres + Row Level Security.
   </div>
 </div>
 """,
@@ -59,7 +55,7 @@ st.markdown(
 # ── Already signed in: show profile + sign-out button ──────────────────
 if is_authenticated():
     user = current_user()
-    st.success(f"Signed in as **{user['email']}**" if not is_zh else f"已登录: **{user['email']}**")
+    st.success(f"Signed in as **{user['email']}**")
     st.json(
         {
             "id": user["id"],
@@ -67,7 +63,7 @@ if is_authenticated():
             "created_at": user.get("created_at"),
         }
     )
-    if st.button("Sign out" if not is_zh else "登出", type="secondary"):
+    if st.button("Sign out", type="secondary"):
         sign_out()
         st.rerun()
     st.stop()
@@ -76,34 +72,34 @@ if is_authenticated():
 # ── Not signed in: tabs for login + signup ────────────────────────────
 tab_login, tab_signup = st.tabs(
     [
-        "Sign in" if not is_zh else "登录",
-        "Create account" if not is_zh else "注册",
+        "Sign in",
+        "Create account",
     ]
 )
 
 with tab_login:
     with st.form("login_form", clear_on_submit=False):
         email = st.text_input(
-            "Email" if not is_zh else "邮箱",
+            "Email",
             placeholder="you@example.com",
             key="login_email",
         )
         password = st.text_input(
-            "Password" if not is_zh else "密码",
+            "Password",
             type="password",
             key="login_password",
         )
         submitted = st.form_submit_button(
-            "Sign in" if not is_zh else "登录",
+            "Sign in",
             type="primary",
             use_container_width=True,
         )
     if submitted:
         if not email or not password:
-            st.error("Email and password are required." if not is_zh else "邮箱和密码都不能为空。")
+            st.error("Email and password are required.")
         else:
             try:
-                with st.spinner("Authenticating..." if not is_zh else "登录中..."):
+                with st.spinner("Authenticating..."):
                     sign_in_with_password(email, password)
                 st.rerun()
             except AuthError as e:
@@ -114,20 +110,14 @@ with tab_login:
                     st.error(
                         "Your email isn't confirmed yet. Check your inbox (and spam folder), "
                         "or use the button below to resend the link."
-                        if not is_zh
-                        else "邮箱尚未确认。请检查收件箱（包括垃圾邮件），或点下方按钮重发。"
                     )
                     if st.button(
-                        "📧 Resend confirmation email" if not is_zh else "📧 重发确认邮件",
+                        "📧 Resend confirmation email",
                         key="resend_after_login_fail",
                     ):
                         try:
                             resend_confirmation_email(email)
-                            st.success(
-                                "Sent. The previous link is now invalid."
-                                if not is_zh
-                                else "已发送。之前的链接已失效。"
-                            )
+                            st.success("Sent. The previous link is now invalid.")
                         except AuthError as re:
                             st.error(str(re))
                 else:
@@ -143,22 +133,22 @@ except Exception:
 with tab_signup:
     with st.form("signup_form", clear_on_submit=False):
         email = st.text_input(
-            "Email" if not is_zh else "邮箱",
+            "Email",
             key="signup_email",
         )
         password = st.text_input(
-            "Password (min 8 chars)" if not is_zh else "密码(最少 8 位)",
+            "Password (min 8 chars)",
             type="password",
             key="signup_password",
-            help="Must be at least 8 characters." if not is_zh else "至少 8 个字符。",
+            help="Must be at least 8 characters.",
         )
         password2 = st.text_input(
-            "Confirm password" if not is_zh else "确认密码",
+            "Confirm password",
             type="password",
             key="signup_password2",
         )
         submitted = st.form_submit_button(
-            "Create account" if not is_zh else "注册",
+            "Create account",
             type="primary",
             use_container_width=True,
         )
@@ -166,52 +156,37 @@ with tab_signup:
         if not email or not password:
             st.error("Email and password are required.")
         elif len(password) < 8:
-            st.error(
-                "Password must be at least 8 characters." if not is_zh else "密码至少 8 个字符。"
-            )
+            st.error("Password must be at least 8 characters.")
         elif password != password2:
-            st.error("Passwords don't match." if not is_zh else "两次输入的密码不一致。")
+            st.error("Passwords don't match.")
         else:
             try:
-                with st.spinner("Creating account..." if not is_zh else "创建账号..."):
+                with st.spinner("Creating account..."):
                     user_info = sign_up_with_password(email, password)
                 if user_info.get("email_confirmed"):
                     # Project has Confirm Email = OFF → auto-signed-in.
-                    st.success(
-                        "Account created and signed in. Redirecting…"
-                        if not is_zh
-                        else "账号已创建并自动登录,跳转中…"
-                    )
+                    st.success("Account created and signed in. Redirecting...")
                     st.rerun()
                 else:
                     # Project has Confirm Email = ON → user must click link.
                     st.success(
                         "Account created. Check your inbox (and spam folder) "
                         "for a confirmation link, then come back and sign in."
-                        if not is_zh
-                        else "账号已创建。请检查邮箱（包括垃圾邮件）确认链接后回来登录。"
                     )
-                    with st.expander("Didn't receive the email?" if not is_zh else "没收到邮件？"):
+                    with st.expander("Didn't receive the email?"):
                         st.caption(
                             "Supabase's default SMTP is rate-limited to 3 emails/hour "
                             "and many providers mark its sender address as spam. If "
                             "the message hasn't arrived in 5 minutes, click resend "
                             "below — or sign in once email confirmation is reconfigured."
-                            if not is_zh
-                            else "Supabase 默认 SMTP 限速每小时 3 封，且发件人常被识别为垃圾邮件。"
-                            "若 5 分钟未收到,可点击下方重发。"
                         )
                         if st.button(
-                            "📧 Resend confirmation email" if not is_zh else "📧 重发确认邮件",
+                            "📧 Resend confirmation email",
                             key="resend_after_signup",
                         ):
                             try:
                                 resend_confirmation_email(email)
-                                st.success(
-                                    "Sent. The previous link is now invalid."
-                                    if not is_zh
-                                    else "已发送。之前的链接已失效。"
-                                )
+                                st.success("Sent. The previous link is now invalid.")
                             except AuthError as re:
                                 st.error(str(re))
             except AuthError as e:

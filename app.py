@@ -912,6 +912,8 @@ def _confidence_from_count(n: int) -> str:
 
 def score_sentiment_ollama(ticker: str, headlines: list[str], model: str, lang: str = "en") -> dict:
     """Send news headlines to the active LLM for sentiment analysis."""
+    del lang
+
     if not headlines:
         return {
             "retail_sentiment_score": 5.0,
@@ -942,8 +944,6 @@ def score_sentiment_ollama(ticker: str, headlines: list[str], model: str, lang: 
             f'{{"score":7,"label":"Bullish","bull":["reason1","reason2"],"bear":["risk1","risk2"],"summary":"..."}}\n\n'
             f"Headlines:\n{headlines_text}\n\nJSON:"
         )
-        if lang == "zh":
-            prompt += "\nUse Simplified Chinese for every string value in the JSON."
     else:
         prompt = (
             f"You are a senior Wall Street equity research analyst writing a Sentiment Tear Sheet for {ticker}.\n"
@@ -963,12 +963,6 @@ def score_sentiment_ollama(ticker: str, headlines: list[str], model: str, lang: 
             f"}}\n\n"
             f"Headlines:\n{headlines_text}"
         )
-        if lang == "zh":
-            prompt += (
-                "\n\nReturn all narrative text, labels, bullet titles, and details in "
-                "Simplified Chinese. Keep JSON keys exactly as specified."
-            )
-
     try:
         raw = call_llm(prompt, max_tokens=800, temperature=0.1)
         cleaned = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
@@ -1423,6 +1417,8 @@ def _fetch_daily_pnl(tickers_tuple):
 
 def render_sentiment_tear_sheet(tk: str, data: dict, weight: float, lang: str = "en"):
     """Render a single stock's institutional sentiment tear sheet card."""
+    del lang
+
     score = data.get("retail_sentiment_score", data.get("score", 5))
     if isinstance(score, int):
         score = float(score)
@@ -1439,16 +1435,16 @@ def render_sentiment_tear_sheet(tk: str, data: dict, weight: float, lang: str = 
 
     score_color = CLR_GOOD if score >= 7 else (CLR_DANGER if score <= 4 else CLR_WARN)
 
-    _lbl_score = "AI SENTIMENT SCORE" if lang == "en" else "AI 情绪评分"
-    _lbl_coverage = "RETAIL COVERAGE" if lang == "en" else "新闻覆盖度"
-    _lbl_analysis = "NEWS & SOCIAL ANALYSIS" if lang == "en" else "新闻与情绪分析"
-    _lbl_bull = "BULL ARGUMENTS" if lang == "en" else "看涨逻辑"
-    _lbl_bear = "BEAR ARGUMENTS" if lang == "en" else "看跌隐患"
-    _lbl_narrative = "KEY NARRATIVE SUMMARY" if lang == "en" else "核心叙事总结"
-    _lbl_headlines = "RELATED HEADLINES" if lang == "en" else "相关新闻"
-    _lbl_no_bull = "No bull arguments identified" if lang == "en" else "AI 未识别到明确看涨信号"
-    _lbl_no_bear = "No bear arguments identified" if lang == "en" else "AI 未识别到明确风险信号"
-    _lbl_portfolio = "OF PORTFOLIO" if lang == "en" else "持仓占比"
+    _lbl_score = "AI SENTIMENT SCORE"
+    _lbl_coverage = "RETAIL COVERAGE"
+    _lbl_analysis = "NEWS & SOCIAL ANALYSIS"
+    _lbl_bull = "BULL ARGUMENTS"
+    _lbl_bear = "BEAR ARGUMENTS"
+    _lbl_narrative = "KEY NARRATIVE SUMMARY"
+    _lbl_headlines = "RELATED HEADLINES"
+    _lbl_no_bull = "No bull arguments identified"
+    _lbl_no_bear = "No bear arguments identified"
+    _lbl_portfolio = "OF PORTFOLIO"
 
     st.markdown(
         f'<div style="border:1px solid rgba(100,116,139,0.3);border-radius:12px 12px 0 0;'
@@ -1649,8 +1645,6 @@ def execute_analysis(force: bool = False) -> bool:
     mc_horizon = st.session_state.get("mc_horizon", 21)
     market_shock = st.session_state.get("market_shock", -0.10)
     risk_free_fallback = st.session_state.get("risk_free_fallback", 0.045)
-    lang = st.session_state.get("_lang", "en")
-
     run_btn = st.session_state.get("_run_trigger", False)
     if force:
         run_btn = True
@@ -1667,11 +1661,7 @@ def execute_analysis(force: bool = False) -> bool:
             from libs.auth.active_portfolio import is_active_portfolio_empty
 
             if is_active_portfolio_empty():
-                st.warning(
-                    "Create a portfolio on the Portfolios page before running analysis."
-                    if lang == "en"
-                    else "请先在「我的组合」页面创建组合，再运行分析。"
-                )
+                st.warning("Create a portfolio on the Portfolios page before running analysis.")
                 return False
         except Exception:
             pass  # resolver unavailable → behave like before (anonymous demo)
@@ -1764,24 +1754,16 @@ def execute_analysis(force: bool = False) -> bool:
     #  CTA just sets _auto_run and rerun()s, reusing the existing run path.
     # ══════════════════════════════════════════════════════════════
 
-    def _render_landing(lang_code: str) -> None:
+    def _render_landing() -> None:
         """First-impression hero + features + CTA for unauth visitors."""
-        is_zh = lang_code == "zh"
-
         # Hero
-        hero_title = (
-            "Institutional-grade portfolio risk, made accessible."
-            if not is_zh
-            else "把机构级风险分析,带给散户。"
-        )
+        hero_title = "Institutional-grade portfolio risk, made accessible."
         hero_sub = (
             "Start with the question that matters: capital protection, risk drivers, "
             "allocation changes, or new ideas."
-            if not is_zh
-            else "从最重要的问题开始：先看保本、风险来源、调仓动作，还是研究新机会。"
         )
-        cta_label = "Run Demo Portfolio" if not is_zh else "运行 Demo 组合"
-        skip_label = "Skip to dashboard" if not is_zh else "跳过,直接看仪表盘"
+        cta_label = "Run Demo Portfolio"
+        skip_label = "Skip to dashboard"
 
         st.markdown(
             f"""
@@ -1810,38 +1792,28 @@ def execute_analysis(force: bool = False) -> bool:
         features = [
             (
                 "🛡️",
-                "Protect Capital" if not is_zh else "先保住本金",
-                (
-                    "Overview + Risk first. Focus on net equity, drawdown, VaR, and margin distance."
-                    if not is_zh
-                    else "先看概览和风险页，抓净值、回撤、VaR、保证金安全边际。"
-                ),
+                "Protect Capital",
+                ("Overview + Risk first. Focus on net equity, drawdown, VaR, and margin distance."),
             ),
             (
                 "🧭",
-                "Explain Drivers" if not is_zh else "解释风险来源",
+                "Explain Drivers",
                 (
                     "Use factor exposure, component VaR, sector concentration, and macro sensitivity."
-                    if not is_zh
-                    else "用因子暴露、边际 VaR、行业集中度、宏观敏感度解释问题。"
                 ),
             ),
             (
                 "⚖️",
-                "Improve Allocation" if not is_zh else "优化组合动作",
+                "Improve Allocation",
                 (
                     "Portfolio Actions + Quant Lab. Compare current weights, scenario downside, and risk-adjusted return."
-                    if not is_zh
-                    else "组合动作页和量化实验室结合，看当前权重、情景下行和风险调整收益。"
                 ),
             ),
             (
                 "🔎",
-                "Research New Ideas" if not is_zh else "研究新机会",
+                "Research New Ideas",
                 (
                     "Ticker Research + Institutions + TradingView. Validate thesis before adding exposure."
-                    if not is_zh
-                    else "个股研究、机构页和图表页联动，先验证逻辑，再加仓位。"
                 ),
             ),
         ]
@@ -1865,44 +1837,26 @@ def execute_analysis(force: bool = False) -> bool:
                 )
 
         render_section(
-            "Recommended Workflow" if not is_zh else "建议使用路径",
-            (
-                "Start from the smallest set of metrics that changes decisions."
-                if not is_zh
-                else "先抓最少但真正会影响决策的指标。"
-            ),
+            "Recommended Workflow",
+            "Start from the smallest set of metrics that changes decisions.",
         )
         workflow = [
             (
                 "1. Overview",
-                (
-                    "Validate net equity, P&L coverage, and recent portfolio path."
-                    if not is_zh
-                    else "先确认净值、盈亏覆盖率和近期组合路径。"
-                ),
+                ("Validate net equity, P&L coverage, and recent portfolio path."),
             ),
             (
                 "2. Risk",
-                (
-                    "Check VaR, drawdown, top risk contributors, and stress loss."
-                    if not is_zh
-                    else "再看 VaR、回撤、主要风险来源和压力损失。"
-                ),
+                ("Check VaR, drawdown, top risk contributors, and stress loss."),
             ),
             (
                 "3. Portfolio Actions",
-                (
-                    "Only after risk is understood, evaluate reweights and scenario trades."
-                    if not is_zh
-                    else "理解风险后，再做权重调整和情景调仓。"
-                ),
+                ("Only after risk is understood, evaluate reweights and scenario trades."),
             ),
             (
                 "4. Research",
                 (
                     "Use Markets, Ticker Research, and Institutions as evidence layers, not the starting point."
-                    if not is_zh
-                    else "市场、个股研究、机构页是验证层，不应成为起点。"
                 ),
             ),
         ]
@@ -1937,8 +1891,6 @@ def execute_analysis(force: bool = False) -> bool:
             st.caption(
                 "💡 Demo runs with built-in sample holdings. Sign in to save and analyze "
                 "your own portfolio; API keys stay server-side."
-                if not is_zh
-                else "💡 Demo 使用内置样例组合。登录后可保存并分析自己的组合；API key 由服务器统一管理。"
             )
 
         # Footer micro-strip — tech stack + GitHub
@@ -1970,7 +1922,7 @@ def execute_analysis(force: bool = False) -> bool:
         and not run_btn
     )
     if _show_landing:
-        _render_landing(lang)
+        _render_landing()
         st.stop()  # don't render the run-analysis canvas under it
 
     # ══════════════════════════════════════════════════════════════
@@ -2065,17 +2017,11 @@ def execute_analysis(force: bool = False) -> bool:
                 age_min = int(age_sec // 60)
                 st.warning(
                     f"⚠️ Analysis is {age_min} minutes old. Click Force Refresh for fresh data."
-                    if lang == "en"
-                    else f"⚠️ 分析结果已 {age_min} 分钟未更新。点击 Force Refresh 重新计算。"
                 )
 
         if using_cache:
             age_min = int((time.time() - last_ts) // 60) if last_ts else 0
-            st.info(
-                f"Using cached analysis ({age_min}m old). Click Force Refresh to recompute."
-                if lang == "en"
-                else f"使用缓存的分析结果（{age_min} 分钟前计算）。点击 Force Refresh 重新计算。"
-            )
+            st.info(f"Using cached analysis ({age_min}m old). Click Force Refresh to recompute.")
             logger.info("ui.analysis.cache_hit", age_min=age_min)
             _record_analysis_event(
                 "success",
@@ -2214,18 +2160,10 @@ def execute_analysis(force: bool = False) -> bool:
             # Display performance metrics
             perf_col1, perf_col2 = st.columns(2)
             with perf_col1:
-                st.caption(
-                    f"Computation time: {analysis_duration_ms:.0f}ms"
-                    if lang == "en"
-                    else f"计算耗时: {analysis_duration_ms:.0f}ms"
-                )
+                st.caption(f"Computation time: {analysis_duration_ms:.0f}ms")
             with perf_col2:
                 status_emoji = "✓" if analysis_duration_ms < 10000 else "⚠"
-                st.caption(
-                    f"{status_emoji} Target: <10s (cold), <3s (cached)"
-                    if lang == "en"
-                    else f"{status_emoji} 目标: <10秒(首次), <3秒(缓存)"
-                )
+                st.caption(f"{status_emoji} Target: <10s (cold), <3s (cached)")
 
             logger.info(
                 "ui.analysis.complete_with_timing",
@@ -2280,8 +2218,8 @@ def _main_ui():
         # Run button.
         st.info(
             "👈 Configure your portfolio and click **Refresh & Run Analysis** in the "
-            "sidebar to start. Begin with **Guided Analysis**, then move into Overview, "
-            "Risk, and Portfolio Actions. Logged-in users analyze their own DB-stored portfolio; "
+            "sidebar to start. Begin with **Overview**, then move into **Risk** and "
+            "**Portfolio Actions**. Logged-in users analyze their own DB-stored portfolio; "
             "everyone else gets the built-in demo."
         )
 
@@ -2294,7 +2232,7 @@ def _main_ui():
         st.success(
             "✅ Analysis complete. **Open `Overview`** in the left sidebar for the "
             "full dashboard — KPIs, cumulative returns, drawdown, P&L breakdown, "
-            "and the AI risk digest. Other pages (Risk, Guided Analysis, Markets, etc.) "
+            "and the AI risk digest. Other pages (Risk, Markets, Portfolio Actions, etc.) "
             "are also unlocked."
         )
         if st.session_state.get("report"):

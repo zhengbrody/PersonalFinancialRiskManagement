@@ -29,7 +29,6 @@ _NAV_GROUPS = [
             ("app.py", "Dashboard"),
             ("pages/0_Login.py", "Login"),
             ("pages/0_Portfolios.py", "Portfolios"),
-            ("pages/6_Guided_Analysis.py", "Guided Analysis"),
         ],
     ),
     (
@@ -177,12 +176,10 @@ def render_shared_sidebar():
         st.markdown("---")
 
         # ── Portfolio Configuration ───────────────────────────────
-        st.markdown("### 📊 " + ("Portfolio" if current_lang == "en" else "组合"))
+        st.markdown("### 📊 Portfolio")
 
         # Combined Refresh + Run button (replaces separate Refresh and Run Analysis)
-        _run_label_live = (
-            "🚀 Refresh & Run Analysis" if current_lang == "en" else "🚀 刷新并运行分析"
-        )
+        _run_label_live = "🚀 Refresh & Run Analysis"
         # Active-portfolio resolver: when user is logged in with a DB portfolio,
         # use that; otherwise fall back to the hardcoded portfolio_config defaults.
         # See libs/auth/active_portfolio.py for the decision tree.
@@ -200,29 +197,17 @@ def render_shared_sidebar():
         # Inline banner so user knows which portfolio is loaded
         _active_source = _active_meta.get("source")
         if _active_source == "supabase":
-            st.caption(
-                f"📂 Active: **{_active_meta['name']}** (your DB portfolio)"
-                if current_lang == "en"
-                else f"📂 当前组合：**{_active_meta['name']}**（你的数据库组合）"
-            )
+            st.caption(f"📂 Active: **{_active_meta['name']}** (your DB portfolio)")
         elif _active_source == "empty":
             # Authed user with no portfolios — block analysis to avoid silently
             # showing the dev's hardcoded holdings (data leak).
-            st.warning(
-                "No portfolio yet. Create one on the Portfolios page to enable analysis."
-                if current_lang == "en"
-                else "尚无组合。请先在「我的组合」页面创建后再运行分析。"
-            )
+            st.warning("No portfolio yet. Create one on the Portfolios page to enable analysis.")
             st.page_link(
                 "pages/0_Portfolios.py",
-                label=("→ Go to Portfolios" if current_lang == "en" else "→ 前往「我的组合」"),
+                label="→ Go to Portfolios",
             )
         else:
-            st.caption(
-                f"📂 Active: **{_active_meta['name']}**"
-                if current_lang == "en"
-                else f"📂 当前组合：**{_active_meta['name']}**"
-            )
+            st.caption(f"📂 Active: **{_active_meta['name']}**")
 
         _block_run = _active_source == "empty"
 
@@ -265,9 +250,7 @@ def render_shared_sidebar():
                     h = PORTFOLIO_HOLDINGS[t]
                     return h["shares"] if isinstance(h, dict) else h
 
-                with st.spinner(
-                    "Fetching live prices..." if current_lang == "en" else "获取实时价格..."
-                ):
+                with st.spinner("Fetching live prices..."):
                     tickers = list(PORTFOLIO_HOLDINGS.keys())
                     data = yf.download(tickers, period="5d", progress=False)
                     current_prices = {}
@@ -419,25 +402,19 @@ def render_shared_sidebar():
                 st.error(f"Failed: {str(e)}")
 
         # Secondary "Run with current weights" — for when user edits JSON manually
-        _run_label_current = (
-            "Run with Current Weights" if current_lang == "en" else "用当前权重运行"
-        )
+        _run_label_current = "Run with Current Weights"
         if st.button(_run_label_current, use_container_width=True, key="run_current_only"):
             _queue_analysis_and_route(force_refresh=False)
 
         # Force Refresh — bypasses cache regardless of whether any param changed.
         # Useful when prices may have moved but analysis params haven't, or when
         # user explicitly wants a fresh Monte Carlo roll.
-        _force_label = "🔄 Force Refresh" if current_lang == "en" else "🔄 强制刷新"
+        _force_label = "🔄 Force Refresh"
         if st.button(
             _force_label,
             use_container_width=True,
             key="force_refresh_btn",
-            help=(
-                "Invalidate the analysis cache and recompute from scratch."
-                if current_lang == "en"
-                else "清除分析缓存并重新计算。"
-            ),
+            help="Invalidate the analysis cache and recompute from scratch.",
         ):
             _queue_analysis_and_route(force_refresh=True)
 
@@ -523,9 +500,9 @@ def render_shared_sidebar():
             del st.session_state._example_portfolio
 
         # Weights Input
-        st.caption("Weights (JSON)" if current_lang == "en" else "权重 (JSON)")
+        st.caption("Weights (JSON)")
         weights_json = st.text_area(
-            "Portfolio Weights" if current_lang == "en" else "组合权重",
+            "Portfolio Weights",
             value=st.session_state.weights_json,
             height=120,
             label_visibility="collapsed",
@@ -534,12 +511,12 @@ def render_shared_sidebar():
         st.markdown("---")
 
         # ── Analysis Parameters ───────────────────────────────────
-        st.markdown("### ⚙️ " + ("Parameters" if current_lang == "en" else "参数"))
+        st.markdown("### ⚙️ Parameters")
 
         col1, col2 = st.columns(2)
         with col1:
             period_years = st.slider(
-                "History (yr)" if current_lang == "en" else "历史（年）",
+                "History (yr)",
                 min_value=1,
                 max_value=5,
                 value=st.session_state.get("period_years", 2),
@@ -548,7 +525,7 @@ def render_shared_sidebar():
 
         with col2:
             mc_sims = st.select_slider(
-                "MC Sims" if current_lang == "en" else "蒙特卡洛",
+                "MC Sims",
                 options=[1000, 5000, 10000, 20000, 50000],
                 value=st.session_state.get("mc_sims", 10000),
                 key="mc_sims_sidebar",
@@ -557,7 +534,7 @@ def render_shared_sidebar():
         col3, col4 = st.columns(2)
         with col3:
             mc_horizon = st.slider(
-                "Horizon (d)" if current_lang == "en" else "周期（天）",
+                "Horizon (d)",
                 min_value=5,
                 max_value=63,
                 value=st.session_state.get("mc_horizon", 21),
@@ -566,7 +543,7 @@ def render_shared_sidebar():
 
         with col4:
             market_shock_pct = st.slider(
-                "Shock (%)" if current_lang == "en" else "冲击 (%)",
+                "Shock (%)",
                 min_value=-30,
                 max_value=0,
                 value=int(st.session_state.get("market_shock", -0.10) * 100),
@@ -577,7 +554,7 @@ def render_shared_sidebar():
         # Risk-free rate
         risk_free_rate = (
             st.number_input(
-                "Risk-Free Rate (%)" if current_lang == "en" else "无风险利率 (%)",
+                "Risk-Free Rate (%)",
                 min_value=0.0,
                 max_value=15.0,
                 value=4.5,
@@ -611,11 +588,9 @@ def render_shared_sidebar():
         _api_ui_mode = _admin_mode and _show_api_inputs
 
         if _api_ui_mode:
-            st.markdown(
-                "### 🤖 AI Provider (admin)" if current_lang == "en" else "### 🤖 AI 提供方 (admin)"
-            )
+            st.markdown("### 🤖 AI Provider (admin)")
         else:
-            st.markdown("### 🤖 AI Access" if current_lang == "en" else "### 🤖 AI 访问")
+            st.markdown("### 🤖 AI Access")
 
         # ── Detect if running in cloud/preview (localhost unreachable) ──
         # Check once per session to avoid slow repeated probes
@@ -660,7 +635,7 @@ def render_shared_sidebar():
                     if st.button(
                         "🔄",
                         key="recheck_ollama",
-                        help="重新检测本地 Ollama (启动 `ollama serve` 后点此)",
+                        help="Recheck local Ollama after starting `ollama serve`.",
                     ):
                         st.session_state.pop("_ollama_reachable", None)
                         st.rerun()
@@ -707,17 +682,9 @@ def render_shared_sidebar():
                             + ("  ⚠️ exhausted" if c["exhausted"] else "")
                         )
                     if _qs["plan"] == "free":
-                        st.caption(
-                            "💡 Beta access: paid plans are configured but not live yet."
-                            if current_lang == "en"
-                            else "💡 Beta 阶段：付费计划已配置，但暂未正式开放。"
-                        )
+                        st.caption("💡 Beta access: paid plans are configured but not live yet.")
                 else:
-                    st.caption(
-                        "🔐 Sign in to use free monthly AI credits."
-                        if current_lang == "en"
-                        else "🔐 登录后可使用每月免费 AI 额度。"
-                    )
+                    st.caption("🔐 Sign in to use free monthly AI credits.")
             except Exception:
                 pass
 
@@ -729,7 +696,7 @@ def render_shared_sidebar():
                 or st.session_state.get("_api_key_input", ""),
                 placeholder="sk-ant-...",
                 key="claude_api_key_sidebar",
-                help="从 https://console.anthropic.com/ 获取",
+                help="Get one from https://console.anthropic.com/.",
             )
             st.session_state._api_key_input = api_key
             _key_ok = bool(api_key and api_key.startswith("sk-"))
@@ -742,7 +709,7 @@ def render_shared_sidebar():
                 or st.session_state.get("_deepseek_key", ""),
                 placeholder="sk-...",
                 key="deepseek_api_key_sidebar",
-                help="从 https://platform.deepseek.com/ 获取",
+                help="Get one from https://platform.deepseek.com/.",
             )
             st.session_state._deepseek_key = deepseek_key
             _key_ok = bool(deepseek_key and len(deepseek_key) > 10)
@@ -760,9 +727,9 @@ def render_shared_sidebar():
         # a richer plan + quota card above)
         if _api_ui_mode:
             if _key_ok:
-                st.caption(f"✅ {model_provider} 已配置")
+                st.caption(f"✅ {model_provider} configured")
             else:
-                st.caption("⚠️ 请填写 API Key 以启用 AI 功能")
+                st.caption("⚠️ Add an API key to enable AI features")
 
             # Store provider in session state (owner chose it)
             st.session_state._model_provider = model_provider
@@ -798,11 +765,11 @@ def render_shared_sidebar():
                     or len(fmp_key_input) < 20
                 )
                 if _looks_wrong:
-                    st.caption("⚠️ 这不像 FMP key(可能粘错了)。")
+                    st.caption("⚠️ This does not look like an FMP key.")
                 else:
-                    st.caption("✅ FMP 已配置")
+                    st.caption("✅ FMP configured")
             else:
-                st.caption("ℹ️ FMP 未配置")
+                st.caption("ℹ️ FMP not configured")
 
         st.markdown("---")
 

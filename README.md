@@ -71,7 +71,6 @@ Under the hood, the stack is still quantitative and serious: Monte Carlo VaR, mu
 |---|---|
 | 🛡️ **Risk Engine** | Monte Carlo VaR/CVaR · EWMA covariance (λ=0.94) · Component VaR · Stress testing · Margin-call distance |
 | 📈 **Factor Models** | 6-factor OLS with t-statistics · Macro sensitivities (rates/USD/oil) · Barra PCA attribution |
-| 🧭 **Guided Analysis** | Question-first workflow · goal-based page routing · priority metrics for retail users |
 | 🏛️ **Institutional Intel** | SEC 13F parser (top ~30 filers) · Smart-money overlap · crowding detection · conviction tracking |
 | 🔄 **Regime & Backtest** | HMM (Gaussian mixture EM) · Vectorized backtesting · Brinson-Hood-Beebower attribution |
 | 🤖 **AI Digests** | Narrative summaries on every page (Claude / DeepSeek / Ollama with auto-detection) |
@@ -98,11 +97,10 @@ Under the hood, the stack is still quantitative and serious: Monte Carlo VaR, mu
 | 3 | 📰 **Markets** | VIX · Fear & Greed · Yield curve · Macro news · AI sentiment (all holdings) · Earnings AI |
 | 4 | 💼 **Portfolio** | Efficient frontier · Trade blotter · Scenario simulator (-30% ~ +30%) · Margin monitor |
 | 5 | 📉 **TradingView** | Embedded TradingView charts + technical analysis |
-| 6 | 🧭 **Guided Analysis** | Decision-first workflow · which page to open next · what metrics matter most |
-| 7 | 🏙️ **Trading Floor** | Bloomberg-style regime + sectors + movers + next-read routing |
-| 8 | 🏛️ **Institutions** | SEC 13F smart money · Institution deep dive · conviction and crowding analysis |
-| 9 | 🔬 **Quant Lab** | Backtesting · Performance attribution · Regime analysis |
-| 10 | 🔎 **Ticker Research** | Standalone any-ticker deep dive (10 data sources + AI recommendation) |
+| 6 | 🏙️ **Trading Floor** | Bloomberg-style regime + sectors + movers + next-read routing |
+| 7 | 🏛️ **Institutions** | SEC 13F smart money · Institution deep dive · conviction and crowding analysis |
+| 8 | 🔬 **Quant Lab** | Backtesting · Performance attribution · Regime analysis |
+| 9 | 🔎 **Ticker Research** | Standalone any-ticker deep dive (10 data sources + AI recommendation) |
 
 ---
 
