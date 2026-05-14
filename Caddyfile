@@ -17,51 +17,123 @@
 # When SITE_HOST is the nip.io fallback, www.<eip>.nip.io also works
 # transparently since *.nip.io resolves the same way.
 {$SITE_HOST}, www.{$SITE_HOST} {
-    encode gzip
-    log {
-        output stdout
-        format json
-    }
+	encode gzip
+	log {
+		output stdout
+		format json
+	}
 
-    # Redirect www → apex so SEO + bookmarks settle on a single canonical URL.
-    @www host www.{$SITE_HOST}
-    redir @www https://{$SITE_HOST}{uri} permanent
+	# Redirect www → apex so SEO + bookmarks settle on a single canonical URL.
+	@www host www.{$SITE_HOST}
+	redir @www https://{$SITE_HOST}{uri} permanent
 
-    handle /robots.txt {
-        header Content-Type "text/plain; charset=utf-8"
-        respond `User-agent: *
+	handle /robots.txt {
+		header Content-Type "text/plain; charset=utf-8"
+		respond `User-agent: *
 Allow: /
 Sitemap: https://{$SITE_HOST}/sitemap.xml
 `
-    }
+	}
 
-    handle /sitemap.xml {
-        header Content-Type "application/xml; charset=utf-8"
-        respond `<?xml version="1.0" encoding="UTF-8"?>
+	handle /sitemap.xml {
+		header Content-Type "application/xml; charset=utf-8"
+		respond `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://{$SITE_HOST}/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
+  <url>
+    <loc>https://{$SITE_HOST}/about</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://{$SITE_HOST}/Legal</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
 </urlset>
 `
-    }
+	}
 
-    handle {
-        reverse_proxy app:8501 {
-            # Keep the WebSocket / SSE stream alive for slow analyses.
-            transport http {
-                read_timeout 300s
-                write_timeout 300s
-            }
-        }
-    }
+	handle /googlecpW5HG50AaWNMEfTxdGBF6JxeviA-0QFaHDYS0xw_N8.html {
+		header Content-Type "text/plain; charset=utf-8"
+		respond "google-site-verification: googlecpW5HG50AaWNMEfTxdGBF6JxeviA-0QFaHDYS0xw_N8.html"
+	}
+
+	handle /about {
+		header Content-Type "text/html; charset=utf-8"
+		respond `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="index, follow">
+  <meta name="google-site-verification" content="cpW5HG50AaWNMEfTxdGBF6JxeviA-0QFaHDYS0xw_N8">
+  <link rel="canonical" href="https://{$SITE_HOST}/about">
+  <title>MindMarket AI | Mind Market Portfolio Risk Analytics</title>
+  <meta name="description" content="MindMarket AI, also searched as Mind Market, is a portfolio risk analytics platform for investors, with AI analysis, VaR, stress testing, market context, ticker research, and portfolio tools.">
+  <style>
+    body { margin:0; background:#0B0E11; color:#E2E8F0; font-family:Inter,Arial,sans-serif; line-height:1.6; }
+    main { max-width:880px; margin:0 auto; padding:72px 24px; }
+    a { color:#39A3B5; }
+    h1 { font-size:42px; line-height:1.15; margin:0 0 16px; }
+    h2 { margin-top:34px; color:#F8FAFC; }
+    p, li { color:#AAB4C2; font-size:17px; }
+    .eyebrow { color:#39A3B5; font-size:13px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; }
+    .cta { display:inline-block; margin-top:18px; padding:12px 16px; border:1px solid #39A3B5; border-radius:6px; text-decoration:none; color:#E2E8F0; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">MindMarket AI</div>
+    <h1>Mind Market portfolio risk analytics for individual investors.</h1>
+    <p>
+      MindMarket AI, sometimes searched as Mind Market, helps investors analyze
+      portfolio risk, drawdown, VaR, stress scenarios, market context, ticker
+      research, and AI-generated risk summaries.
+    </p>
+    <p>
+      The platform combines quantitative portfolio analytics with server-managed
+      AI analysis. Users can create their own portfolio, import holdings from CSV,
+      run risk analysis, and review market or ticker research in one dashboard.
+    </p>
+    <h2>Core features</h2>
+    <ul>
+      <li>Portfolio risk dashboard with VaR, CVaR, drawdown, stress testing, and factor exposure.</li>
+      <li>AI analyst summaries for portfolio risk, market context, and ticker research.</li>
+      <li>User-owned portfolios stored with authentication and row-level access controls.</li>
+      <li>Market intelligence from public and premium data sources, with clear data-source status.</li>
+    </ul>
+    <h2>Important disclaimer</h2>
+    <p>
+      MindMarket AI is for educational and research use only. It is not financial,
+      investment, tax, or legal advice. AI-generated analysis can be incomplete or
+      incorrect, and market data may be delayed or unavailable.
+    </p>
+    <a class="cta" href="https://{$SITE_HOST}/">Open MindMarket AI</a>
+  </main>
+</body>
+</html>
+`
+	}
+
+	handle {
+		reverse_proxy app:8501 {
+			# Keep the WebSocket / SSE stream alive for slow analyses.
+			transport http {
+				read_timeout 300s
+				write_timeout 300s
+			}
+		}
+	}
 }
 
 # When SITE_HOST is unset (first boot, before deploy script writes .env),
 # serve a holding page on :80 so health probes don't bounce. Caddy can't
 # auto-TLS without a hostname so we don't expose :443 here.
 :80 {
-    respond "MindMarket bootstrap pending" 503
+	respond "MindMarket bootstrap pending" 503
 }
