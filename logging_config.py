@@ -6,6 +6,7 @@
 import logging
 import logging.handlers
 from pathlib import Path
+from typing import Optional
 
 import structlog
 
@@ -79,6 +80,6 @@ def setup_logging():
     configure_structlog()
 
 
-def get_logger(name: str = None):
+def get_logger(name: Optional[str] = None):
     """获取structlog logger"""
     return structlog.get_logger(name)

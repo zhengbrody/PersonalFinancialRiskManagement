@@ -393,7 +393,7 @@ class RiskEngine:
 
         # Sector limit
         max_sector = rules.get("max_sector_weight", 0.30)
-        sector_weights = {}
+        sector_weights: Dict[str, float] = {}
         for tk, w in proposed_weights.items():
             s = sector_map.get(tk, "Other")
             sector_weights[s] = sector_weights.get(s, 0) + w
@@ -972,7 +972,7 @@ class RiskEngine:
         last_factor_ret = factor_returns[-1]  # (n_factors,)
         actual_port_ret = float(returns.iloc[-1].values @ weights)
         factor_pnl = {}
-        total_factor_pnl = 0
+        total_factor_pnl = 0.0
         for k in range(n_factors):
             pnl = float(port_exposure[k] * last_factor_ret[k] * std.mean())
             factor_pnl[factor_names[k]] = pnl
