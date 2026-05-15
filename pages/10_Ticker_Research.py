@@ -343,8 +343,8 @@ def _build_research_inline(ticker: str, fmp_key: str) -> dict:
 #  Page Header & Search
 # ══════════════════════════════════════════════════════════════
 
-page_title = "Ticker Research" if lang == "en" else "个股研究"
-page_subtitle = "Deep-dive single-stock analysis" if lang == "en" else "个股深度分析"
+page_title = "Ticker Research"
+page_subtitle = "Deep-dive single-stock analysis"
 
 st.markdown(
     f'<div style="{T.font_page_title};color:{T.text};margin-bottom:4px">' f"{page_title}</div>",
@@ -361,7 +361,7 @@ with st.form("ticker_research_search_form", clear_on_submit=False):
     with col_input:
         ticker_input = (
             st.text_input(
-                "Ticker Symbol" if lang == "en" else "股票代码",
+                "Ticker Symbol",
                 value=st.session_state.get("_research_ticker", ""),
                 placeholder="Enter ticker symbol, e.g. AAPL",
                 key="research_ticker_input",
@@ -372,7 +372,7 @@ with st.form("ticker_research_search_form", clear_on_submit=False):
     with col_btn:
         st.markdown("<div style='margin-top:28px'></div>", unsafe_allow_html=True)
         search_clicked = st.form_submit_button(
-            "Search" if lang == "en" else "搜索",
+            "Search",
             type="primary",
             use_container_width=True,
         )
@@ -385,7 +385,7 @@ ticker = st.session_state.get("_research_ticker", "")
 if not ticker:
     st.markdown(
         f'<div style="{T.font_body};color:{T.text_secondary};margin-top:{T.sp_xl};text-align:center">'
-        f'{"Enter a ticker symbol above to begin research." if lang == "en" else "请在上方输入股票代码开始研究。"}'
+        f"{'Enter a ticker symbol above to begin research.'}"
         f"</div>",
         unsafe_allow_html=True,
     )
@@ -395,18 +395,12 @@ if not ticker:
 #  Fetch Research Data
 # ══════════════════════════════════════════════════════════════
 
-with st.spinner(
-    f"Fetching research data for {ticker}..." if lang == "en" else f"正在获取 {ticker} 研究数据..."
-):
+with st.spinner(f"Fetching research data for {ticker}..."):
     research = _cached_fetch_ticker_research(ticker, fmp_key)
 
 if not research or research.get("error"):
     error_msg = research.get("error", "Unknown error") if research else "Failed to fetch data"
-    st.error(
-        f"Could not load data for **{ticker}**: {error_msg}"
-        if lang == "en"
-        else f"无法加载 **{ticker}** 的数据: {error_msg}"
-    )
+    st.error(f"Could not load data for **{ticker}**: {error_msg}")
     st.stop()
 
 try:
@@ -453,7 +447,7 @@ try:
     #  3. Fundamentals Dashboard
     # ══════════════════════════════════════════════════════════
 
-    render_section("Fundamentals" if lang == "en" else "基本面指标")
+    render_section("Fundamentals")
 
     render_kpi_row(
         [
@@ -497,7 +491,7 @@ try:
     #  4. Valuation Analysis
     # ══════════════════════════════════════════════════════════
 
-    render_section("Valuation Analysis" if lang == "en" else "估值分析")
+    render_section("Valuation Analysis")
 
     intrinsic = valuation.get("intrinsic_value")
     current_p = valuation.get("current_price") or price
@@ -546,7 +540,7 @@ try:
     #  5. Analyst Consensus
     # ══════════════════════════════════════════════════════════
 
-    render_section("Analyst Consensus" if lang == "en" else "分析师共识")
+    render_section("Analyst Consensus")
 
     rating = analyst.get("rating", "N/A")
     num_analysts = analyst.get("num_analysts")
@@ -583,9 +577,7 @@ try:
     upgrades_list = analyst.get("upgrades_downgrades", [])
     if upgrades_list:
         st.markdown(f"<div style='height:{T.sp_sm}'></div>", unsafe_allow_html=True)
-        with render_section(
-            "Recent Upgrades / Downgrades" if lang == "en" else "近期评级变动", collapsed=True
-        ):
+        with render_section("Recent Upgrades / Downgrades", collapsed=True):
             try:
                 ug_df = pd.DataFrame(upgrades_list)
                 # Keep only useful columns
@@ -604,7 +596,7 @@ try:
     #  6. Technical Analysis
     # ══════════════════════════════════════════════════════════
 
-    render_section("Technical Analysis" if lang == "en" else "技术分析")
+    render_section("Technical Analysis")
 
     rsi_val = technical.get("rsi")
     pv_sma50 = technical.get("price_vs_sma50")
@@ -771,7 +763,7 @@ try:
     #  7. Insider Activity
     # ══════════════════════════════════════════════════════════
 
-    render_section("Insider Activity" if lang == "en" else "内部人交易")
+    render_section("Insider Activity")
 
     direction = insider.get("direction", "No Data")
     net_shares = insider.get("net_shares", 0)
@@ -801,9 +793,7 @@ try:
 
     recent_txns = insider.get("recent_txns", [])
     if recent_txns:
-        with render_section(
-            "Recent Insider Transactions" if lang == "en" else "近期内部人交易", collapsed=True
-        ):
+        with render_section("Recent Insider Transactions", collapsed=True):
             try:
                 txn_df = pd.DataFrame(recent_txns)
                 display_cols = [
@@ -823,13 +813,13 @@ try:
     #  8. Top Institutional Holders
     # ══════════════════════════════════════════════════════════
 
-    render_section("Institutional Holders" if lang == "en" else "机构持仓")
+    render_section("Institutional Holders")
 
     inst_pct = institutional.get("pct_held")
     if inst_pct is not None:
         st.markdown(
             f'<div style="{T.font_body};color:{T.text_secondary};margin-bottom:{T.sp_md}">'
-            f'{"Institutional Ownership" if lang == "en" else "机构持股比例"}: '
+            f"{'Institutional Ownership'}: "
             f'<span style="color:{T.text};font-weight:600">{_fmt_pct(inst_pct)}</span></div>',
             unsafe_allow_html=True,
         )
@@ -860,21 +850,19 @@ try:
         except Exception:
             st.caption("Could not display institutional holders.")
     else:
-        st.caption(
-            "No institutional holder data available." if lang == "en" else "暂无机构持仓数据。"
-        )
+        st.caption("No institutional holder data available.")
 
     # ══════════════════════════════════════════════════════════
     #  9. AI Investment Summary
     # ══════════════════════════════════════════════════════════
 
-    render_section("AI Investment Summary" if lang == "en" else "AI 投资摘要")
+    render_section("AI Investment Summary")
 
     summary_context = research.get("summary_context", "")
 
     if summary_context:
         if st.button(
-            "Generate AI Analysis" if lang == "en" else "生成 AI 分析",
+            "Generate AI Analysis",
             key="generate_ai_summary",
             type="primary",
         ):
@@ -883,8 +871,7 @@ try:
                 "Provide a structured, professional investment analysis. Be specific with numbers. "
                 "Do not use markdown headers (#). Use plain text with clear section labels."
             )
-            if lang == "zh":
-                ai_system += " Respond entirely in Simplified Chinese."
+            pass
 
             ai_prompt = f"""Analyze the following stock data and provide a comprehensive investment summary.
 
@@ -913,13 +900,9 @@ INSTITUTIONAL SENTIMENT: [1 sentence on insider/institutional activity signals]
 
 RECOMMENDATION: [Strong Buy / Buy / Hold / Sell / Strong Sell]
 CONFIDENCE: [High / Medium / Low]"""
-            if lang == "zh":
-                ai_prompt += (
-                    "\n\n请使用简体中文输出所有段落标题、要点、风险、估值观点、技术观点、"
-                    "机构情绪、推荐结论和置信度。保留 ticker、百分比、价格等数字。"
-                )
+            pass
 
-            with st.spinner("Generating AI analysis..." if lang == "en" else "正在生成 AI 分析..."):
+            with st.spinner("Generating AI analysis..."):
                 try:
                     ai_response = call_llm(
                         prompt=ai_prompt,
@@ -936,14 +919,10 @@ CONFIDENCE: [High / Medium / Low]"""
                     else:
                         st.warning(
                             "AI analysis returned empty. Check your LLM provider settings in the sidebar."
-                            if lang == "en"
-                            else "AI 分析返回为空。请检查侧边栏中的 LLM 提供商设置。"
                         )
                 except Exception as e:
                     st.error(
                         f"AI analysis failed: {e}. Ensure your LLM provider is configured in the sidebar."
-                        if lang == "en"
-                        else f"AI 分析失败: {e}。请确保已在侧边栏中配置 LLM 提供商。"
                     )
 
         # Show cached AI summary if available (only when button was NOT just clicked)
@@ -953,11 +932,7 @@ CONFIDENCE: [High / Medium / Low]"""
                 sources=f"yfinance, FMP API | {ticker.upper()} (cached)",
             )
     else:
-        st.caption(
-            "Insufficient data to generate AI analysis."
-            if lang == "en"
-            else "数据不足，无法生成 AI 分析。"
-        )
+        st.caption("Insufficient data to generate AI analysis.")
 
     # ══════════════════════════════════════════════════════════
     #  10. Institutional Analyst Report — full IB-grade research note
@@ -967,12 +942,9 @@ CONFIDENCE: [High / Medium / Low]"""
 
     st.markdown("---")
     render_section(
-        "🏛️ Institutional Analyst Report" if lang == "en" else "🏛️ 投行分析报告",
+        "🏛️ Institutional Analyst Report",
         subtitle=(
-            "Comprehensive equity research note combining earnings, financials, "
-            "valuation methods, peer comparison, and top-bank views."
-            if lang == "en"
-            else "综合研报：财报电话会、财务报表、估值方法、同业对比、顶级投行观点。"
+            "Comprehensive equity research note combining earnings, financials, valuation methods, peer comparison, and top-bank views."
         ),
     )
 
@@ -997,10 +969,7 @@ CONFIDENCE: [High / Medium / Low]"""
         if not _anth_key:
             missing.append("ANTHROPIC_API_KEY")
         st.info(
-            f"🔑 Configure {' + '.join(missing)} in server secrets "
-            f"to unlock the institutional analyst report."
-            if lang == "en"
-            else f"🔑 在服务器 secrets 中配置 {' + '.join(missing)} 以解锁投行分析报告。"
+            f"🔑 Configure {' + '.join(missing)} in server secrets to unlock the institutional analyst report."
         )
     else:
         report_key = f"_analyst_report_{lang}_{ticker.upper()}"
@@ -1010,11 +979,7 @@ CONFIDENCE: [High / Medium / Low]"""
 
         bcol1, bcol2 = st.columns([1, 3])
         with bcol1:
-            _btn_label = (
-                ("Regenerate Report" if cached_report else "Generate Report")
-                if lang == "en"
-                else ("重新生成报告" if cached_report else "生成分析报告")
-            )
+            _btn_label = "Regenerate Report" if cached_report else "Generate Report"
             gen_clicked = st.button(
                 _btn_label,
                 key="generate_analyst_report",
@@ -1024,8 +989,6 @@ CONFIDENCE: [High / Medium / Low]"""
         with bcol2:
             st.caption(
                 "~30-60s. Fetches 4Q of statements, peer comps, analyst actions, earnings call + sends to Claude."
-                if lang == "en"
-                else "约 30-60 秒。获取 4 个季度财务报表、同业对比、分析师评级变更、财报电话会，并发送给 Claude。"
             )
 
         if gen_clicked:
@@ -1074,11 +1037,7 @@ CONFIDENCE: [High / Medium / Low]"""
                     )
                     st.stop()
 
-            with st.spinner(
-                f"📊 Aggregating institutional data for {ticker.upper()}..."
-                if lang == "en"
-                else f"📊 正在聚合 {ticker.upper()} 的机构级数据..."
-            ):
+            with st.spinner(f"📊 Aggregating institutional data for {ticker.upper()}..."):
                 result = generate_analyst_report(
                     ticker=ticker.upper(),
                     fmp_key=_fmp_key_for_report,
@@ -1088,21 +1047,16 @@ CONFIDENCE: [High / Medium / Low]"""
                 )
             if result.get("error"):
                 render_unified_error(
-                    message=(
-                        "Analyst report generation failed" if lang == "en" else "分析报告生成失败"
-                    ),
+                    message=("Analyst report generation failed"),
                     detail=result.get("error"),
                     suggestion=(
-                        "Check that both FMP and Anthropic API keys are valid, "
-                        "and that the ticker exists in FMP's database."
-                        if lang == "en"
-                        else "确认 FMP 和 Anthropic API key 有效，且该 ticker 存在于 FMP 数据库中。"
+                        "Check that both FMP and Anthropic API keys are valid, and that the ticker exists in FMP's database."
                     ),
                 )
             else:
                 st.session_state[report_key] = result["report"]
                 st.session_state[quality_key] = result.get("data_quality")
-                st.success("Report generated successfully." if lang == "en" else "报告生成成功。")
+                st.success("Report generated successfully.")
                 cached_report = result["report"]
                 cached_quality = result.get("data_quality")
 
@@ -1128,11 +1082,7 @@ CONFIDENCE: [High / Medium / Low]"""
             render_analyst_report(cached_report, ticker.upper(), current_price=cur_px)
 
 except Exception as e:
-    st.error(
-        f"An error occurred while rendering research for **{ticker}**: {str(e)}"
-        if lang == "en"
-        else f"渲染 **{ticker}** 研究数据时出错: {str(e)}"
-    )
+    st.error(f"An error occurred while rendering research for **{ticker}**: {str(e)}")
     import traceback
 
     with st.expander("Error Details"):

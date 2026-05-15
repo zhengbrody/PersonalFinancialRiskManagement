@@ -43,17 +43,13 @@ qp = st.query_params.get("doc", "disclaimer")
 if qp not in _DOCS:
     qp = "disclaimer"
 
-tab_labels = [_DOCS[k][0 if lang == "en" else 1] for k in _DOCS]
+tab_labels = [_DOCS[k][0] for k in _DOCS]
 tabs = st.tabs(tab_labels)
 for tab, key in zip(tabs, _DOCS.keys()):
     with tab:
         st.markdown(_read(key))
 
-st.caption(
-    "Beta legal documents. Last updated: 2026-05-09."
-    if lang == "en"
-    else "Beta 法律文件。最近更新：2026-05-09。"
-)
+st.caption("Beta legal documents. Last updated: 2026-05-09.")
 
 try:
     from ui.legal_footer import render_legal_footer

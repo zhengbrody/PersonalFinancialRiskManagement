@@ -401,11 +401,9 @@ if briefing:
 #  6. Portfolio Scenario Simulator
 # ══════════════════════════════════════════════════════════════
 render_section(
-    "Portfolio Scenario Simulator" if lang == "en" else "组合情景模拟",
+    "Portfolio Scenario Simulator",
     subtitle=(
         "Estimate portfolio impact from a broad market move using beta-implied asset returns."
-        if lang == "en"
-        else "基于Beta估算市场变动对组合的影响"
     ),
 )
 
@@ -422,7 +420,7 @@ else:
 
 # --- Market move slider ---
 _scenario_market_move = st.slider(
-    "Market Move (%)" if lang == "en" else "市场变动 (%)",
+    "Market Move (%)",
     min_value=-30,
     max_value=30,
     value=0,
@@ -467,21 +465,21 @@ if _scenario_market_move != 0:
     render_kpi_row(
         [
             {
-                "label": "Portfolio Impact" if lang == "en" else "组合影响",
+                "label": "Portfolio Impact",
                 "value": f"{_total_port_impact_pct:+.1%}",
                 "delta_color": _impact_color,
             },
             {
-                "label": "Dollar P&L" if lang == "en" else "盈亏金额",
+                "label": "Dollar P&L",
                 "value": f"${_total_port_impact_dollar:+,.0f}",
                 "delta_color": _impact_color,
             },
             {
-                "label": "New Portfolio Value" if lang == "en" else "新组合价值",
+                "label": "New Portfolio Value",
                 "value": f"${_new_portfolio_value:,.0f}",
             },
             {
-                "label": "New Equity" if lang == "en" else "新净资产",
+                "label": "New Equity",
                 "value": f"${_new_equity:,.0f}",
                 "delta_color": "negative" if _new_equity < _sim_net_equity else "neutral",
             },
@@ -496,22 +494,22 @@ if _scenario_market_move != 0:
         render_kpi_row(
             [
                 {
-                    "label": "Cost Basis" if lang == "en" else "本金",
+                    "label": "Cost Basis",
                     "value": f"${_sim_cost_basis:,.0f}",
                 },
                 {
-                    "label": "P&L vs Cost" if lang == "en" else "相对本金盈亏",
+                    "label": "P&L vs Cost",
                     "value": f"${_pnl_vs_cost:+,.0f}",
                     "delta": f"{_pnl_vs_cost_pct:+.1%}",
                     "delta_color": _cb_color,
                 },
                 {
-                    "label": "Return on Capital" if lang == "en" else "资本回报率",
+                    "label": "Return on Capital",
                     "value": f"{_pnl_vs_cost_pct:+.1%}",
                     "delta_color": _cb_color,
                 },
                 {
-                    "label": "Margin Loan" if lang == "en" else "保证金",
+                    "label": "Margin Loan",
                     "value": f"${_sim_margin_loan:,.0f}",
                 },
             ]
@@ -555,12 +553,8 @@ if _scenario_market_move != 0:
         )
     )
     fig_scenario_wf.update_layout(
-        title=(
-            "Scenario Waterfall: Per-Asset Contribution"
-            if lang == "en"
-            else "情景瀑布图: 各资产贡献"
-        ),
-        yaxis_title="Contribution (%)" if lang == "en" else "贡献 (%)",
+        title=("Scenario Waterfall: Per-Asset Contribution"),
+        yaxis_title="Contribution (%)",
         yaxis_tickformat=".1%",
         height=450,
     )
@@ -571,21 +565,12 @@ if _scenario_market_move != 0:
         _new_equity_ratio = _new_equity / _new_portfolio_value
         if _new_equity_ratio < 0.30:
             st.warning(
-                (
-                    "Margin Call Risk: Equity ratio would drop to "
-                    f"{_new_equity_ratio:.1%}, below the 30% maintenance threshold. "
-                    "Consider reducing leverage or adding collateral."
-                )
-                if lang == "en"
-                else (
-                    f"保证金预警: 净资产比率将降至 {_new_equity_ratio:.1%}，"
-                    "低于30%维持保证金线。建议降低杠杆或追加保证金。"
-                )
+                f"Margin Call Risk: Equity ratio would drop to {_new_equity_ratio:.1%}, below the 30% maintenance threshold. Consider reducing leverage or adding collateral."
             )
 
     # --- Custom Per-Asset Override (expander) ---
     with render_section(
-        "Custom Asset Scenarios" if lang == "en" else "自定义资产情景",
+        "Custom Asset Scenarios",
         collapsed=True,
     ):
         _override_df = pd.DataFrame(
@@ -640,21 +625,21 @@ if _scenario_market_move != 0:
         render_kpi_row(
             [
                 {
-                    "label": "Custom Portfolio Impact" if lang == "en" else "自定义组合影响",
+                    "label": "Custom Portfolio Impact",
                     "value": f"{_custom_total_pct:+.1%}",
                     "delta_color": "positive" if _custom_total_pct >= 0 else "negative",
                 },
                 {
-                    "label": "Custom Dollar P&L" if lang == "en" else "自定义盈亏金额",
+                    "label": "Custom Dollar P&L",
                     "value": f"${_custom_total_dollar:+,.0f}",
                     "delta_color": "positive" if _custom_total_dollar >= 0 else "negative",
                 },
                 {
-                    "label": "New Portfolio Value" if lang == "en" else "新组合价值",
+                    "label": "New Portfolio Value",
                     "value": f"${_custom_new_port:,.0f}",
                 },
                 {
-                    "label": "New Equity" if lang == "en" else "新净资产",
+                    "label": "New Equity",
                     "value": f"${_custom_new_equity:,.0f}",
                 },
             ]
@@ -691,11 +676,7 @@ if _scenario_market_move != 0:
         )
 
 else:
-    st.caption(
-        "Move the slider above to simulate a market scenario."
-        if lang == "en"
-        else "拖动上方滑块以模拟市场情景。"
-    )
+    st.caption("Move the slider above to simulate a market scenario.")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -703,9 +684,7 @@ else:
 # ══════════════════════════════════════════════════════════════
 
 # ── Cash Deployment ──────────────────────────────────────────
-with render_section(
-    "Cash Deployment Simulator" if lang == "en" else "备用金追加模拟", collapsed=True
-):
+with render_section("Cash Deployment Simulator", collapsed=True):
     st.markdown(t("cash_title"))
 
     meta_ss = getattr(st.session_state, "_portfolio_meta", None)
@@ -799,7 +778,7 @@ with render_section(
 
 
 # ── Margin Monitor ───────────────────────────────────────────
-with render_section("Margin Monitor" if lang == "en" else "保证金监控", collapsed=True):
+with render_section("Margin Monitor", collapsed=True):
     st.markdown(t("margin_title"))
 
     mi = report.margin_call_info

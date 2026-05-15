@@ -149,8 +149,6 @@ st.markdown(
 if not st.session_state.get("weights"):
     st.caption(
         "Showing default market watchlist. Load your portfolio in the sidebar for personalized positioning."
-        if lang == "en"
-        else "显示默认市场监控列表。在侧边栏加载投资组合以查看个性化持仓视角。"
     )
 
 
@@ -161,7 +159,7 @@ if not st.session_state.get("weights"):
 load_col, status_col = st.columns([1, 3])
 with load_col:
     load_data = st.button(
-        "LOAD MARKET DATA" if lang == "en" else "\u52a0\u8f7d\u5e02\u573a\u6570\u636e",
+        "LOAD MARKET DATA",
         type="primary",
         key="tf_load_data",
         use_container_width=True,
@@ -531,20 +529,10 @@ else:
 st.markdown('<div class="tf-section-hdr">NEXT READS</div>', unsafe_allow_html=True)
 
 meta = st.session_state.get("_portfolio_meta") or {}
-regime_note = (
-    "Open Markets next if today's regime banner is your main concern."
-    if lang == "en"
-    else "如果你最关心今天的市场状态，下一步去看 Markets。"
-)
-risk_note = (
-    "Open Risk next if VaR, drawdown, or leverage is what may change your position sizing."
-    if lang == "en"
-    else "如果 VaR、回撤或杠杆会改变你的仓位决策，下一步去看 Risk。"
-)
+regime_note = "Open Markets next if today's regime banner is your main concern."
+risk_note = "Open Risk next if VaR, drawdown, or leverage is what may change your position sizing."
 research_note = (
     "Open Ticker Research or Institutions only after you know what risk you are trying to confirm."
-    if lang == "en"
-    else "只有在你已经知道要验证什么风险后，再去看个股研究或机构页。"
 )
 
 dist = None
@@ -555,11 +543,7 @@ if report and getattr(report, "margin_call_info", None):
         dist = None
 
 if dist is not None and dist < 0.30:
-    risk_note = (
-        f"Leverage deserves attention first: margin-call distance is {dist:.1%}. Open Risk before researching new names."
-        if lang == "en"
-        else f"杠杆应优先处理：距离保证金追缴仅 {dist:.1%}。先看 Risk，再研究新标的。"
-    )
+    risk_note = f"Leverage deserves attention first: margin-call distance is {dist:.1%}. Open Risk before researching new names."
 
 cards = [
     ("Markets", regime_note, "pages/3_Markets.py"),
@@ -573,11 +557,7 @@ for col, (title, body, path) in zip(cols, cards):
         st.caption(body)
         st.page_link(
             path,
-            label=(
-                f"Open {title}"
-                if lang == "en"
-                else {"Markets": "打开市场", "Risk": "打开风险", "Research": "打开个股研究"}[title]
-            ),
+            label=(f"Open {title}"),
         )
 
 

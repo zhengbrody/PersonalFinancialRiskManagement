@@ -355,17 +355,13 @@ _leverage_display = (
 )
 
 render_section(
-    "Executive Snapshot" if lang == "en" else "执行摘要",
-    (
-        "Six numbers first. Everything else should explain or support these."
-        if lang == "en"
-        else "先看六个数字，其余内容都只是解释和支撑。"
-    ),
+    "Executive Snapshot",
+    ("Six numbers first. Everything else should explain or support these."),
 )
 render_kpi_row(
     [
         {
-            "label": "Net Equity" if lang == "en" else "净资产",
+            "label": "Net Equity",
             "value": f"${meta_kpi.get('net_equity', 0):,.0f}" if meta_kpi else "--",
             "delta": (
                 f"${daily_pnl:+,.0f} ({daily_pnl_pct:+.2%})"
@@ -381,7 +377,7 @@ render_kpi_row(
             "tooltip": f"VaR 99%: {report.var_99:.2%} | CVaR 95%: {report.cvar_95:.2%}",
         },
         {
-            "label": "Max Drawdown" if lang == "en" else "最大回撤",
+            "label": "Max Drawdown",
             "value": f"{report.max_drawdown:.2%}",
             "tooltip": "Worst peak-to-trough decline over the analysis window",
         },
@@ -395,14 +391,12 @@ render_kpi_row(
             "tooltip": f"Rf={report.risk_free_rate:.2%} | Vol={report.annual_volatility:.2%}",
         },
         {
-            "label": "Leverage" if lang == "en" else "杠杆",
+            "label": "Leverage",
             "value": _leverage_display,
-            "tooltip": (
-                "Total long divided by net equity" if lang == "en" else "总多头市值 / 净资产"
-            ),
+            "tooltip": ("Total long divided by net equity"),
         },
         {
-            "label": "Top Risk" if lang == "en" else "头号风险来源",
+            "label": "Top Risk",
             "value": f"{_top_risk_tk} · {_top_risk_pct:.0%}",
             "tooltip": _top_risk_tooltip,
         },
@@ -410,23 +404,15 @@ render_kpi_row(
 )
 
 render_section(
-    "What Matters Now" if lang == "en" else "当前最重要",
-    (
-        "Action-first interpretation of the portfolio state."
-        if lang == "en"
-        else "先给动作导向的解释。"
-    ),
+    "What Matters Now",
+    ("Action-first interpretation of the portfolio state."),
 )
 _render_focus_cards(_build_focus_cards(report, meta_kpi or {}, weights, lang))
 
 if meta_kpi:
     render_section(
-        "Capital Snapshot" if lang == "en" else "资金快照",
-        (
-            "Separate capital efficiency from position-level P&L."
-            if lang == "en"
-            else "把本金效率和持仓盈亏拆开看。"
-        ),
+        "Capital Snapshot",
+        ("Separate capital efficiency from position-level P&L."),
     )
     _cc = meta_kpi.get("contributed_capital", meta_kpi.get("cost_basis", 0))
     _roc_dollar = meta_kpi.get("return_on_capital_dollar", meta_kpi.get("total_pnl", 0))
@@ -439,26 +425,22 @@ if meta_kpi:
     _missing_cost = _pos_info.get("tickers_missing_cost", [])
     capital_metrics = [
         {
-            "label": "Contributed Capital" if lang == "en" else "自有本金",
+            "label": "Contributed Capital",
             "value": f"${_cc:,.0f}" if _cc else "--",
-            "tooltip": (
-                "Self-funded principal, excluding margin draws"
-                if lang == "en"
-                else "自有投入本金，不含融资借款"
-            ),
+            "tooltip": ("Self-funded principal, excluding margin draws"),
         },
         {
-            "label": "Total Long" if lang == "en" else "总多头市值",
+            "label": "Total Long",
             "value": f"${meta_kpi.get('total_long', 0):,.0f}",
         },
         {
-            "label": "Return on Capital" if lang == "en" else "本金收益",
+            "label": "Return on Capital",
             "value": f"${_roc_dollar:+,.0f}" if _roc_dollar is not None else "--",
             "delta": f"{_roc_pct:+.1%}" if _roc_pct is not None else None,
             "delta_color": "positive" if (_roc_dollar or 0) >= 0 else "negative",
         },
         {
-            "label": "Position P&L" if lang == "en" else "持仓盈亏",
+            "label": "Position P&L",
             "value": f"${_pos_pnl:+,.0f}" if _pos_pnl is not None else "—",
             "delta": f"{_pos_pnl_pct:+.1%}" if _pos_pnl_pct is not None else None,
             "delta_color": "positive" if (_pos_pnl or 0) >= 0 else "negative",
@@ -470,23 +452,14 @@ if meta_kpi:
     render_kpi_row(capital_metrics)
     if _missing_cost:
         st.caption(
-            f"🔍 Missing `avg_cost` for {len(_missing_cost)} ticker(s): "
-            f"{', '.join(f'`{t}`' for t in _missing_cost)}. "
-            f"Coverage by ticker count: {_cov_ct:.0%}."
-            if lang == "en"
-            else f"🔍 有 {len(_missing_cost)} 只持仓缺少 `avg_cost`：{', '.join(f'`{t}`' for t in _missing_cost)}。"
-            f"按 ticker 数覆盖率：{_cov_ct:.0%}。"
+            f"🔍 Missing `avg_cost` for {len(_missing_cost)} ticker(s): {', '.join((f'`{t}`' for t in _missing_cost))}. Coverage by ticker count: {_cov_ct:.0%}."
         )
 
 account_df = _build_account_scorecard(prices, weights, report, meta_kpi or {})
 if not account_df.empty:
     render_section(
-        "Per-Account Scorecard" if lang == "en" else "分账户评分卡",
-        (
-            "Simulated from current holdings and the same historical window as portfolio analytics."
-            if lang == "en"
-            else "基于当前持仓结构，在与组合分析相同的历史窗口内回溯模拟。"
-        ),
+        "Per-Account Scorecard",
+        ("Simulated from current holdings and the same historical window as portfolio analytics."),
     )
     display_df = account_df.copy()
     display_df["Account"] = display_df["account"].map(str)
@@ -522,7 +495,7 @@ if not account_df.empty:
         use_container_width=True,
     )
 
-render_section("AI Risk Digest" if lang == "en" else "AI风险摘要")
+render_section("AI Risk Digest")
 try:
     top_holding = sorted(weights.items(), key=lambda x: -x[1])[0]
     top_tk, top_wt = top_holding
@@ -535,10 +508,7 @@ try:
 - Annual Volatility: {report.annual_volatility:.2%}
 - Stress Loss: {report.stress_loss:.2%}
 Highlight the single most important risk and one practical next step. Plain text, no markdown."""
-    if lang == "zh":
-        prompt = prompt.replace("Based on", "根据").replace(
-            "generate a concise risk summary", "生成简洁的风险摘要"
-        )
+    pass
 
     with st.spinner("Generating AI risk digest..."):
         digest = cached_digest(
@@ -564,12 +534,8 @@ if meta_kpi and cumret is not None and len(cumret) > 1:
     _base = meta_kpi.get("contributed_capital") or meta_kpi.get("cost_basis")
     if _base and _base > 0:
         render_section(
-            "Portfolio Value History (simulated)" if lang == "en" else "组合净值历史（模拟）",
-            (
-                "Main chart for decision-makers. Relative-holding charts are moved below."
-                if lang == "en"
-                else "这是决策者优先看的主图，个股相对表现下沉到下方折叠区。"
-            ),
+            "Portfolio Value History (simulated)",
+            ("Main chart for decision-makers. Relative-holding charts are moved below."),
         )
         port_value = _base * cumret
         peak = port_value.cummax()
@@ -604,7 +570,7 @@ if meta_kpi and cumret is not None and len(cumret) > 1:
             annotation_position="bottom right",
         )
         fig_hist.update_layout(
-            yaxis_title="Portfolio $" if lang == "en" else "组合金额 $",
+            yaxis_title="Portfolio $",
             xaxis_title="",
             height=340,
             hovermode="x unified",
@@ -614,8 +580,6 @@ if meta_kpi and cumret is not None and len(cumret) > 1:
             fig_hist,
             insight=(
                 f"Simulated value if current weights had been held since {port_value.index[0].date()}."
-                if lang == "en"
-                else f"以当前权重在 {port_value.index[0].date()} 回溯模拟的净值路径。"
             ),
         )
 
@@ -633,7 +597,7 @@ if meta_kpi and cumret is not None and len(cumret) > 1:
                 )
             )
             fig_dd_dollar.update_layout(
-                yaxis_title="Dollar Drawdown" if lang == "en" else "美元回撤",
+                yaxis_title="Dollar Drawdown",
                 xaxis_title="",
                 height=200,
                 showlegend=False,
@@ -643,23 +607,17 @@ if meta_kpi and cumret is not None and len(cumret) > 1:
                 fig_dd_dollar,
                 insight=(
                     f"Worst drawdown: ${drawdown_dollar.min():,.0f} ({drawdown_dollar.min() / _base:.1%} of capital)"
-                    if lang == "en"
-                    else f"最大回撤：${drawdown_dollar.min():,.0f}（占本金 {drawdown_dollar.min() / _base:.1%}）"
                 ),
             )
 
 render_section(
-    "Risk Breakdown" if lang == "en" else "风险拆解",
-    (
-        "Only the exposures most likely to change your next action."
-        if lang == "en"
-        else "这里只保留最可能影响你下一步动作的风险暴露。"
-    ),
+    "Risk Breakdown",
+    ("Only the exposures most likely to change your next action."),
 )
 col_left, col_right = st.columns(2)
 
 with col_left:
-    st.markdown("**Top Risk Contributors**" if lang == "en" else "**主要风险来源**")
+    st.markdown("**Top Risk Contributors**")
     if report.component_var_pct is not None:
         cv = report.component_var_pct
         top_risk = sorted(cv.items(), key=lambda x: -x[1])[:5]
@@ -678,7 +636,7 @@ with col_left:
         st.dataframe(pd.DataFrame(risk_rows), hide_index=True, use_container_width=True)
 
 with col_right:
-    st.markdown("**Sector Exposure**" if lang == "en" else "**行业配置**")
+    st.markdown("**Sector Exposure**")
     sector_weights = {}
     for tk, w in weights.items():
         sector = get_sector(tk)
@@ -710,13 +668,11 @@ with col_right:
     )
     render_chart(fig_sector)
 
-with render_section(
-    "Relative Performance Detail" if lang == "en" else "相对表现详情", collapsed=True
-):
+with render_section("Relative Performance Detail", collapsed=True):
     if prices is not None and not prices.empty and cumret is not None and len(cumret) > 1:
         norm = prices / prices.iloc[0]
         display_mode = st.radio(
-            "Display Mode" if lang == "en" else "显示模式",
+            "Display Mode",
             ["Portfolio Only", "Portfolio + Top 10", "All Holdings"],
             horizontal=True,
             key="cumret_mode",
@@ -752,7 +708,7 @@ with render_section(
             )
         )
         fig.update_layout(
-            yaxis_title="Cumulative Return" if lang == "en" else "累积收益",
+            yaxis_title="Cumulative Return",
             height=500,
             legend=dict(orientation="h", y=-0.12),
             hovermode="closest",
@@ -762,16 +718,14 @@ with render_section(
             insight="Portfolio cumulative return tracks the weighted sum of all holdings over the analysis period.",
         )
     else:
-        st.caption(
-            "Relative performance detail is unavailable." if lang == "en" else "暂无相对表现详情。"
-        )
+        st.caption("Relative performance detail is unavailable.")
 
-with render_section("Export Reports" if lang == "en" else "导出报告", collapsed=True):
+with render_section("Export Reports", collapsed=True):
     exp_col1, exp_col2, _ = st.columns([1, 1, 4])
     with exp_col1:
         excel_buf = create_excel_report(report, weights, mc_horizon, market_shock, prices)
         st.download_button(
-            label="Export Excel" if lang == "en" else "导出Excel",
+            label="Export Excel",
             data=excel_buf,
             file_name="portfolio_risk_report.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -792,7 +746,7 @@ with render_section("Export Reports" if lang == "en" else "导出报告", collap
                 lang,
             )
             st.download_button(
-                label="Export PDF" if lang == "en" else "导出PDF",
+                label="Export PDF",
                 data=pdf_bytes,
                 file_name="portfolio_risk_report.pdf",
                 mime="application/pdf",
@@ -804,7 +758,7 @@ with render_section("Export Reports" if lang == "en" else "导出报告", collap
 
 
 # Drawdown Detail (Collapsed)
-with render_section("Drawdown Detail" if lang == "en" else "回撤详情", collapsed=True):
+with render_section("Drawdown Detail", collapsed=True):
     dd = report.drawdown_series
     fig_dd = go.Figure()
     fig_dd.add_trace(
@@ -818,7 +772,7 @@ with render_section("Drawdown Detail" if lang == "en" else "回撤详情", colla
         )
     )
     fig_dd.update_layout(
-        yaxis_title="Drawdown" if lang == "en" else "回撤",
+        yaxis_title="Drawdown",
         yaxis_tickformat=".1%",
         height=380,
     )

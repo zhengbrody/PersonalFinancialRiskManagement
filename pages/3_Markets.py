@@ -80,7 +80,7 @@ server_deepseek_key = os.environ.get("DEEPSEEK_API_KEY", "") or _safe_get_secret
 # ══════════════════════════════════════════════════════════════
 #  1. Market Regime Strip — VIX + F&G + Yield Curve (3 compact cards)
 # ══════════════════════════════════════════════════════════════
-render_section("Market Regime" if lang == "en" else "市场状态")
+render_section("Market Regime")
 
 # Auto-load market regime data on first visit (cached for the session).
 # Avoids the "click button or see --" dead state.
@@ -92,25 +92,21 @@ _needs_regime_load = not all(
 load_col, refresh_col, _ = st.columns([1, 1, 2])
 with load_col:
     run_regime = st.button(
-        "Refresh Market Data" if lang == "en" else "刷新市场数据",
+        "Refresh Market Data",
         type="primary",
         key="run_regime",
         use_container_width=True,
     )
 with refresh_col:
     if _needs_regime_load:
-        st.caption("Auto-loading…" if lang == "en" else "首次加载中…")
+        st.caption("Auto-loading…")
 
 if run_regime or _needs_regime_load:
-    with st.spinner(
-        "Fetching VIX, Fear & Greed, Yield Curve..."
-        if lang == "en"
-        else "正在获取 VIX / 恐贪指数 / 收益率曲线..."
-    ):
+    with st.spinner("Fetching VIX, Fear & Greed, Yield Curve..."):
         try:
             st.session_state.vix_current = get_vix_current()
         except Exception as e:
-            st.warning(f"VIX fetch failed: {e}" if lang == "en" else f"VIX 获取失败: {e}")
+            st.warning(f"VIX fetch failed: {e}")
             st.session_state.vix_current = None
         try:
             st.session_state.vix_hist = fetch_vix_data(period="1y")
@@ -121,15 +117,11 @@ if run_regime or _needs_regime_load:
             st.session_state.yield_curve_df = yc_df
             st.session_state.yield_analysis = yc_analysis
         except Exception as e:
-            st.warning(
-                f"Yield curve fetch failed: {e}" if lang == "en" else f"收益率曲线获取失败: {e}"
-            )
+            st.warning(f"Yield curve fetch failed: {e}")
         try:
             st.session_state.fear_greed_data = fetch_fear_greed()
         except Exception as e:
-            st.warning(
-                f"Fear & Greed fetch failed: {e}" if lang == "en" else f"恐贪指数获取失败: {e}"
-            )
+            st.warning(f"Fear & Greed fetch failed: {e}")
 
 vix_cur = st.session_state.get("vix_current")
 fg_data = st.session_state.get("fear_greed_data")
@@ -201,9 +193,9 @@ if _yc_df is not None and not _yc_df.empty:
         )
     )
     fig_yc.update_layout(
-        title="US Treasury Yield Curve" if lang == "en" else "美国国债收益率曲线",
-        xaxis_title="Maturity" if lang == "en" else "期限",
-        yaxis_title="Yield (%)" if lang == "en" else "收益率 (%)",
+        title="US Treasury Yield Curve",
+        xaxis_title="Maturity",
+        yaxis_title="Yield (%)",
         height=320,
         hovermode="x unified",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
@@ -246,18 +238,18 @@ if mnews_data:
 #  3. Ticker Research Quick Access
 # ══════════════════════════════════════════════════════════════
 st.markdown("---")
-render_section("Ticker Research" if lang == "en" else "个股研究")
+render_section("Ticker Research")
 
 st.markdown(
     '<div style="background:rgba(11,114,133,0.08);border:1px solid rgba(11,114,133,0.2);'
     'border-radius:8px;padding:16px 20px;margin:8px 0">'
     '<div style="font-size:14px;font-weight:600;color:#E6EDF3;margin-bottom:6px">'
-    f'{"For comprehensive single-stock analysis (fundamentals, valuation, technicals, insider activity, analyst ratings, AI recommendation), use the" if lang == "en" else "如需全面的个股分析（基本面、估值、技术面、内部人交易、分析师评级、AI推荐），请使用"}'
-    f' <b>{"Ticker Research" if lang == "en" else "个股研究"}</b> '
-    f'{"page in the sidebar." if lang == "en" else "页面（侧边栏）。"}'
+    f"{'For comprehensive single-stock analysis (fundamentals, valuation, technicals, insider activity, analyst ratings, AI recommendation), use the'}"
+    f" <b>{'Ticker Research'}</b> "
+    f"{'page in the sidebar.'}"
     "</div>"
     '<div style="font-size:12px;color:#8B949E">'
-    f'{"Supports any ticker symbol — not limited to your portfolio holdings." if lang == "en" else "支持搜索任意股票代码，不限于持仓股票。"}'
+    f"{'Supports any ticker symbol — not limited to your portfolio holdings.'}"
     "</div>"
     "</div>",
     unsafe_allow_html=True,
@@ -270,14 +262,10 @@ all_tickers_sorted = sorted(weights, key=lambda x: -weights[x])
 equity_tickers = [tk for tk in all_tickers_sorted if not tk.endswith("-USD")]
 selector_options = equity_tickers if equity_tickers else all_tickers_sorted
 selected_ticker = st.selectbox(
-    "Select Ticker" if lang == "en" else "选择股票",
+    "Select Ticker",
     selector_options,
     key="market_intel_ticker",
-    help=(
-        f"Choose from all {len(selector_options)} equity holdings"
-        if lang == "en"
-        else f"从全部 {len(selector_options)} 只股票持仓中选择"
-    ),
+    help=(f"Choose from all {len(selector_options)} equity holdings"),
 )
 
 
@@ -285,7 +273,7 @@ selected_ticker = st.selectbox(
 #  5. Sentiment Tear Sheet for selected ticker
 # ══════════════════════════════════════════════════════════════
 st.markdown("---")
-render_section("AI Sentiment" if lang == "en" else "AI 情绪分析")
+render_section("AI Sentiment")
 
 _llm_available = (
     (model_provider == "Anthropic Claude" and (api_key_input or server_anthropic_key))
@@ -294,11 +282,7 @@ _llm_available = (
 )
 
 if not _llm_available:
-    st.info(
-        "AI sentiment requires a configured server-side Claude/DeepSeek key, or local Ollama."
-        if lang == "en"
-        else "AI 情绪分析需要服务器端 Claude/DeepSeek key，或本地 Ollama。"
-    )
+    st.info("AI sentiment requires a configured server-side Claude/DeepSeek key, or local Ollama.")
 else:
     # Universe = ALL portfolio holdings (stocks via yfinance + crypto via CryptoPanic).
     _all_by_weight = sorted(weights.keys(), key=lambda x: -weights[x])
@@ -308,12 +292,7 @@ else:
     info_col, sent_col, reddit_col = st.columns([2, 1, 1])
     with info_col:
         st.caption(
-            f"Will analyze all {_total_holdings} holdings "
-            f"({len(_equity_by_weight)} equities + {_total_holdings - len(_equity_by_weight)} crypto). "
-            f"Each click fetches fresh news."
-            if lang == "en"
-            else f"将分析全部 {_total_holdings} 只持仓（{len(_equity_by_weight)} 股票 + "
-            f"{_total_holdings - len(_equity_by_weight)} 加密）。每次点击获取最新新闻。"
+            f"Will analyze all {_total_holdings} holdings ({len(_equity_by_weight)} equities + {_total_holdings - len(_equity_by_weight)} crypto). Each click fetches fresh news."
         )
     with sent_col:
         run_sent = st.button(
@@ -322,14 +301,10 @@ else:
     with reddit_col:
         _apify_key = os.environ.get("APIFY_API_KEY", "") or _safe_get_secret("APIFY_API_KEY")
         run_reddit = st.button(
-            "Reddit FOMO" if lang == "en" else "Reddit 散户情绪",
+            "Reddit FOMO",
             key="run_reddit",
             use_container_width=True,
-            help=(
-                "Reddit sentiment covers equities + crypto via r/wallstreetbets and r/stocks"
-                if lang == "en"
-                else "Reddit 情绪覆盖股票 + 加密货币，来源 r/wallstreetbets + r/stocks"
-            ),
+            help=("Reddit sentiment covers equities + crypto via r/wallstreetbets and r/stocks"),
         )
 
     if run_sent:
@@ -372,11 +347,7 @@ else:
 
         progress_bar = st.progress(
             0,
-            text=(
-                f"Fetching news for {len(selected)} tickers..."
-                if lang == "en"
-                else f"正在获取 {len(selected)} 只标的新闻..."
-            ),
+            text=(f"Fetching news for {len(selected)} tickers..."),
         )
         news_data = fetch_asset_news(tuple(selected))
 
@@ -388,11 +359,7 @@ else:
 
         sentiment_results: dict = {}
         completed = 0
-        with st.spinner(
-            f"Scoring {len(selected)} tickers in parallel (max 5 at once)..."
-            if lang == "en"
-            else f"正在并行情绪评分 {len(selected)} 只标的（最多同时 5 个）..."
-        ):
+        with st.spinner(f"Scoring {len(selected)} tickers in parallel (max 5 at once)..."):
             with ThreadPoolExecutor(max_workers=5) as ex:
                 future_to_tk = {
                     ex.submit(
@@ -422,11 +389,7 @@ else:
                     completed += 1
                     progress_bar.progress(
                         completed / len(selected),
-                        text=(
-                            f"Scored {completed}/{len(selected)}"
-                            if lang == "en"
-                            else f"已评分 {completed}/{len(selected)}"
-                        ),
+                        text=(f"Scored {completed}/{len(selected)}"),
                     )
         progress_bar.empty()
 
@@ -504,7 +467,7 @@ else:
         fig_sent.add_hline(y=7, line_dash="dot", line_color=CLR_GOOD, opacity=0.4)
         fig_sent.add_hline(y=3, line_dash="dot", line_color=CLR_DANGER, opacity=0.4)
         fig_sent.update_layout(
-            title="Sentiment Score Overview" if lang == "en" else "情绪评分总览",
+            title="Sentiment Score Overview",
             yaxis=dict(range=[0, 11]),
             height=300,
         )
@@ -512,9 +475,7 @@ else:
 
         # ── Full overview table: weight + score + top headline ─────
         st.markdown("")
-        render_section(
-            "All Holdings — Sentiment & Headlines" if lang == "en" else "全持仓情绪与头条"
-        )
+        render_section("All Holdings — Sentiment & Headlines")
         _rows = []
         for tk in sorted(sent.keys(), key=lambda x: -weights.get(x, 0)):
             d = sent[tk]
@@ -547,7 +508,7 @@ else:
         if selected_ticker in sent:
             st.markdown("")
             render_section(
-                f"Detail — {selected_ticker}" if lang == "en" else f"明细 — {selected_ticker}",
+                f"Detail — {selected_ticker}",
                 collapsed=True,
             )
             render_sentiment_tear_sheet(
@@ -569,9 +530,7 @@ else:
 # ══════════════════════════════════════════════════════════════
 reddit_fomo = st.session_state.get("reddit_fomo_data")
 if reddit_fomo:
-    with render_section(
-        "Reddit FOMO Monitor" if lang == "en" else "Reddit 散户情绪监控", collapsed=True
-    ):
+    with render_section("Reddit FOMO Monitor", collapsed=True):
         # Split scored vs no-mention tickers.
         # A scored ticker has a numeric fomo_score (not None).
         all_tickers = {
@@ -581,10 +540,7 @@ if reddit_fomo:
         no_mention = [k for k, v in all_tickers.items() if v.get("fomo_score") is None]
 
         st.caption(
-            f"{len(scored)} tickers had Reddit mentions in the last 24h · "
-            f"{len(no_mention)} had no mentions"
-            if lang == "en"
-            else f"{len(scored)} 只在过去 24h 有 Reddit 讨论 · {len(no_mention)} 只无讨论"
+            f"{len(scored)} tickers had Reddit mentions in the last 24h · {len(no_mention)} had no mentions"
         )
 
         if scored:
@@ -616,7 +572,7 @@ if reddit_fomo:
 
             # Detailed post text per ticker
             with render_section(
-                "Top posts per ticker" if lang == "en" else "每只股票的热门帖子",
+                "Top posts per ticker",
                 collapsed=True,
             ):
                 for tk, fomo in scored_sorted[:10]:
@@ -633,11 +589,7 @@ if reddit_fomo:
 
         if no_mention:
             st.caption(
-                f"No Reddit mentions: {', '.join(no_mention[:15])}"
-                f"{'…' if len(no_mention) > 15 else ''}"
-                if lang == "en"
-                else f"无 Reddit 讨论: {', '.join(no_mention[:15])}"
-                f"{'…' if len(no_mention) > 15 else ''}"
+                f"No Reddit mentions: {', '.join(no_mention[:15])}{('…' if len(no_mention) > 15 else '')}"
             )
 
 
@@ -646,9 +598,7 @@ if reddit_fomo:
 # ══════════════════════════════════════════════════════════════
 fund_data = st.session_state.get("fundamentals_data")
 if fund_data is not None and not fund_data.empty:
-    with render_section(
-        "Full Fundamentals Table" if lang == "en" else "完整基本面数据", collapsed=True
-    ):
+    with render_section("Full Fundamentals Table", collapsed=True):
         order = [tk for tk in sorted(weights, key=lambda x: -weights[x]) if tk in fund_data.index]
         fund_sorted = fund_data.loc[order].copy()
         fund_sorted.insert(0, "Weight", [f"{weights.get(tk, 0):.1%}" for tk in fund_sorted.index])
