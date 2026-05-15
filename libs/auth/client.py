@@ -72,8 +72,9 @@ def get_supabase():
         )
 
     try:
-        from supabase import create_client
         from supabase.client import ClientOptions
+
+        from supabase import create_client
     except ImportError as e:
         raise AuthError("supabase-py not installed. Run `pip install supabase`.") from e
 
