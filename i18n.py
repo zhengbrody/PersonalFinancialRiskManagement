@@ -1034,7 +1034,7 @@ You have full access to the analysis report below, which includes:
         "tf_margin": "Margin",
         "tf_leverage": "Leverage",
         # ── Page 8: Institutions ──
-        "page_institutions": "Institutions",
+        "page_institutions": "Macro & Institutions",
         "inst_smart_money": "Smart Money",
         "inst_smart_money_signals": "Smart Money Signals",
         "inst_smart_money_subtitle": "Institutional conviction analysis for your portfolio holdings (SEC 13F)",

@@ -656,7 +656,7 @@ def build_ai_risk_briefing(
     fundamentals_df: pd.DataFrame,
     macro_news: List[Dict],
     sentiment_data: Optional[Dict] = None,
-    lang: str = "zh",
+    lang: str = "en",
 ) -> str:
     """
     综合所有维度的数据，生成结构化的 AI 风险简报提示词。
@@ -664,33 +664,43 @@ def build_ai_risk_briefing(
     """
     sections = []
 
-    # ── A. 市场情绪概览 ──────────────────────────────────────
-    sections.append("## A. 市场情绪概览")
+    use_zh = lang == "zh"
+
+    # ── A. Market sentiment overview ────────────────────────────
+    sections.append("## A. 市场情绪概览" if use_zh else "## A. Market Sentiment Overview")
 
     if vix_info.get("current") is not None:
         vix_val = vix_info["current"]
         vix_change = vix_info.get("change")
         change_str = f" ({vix_change:+.1%} vs prev close)" if vix_change else ""
-        sections.append(f"  VIX 恐慌指数: {vix_val:.2f}{change_str} — {vix_info['level']}")
+        label = "VIX 恐慌指数" if use_zh else "VIX fear index"
+        sections.append(f"  {label}: {vix_val:.2f}{change_str} - {vix_info['level']}")
 
     if yield_analysis:
         status = yield_analysis.get("curve_status", "N/A")
         spread = yield_analysis.get("3M-10Y Spread")
         spread_str = f", 3M-10Y spread: {spread:+.2f}%" if spread is not None else ""
-        sections.append(f"  收益率曲线: {status}{spread_str}")
+        label = "收益率曲线" if use_zh else "Yield curve"
+        sections.append(f"  {label}: {status}{spread_str}")
 
     sections.append("")
 
-    # ── B. 宏观新闻摘要 ──────────────────────────────────────
+    # ── B. Macro news summary ───────────────────────────────────
     if macro_news:
-        sections.append("## B. 最新宏观新闻（前 10 条）")
+        sections.append(
+            "## B. 最新宏观新闻（前 10 条）" if use_zh else "## B. Latest Macro News (Top 10)"
+        )
         for i, item in enumerate(macro_news[:10], 1):
             sections.append(f"  {i}. [{item['source']}] {item['title']}")
         sections.append("")
 
-    # ── C. 持仓基本面快照 ─────────────────────────────────────
+    # ── C. Holdings fundamentals snapshot ───────────────────────
     if fundamentals_df is not None and not fundamentals_df.empty:
-        sections.append("## C. 持仓基本面快照（前 10 大持仓）")
+        sections.append(
+            "## C. 持仓基本面快照（前 10 大持仓）"
+            if use_zh
+            else "## C. Holdings Fundamentals Snapshot (Top 10)"
+        )
         top_tickers = sorted(weights, key=lambda x: -weights[x])[:10]
         for tk in top_tickers:
             if tk in fundamentals_df.index:
@@ -718,30 +728,42 @@ def build_ai_risk_briefing(
                 sections.append("  ".join(parts))
         sections.append("")
 
-    # ── D. 量化风险指标（简缩版）───────────────────────────────
-    sections.append("## D. 核心量化风险指标")
+    # ── D. Quantitative risk metrics ────────────────────────────
+    sections.append("## D. 核心量化风险指标" if use_zh else "## D. Core Quantitative Risk Metrics")
     sections.append(
         f"  VaR 95%: {report.var_95:.2%} | VaR 99%: {report.var_99:.2%} | CVaR 95%: {report.cvar_95:.2%}"
     )
     sections.append(
-        f"  年化波动率: {report.annual_volatility:.2%} | 夏普: {report.sharpe_ratio:.2f} | 最大回撤: {report.max_drawdown:.2%}"
+        (
+            f"  年化波动率: {report.annual_volatility:.2%} | 夏普: {report.sharpe_ratio:.2f} | 最大回撤: {report.max_drawdown:.2%}"
+            if use_zh
+            else f"  Annual volatility: {report.annual_volatility:.2%} | Sharpe: {report.sharpe_ratio:.2f} | Max drawdown: {report.max_drawdown:.2%}"
+        )
     )
-    sections.append(f"  压力损失: {report.stress_loss:.2%}")
+    sections.append(
+        f"  压力损失: {report.stress_loss:.2%}"
+        if use_zh
+        else f"  Stress loss: {report.stress_loss:.2%}"
+    )
 
     if report.margin_call_info and report.margin_call_info.get("has_margin"):
         mi = report.margin_call_info
-        sections.append(f"  杠杆: {mi['leverage']:.2f}x | 距强平: {mi['distance_to_call_pct']:.1%}")
+        sections.append(
+            f"  杠杆: {mi['leverage']:.2f}x | 距强平: {mi['distance_to_call_pct']:.1%}"
+            if use_zh
+            else f"  Leverage: {mi['leverage']:.2f}x | Distance to margin call: {mi['distance_to_call_pct']:.1%}"
+        )
     sections.append("")
 
-    # ── E. 情绪得分（如有）────────────────────────────────────
+    # ── E. Sentiment scores ─────────────────────────────────────
     if sentiment_data:
-        sections.append("## E. 个股情绪评分")
+        sections.append("## E. 个股情绪评分" if use_zh else "## E. Single-Name Sentiment Scores")
         for tk, data in sorted(sentiment_data.items(), key=lambda x: x[1]["score"]):
             sections.append(f"  {tk}: {data['score']:+d}/10 — {data['summary'][:60]}")
         sections.append("")
 
     # ── 生成提示 ──────────────────────────────────────────────
-    if lang == "zh":
+    if use_zh:
         instruction = """## 请求
 基于以上所有信息，生成一份简洁的综合风险简报（3-5 段），包括：
 1. **市场环境判断** — VIX、收益率曲线、宏观新闻的综合含义

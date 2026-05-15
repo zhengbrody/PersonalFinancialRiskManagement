@@ -357,22 +357,34 @@ if run_brief:
         sentiment_data=sent,
         lang=lang,
     )
+    briefing_cache_key = hash((lang, tuple(sorted(weights.items())), briefing_prompt))
 
     with st.spinner(t("briefing_gen_spinner")):
         try:
-            st.session_state.ai_briefing = call_llm(
+            briefing = call_llm(
                 briefing_prompt,
                 system=(
                     "You are an institutional-grade portfolio risk analyst "
-                    "generating a morning risk briefing."
+                    "generating a morning risk briefing. Write the entire answer "
+                    "in English unless the user explicitly selected Chinese."
                 ),
                 max_tokens=2048,
                 temperature=0.3,
             )
+            st.session_state.ai_briefing = {
+                "lang": lang,
+                "cache_key": briefing_cache_key,
+                "text": briefing,
+            }
         except Exception as e:
             st.error(f"AI briefing unavailable: {e}")
 
-briefing = st.session_state.get("ai_briefing")
+briefing_state = st.session_state.get("ai_briefing")
+briefing = briefing_state.get("text") if isinstance(briefing_state, dict) else None
+if briefing_state and not isinstance(briefing_state, dict):
+    st.session_state.ai_briefing = None
+if isinstance(briefing_state, dict) and briefing_state.get("lang") != lang:
+    briefing = None
 if briefing:
     st.markdown(briefing)
     from datetime import datetime

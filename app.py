@@ -452,7 +452,8 @@ def run_portfolio_analysis(
         failed_tickers = dp.get_failed_tickers()
         if failed_tickers and len(failed_tickers) == len(weights):
             raise ValueError(
-                "无法下载所有ticker的数据。可能原因: " "网络不可用、股票代码无效或日期范围错误"
+                "Could not download data for any ticker. Possible causes: network "
+                "unavailable, invalid ticker symbols, or an unsupported date range."
             )
 
         prices = dp.fetch_prices()
@@ -484,7 +485,10 @@ def run_portfolio_analysis(
             duration_ms=round(duration_ms, 2),
             exc_info=True,
         )
-        raise ValueError("协方差矩阵计算失败。可能原因: " "资产高度相关、数据不足或数据质量问题")
+        raise ValueError(
+            "Covariance matrix calculation failed. Possible causes: highly correlated "
+            "assets, insufficient history, or poor data quality."
+        )
     except Exception as e:
         duration_ms = (time.time() - start_time) * 1000
         logger.error(
@@ -597,6 +601,29 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
         _os.environ.get("MINDMARKET_ADMIN_MODE", "") or _safe_get_secret("MINDMARKET_ADMIN_MODE")
     ).strip().lower() in ("1", "true", "yes", "on")
     model_provider = st.session_state.get("_model_provider", "Ollama (Local)")
+    system_prompt = (
+        system.strip()
+        if system
+        else (
+            "You are a helpful financial analyst. Answer in English unless the "
+            "caller explicitly requests another language."
+        )
+    )
+    if system:
+        _system_lower = system_prompt.lower()
+        if not any(
+            marker in _system_lower
+            for marker in (
+                "chinese",
+                "simplified chinese",
+                "answer in",
+                "respond in",
+                "respond entirely",
+                "write the entire answer",
+                "same language",
+            )
+        ):
+            system_prompt = f"{system_prompt} Write the entire answer in English."
 
     # Server-side keys when not admin; admin can still override via session.
     api_key_input = (
@@ -640,7 +667,7 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
                 raise ValueError("Please sign in to use AI chat and analysis credits.")
             pending_estimate = estimate_llm_event(
                 prompt=prompt,
-                system=system,
+                system=system_prompt,
                 provider=provider_slug,
                 model=model_name,
                 max_tokens=max_tokens,
@@ -704,7 +731,7 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
             else:
                 est = estimate_llm_event(
                     prompt=prompt,
-                    system=system,
+                    system=system_prompt,
                     provider=event_provider,
                     model=event_model,
                     max_tokens=max_tokens,
@@ -746,7 +773,7 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
                     resp = client.messages.create(
                         model=model_name,
                         max_tokens=max_tokens,
-                        system=system if system else "You are a helpful financial analyst.",
+                        system=system_prompt,
                         messages=[{"role": "user", "content": prompt}],
                     )
                     text = resp.content[0].text.strip()
@@ -767,7 +794,7 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
                                 fallback = _call_deepseek(
                                     api_key=deepseek_key,
                                     prompt=prompt,
-                                    system=system,
+                                    system=system_prompt,
                                     max_tokens=max_tokens,
                                     temperature=temperature,
                                 )
@@ -809,7 +836,7 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
                 text = _call_deepseek(
                     api_key=deepseek_key,
                     prompt=prompt,
-                    system=system,
+                    system=system_prompt,
                     max_tokens=max_tokens,
                     temperature=temperature,
                 )
@@ -825,9 +852,11 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
                 raise
 
         elif model_provider == "Ollama (Local)":
+            messages = [{"role": "system", "content": system_prompt}]
+            messages.append({"role": "user", "content": prompt})
             payload = {
                 "model": ollama_model,
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": messages,
                 "stream": False,
                 "options": {"temperature": temperature, "num_predict": max_tokens},
             }
@@ -840,14 +869,14 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
             except requests.exceptions.ConnectionError as e:
                 logger.error("llm.ollama.connection_failed", error=str(e))
                 raise ConnectionError(
-                    "无法连接到本地 Ollama (localhost:11434)。"
-                    "请确保 Ollama 已启动，或切换到 DeepSeek/Claude API。"
+                    "Cannot connect to local Ollama (localhost:11434). "
+                    "Start Ollama, or switch to DeepSeek / Claude in the sidebar."
                 )
             except requests.exceptions.Timeout as e:
                 logger.error("llm.ollama.timeout", error=str(e))
-                raise TimeoutError("Ollama 响应超时。请检查网络连接或稍后重试。")
+                raise TimeoutError("Ollama timed out. Check the connection or retry later.")
 
-        raise ValueError("未配置LLM后端。请在侧边栏设置API密钥。")
+        raise ValueError("No LLM backend configured. Configure server-side AI keys.")
 
     except ConnectionError as e:
         _record_llm_event("failure", error_reason=str(e))
@@ -1997,8 +2026,8 @@ def execute_analysis(force: bool = False) -> bool:
                 "failure", error_reason=validation_msg or "weight validation failed"
             )
             show_error(
-                ValueError(validation_msg or "权重验证失败"),
-                title="权重配置错误",
+                ValueError(validation_msg or "Weight validation failed"),
+                title="Weight Configuration Error",
                 error_type="weight_error",
             )
             st.stop()
@@ -2015,12 +2044,12 @@ def execute_analysis(force: bool = False) -> bool:
                 error_reason=f"invalid_tickers: {', '.join(invalid_tickers)}",
             )
             show_warning(
-                f"以下ticker格式无效: {', '.join(invalid_tickers)}",
-                title="无效的股票代码",
+                f"Invalid ticker format: {', '.join(invalid_tickers)}",
+                title="Invalid Ticker Symbol",
                 suggestions=[
-                    "确保代码只包含字母、数字和连字符（如 BTC-USD）",
-                    "使用标准的美股代码（AAPL, GOOGL, MSFT等）",
-                    "对于加密货币，使用 BTC-USD 格式而不是 BTC",
+                    "Use only letters, numbers, dots, and hyphens, for example BTC-USD.",
+                    "Use standard US ticker symbols such as AAPL, GOOGL, or MSFT.",
+                    "For crypto, use the Yahoo format such as BTC-USD instead of BTC.",
                 ],
             )
             st.stop()
@@ -2079,7 +2108,7 @@ def execute_analysis(force: bool = False) -> bool:
 
             # ── Step 4: Load price data ───────────────────────────────────
             try:
-                with st.spinner("正在下载市场数据（可能需要30-60秒）..."):
+                with st.spinner("Downloading market data. This can take 30-60 seconds..."):
                     report, prices, cumret = run_portfolio_analysis(
                         weights_json,
                         period_years,
@@ -2088,7 +2117,10 @@ def execute_analysis(force: bool = False) -> bool:
                         risk_free_fallback,
                         market_shock,
                     )
-                show_success(f"成功加载 {len(prices.columns)} 个ticker的数据", title="数据加载完成")
+                show_success(
+                    f"Loaded data for {len(prices.columns)} ticker(s)",
+                    title="Data Load Complete",
+                )
             except ValueError as e:
                 _record_analysis_event(
                     "failure",
@@ -2097,7 +2129,7 @@ def execute_analysis(force: bool = False) -> bool:
                 )
                 show_error(
                     e,
-                    title="数据加载失败",
+                    title="Data Load Failed",
                     error_type="insufficient_data",
                 )
                 logger.error("ui.analysis.data_load_failed", error=str(e), exc_info=True)
@@ -2112,20 +2144,20 @@ def execute_analysis(force: bool = False) -> bool:
                 if "linalg" in error_str or "singular" in error_str:
                     show_error(
                         e,
-                        title="协方差矩阵计算失败",
+                        title="Covariance Matrix Calculation Failed",
                         error_type="linear_algebra_error",
                     )
                 else:
                     show_error(
                         e,
-                        title="分析失败",
+                        title="Analysis Failed",
                     )
                 logger.error("ui.analysis.failed", error=str(e), exc_info=True)
                 st.stop()
 
             # ── Step 5: Build risk engine ─────────────────────────────────
             try:
-                with st.spinner("正在构建风险引擎..."):
+                with st.spinner("Building risk engine..."):
                     engine = build_engine_ref(
                         weights,
                         period_years,
@@ -2142,7 +2174,7 @@ def execute_analysis(force: bool = False) -> bool:
                         report.margin_call_info = engine.compute_margin_call(
                             meta_ss["total_long"], meta_ss.get("margin_loan", 0.0)
                         )
-                show_success("风险引擎构建完成", title="")
+                show_success("Risk engine ready", title="")
             except Exception as e:
                 _record_analysis_event(
                     "failure",
@@ -2151,7 +2183,7 @@ def execute_analysis(force: bool = False) -> bool:
                 )
                 show_error(
                     e,
-                    title="风险引擎构建失败",
+                    title="Risk Engine Build Failed",
                 )
                 logger.error("ui.engine.build_failed", error=str(e), exc_info=True)
                 st.stop()
@@ -2299,46 +2331,49 @@ def _main_ui():
                 )
                 if _input:
                     try:
-                        with st.spinner("AI分析中..."):
+                        with st.spinner("Analyzing..."):
                             _resp = call_llm(
                                 prompt=_input,
-                                system="You are a concise portfolio risk analyst. Answer in 2-3 sentences max. Be specific with numbers.",
+                                system=(
+                                    "You are a concise portfolio risk analyst. Answer in "
+                                    "English in 2-3 sentences max. Be specific with numbers."
+                                ),
                                 max_tokens=300,
                             )
                         st.markdown(_resp)
                     except ConnectionError as _e:
                         show_error(
                             _e,
-                            title="AI服务连接失败",
+                            title="AI Service Connection Failed",
                             error_type="connection_error",
                         )
                         logger.error("ui.chat.connection_error", error=str(_e))
                     except TimeoutError as _e:
                         show_warning(
-                            "AI响应超时，请稍后重试",
-                            title="请求超时",
+                            "The AI response timed out. Please retry later.",
+                            title="Request Timed Out",
                             suggestions=[
-                                "检查网络连接",
-                                "确保本地Ollama服务正常运行（如果使用）",
-                                "尝试切换到其他AI提供商",
+                                "Check your network connection.",
+                                "If using Ollama, confirm the local service is running.",
+                                "Try switching to another AI provider.",
                             ],
                         )
                         logger.warning("ui.chat.timeout", error=str(_e))
                     except ValueError as _e:
                         show_error(
                             _e,
-                            title="AI配置错误",
+                            title="AI Configuration Error",
                             error_type="value_error",
                         )
                         logger.error("ui.chat.config_error", error=str(_e))
                     except Exception as _e:
                         show_error(
                             _e,
-                            title="AI分析失败",
+                            title="AI Analysis Failed",
                         )
                         logger.error("ui.chat.error", error=str(_e), exc_info=True)
             else:
-                st.caption("运行分析以启用AI聊天")
+                st.caption("Run analysis to enable AI chat.")
 
     # ══════════════════════════════════════════════════════════════
     #  Floating AI Assistant (Always Visible - Replaces Chat Popover)

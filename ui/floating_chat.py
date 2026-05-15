@@ -11,6 +11,12 @@ LLM (Anthropic Claude, DeepSeek API, or local Ollama).
 
 import streamlit as st
 
+_CHAT_LANGUAGE_OPTIONS = {
+    "English": "English",
+    "Chinese": "Simplified Chinese",
+    "Match my message": "the same language as the user's latest message",
+}
+
 
 def _is_provider_auth_error(exc: Exception) -> bool:
     text = str(exc).lower()
@@ -81,6 +87,14 @@ def _chat_call_llm(
 
     model_provider = st.session_state.get("_model_provider", "Ollama (Local)")
     provider_slug = model_provider.lower().split()[0] if model_provider else None
+    system_prompt = (
+        system.strip()
+        if system
+        else (
+            "You are a helpful financial analyst. Answer in English unless the "
+            "caller explicitly requests another language."
+        )
+    )
 
     # Quota gate (production only)
     if not _admin_mode:
@@ -100,7 +114,7 @@ def _chat_call_llm(
             )
             usage_estimate = estimate_llm_event(
                 prompt=prompt,
-                system=system,
+                system=system_prompt,
                 provider=provider_slug,
                 model=model_name,
                 max_tokens=max_tokens,
@@ -180,7 +194,7 @@ def _chat_call_llm(
                 resp = client.messages.create(
                     model=claude_model,
                     max_tokens=max_tokens,
-                    system=system or "You are a helpful financial analyst.",
+                    system=system_prompt,
                     messages=[{"role": "user", "content": prompt}],
                 )
                 return resp.content[0].text.strip()
@@ -192,7 +206,7 @@ def _chat_call_llm(
                             fallback = _call_deepseek(
                                 api_key=deepseek_key,
                                 prompt=prompt,
-                                system=system,
+                                system=system_prompt,
                                 max_tokens=max_tokens,
                                 temperature=temperature,
                             )
@@ -226,7 +240,7 @@ def _chat_call_llm(
             return _call_deepseek(
                 api_key=deepseek_key,
                 prompt=prompt,
-                system=system,
+                system=system_prompt,
                 max_tokens=max_tokens,
                 temperature=temperature,
             )
@@ -242,9 +256,11 @@ def _chat_call_llm(
     elif model_provider == "Ollama (Local)":
         import requests as _requests
 
+        messages = [{"role": "system", "content": system_prompt}]
+        messages.append({"role": "user", "content": prompt})
         payload = {
             "model": ollama_model,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": messages,
             "stream": False,
             "options": {"temperature": temperature, "num_predict": max_tokens},
         }
@@ -267,17 +283,116 @@ def _chat_call_llm(
 #  Build portfolio context string from session_state
 # ──────────────────────────────────────────────────────────────
 def _build_portfolio_context() -> str:
-    """Assemble a concise context block from whatever is in session_state."""
+    """Assemble a concise context block from session_state and active DB holdings."""
+    import json
+
     parts = []
 
-    weights = st.session_state.get("weights_input") or st.session_state.get("weights_json")
+    weights = st.session_state.get("weights") or {}
+    if not weights:
+        raw_weights = st.session_state.get("weights_input") or st.session_state.get("weights_json")
+        if raw_weights:
+            try:
+                weights = json.loads(raw_weights)
+            except Exception:
+                weights = {}
+
+    holdings = {}
+    margin_loan = None
+    portfolio_meta = {}
+    if weights or st.session_state.get("analysis_ready"):
+        try:
+            from libs.auth.active_portfolio import (
+                get_active_holdings,
+                get_active_margin_loan,
+                get_active_portfolio_meta,
+            )
+
+            holdings = get_active_holdings() or {}
+            margin_loan = float(get_active_margin_loan() or 0)
+            portfolio_meta = get_active_portfolio_meta() or {}
+        except Exception:
+            holdings = {}
+            portfolio_meta = {}
+
     if weights:
-        parts.append(f"Current portfolio weights (JSON):\n{weights}")
+        weight_items = sorted(
+            ((str(t).upper(), float(w)) for t, w in weights.items()),
+            key=lambda item: item[1],
+            reverse=True,
+        )
+        parts.append(
+            "Current portfolio weights:\n"
+            + "\n".join(f"- {ticker}: {weight:.2%}" for ticker, weight in weight_items[:20])
+        )
+
+    if holdings:
+        latest_prices = {}
+        prices = st.session_state.get("prices")
+        try:
+            if prices is not None and not prices.empty:
+                last_row = prices.ffill().iloc[-1]
+                latest_prices = {str(k).upper(): float(v) for k, v in last_row.items()}
+        except Exception:
+            latest_prices = {}
+
+        holding_lines = []
+        total_cost = 0.0
+        total_market_value = 0.0
+        for ticker, holding in sorted(holdings.items()):
+            if not isinstance(holding, dict):
+                continue
+            shares = float(holding.get("shares") or 0)
+            avg_cost = holding.get("avg_cost")
+            account = holding.get("account") or "default"
+            asset_type = holding.get("asset_type") or "unknown"
+            sector = holding.get("sector") or ""
+            price = latest_prices.get(str(ticker).upper())
+            market_value = shares * price if price is not None else None
+            if market_value is not None:
+                total_market_value += market_value
+            cost = shares * float(avg_cost) if avg_cost is not None else None
+            if cost is not None:
+                total_cost += cost
+            holding_lines.append(
+                "- "
+                + str(ticker).upper()
+                + f": shares={shares:g}"
+                + (
+                    f", weight={float(weights.get(ticker, weights.get(str(ticker).upper(), 0))):.2%}"
+                    if weights
+                    else ""
+                )
+                + (f", last_price=${price:,.2f}" if price is not None else "")
+                + (f", market_value=${market_value:,.0f}" if market_value is not None else "")
+                + (f", avg_cost=${float(avg_cost):,.2f}" if avg_cost is not None else "")
+                + f", account={account}, asset_type={asset_type}"
+                + (f", sector={sector}" if sector else "")
+            )
+        parts.append(
+            "Active user portfolio holdings"
+            + (
+                f" ({portfolio_meta.get('name')}, source={portfolio_meta.get('source')})"
+                if portfolio_meta
+                else ""
+            )
+            + ":\n"
+            + "\n".join(holding_lines[:30])
+        )
+        if total_market_value or total_cost or margin_loan is not None:
+            parts.append(
+                "Portfolio totals from holdings/prices: "
+                f"market_value=${total_market_value:,.0f}, "
+                f"known_cost_basis=${total_cost:,.0f}, "
+                f"margin_loan=${float(margin_loan or 0):,.0f}"
+            )
 
     meta = st.session_state.get("_portfolio_meta")
     if meta:
         parts.append(
             f"Portfolio metadata: "
+            f"Name={meta.get('portfolio_name', 'N/A')}, "
+            f"Source={meta.get('portfolio_source', 'N/A')}, "
             f"Net Equity=${meta.get('net_equity', 0):,.0f}, "
             f"Total Long=${meta.get('total_long', 0):,.0f}, "
             f"Margin Loan=${meta.get('margin_loan', 0):,.0f}, "
@@ -313,7 +428,10 @@ def _build_portfolio_context() -> str:
                 pass
 
     if not parts:
-        return "No portfolio data loaded yet. The user should run an analysis first."
+        return (
+            "No portfolio data is loaded yet. Ask the user to create/select a "
+            "portfolio and run Refresh & Run Analysis before giving portfolio-specific advice."
+        )
 
     return "\n\n".join(parts)
 
@@ -323,7 +441,8 @@ _SYSTEM_PROMPT = (
     "dashboard app.  You have access to the user's live portfolio data shown "
     "below.  Answer questions concisely and authoritatively, citing specific "
     "numbers.  Use bullet points for clarity.  Keep answers to 3-5 sentences "
-    "unless the user asks for more detail.\n\n"
+    "unless the user asks for more detail.  Do not invent holdings or prices; "
+    "if a field is missing, say it is unavailable.  Answer in {language}.\n\n"
     "--- PORTFOLIO CONTEXT ---\n{context}\n--- END CONTEXT ---"
 )
 
@@ -353,6 +472,14 @@ def _open_chat_dialog():
     st.caption(
         f"Powered by {provider}  --  "
         "Ask about your portfolio risk, market conditions, or strategy"
+    )
+
+    st.selectbox(
+        "Response language",
+        list(_CHAT_LANGUAGE_OPTIONS.keys()),
+        index=0,
+        key="_fc_response_language",
+        help="Only the chat assistant uses this language setting. The app UI stays English.",
     )
 
     chat_container = st.container(height=420)
@@ -403,7 +530,11 @@ def _handle_user_input(user_input: str, chat_container):
             st.markdown(user_input)
 
     context = _build_portfolio_context()
-    system = _SYSTEM_PROMPT.format(context=context)
+    language = _CHAT_LANGUAGE_OPTIONS.get(
+        st.session_state.get("_fc_response_language", "English"),
+        "English",
+    )
+    system = _SYSTEM_PROMPT.format(context=context, language=language)
 
     recent = st.session_state._fc_messages[-10:]
     conversation_parts = []

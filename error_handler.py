@@ -22,111 +22,111 @@ logger = get_logger(__name__)
 
 ERROR_SUGGESTIONS = {
     "json_decode_error": {
-        "title": "JSON格式错误",
+        "title": "JSON Format Error",
         "causes": [
-            "缺少逗号或引号",
-            "大括号不匹配",
-            "使用了单引号而不是双引号",
+            "Missing comma or quote",
+            "Mismatched braces or brackets",
+            "Single quotes used instead of double quotes",
         ],
         "suggestions": [
-            "检查JSON格式（使用在线JSON验证工具）",
-            "确保所有字符串用双引号括起来",
-            "确保最后一个元素后没有逗号",
+            "Validate the JSON syntax before running analysis.",
+            "Wrap all strings in double quotes.",
+            "Remove trailing commas after the final item.",
         ],
     },
     "connection_error": {
-        "title": "网络连接失败",
+        "title": "Connection Failed",
         "causes": [
-            "互联网连接中断",
-            "API服务不可用",
-            "Ollama本地服务未运行",
+            "Internet connection interrupted",
+            "External API unavailable",
+            "Local Ollama service is not running",
         ],
         "suggestions": [
-            "检查网络连接",
-            "尝试刷新页面重试",
-            "如使用Ollama，请确保localhost:11434可访问",
-            "尝试切换到其他LLM提供商（Claude/DeepSeek）",
+            "Check the network connection.",
+            "Refresh the page and retry.",
+            "If using Ollama, confirm localhost:11434 is reachable.",
+            "Try another LLM provider such as Claude or DeepSeek.",
         ],
     },
     "insufficient_data": {
-        "title": "数据不足",
+        "title": "Insufficient Data",
         "causes": [
-            "样本量太少（少于1年数据）",
-            "太多ticker数据获取失败",
-            "股票代码无效",
+            "Too little history, usually less than one year",
+            "Too many ticker downloads failed",
+            "Invalid ticker symbol",
         ],
         "suggestions": [
-            "增加历史数据周期（建议≥2年）",
-            "检查股票代码是否正确",
-            "确保网络连接正常",
-            "尝试使用更流动性的资产（如ETF）",
+            "Increase the historical period, preferably to at least two years.",
+            "Check ticker symbols for typos.",
+            "Confirm network access is working.",
+            "Use more liquid assets such as ETFs where possible.",
         ],
     },
     "linear_algebra_error": {
-        "title": "协方差矩阵计算失败",
+        "title": "Covariance Matrix Calculation Failed",
         "causes": [
-            "资产完全相关（高度相关）",
-            "数据中存在NaN或无穷大值",
-            "样本量不足导致矩阵奇异",
+            "Assets are perfectly or highly correlated",
+            "Data contains NaN or infinite values",
+            "Sample size is too small, causing a singular matrix",
         ],
         "suggestions": [
-            "移除过度相关的资产对",
-            "增加历史数据周期",
-            "检查数据质量（可能存在异常值）",
-            "尝试减少portfolio中的资产数量",
+            "Remove overly correlated assets.",
+            "Increase the historical data period.",
+            "Inspect data quality and outliers.",
+            "Try reducing the number of portfolio assets.",
         ],
     },
     "weight_error": {
-        "title": "权重配置错误",
+        "title": "Weight Configuration Error",
         "causes": [
-            "权重不是数字",
-            "权重总和不等于1.0",
-            "存在负权重",
+            "One or more weights are not numeric",
+            "Weights do not sum to 1.0",
+            "One or more weights are negative",
         ],
         "suggestions": [
-            "确保所有权重是正数",
-            "权重总和应接近100%（会自动归一化）",
-            '使用JSON格式: {"AAPL": 0.3, "GOOGL": 0.7}',
+            "Use positive numeric weights.",
+            "Keep total weights close to 100%; the app can normalize small differences.",
+            'Use JSON format: {"AAPL": 0.3, "GOOGL": 0.7}',
         ],
     },
     "invalid_ticker": {
-        "title": "无效的股票代码",
+        "title": "Invalid Ticker Symbol",
         "causes": [
-            "代码格式错误（包含特殊字符）",
-            "股票不存在或已退市",
-            "拼写错误",
+            "Ticker contains unsupported characters",
+            "Security does not exist or was delisted",
+            "Ticker is misspelled",
         ],
         "suggestions": [
-            "检查代码拼写（通常为大写字母）",
-            "确保使用有效的交易所代码（AAPL不是aapl）",
-            "对于加密货币，使用 BTC-USD 格式",
-            "参考美股列表: AAPL, GOOGL, MSFT, TSLA等",
+            "Check spelling and use uppercase symbols.",
+            "Use valid exchange symbols.",
+            "For crypto, use Yahoo-style symbols such as BTC-USD.",
+            "Examples: AAPL, GOOGL, MSFT, TSLA.",
         ],
     },
     "timeout_error": {
-        "title": "请求超时",
+        "title": "Request Timed Out",
         "causes": [
-            "网络速度慢",
-            "下载的数据太多",
-            "API响应缓慢",
+            "Network is slow",
+            "Request is too large",
+            "External API responded slowly",
         ],
         "suggestions": [
-            "减少ticker数量",
-            "减少历史数据周期",
-            "稍后重试",
-            "检查网络速度",
+            "Reduce the number of tickers.",
+            "Shorten the historical period.",
+            "Retry later.",
+            "Check network speed.",
         ],
     },
     "value_error": {
-        "title": "参数值错误",
+        "title": "Invalid Parameter",
         "causes": [
-            "参数超出合理范围",
-            "数据类型不匹配",
+            "Parameter is outside the supported range",
+            "Data type does not match the expected format",
         ],
         "suggestions": [
-            "检查输入参数范围",
-            "确保日期格式正确",
-            "确保蒙特卡洛模拟次数为正整数",
+            "Check input ranges.",
+            "Confirm date formats are valid.",
+            "Use a positive integer for Monte Carlo simulations.",
         ],
     },
 }
@@ -139,7 +139,7 @@ ERROR_SUGGESTIONS = {
 
 def show_error(
     error: Exception,
-    title: str = "发生错误",
+    title: str = "Error",
     error_type: Optional[str] = None,
     show_technical_details: bool = True,
 ) -> None:
@@ -156,26 +156,26 @@ def show_error(
 
     # 获取错误消息
     error_message = str(error)
-    st.markdown(f"**错误**: {error_message}")
+    st.markdown(f"**Error**: {error_message}")
 
     # 查找相关建议
     suggestions_dict = ERROR_SUGGESTIONS.get(error_type or "value_error", {})
 
     if suggestions_dict:
-        with st.expander("📋 可能的原因和解决方案"):
+        with st.expander("📋 Possible Causes and Fixes"):
             if suggestions_dict.get("causes"):
-                st.markdown("**可能的原因：**")
+                st.markdown("**Possible causes:**")
                 for cause in suggestions_dict["causes"]:
                     st.markdown(f"- {cause}")
 
             if suggestions_dict.get("suggestions"):
-                st.markdown("**建议的解决方案：**")
+                st.markdown("**Suggested fixes:**")
                 for suggestion in suggestions_dict["suggestions"]:
                     st.markdown(f"- {suggestion}")
 
     # 显示技术细节（可选）
     if show_technical_details:
-        with st.expander("🔧 技术细节（开发者）"):
+        with st.expander("🔧 Technical Details"):
             st.code(traceback.format_exc(), language="python")
             logger.error(
                 "ui.error",
@@ -187,7 +187,7 @@ def show_error(
 
 def show_warning(
     message: str,
-    title: str = "警告",
+    title: str = "Warning",
     suggestions: Optional[list[str]] = None,
 ) -> None:
     """
@@ -202,12 +202,12 @@ def show_warning(
     st.markdown(message)
 
     if suggestions:
-        st.markdown("**建议：**")
+        st.markdown("**Suggestions:**")
         for suggestion in suggestions:
             st.markdown(f"- {suggestion}")
 
 
-def show_success(message: str, title: str = "成功") -> None:
+def show_success(message: str, title: str = "Success") -> None:
     """显示成功消息"""
     st.success(f"✓ {title}")
     st.markdown(message)
@@ -220,27 +220,27 @@ def show_success(message: str, title: str = "成功") -> None:
 
 def handle_json_error(error: json.JSONDecodeError, json_string: str) -> None:
     """处理JSON解析错误"""
-    st.error("❌ JSON格式错误")
-    st.markdown(f"**错误位置**: 第 {error.lineno} 行，第 {error.colno} 列")
-    st.markdown(f"**错误信息**: {error.msg}")
+    st.error("❌ JSON Format Error")
+    st.markdown(f"**Location**: line {error.lineno}, column {error.colno}")
+    st.markdown(f"**Message**: {error.msg}")
 
     # 显示错误位置附近的代码
     lines = json_string.split("\n")
     if error.lineno and error.lineno <= len(lines):
-        st.markdown("**错误附近的代码:**")
+        st.markdown("**Nearby code:**")
         start = max(0, error.lineno - 3)
         end = min(len(lines), error.lineno + 2)
         for i in range(start, end):
             marker = ">>> " if i == error.lineno - 1 else "    "
             st.code(f"{marker}{lines[i]}")
 
-    with st.expander("📋 可能的原因和解决方案"):
-        st.markdown("**常见JSON错误：**")
+    with st.expander("📋 Possible Causes and Fixes"):
+        st.markdown("**Common JSON issues:**")
         st.markdown("""
-        - 字符串必须用双引号（"），不能用单引号（'）
-        - 最后一个元素后面不能有逗号
-        - 大括号和方括号必须成对出现
-        - 数字不能有引号（数字直接写，如 1, 3.14，不是 "1", "3.14"）
+        - Strings must use double quotes (`"`), not single quotes.
+        - The final item must not have a trailing comma.
+        - Braces and brackets must be balanced.
+        - Numbers should not be quoted, for example `1` or `3.14`, not `"1"`.
         """)
 
     logger.warning("ui.json_parse_error", lineno=error.lineno, colno=error.colno)
@@ -248,13 +248,13 @@ def handle_json_error(error: json.JSONDecodeError, json_string: str) -> None:
 
 def handle_weight_error(weights: dict, total: float) -> None:
     """处理权重验证错误"""
-    st.warning("⚠️ 权重配置问题")
-    st.markdown(f"**权重总和**: {total:.2%} (应为100%)")
-    st.markdown("**已自动归一化为100%**")
+    st.warning("⚠️ Weight Configuration Issue")
+    st.markdown(f"**Weight total**: {total:.2%} (expected 100%)")
+    st.markdown("**Weights were automatically normalized to 100%.**")
 
     # 显示归一化后的权重
     normalized = {k: round(v / total * 100, 2) for k, v in weights.items()}
-    st.markdown("**归一化后的权重:**")
+    st.markdown("**Normalized weights:**")
     for ticker, pct in sorted(normalized.items(), key=lambda x: x[1], reverse=True):
         st.markdown(f"- {ticker}: {pct}%")
 
@@ -266,16 +266,16 @@ def handle_data_loading_error(
 ) -> None:
     """处理数据加载错误"""
     if ticker:
-        st.warning(f"⚠️ 无法下载 {ticker} 的数据")
+        st.warning(f"⚠️ Could not download data for {ticker}")
         if reason:
-            st.markdown(f"**原因**: {reason}")
+            st.markdown(f"**Reason**: {reason}")
 
     if failed_tickers:
-        st.warning(f"⚠️ 无法下载 {len(failed_tickers)} 个ticker的数据")
-        with st.expander("查看失败详情"):
+        st.warning(f"⚠️ Could not download data for {len(failed_tickers)} ticker(s)")
+        with st.expander("View Failure Details"):
             for tk, rsn in failed_tickers:
                 st.markdown(f"- **{tk}**: {rsn}")
-        st.info("💡 分析将使用成功下载的ticker继续")
+        st.info("Analysis will continue with successfully downloaded tickers.")
 
 
 def handle_risk_calculation_error(error: Exception) -> None:
@@ -285,19 +285,19 @@ def handle_risk_calculation_error(error: Exception) -> None:
     if "singular" in error_str or "linalg" in error_str:
         show_error(
             error,
-            title="协方差矩阵计算失败",
+            title="Covariance Matrix Calculation Failed",
             error_type="linear_algebra_error",
         )
     elif "insufficient" in error_str or "data" in error_str:
         show_error(
             error,
-            title="数据不足",
+            title="Insufficient Data",
             error_type="insufficient_data",
         )
     else:
         show_error(
             error,
-            title="风险计算失败",
+            title="Risk Calculation Failed",
         )
 
 
@@ -311,14 +311,14 @@ def validate_weights(weights: dict) -> tuple[bool, Optional[dict], Optional[str]
     try:
         # 检查是否为空
         if not weights:
-            return False, None, "权重配置为空"
+            return False, None, "Weight configuration is empty"
 
         # 检查所有值都是数字
         for ticker, weight in weights.items():
             if not isinstance(weight, (int, float)):
-                return False, None, f"{ticker} 的权重不是数字: {weight}"
+                return False, None, f"{ticker} weight is not numeric: {weight}"
             if weight < 0:
-                return False, None, f"{ticker} 的权重为负数: {weight}"
+                return False, None, f"{ticker} weight is negative: {weight}"
 
         # 计算总和
         total = sum(weights.values())
@@ -327,12 +327,16 @@ def validate_weights(weights: dict) -> tuple[bool, Optional[dict], Optional[str]
         if abs(total - 1.0) > 0.01:  # 允许1%的误差
             # 自动归一化
             normalized = {k: v / total for k, v in weights.items()}
-            return True, normalized, f"权重已自动归一化（原总和: {total:.2%}）"
+            return (
+                True,
+                normalized,
+                f"Weights automatically normalized (original total: {total:.2%})",
+            )
 
         return True, weights, None
 
     except Exception as e:
-        return False, None, f"权重验证失败: {str(e)}"
+        return False, None, f"Weight validation failed: {str(e)}"
 
 
 def validate_tickers(tickers: list[str]) -> tuple[bool, list[str], list[str]]:
@@ -358,9 +362,9 @@ def validate_tickers(tickers: list[str]) -> tuple[bool, list[str], list[str]]:
 def safe_operation(
     func: Callable,
     *args,
-    operation_name: str = "操作",
+    operation_name: str = "Operation",
     show_spinner: bool = True,
-    spinner_text: str = "处理中...",
+    spinner_text: str = "Processing...",
     **kwargs,
 ) -> Optional[Any]:
     """
@@ -390,7 +394,7 @@ def safe_operation(
     except ConnectionError as e:
         show_error(
             e,
-            title="网络连接失败",
+            title="Connection Failed",
             error_type="connection_error",
         )
         logger.error(f"{operation_name}_connection_error", exc_info=True)
@@ -399,7 +403,7 @@ def safe_operation(
     except ValueError as e:
         show_error(
             e,
-            title="参数值错误",
+            title="Invalid Parameter",
             error_type="value_error",
         )
         logger.error(f"{operation_name}_value_error", exc_info=True)
@@ -413,7 +417,7 @@ def safe_operation(
     except TimeoutError as e:
         show_error(
             e,
-            title="请求超时",
+            title="Request Timed Out",
             error_type="timeout_error",
         )
         logger.error(f"{operation_name}_timeout", exc_info=True)
@@ -422,7 +426,7 @@ def safe_operation(
     except Exception as e:
         show_error(
             e,
-            title=f"{operation_name}失败",
+            title=f"{operation_name} Failed",
         )
         logger.error(f"{operation_name}_error", exc_info=True)
         return None

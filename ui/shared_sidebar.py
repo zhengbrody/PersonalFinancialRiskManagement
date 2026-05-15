@@ -51,7 +51,7 @@ _NAV_GROUPS = [
         "Research",
         [
             ("pages/10_Ticker_Research.py", "Ticker Research"),
-            ("pages/8_Institutions.py", "Institutions"),
+            ("pages/8_Institutions.py", "Macro & Institutions"),
             ("pages/9_Quant_Lab.py", "Quant Lab"),
         ],
     ),
@@ -368,6 +368,9 @@ def render_shared_sidebar():
                         pass
 
                     meta = {
+                        "portfolio_name": _active_meta.get("name"),
+                        "portfolio_source": _active_meta.get("source"),
+                        "portfolio_id": _active_meta.get("id"),
                         "total_long": total_value,
                         "net_equity": net_equity,
                         "margin_loan": MARGIN_LOAN,

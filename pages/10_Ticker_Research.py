@@ -356,26 +356,26 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-col_input, col_btn = st.columns([3, 1])
-with col_input:
-    ticker_input = (
-        st.text_input(
-            "Ticker Symbol" if lang == "en" else "股票代码",
-            value=st.session_state.get("_research_ticker", ""),
-            placeholder="Enter ticker symbol, e.g. AAPL",
-            key="research_ticker_input",
+with st.form("ticker_research_search_form", clear_on_submit=False):
+    col_input, col_btn = st.columns([3, 1])
+    with col_input:
+        ticker_input = (
+            st.text_input(
+                "Ticker Symbol" if lang == "en" else "股票代码",
+                value=st.session_state.get("_research_ticker", ""),
+                placeholder="Enter ticker symbol, e.g. AAPL",
+                key="research_ticker_input",
+            )
+            .strip()
+            .upper()
         )
-        .strip()
-        .upper()
-    )
-with col_btn:
-    st.markdown("<div style='margin-top:28px'></div>", unsafe_allow_html=True)
-    search_clicked = st.button(
-        "Search" if lang == "en" else "搜索",
-        key="research_search_btn",
-        type="primary",
-        use_container_width=True,
-    )
+    with col_btn:
+        st.markdown("<div style='margin-top:28px'></div>", unsafe_allow_html=True)
+        search_clicked = st.form_submit_button(
+            "Search" if lang == "en" else "搜索",
+            type="primary",
+            use_container_width=True,
+        )
 
 if search_clicked and ticker_input:
     st.session_state["_research_ticker"] = ticker_input

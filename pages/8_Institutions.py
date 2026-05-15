@@ -12,6 +12,7 @@ REFACTORED: All raw HTML tables/grids replaced with Streamlit-native components
 from datetime import datetime
 
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
 from app import cached_digest
@@ -163,6 +164,109 @@ def _fmt_pct(val, show_sign=True):
         return "--"
 
 
+@st.cache_data(ttl=6 * 60 * 60, show_spinner=False)
+def _fetch_fred_series(series_id: str) -> pd.DataFrame:
+    """Fetch a public FRED series via the official CSV endpoint."""
+    url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+    df = pd.read_csv(url)
+    if "observation_date" not in df.columns or series_id not in df.columns:
+        return pd.DataFrame(columns=["date", "value"])
+    out = df.rename(columns={"observation_date": "date", series_id: "value"})[
+        ["date", "value"]
+    ].copy()
+    out["date"] = pd.to_datetime(out["date"], errors="coerce")
+    out["value"] = pd.to_numeric(out["value"], errors="coerce")
+    return out.dropna(subset=["date", "value"]).sort_values("date")
+
+
+def _series_snapshot(series_id: str, label: str, cadence: str, unit: str) -> dict:
+    df = _fetch_fred_series(series_id)
+    if df.empty:
+        return {
+            "Indicator": label,
+            "Cadence": cadence,
+            "Latest Date": "--",
+            "Latest": "--",
+            "Last Change": "--",
+            "YoY": "--",
+            "Source": "FRED",
+        }
+
+    latest = df.iloc[-1]
+    previous = df.iloc[-2] if len(df) >= 2 else None
+    year_ago = df.iloc[-13] if cadence == "Monthly" and len(df) >= 13 else None
+    value = float(latest["value"])
+    last_change = value - float(previous["value"]) if previous is not None else None
+    yoy = ((value / float(year_ago["value"])) - 1.0) * 100 if year_ago is not None else None
+
+    if unit == "pct":
+        latest_text = f"{value:.2f}%"
+        change_text = f"{last_change:+.2f} pp" if last_change is not None else "--"
+    elif unit == "index":
+        latest_text = f"{value:.1f}"
+        change_text = f"{last_change:+.1f}" if last_change is not None else "--"
+    elif unit == "thousands":
+        latest_text = f"{value:,.0f}K"
+        change_text = f"{last_change:+,.0f}K" if last_change is not None else "--"
+    else:
+        latest_text = f"{value:.2f}"
+        change_text = f"{last_change:+.2f}" if last_change is not None else "--"
+
+    return {
+        "Indicator": label,
+        "Cadence": cadence,
+        "Latest Date": latest["date"].strftime("%Y-%m-%d"),
+        "Latest": latest_text,
+        "Last Change": change_text,
+        "YoY": f"{yoy:+.2f}%" if yoy is not None else "--",
+        "Source": "FRED",
+    }
+
+
+def _macro_release_rows() -> list[dict]:
+    specs = [
+        ("CPIAUCSL", "CPI", "Monthly", "index"),
+        ("CPILFESL", "Core CPI", "Monthly", "index"),
+        ("PCEPI", "PCE Price Index", "Monthly", "index"),
+        ("PCEPILFE", "Core PCE Price Index", "Monthly", "index"),
+        ("UMCSENT", "University of Michigan Sentiment", "Monthly", "index"),
+        ("FEDFUNDS", "Effective Fed Funds Rate", "Monthly", "pct"),
+        ("DFEDTARL", "Fed Target Range Lower", "Daily", "pct"),
+        ("DFEDTARU", "Fed Target Range Upper", "Daily", "pct"),
+        ("DGS10", "10Y Treasury Yield", "Daily", "pct"),
+        ("T10Y2Y", "10Y-2Y Treasury Spread", "Daily", "pct"),
+        ("UNRATE", "Unemployment Rate", "Monthly", "pct"),
+        ("PAYEMS", "Nonfarm Payrolls", "Monthly", "thousands"),
+    ]
+    rows = []
+    for series_id, label, cadence, unit in specs:
+        try:
+            rows.append(_series_snapshot(series_id, label, cadence, unit))
+        except Exception as exc:
+            rows.append(
+                {
+                    "Indicator": label,
+                    "Cadence": cadence,
+                    "Latest Date": "--",
+                    "Latest": "--",
+                    "Last Change": "--",
+                    "YoY": "--",
+                    "Source": f"FRED unavailable: {exc}",
+                }
+            )
+    return rows
+
+
+def _latest_numeric(series_id: str) -> float | None:
+    try:
+        df = _fetch_fred_series(series_id)
+        if df.empty:
+            return None
+        return float(df.iloc[-1]["value"])
+    except Exception:
+        return None
+
+
 # ══════════════════════════════════════════════════════════════
 #  Terminal Header
 # ══════════════════════════════════════════════════════════════
@@ -171,8 +275,8 @@ now_str = datetime.now().strftime("%Y-%m-%d  %H:%M:%S")
 st.markdown(
     f"""
 <div class="terminal-header">
-    <div class="title">INSTITUTIONAL FLOW & SMART MONEY</div>
-    <div class="subtitle">SEC 13F Filings  |  Conviction Tracking  |  Smart Money Positioning</div>
+    <div class="title">MACRO & INSTITUTIONAL MONITOR</div>
+    <div class="subtitle">FRED Economic Releases  |  Fed Rate Signals  |  SEC 13F Positioning</div>
     <div class="timestamp">LIVE  {now_str}</div>
 </div>
 """,
@@ -210,14 +314,107 @@ What does this institutional crowding tell us about risk? Plain text only."""
 #  Tabs
 # ══════════════════════════════════════════════════════════════
 
-tab_smart, tab_deepdive = st.tabs(
+tab_macro, tab_smart, tab_deepdive = st.tabs(
     [
+        "Macro Release Monitor",
         "Smart Money Dashboard",
         "Institution Deep Dive",
     ]
 )
 
 portfolio_tickers = _get_portfolio_tickers()
+
+
+# ══════════════════════════════════════════════════════════════
+#  TAB 0: Macro Release Monitor
+# ══════════════════════════════════════════════════════════════
+
+with tab_macro:
+    render_section(
+        "Macro Release Monitor",
+        subtitle=(
+            "Daily and monthly US economic indicators used for portfolio risk context. "
+            "Source: Federal Reserve Economic Data (FRED)."
+        ),
+    )
+
+    rows = _macro_release_rows()
+    macro_df = pd.DataFrame(rows)
+
+    fed_lower = _latest_numeric("DFEDTARL")
+    fed_upper = _latest_numeric("DFEDTARU")
+    fed_funds = _latest_numeric("FEDFUNDS")
+    ten_year = _latest_numeric("DGS10")
+    curve = _latest_numeric("T10Y2Y")
+
+    fed_range = (
+        f"{fed_lower:.2f}% - {fed_upper:.2f}%"
+        if fed_lower is not None and fed_upper is not None
+        else "--"
+    )
+    render_kpi_row(
+        [
+            {"label": "Fed Target Range", "value": fed_range},
+            {
+                "label": "Effective Fed Funds",
+                "value": f"{fed_funds:.2f}%" if fed_funds is not None else "--",
+            },
+            {
+                "label": "10Y Treasury",
+                "value": f"{ten_year:.2f}%" if ten_year is not None else "--",
+            },
+            {
+                "label": "10Y-2Y Spread",
+                "value": f"{curve:+.2f}%" if curve is not None else "--",
+                "delta_color": "negative" if curve is not None and curve < 0 else "neutral",
+            },
+        ]
+    )
+
+    st.dataframe(macro_df, hide_index=True, use_container_width=True)
+    st.caption(
+        "Cadence reflects publication frequency. Latest Date is the latest observation "
+        "available from FRED, not a forecast. CPI/PCE/Michigan/Unemployment/Payrolls "
+        "are monthly; Fed target range and Treasury rates update daily when available."
+    )
+
+    chart_specs = [
+        ("CPIAUCSL", "CPI"),
+        ("PCEPI", "PCE"),
+        ("UMCSENT", "Michigan Sentiment"),
+        ("FEDFUNDS", "Effective Fed Funds"),
+    ]
+    fig_macro = go.Figure()
+    for series_id, label in chart_specs:
+        try:
+            df = _fetch_fred_series(series_id).tail(60)
+            if not df.empty:
+                fig_macro.add_trace(
+                    go.Scatter(
+                        x=df["date"],
+                        y=df["value"],
+                        mode="lines",
+                        name=label,
+                    )
+                )
+        except Exception:
+            continue
+    fig_macro.update_layout(
+        title="Selected Macro Indicators",
+        height=420,
+        xaxis_title="Date",
+        yaxis_title="Index / Rate",
+        legend_orientation="h",
+    )
+    st.plotly_chart(fig_macro, use_container_width=True)
+
+    with st.expander("How this feeds portfolio risk", expanded=False):
+        st.markdown("""
+- CPI and PCE drive inflation expectations and discount-rate pressure on long-duration equities.
+- University of Michigan sentiment helps flag consumer demand weakness before it appears in earnings.
+- Fed target range and effective fed funds summarize the current policy stance.
+- 10Y yield and 10Y-2Y spread show rate pressure and recession-risk pricing.
+""")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -235,94 +432,97 @@ with tab_smart:
             "Configure a portfolio and run analysis from the sidebar to see "
             "institutional positioning for your specific holdings."
         )
-        st.stop()
+    else:
+        # 13F SEC EDGAR scan is expensive (multiple HTTP fetches per ticker).
+        # Cache the last result in session_state and only re-scan on explicit
+        # button click — previous behavior fired on every Streamlit rerun.
+        _scan_label = (
+            "Rescan 13F filings"
+            if st.session_state.get("smart_money_data")
+            else "Scan 13F filings (SEC EDGAR)"
+        )
+        _rescan = st.button(_scan_label, key="institutions_rescan", type="primary")
 
-    # 13F SEC EDGAR scan is expensive (multiple HTTP fetches per ticker).
-    # Cache the last result in session_state and only re-scan on explicit
-    # button click — previous behavior fired on every Streamlit rerun.
-    _scan_label = (
-        "🔄 Rescan 13F filings"
-        if st.session_state.get("smart_money_data")
-        else "📊 Scan 13F filings (SEC EDGAR)"
-    )
-    _rescan = st.button(_scan_label, key="institutions_rescan", type="primary")
+        try:
+            cached_signals = st.session_state.get("smart_money_data")
+            if cached_signals and not _rescan:
+                signals = cached_signals
+            else:
+                with st.spinner("Scanning institutional 13F filings via SEC EDGAR..."):
+                    from institutional_tracker import get_smart_money_signals
 
-    try:
-        cached_signals = st.session_state.get("smart_money_data")
-        if cached_signals and not _rescan:
-            signals = cached_signals
-        else:
-            with st.spinner("Scanning institutional 13F filings via SEC EDGAR..."):
-                from institutional_tracker import get_smart_money_signals
+                    signals = get_smart_money_signals(portfolio_tickers)
+                st.session_state["smart_money_data"] = signals
 
-                signals = get_smart_money_signals(portfolio_tickers)
-            st.session_state["smart_money_data"] = signals
+            if not signals:
+                st.info(
+                    "No institutional signal data available. "
+                    "13F filings are updated quarterly -- data may not yet be cached. "
+                    "Try refreshing or check back later."
+                )
+            else:
+                # Summary strip using render_kpi_row
+                total = len(signals)
+                high_ct = sum(1 for s in signals if s["signal"] == "HIGH_CONVICTION")
+                mod_ct = sum(1 for s in signals if s["signal"] == "MODERATE")
+                low_ct = sum(1 for s in signals if s["signal"] == "LOW")
 
-        if not signals:
-            st.info(
-                "No institutional signal data available. "
-                "13F filings are updated quarterly -- data may not yet be cached. "
-                "Try refreshing or check back later."
-            )
-        else:
-            # Summary strip using render_kpi_row
-            total = len(signals)
-            high_ct = sum(1 for s in signals if s["signal"] == "HIGH_CONVICTION")
-            mod_ct = sum(1 for s in signals if s["signal"] == "MODERATE")
-            low_ct = sum(1 for s in signals if s["signal"] == "LOW")
-
-            render_kpi_row(
-                [
-                    {"label": "Total Holdings", "value": str(total)},
-                    {"label": "High Conviction", "value": str(high_ct), "delta_color": "positive"},
-                    {"label": "Moderate", "value": str(mod_ct), "delta_color": "neutral"},
-                    {"label": "Low", "value": str(low_ct), "delta_color": "negative"},
-                ]
-            )
-
-            # Sort by conviction descending (HIGH first)
-            conviction_order = {"HIGH_CONVICTION": 0, "MODERATE": 1, "LOW": 2}
-            signals_sorted = sorted(
-                signals,
-                key=lambda s: (conviction_order.get(s["signal"], 99), -s["num_institutions"]),
-            )
-
-            # Build dataframe for display
-            table_rows = []
-            for s in signals_sorted:
-                top_holders_str = ", ".join(s.get("top_holders", [])[:3])
-                if len(s.get("top_holders", [])) > 3:
-                    top_holders_str += f" +{len(s['top_holders']) - 3} more"
-
-                crowding_pct = f"{s['crowding_score'] * 100:.0f}%"
-
-                table_rows.append(
-                    {
-                        "Ticker": s["ticker"],
-                        "# Institutions": s["num_institutions"],
-                        "Crowding": crowding_pct,
-                        "Top Holders": top_holders_str,
-                        "Conviction": f"{_signal_emoji(s['signal'])} {_badge_text(s['signal'])}",
-                    }
+                render_kpi_row(
+                    [
+                        {"label": "Total Holdings", "value": str(total)},
+                        {
+                            "label": "High Conviction",
+                            "value": str(high_ct),
+                            "delta_color": "positive",
+                        },
+                        {"label": "Moderate", "value": str(mod_ct), "delta_color": "neutral"},
+                        {"label": "Low", "value": str(low_ct), "delta_color": "negative"},
+                    ]
                 )
 
-            st.dataframe(
-                pd.DataFrame(table_rows),
-                hide_index=True,
-                use_container_width=True,
-            )
+                # Sort by conviction descending (HIGH first)
+                conviction_order = {"HIGH_CONVICTION": 0, "MODERATE": 1, "LOW": 2}
+                signals_sorted = sorted(
+                    signals,
+                    key=lambda s: (conviction_order.get(s["signal"], 99), -s["num_institutions"]),
+                )
 
-            # Legend
-            st.caption(
-                "Conviction thresholds: HIGH = >10 of top 30 funds hold | "
-                "MODERATE = 5-10 | LOW = <5.  "
-                "Crowding = % of tracked institutions holding the stock.  "
-                "Source: SEC EDGAR 13F filings (quarterly, cached 24h)."
-            )
+                # Build dataframe for display
+                table_rows = []
+                for s in signals_sorted:
+                    top_holders_str = ", ".join(s.get("top_holders", [])[:3])
+                    if len(s.get("top_holders", [])) > 3:
+                        top_holders_str += f" +{len(s['top_holders']) - 3} more"
 
-    except Exception as exc:
-        st.error(f"Failed to load smart money signals: {exc}")
-        st.caption("Ensure SEC EDGAR is reachable. 13F data is fetched from data.sec.gov.")
+                    crowding_pct = f"{s['crowding_score'] * 100:.0f}%"
+
+                    table_rows.append(
+                        {
+                            "Ticker": s["ticker"],
+                            "# Institutions": s["num_institutions"],
+                            "Crowding": crowding_pct,
+                            "Top Holders": top_holders_str,
+                            "Conviction": f"{_signal_emoji(s['signal'])} {_badge_text(s['signal'])}",
+                        }
+                    )
+
+                st.dataframe(
+                    pd.DataFrame(table_rows),
+                    hide_index=True,
+                    use_container_width=True,
+                )
+
+                # Legend
+                st.caption(
+                    "Conviction thresholds: HIGH = >10 of top 30 funds hold | "
+                    "MODERATE = 5-10 | LOW = <5.  "
+                    "Crowding = % of tracked institutions holding the stock.  "
+                    "Source: SEC EDGAR 13F filings (quarterly, cached 24h)."
+                )
+
+        except Exception as exc:
+            st.error(f"Failed to load smart money signals: {exc}")
+            st.caption("Ensure SEC EDGAR is reachable. 13F data is fetched from data.sec.gov.")
 
 
 # ══════════════════════════════════════════════════════════════
