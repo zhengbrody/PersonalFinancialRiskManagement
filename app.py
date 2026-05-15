@@ -1974,7 +1974,7 @@ def execute_analysis(force: bool = False) -> bool:
         <a href="https://github.com/zhengbrody/PersonalFinancialRiskManagement"
            style="color:#0B7285;text-decoration:none;">GitHub</a>
         &nbsp;·&nbsp;
-        <a href="https://github.com/zhengbrody/PersonalFinancialRiskManagement/blob/aws-migration/README.md#%EF%B8%8F-aws-migration-phases-12-complete"
+        <a href="https://github.com/zhengbrody/PersonalFinancialRiskManagement/blob/main/README.md#%EF%B8%8F-aws-migration-phases-12-complete"
            style="color:#0B7285;text-decoration:none;">AWS Architecture</a>
       </div>
     </div>

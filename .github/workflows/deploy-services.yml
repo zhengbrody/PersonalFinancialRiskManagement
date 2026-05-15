@@ -1,6 +1,6 @@
 # .github/workflows/deploy-services.yml
 #
-# CI/CD for the Phase 2 Lambda services. Triggers on push to aws-migration:
+# CI/CD for the Phase 2 Lambda services. Triggers on push to main:
 #   1. Run pytest on libs/ + each service's tests/
 #   2. (build + push to ECR + cdk deploy ApiStack) — gated behind manual
 #      approval until OIDC role is set up. We don't store long-lived
@@ -9,7 +9,7 @@
 # To enable the AWS deploy job:
 #   1. Create an OIDC IAM role in the AWS account (one-time):
 #        - Trust policy: GitHub OIDC provider, conditioned on
-#          `repo:zhengbrody/PersonalFinancialRiskManagement:ref:refs/heads/aws-migration`
+#          `repo:zhengbrody/PersonalFinancialRiskManagement:ref:refs/heads/main`
 #        - Permissions: ECR push, CloudFormation deploy on MindMarket-* stacks,
 #          Lambda + IAM + API Gateway as needed by CDK
 #   2. Set repo secret AWS_DEPLOY_ROLE_ARN to the role ARN
@@ -19,14 +19,14 @@ name: Phase 2 Services CI/CD
 
 on:
   push:
-    branches: [aws-migration]
+    branches: [main]
     paths:
       - 'services/**'
       - 'libs/**'
       - 'infra/**'
       - '.github/workflows/deploy-services.yml'
   pull_request:
-    branches: [aws-migration]
+    branches: [main]
     paths:
       - 'services/**'
       - 'libs/**'

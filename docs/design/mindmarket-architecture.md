@@ -4,7 +4,7 @@
 **Status:** v1 — covers Phase 0 (Streamlit monolith) → Phase 2 (Lambda extract) and the Phase 1 EC2 lift, deployed and verified live
 **Format:** Amazon-style 6-pager. Read top-to-bottom; FAQ at the end answers everything not in the body.
 **Live:** https://mindmarket.app (deployed on demand; idle when not demoing)
-**Repo:** https://github.com/zhengbrody/PersonalFinancialRiskManagement (`aws-migration` branch)
+**Repo:** https://github.com/zhengbrody/PersonalFinancialRiskManagement (`main` branch — single source of truth as of 2026-05; legacy `aws-migration` branch retired)
 
 ---
 

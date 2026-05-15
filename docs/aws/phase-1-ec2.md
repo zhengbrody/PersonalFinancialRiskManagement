@@ -47,7 +47,7 @@ What it does (in order):
 1. `cdk deploy --all` — Foundation + Compute (90 s if first time, 30 s after)
 2. Polls `/var/lib/mindmarket-bootstrap-complete` over SSH (~2 min after EC2 launch)
 3. SCPs `.streamlit/secrets.toml` to EC2 `~/PersonalFinancialRiskManagement/.streamlit/`
-4. SSH: `git clone` + `git checkout aws-migration` + `git pull`
+4. SSH: `git clone` + `git checkout main` + `git pull`
 5. SSH: writes `.env` with `SITE_HOST=<eip-dashes>.nip.io` and the API keys
 6. SSH: `docker compose -f compose.aws.yml up -d --build`
 7. Waits up to 100 s for the app healthcheck to flip green

@@ -114,8 +114,11 @@ if [[ ! -d PersonalFinancialRiskManagement ]]; then
 fi
 cd PersonalFinancialRiskManagement
 git fetch origin
-git checkout aws-migration
-git reset --hard origin/aws-migration
+# Deploy from main (single source of truth as of 2026-05).
+# The legacy aws-migration branch is no longer maintained — it was a
+# transient mirror from when Streamlit Cloud + EC2 ran in parallel.
+git checkout main
+git reset --hard origin/main
 
 # Place secrets.toml
 mkdir -p .streamlit
