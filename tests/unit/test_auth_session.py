@@ -191,6 +191,79 @@ def test_resend_confirmation_surfaces_auth_error(fake_streamlit, supabase_env):
             auth_session.resend_confirmation_email("user@x.com")
 
 
+# ── OAuth helpers ───────────────────────────────────────────────
+
+
+def test_sign_in_with_oauth_returns_authorization_url(fake_streamlit, supabase_env):
+    fake_client = MagicMock()
+    fake_client.auth.sign_in_with_oauth.return_value = MagicMock(
+        url="https://accounts.google.com/o/oauth2/auth?..."
+    )
+
+    with patch("supabase.create_client", return_value=fake_client):
+        from libs.auth import session as auth_session
+
+        url = auth_session.sign_in_with_oauth("google", redirect_to="https://mindmarket.app")
+
+    assert url.startswith("https://accounts.google.com/")
+    fake_client.auth.sign_in_with_oauth.assert_called_once_with(
+        {"provider": "google", "options": {"redirect_to": "https://mindmarket.app"}}
+    )
+
+
+def test_sign_in_with_oauth_raises_when_no_url_returned(fake_streamlit, supabase_env):
+    fake_client = MagicMock()
+    fake_client.auth.sign_in_with_oauth.return_value = MagicMock(url=None)
+
+    with patch("supabase.create_client", return_value=fake_client):
+        from libs.auth import session as auth_session
+
+        with pytest.raises(auth_client.AuthError, match="authorization URL"):
+            auth_session.sign_in_with_oauth("google")
+
+
+def test_hydrate_session_from_tokens_writes_state(fake_streamlit, supabase_env):
+    """OAuth callback path: set_session validates the tokens server-side
+    and we mirror them into st.session_state so subsequent requests are
+    authed just like a password sign-in."""
+    fake_user = MagicMock(
+        id="g-user", email="g@x.com", user_metadata={"provider": "google"}, created_at="x"
+    )
+    fake_client = MagicMock()
+    fake_client.auth.set_session.return_value = MagicMock(user=fake_user)
+
+    with patch("supabase.create_client", return_value=fake_client):
+        from libs.auth import session as auth_session
+
+        user = auth_session.hydrate_session_from_tokens(
+            access_token="acc-jwt", refresh_token="ref-jwt"
+        )
+
+    assert user["id"] == "g-user"
+    assert fake_streamlit.session_state["_auth_user"]["email"] == "g@x.com"
+    assert fake_streamlit.session_state["_auth_access_token"] == "acc-jwt"
+    assert fake_streamlit.session_state["_auth_refresh_token"] == "ref-jwt"
+    fake_client.auth.set_session.assert_called_once_with("acc-jwt", "ref-jwt")
+
+
+def test_hydrate_session_from_tokens_rejects_empty_tokens(fake_streamlit, supabase_env):
+    from libs.auth import session as auth_session
+
+    with pytest.raises(auth_client.AuthError, match="Missing"):
+        auth_session.hydrate_session_from_tokens(access_token="", refresh_token="r")
+
+
+def test_hydrate_session_from_tokens_surfaces_set_session_error(fake_streamlit, supabase_env):
+    fake_client = MagicMock()
+    fake_client.auth.set_session.side_effect = Exception("invalid_grant")
+
+    with patch("supabase.create_client", return_value=fake_client):
+        from libs.auth import session as auth_session
+
+        with pytest.raises(auth_client.AuthError, match="invalid_grant"):
+            auth_session.hydrate_session_from_tokens("a", "b")
+
+
 def _make_jwt(exp_unix: int) -> str:
     """Build a minimal unsigned JWT with the given exp claim."""
     import base64

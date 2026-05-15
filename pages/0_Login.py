@@ -24,11 +24,50 @@ from libs.auth import (
     current_user,
     is_authenticated,
     resend_confirmation_email,
+    sign_in_with_oauth,
     sign_in_with_password,
     sign_out,
     sign_up_with_password,
 )
 from ui.shared_sidebar import render_shared_sidebar
+
+
+def _public_site_url() -> str:
+    """Return the canonical public URL we send OAuth providers to.
+
+    Supabase requires every redirect_to to be on its whitelist
+    (Auth → URL Configuration). The app's apex (https://mindmarket.app)
+    is on the list and is also where app.py's _handle_oauth_callback()
+    waits for the tokens.
+    """
+    import os
+
+    val = os.environ.get("MINDMARKET_APP_URL", "")
+    if not val:
+        try:
+            val = st.secrets.get("MINDMARKET_APP_URL", "")
+        except Exception:
+            val = ""
+    return (val or "https://mindmarket.app").rstrip("/")
+
+
+def _start_oauth(provider: str) -> None:
+    """Begin OAuth: get the provider's authorization URL, redirect there."""
+    try:
+        url = sign_in_with_oauth(provider, redirect_to=_public_site_url())
+    except AuthError as e:
+        st.error(f"Could not start {provider.title()} sign-in: {e}")
+        return
+    # meta-refresh is the most reliable cross-browser redirect from
+    # Streamlit; window.location.href also works but is occasionally
+    # blocked by aggressive popup blockers when the rerun is fast.
+    st.markdown(
+        f'<meta http-equiv="refresh" content="0; url={url}">',
+        unsafe_allow_html=True,
+    )
+    st.caption(f"Redirecting to {provider.title()}…")
+    st.stop()
+
 
 render_shared_sidebar()
 
@@ -78,6 +117,13 @@ tab_login, tab_signup = st.tabs(
 )
 
 with tab_login:
+    if st.button(
+        "🔵  Continue with Google",
+        key="oauth_google_login",
+        use_container_width=True,
+    ):
+        _start_oauth("google")
+    st.caption("Or sign in with email below:")
     with st.form("login_form", clear_on_submit=False):
         email = st.text_input(
             "Email",
@@ -131,6 +177,13 @@ except Exception:
     pass
 
 with tab_signup:
+    if st.button(
+        "🔵  Continue with Google",
+        key="oauth_google_signup",
+        use_container_width=True,
+    ):
+        _start_oauth("google")
+    st.caption("Or create an account with email + password:")
     with st.form("signup_form", clear_on_submit=False):
         email = st.text_input(
             "Email",

@@ -103,6 +103,63 @@ def sign_up_with_password(email: str, password: str) -> dict:
     return user_dict
 
 
+def sign_in_with_oauth(provider: str, *, redirect_to: Optional[str] = None) -> str:
+    """Begin an OAuth flow with `provider` (e.g. 'google', 'github').
+
+    Returns the Supabase-generated authorization URL. The caller is
+    responsible for navigating the user's browser there. After successful
+    auth the user lands back at `redirect_to` with `access_token` +
+    `refresh_token` in the URL FRAGMENT (`#access_token=...`).
+
+    Streamlit can't read URL fragments directly, so the Login page injects
+    a tiny JS snippet that rewrites the fragment to query params, then
+    `hydrate_session_from_tokens()` finishes the round-trip.
+
+    Errors raise AuthError with the Supabase-provided message so the UI
+    can render it directly.
+    """
+    sb = get_supabase()
+    try:
+        params: dict = {"provider": provider}
+        if redirect_to:
+            params["options"] = {"redirect_to": redirect_to}
+        resp = sb.auth.sign_in_with_oauth(params)
+    except Exception as e:
+        msg = getattr(e, "message", None) or str(e)
+        raise AuthError(msg)
+    url = getattr(resp, "url", None)
+    if not url:
+        raise AuthError("OAuth provider did not return an authorization URL.")
+    return url
+
+
+def hydrate_session_from_tokens(access_token: str, refresh_token: str) -> dict:
+    """Write OAuth-issued tokens into session_state.
+
+    Called when the OAuth callback page receives `?access_token=...&
+    refresh_token=...` (after the JS bridge converts URL fragment to
+    query params). Validates the tokens by asking Supabase for the
+    associated user; raises AuthError if invalid/expired.
+    """
+    if not access_token or not refresh_token:
+        raise AuthError("Missing access or refresh token on callback.")
+    sb = get_supabase()
+    try:
+        resp = sb.auth.set_session(access_token, refresh_token)
+    except Exception as e:
+        msg = getattr(e, "message", None) or str(e)
+        raise AuthError(msg)
+    user = getattr(resp, "user", None)
+    if user is None:
+        raise AuthError("OAuth callback returned no user.")
+    user_dict = _user_to_dict(user)
+    state = _ss()
+    state[_KEY_USER] = user_dict
+    state[_KEY_ACCESS] = access_token
+    state[_KEY_REFRESH] = refresh_token
+    return user_dict
+
+
 def resend_confirmation_email(email: str) -> None:
     """Re-send the signup confirmation email to a user who didn't get one.
 
