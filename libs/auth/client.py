@@ -73,10 +73,20 @@ def get_supabase():
 
     try:
         from supabase import create_client
+        from supabase.client import ClientOptions
     except ImportError as e:
         raise AuthError("supabase-py not installed. Run `pip install supabase`.") from e
 
-    _client_cache = create_client(url, key)
+    # flow_type="pkce" makes OAuth return a one-time `?code=...` query param
+    # instead of an `#access_token=...` URL fragment. Critical for Streamlit:
+    # the framework strips inline <script> tags so we can't run JS to read
+    # fragments, but query params are server-readable via st.query_params.
+    # supabase-py stashes the PKCE code_verifier in the client's in-memory
+    # storage (which we cache here), so it survives the redirect round-trip
+    # as long as the Streamlit process is the same (it always is for a
+    # single-instance EC2 deploy).
+    options = ClientOptions(flow_type="pkce")
+    _client_cache = create_client(url, key, options=options)
     return _client_cache
 
 

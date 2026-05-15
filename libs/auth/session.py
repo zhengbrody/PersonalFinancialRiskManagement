@@ -133,6 +133,42 @@ def sign_in_with_oauth(provider: str, *, redirect_to: Optional[str] = None) -> s
     return url
 
 
+def complete_oauth_with_code(code: str) -> dict:
+    """Finish the PKCE OAuth round-trip and write the session.
+
+    Supabase returns the user to our app with `?code=XXX`. supabase-py's
+    `exchange_code_for_session` pairs that with the PKCE code_verifier it
+    stashed at sign_in_with_oauth time (in the cached client's storage)
+    and returns the issued tokens. We mirror those into session_state so
+    every other lib in the app sees the user as signed in.
+
+    The cached client is what makes this work: `get_supabase()` returns
+    the SAME instance across Streamlit reruns, so the code_verifier
+    written before the redirect is still in `client.auth._storage` when
+    the user returns.
+    """
+    if not code:
+        raise AuthError("Missing OAuth code in callback.")
+    sb = get_supabase()
+    try:
+        resp = sb.auth.exchange_code_for_session({"auth_code": code})
+    except Exception as e:
+        msg = getattr(e, "message", None) or str(e)
+        raise AuthError(msg)
+
+    session = getattr(resp, "session", None)
+    user = getattr(resp, "user", None)
+    if session is None or user is None:
+        raise AuthError("OAuth exchange returned no session.")
+
+    user_dict = _user_to_dict(user)
+    state = _ss()
+    state[_KEY_USER] = user_dict
+    state[_KEY_ACCESS] = session.access_token
+    state[_KEY_REFRESH] = session.refresh_token
+    return user_dict
+
+
 def hydrate_session_from_tokens(access_token: str, refresh_token: str) -> dict:
     """Write OAuth-issued tokens into session_state.
 

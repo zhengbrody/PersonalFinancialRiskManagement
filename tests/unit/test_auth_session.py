@@ -222,6 +222,60 @@ def test_sign_in_with_oauth_raises_when_no_url_returned(fake_streamlit, supabase
             auth_session.sign_in_with_oauth("google")
 
 
+def test_complete_oauth_with_code_writes_session(fake_streamlit, supabase_env):
+    """PKCE callback: ?code=X → exchange for session → store tokens."""
+    fake_user = MagicMock(
+        id="g-user", email="g@x.com", user_metadata={"provider": "google"}, created_at="x"
+    )
+    fake_session = MagicMock(access_token="acc-pkce", refresh_token="ref-pkce")
+    fake_client = MagicMock()
+    fake_client.auth.exchange_code_for_session.return_value = MagicMock(
+        user=fake_user, session=fake_session
+    )
+
+    with patch("supabase.create_client", return_value=fake_client):
+        from libs.auth import session as auth_session
+
+        user = auth_session.complete_oauth_with_code("supabase-auth-code-xyz")
+
+    assert user["id"] == "g-user"
+    assert fake_streamlit.session_state["_auth_user"]["email"] == "g@x.com"
+    assert fake_streamlit.session_state["_auth_access_token"] == "acc-pkce"
+    assert fake_streamlit.session_state["_auth_refresh_token"] == "ref-pkce"
+    fake_client.auth.exchange_code_for_session.assert_called_once_with(
+        {"auth_code": "supabase-auth-code-xyz"}
+    )
+
+
+def test_complete_oauth_with_code_rejects_empty(fake_streamlit, supabase_env):
+    from libs.auth import session as auth_session
+
+    with pytest.raises(auth_client.AuthError, match="Missing OAuth code"):
+        auth_session.complete_oauth_with_code("")
+
+
+def test_complete_oauth_with_code_surfaces_exchange_error(fake_streamlit, supabase_env):
+    fake_client = MagicMock()
+    fake_client.auth.exchange_code_for_session.side_effect = Exception("invalid_grant")
+
+    with patch("supabase.create_client", return_value=fake_client):
+        from libs.auth import session as auth_session
+
+        with pytest.raises(auth_client.AuthError, match="invalid_grant"):
+            auth_session.complete_oauth_with_code("xyz")
+
+
+def test_complete_oauth_with_code_handles_missing_session(fake_streamlit, supabase_env):
+    fake_client = MagicMock()
+    fake_client.auth.exchange_code_for_session.return_value = MagicMock(user=None, session=None)
+
+    with patch("supabase.create_client", return_value=fake_client):
+        from libs.auth import session as auth_session
+
+        with pytest.raises(auth_client.AuthError, match="no session"):
+            auth_session.complete_oauth_with_code("xyz")
+
+
 def test_hydrate_session_from_tokens_writes_state(fake_streamlit, supabase_env):
     """OAuth callback path: set_session validates the tokens server-side
     and we mirror them into st.session_state so subsequent requests are

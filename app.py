@@ -172,45 +172,19 @@ st.set_page_config(
 )
 
 
-def _oauth_fragment_bridge() -> None:
-    """Convert Supabase OAuth's URL fragment to query params.
-
-    Supabase's implicit OAuth flow returns tokens in the URL fragment
-    (`#access_token=...`). Streamlit can't read fragments — they never
-    reach the server. This 8-line JS snippet runs on every page load:
-    when it sees `access_token=` in `window.location.hash`, it rewrites
-    the URL to the same path but with the fragment as query params, then
-    reloads. The next Streamlit run then sees the tokens in
-    `st.query_params` and `_handle_oauth_callback()` finishes the flow.
-
-    No-op on every other page load (when hash is empty or unrelated).
-    """
-    st.markdown(
-        """
-<script>
-(function () {
-  const h = window.location.hash;
-  if (h && h.indexOf('access_token=') !== -1) {
-    const fragment = h.startsWith('#') ? h.substring(1) : h;
-    const sep = window.location.search ? '&' : '?';
-    const newUrl = window.location.pathname + window.location.search + sep + fragment;
-    window.location.replace(newUrl);
-  }
-})();
-</script>
-""",
-        unsafe_allow_html=True,
-    )
-
-
 def _handle_oauth_callback() -> None:
-    """If query params contain OAuth tokens, hydrate the session.
+    """Finish OAuth: exchange the `?code=...` query param for a session.
 
-    The JS bridge above rewrites Supabase's URL fragment into query
-    params. On this rerun we see `?access_token=...&refresh_token=...`,
-    call `set_session` to validate, write to session_state, then clear
-    the query so a refresh doesn't replay the (already-consumed) tokens.
-    Also handles `?error=...` from the OAuth provider.
+    With Supabase configured as `flow_type="pkce"` (see libs/auth/client.py),
+    successful OAuth returns the user to our app with `?code=XXX` in the
+    query string — readable server-side via `st.query_params`. We swap that
+    code (plus the PKCE verifier stashed in the cached client's storage at
+    sign_in time) for an access_token + refresh_token, write to
+    session_state, and clear the query so a page refresh doesn't replay
+    the now-consumed code.
+
+    Also handles `?error=...` returned by the provider (e.g. when user
+    cancels on Google's consent screen).
     """
     qp = st.query_params
     if "error" in qp:
@@ -218,18 +192,15 @@ def _handle_oauth_callback() -> None:
         st.error(f"Sign-in failed: {err}")
         st.query_params.clear()
         return
-    if "access_token" not in qp or "refresh_token" not in qp:
+    if "code" not in qp:
         return
     try:
-        from libs.auth.session import hydrate_session_from_tokens, is_authenticated
+        from libs.auth.session import complete_oauth_with_code, is_authenticated
 
         if is_authenticated():
             st.query_params.clear()
             return
-        hydrate_session_from_tokens(
-            access_token=qp["access_token"],
-            refresh_token=qp["refresh_token"],
-        )
+        complete_oauth_with_code(qp["code"])
         st.query_params.clear()
         st.rerun()
     except Exception as e:
@@ -237,7 +208,6 @@ def _handle_oauth_callback() -> None:
         st.query_params.clear()
 
 
-_oauth_fragment_bridge()
 _handle_oauth_callback()
 
 

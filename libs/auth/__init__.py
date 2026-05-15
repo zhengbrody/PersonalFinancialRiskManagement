@@ -21,6 +21,7 @@ Env vars read (or st.secrets fallback):
 
 from .client import AuthError, get_supabase
 from .session import (
+    complete_oauth_with_code,
     current_user,
     hydrate_session_from_tokens,
     is_authenticated,
@@ -37,6 +38,7 @@ __all__ = [
     "current_user",
     "sign_in_with_password",
     "sign_in_with_oauth",
+    "complete_oauth_with_code",
     "hydrate_session_from_tokens",
     "sign_up_with_password",
     "resend_confirmation_email",
