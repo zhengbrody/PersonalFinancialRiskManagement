@@ -656,46 +656,57 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
     billing_user = None
 
     # Quota check (non-admin only). Admin bypasses for local dev.
+    #
+    # NB on structure: the imports live in their OWN try-except, separate
+    # from the quota-call try-except. Combining them is a common subtle
+    # bug — when `from libs.billing.usage import QuotaExceeded` fails with
+    # ImportError, Python evaluates each `except` clause's expression
+    # against the active exception. `except QuotaExceeded as ...` tries to
+    # resolve the local name `QuotaExceeded`, which is unbound (the import
+    # never completed) → NameError/UnboundLocalError leaks out, bypassing
+    # the `except ImportError: pass` branch entirely. Splitting the try
+    # blocks makes the fail-open path actually reachable.
     if not _admin_mode:
         try:
             from libs.auth.session import current_user
             from libs.billing.costs import estimate_llm_event
             from libs.billing.usage import CostLimitExceeded, QuotaExceeded, check_quota
-
-            _u = current_user()
-            if not _u:
-                raise ValueError("Please sign in to use AI chat and analysis credits.")
-            pending_estimate = estimate_llm_event(
-                prompt=prompt,
-                system=system_prompt,
-                provider=provider_slug,
-                model=model_name,
-                max_tokens=max_tokens,
-            )
-            check_quota(
-                _u["id"],
-                "chat",
-                estimated_cost_usd=float(pending_estimate["cost_usd"]),
-            )
-            billing_user = _u
-        except QuotaExceeded as _qe:
-            # Surface a clean error so the caller can show the upgrade CTA.
-            raise ValueError(f"{_qe}\n\nEmail contact@mindmarket.app for beta access.")
-        except CostLimitExceeded as _ce:
-            raise ValueError(f"{_ce}\n\nEmail contact@mindmarket.app for beta access.")
-        except ValueError:
-            raise
         except ImportError:
             # Billing module unavailable — deploy config issue, fail open.
             pass
-        except Exception as _quota_err:
-            # Quota service unreachable: fail CLOSED. The fail-closed
-            # design in libs/billing/usage.py only holds if callers don't
-            # swallow the exception. Surface a clean ValueError so pages
-            # render a transient-error notice instead of silently spending
-            # provider credits.
-            logger.warning("call_llm.quota_gate_failed", error=str(_quota_err))
-            raise ValueError("Quota service temporarily unavailable. Please retry in a moment.")
+        else:
+            try:
+                _u = current_user()
+                if not _u:
+                    raise ValueError("Please sign in to use AI chat and analysis credits.")
+                pending_estimate = estimate_llm_event(
+                    prompt=prompt,
+                    system=system_prompt,
+                    provider=provider_slug,
+                    model=model_name,
+                    max_tokens=max_tokens,
+                )
+                check_quota(
+                    _u["id"],
+                    "chat",
+                    estimated_cost_usd=float(pending_estimate["cost_usd"]),
+                )
+                billing_user = _u
+            except QuotaExceeded as _qe:
+                # Surface a clean error so the caller can show the upgrade CTA.
+                raise ValueError(f"{_qe}\n\nEmail contact@mindmarket.app for beta access.")
+            except CostLimitExceeded as _ce:
+                raise ValueError(f"{_ce}\n\nEmail contact@mindmarket.app for beta access.")
+            except ValueError:
+                raise
+            except Exception as _quota_err:
+                # Quota service unreachable: fail CLOSED. The fail-closed
+                # design in libs/billing/usage.py only holds if callers
+                # don't swallow the exception. Surface a clean ValueError
+                # so pages render a transient-error notice instead of
+                # silently spending provider credits.
+                logger.warning("call_llm.quota_gate_failed", error=str(_quota_err))
+                raise ValueError("Quota service temporarily unavailable. Please retry in a moment.")
 
     def _record_llm_event(
         status: str,
@@ -1783,33 +1794,37 @@ def execute_analysis(force: bool = False) -> bool:
             _os_quota.environ.get("MINDMARKET_ADMIN_MODE", "")
             or _safe_get_secret("MINDMARKET_ADMIN_MODE")
         ).strip().lower() in ("1", "true", "yes", "on")
+        # Split-try pattern: see call_llm() for the rationale. Combining
+        # imports with `except QuotaExceeded` makes the ImportError path
+        # unreachable (Python NameErrors when resolving the unbound name).
         if not _admin_mode:
             try:
                 from libs.auth.session import current_user
                 from libs.billing.usage import QuotaExceeded, check_quota
-
-                _u = current_user()
-                if not _u:
-                    st.warning("🔐 Please sign in to use your free monthly analysis credits.")
-                    return False
-                check_quota(_u["id"], "analysis")
-                analysis_billing_user = _u
-            except QuotaExceeded as qe:
-                st.error(
-                    f"⚠️ {qe}  \n\n"
-                    "💡 Paid plans are configured but not live yet. Email "
-                    "[contact@mindmarket.app](mailto:contact@mindmarket.app) "
-                    "for beta access."
-                )
-                return False
             except ImportError:
                 pass  # billing module unavailable — fail open (deploy issue)
-            except Exception as _quota_err:
-                # Fail CLOSED on quota-service errors. Don't spend a real
-                # Monte-Carlo run + LLM digest on a user we can't bill.
-                logger.warning("execute_analysis.quota_gate_failed", error=str(_quota_err))
-                st.error("⚠️ Quota service temporarily unavailable. Please retry in a moment.")
-                return False
+            else:
+                try:
+                    _u = current_user()
+                    if not _u:
+                        st.warning("🔐 Please sign in to use your free monthly analysis credits.")
+                        return False
+                    check_quota(_u["id"], "analysis")
+                    analysis_billing_user = _u
+                except QuotaExceeded as qe:
+                    st.error(
+                        f"⚠️ {qe}  \n\n"
+                        "💡 Paid plans are configured but not live yet. Email "
+                        "[contact@mindmarket.app](mailto:contact@mindmarket.app) "
+                        "for beta access."
+                    )
+                    return False
+                except Exception as _quota_err:
+                    # Fail CLOSED on quota-service errors. Don't spend a real
+                    # Monte-Carlo run + LLM digest on a user we can't bill.
+                    logger.warning("execute_analysis.quota_gate_failed", error=str(_quota_err))
+                    st.error("⚠️ Quota service temporarily unavailable. Please retry in a moment.")
+                    return False
 
     # ══════════════════════════════════════════════════════════════
     #  Landing page (first-visit experience)

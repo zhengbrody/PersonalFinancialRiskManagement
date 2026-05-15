@@ -96,56 +96,19 @@ def _chat_call_llm(
         )
     )
 
-    # Quota gate (production only)
+    # Quota gate (production only).
+    # Split-try pattern: imports in their OWN try/except so the ImportError
+    # fail-open path is actually reachable. Combining them would NameError
+    # on `except QuotaExceeded` when the import itself failed (the name is
+    # an unbound local at that point), bypassing this whole branch.
     if not _admin_mode:
         try:
             from libs.auth.session import current_user
             from libs.billing.costs import estimate_llm_event
-            from libs.billing.usage import CostLimitExceeded, QuotaExceeded, check_and_consume
-
-            _u = current_user()
-            if not _u:
-                return "🔐 Please sign in to use your free monthly AI chat credits."
-            pending_ollama_model = st.session_state.get("_ollama_model", "deepseek-r1:14b")
-            model_name = (
-                ("claude-haiku-4-5" if max_tokens <= 700 else "claude-sonnet-4-6")
-                if model_provider == "Anthropic Claude"
-                else "deepseek-chat" if model_provider == "DeepSeek API" else pending_ollama_model
-            )
-            usage_estimate = estimate_llm_event(
-                prompt=prompt,
-                system=system_prompt,
-                provider=provider_slug,
-                model=model_name,
-                max_tokens=max_tokens,
-            )
-            check_and_consume(
-                _u["id"],
-                "chat",
-                provider=provider_slug,
-                model=model_name,
-                tokens_in=int(usage_estimate["tokens_in"]),
-                tokens_out=int(usage_estimate["tokens_out"]),
-                cost_usd=float(usage_estimate["cost_usd"]),
-                metadata={
-                    "feature": "floating_chat",
-                    "estimated": usage_estimate["estimated"],
-                    "max_tokens": max_tokens,
-                },
-            )
-        except QuotaExceeded as _qe:
-            return (
-                f"⚠️ {_qe}\n\n"
-                "💡 Paid plans are configured but not live yet. Email "
-                "[contact@mindmarket.app](mailto:contact@mindmarket.app) "
-                "for beta access."
-            )
-        except CostLimitExceeded as _ce:
-            return (
-                f"⚠️ {_ce}\n\n"
-                "💡 Owner spend guardrails are active. Email "
-                "[contact@mindmarket.app](mailto:contact@mindmarket.app) "
-                "for beta access."
+            from libs.billing.usage import (
+                CostLimitExceeded,
+                QuotaExceeded,
+                check_and_consume,
             )
         except ImportError:
             # Billing module unavailable in this environment (e.g. running
@@ -153,23 +116,71 @@ def _chat_call_llm(
             # Fail open ONLY for import errors — they reflect a deploy
             # configuration issue, not a user trying to spam free LLM calls.
             pass
-        except Exception as _quota_err:
-            # Any other failure (Supabase outage, transient HTTP error)
-            # fails CLOSED: we'd rather show the user an error than
-            # silently grant free LLM calls. The fail-closed design in
-            # libs/billing/usage.py only works if the outer caller does
-            # not swallow the exception.
-            import logging as _logging
+        else:
+            try:
+                _u = current_user()
+                if not _u:
+                    return "🔐 Please sign in to use your free monthly AI chat credits."
+                pending_ollama_model = st.session_state.get("_ollama_model", "deepseek-r1:14b")
+                model_name = (
+                    ("claude-haiku-4-5" if max_tokens <= 700 else "claude-sonnet-4-6")
+                    if model_provider == "Anthropic Claude"
+                    else (
+                        "deepseek-chat"
+                        if model_provider == "DeepSeek API"
+                        else pending_ollama_model
+                    )
+                )
+                usage_estimate = estimate_llm_event(
+                    prompt=prompt,
+                    system=system_prompt,
+                    provider=provider_slug,
+                    model=model_name,
+                    max_tokens=max_tokens,
+                )
+                check_and_consume(
+                    _u["id"],
+                    "chat",
+                    provider=provider_slug,
+                    model=model_name,
+                    tokens_in=int(usage_estimate["tokens_in"]),
+                    tokens_out=int(usage_estimate["tokens_out"]),
+                    cost_usd=float(usage_estimate["cost_usd"]),
+                    metadata={
+                        "feature": "floating_chat",
+                        "estimated": usage_estimate["estimated"],
+                        "max_tokens": max_tokens,
+                    },
+                )
+            except QuotaExceeded as _qe:
+                return (
+                    f"⚠️ {_qe}\n\n"
+                    "💡 Paid plans are configured but not live yet. Email "
+                    "[contact@mindmarket.app](mailto:contact@mindmarket.app) "
+                    "for beta access."
+                )
+            except CostLimitExceeded as _ce:
+                return (
+                    f"⚠️ {_ce}\n\n"
+                    "💡 Owner spend guardrails are active. Email "
+                    "[contact@mindmarket.app](mailto:contact@mindmarket.app) "
+                    "for beta access."
+                )
+            except Exception as _quota_err:
+                # Any other failure (Supabase outage, transient HTTP error)
+                # fails CLOSED: we'd rather show the user an error than
+                # silently grant free LLM calls.
+                import logging as _logging
 
-            _logging.getLogger(__name__).warning(
-                "floating_chat.quota_gate_failed", exc_info=_quota_err
-            )
-            return (
-                "⚠️ The quota service is temporarily unavailable, so we "
-                "can't process your chat right now. Please retry in a "
-                "minute. If this keeps happening, email "
-                "[contact@mindmarket.app](mailto:contact@mindmarket.app)."
-            )
+                _logging.getLogger(__name__).warning(
+                    "floating_chat.quota_gate_failed", exc_info=_quota_err
+                )
+                return (
+                    "⚠️ The quota service is temporarily unavailable, so we "
+                    "can't process your chat right now. Please retry in a "
+                    "minute. If this keeps happening, email "
+                    "[contact@mindmarket.app](mailto:contact@mindmarket.app)."
+                )
 
     # Server-controlled keys when not admin
     api_key_input = (
