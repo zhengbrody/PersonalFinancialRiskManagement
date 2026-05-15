@@ -17,6 +17,10 @@ _CHAT_LANGUAGE_OPTIONS = {
     "Match my message": "the same language as the user's latest message",
 }
 
+_FAST_CHAT_MAX_TOKENS = 500
+_DEEP_CHAT_MAX_TOKENS = 800
+_MAX_CONTEXT_HOLDINGS = 15
+
 
 def _is_provider_auth_error(exc: Exception) -> bool:
     text = str(exc).lower()
@@ -34,6 +38,28 @@ def _is_provider_auth_error(exc: Exception) -> bool:
 
 def _mark_chat_dialog_closed():
     st.session_state._fc_dialog_open = False
+
+
+def _response_budget(user_input: str) -> int:
+    """Use shorter generations by default; only deep-dive requests get more room."""
+    text = (user_input or "").lower()
+    deep_markers = (
+        "详细",
+        "深入",
+        "完整",
+        "deep",
+        "detailed",
+        "full report",
+        "step by step",
+        "scenario",
+        "hedge",
+        "rebalance",
+    )
+    return (
+        _DEEP_CHAT_MAX_TOKENS
+        if any(marker in text for marker in deep_markers)
+        else _FAST_CHAT_MAX_TOKENS
+    )
 
 
 def _call_deepseek(
@@ -347,7 +373,7 @@ def _build_portfolio_context() -> str:
         except Exception:
             latest_prices = {}
 
-        holding_lines = []
+        holding_rows = []
         total_cost = 0.0
         total_market_value = 0.0
         for ticker, holding in sorted(holdings.items()):
@@ -365,21 +391,25 @@ def _build_portfolio_context() -> str:
             cost = shares * float(avg_cost) if avg_cost is not None else None
             if cost is not None:
                 total_cost += cost
-            holding_lines.append(
+            weight = (
+                float(weights.get(ticker, weights.get(str(ticker).upper(), 0))) if weights else 0.0
+            )
+            sort_value = market_value if market_value is not None else weight
+            line = (
                 "- "
                 + str(ticker).upper()
                 + f": shares={shares:g}"
-                + (
-                    f", weight={float(weights.get(ticker, weights.get(str(ticker).upper(), 0))):.2%}"
-                    if weights
-                    else ""
-                )
+                + (f", weight={weight:.2%}" if weights else "")
                 + (f", last_price=${price:,.2f}" if price is not None else "")
                 + (f", market_value=${market_value:,.0f}" if market_value is not None else "")
                 + (f", avg_cost=${float(avg_cost):,.2f}" if avg_cost is not None else "")
                 + f", account={account}, asset_type={asset_type}"
                 + (f", sector={sector}" if sector else "")
             )
+            holding_rows.append((sort_value or 0.0, line))
+        holding_rows.sort(key=lambda row: row[0], reverse=True)
+        holding_lines = [line for _, line in holding_rows[:_MAX_CONTEXT_HOLDINGS]]
+        omitted = max(0, len(holding_rows) - len(holding_lines))
         parts.append(
             "Active user portfolio holdings"
             + (
@@ -388,7 +418,12 @@ def _build_portfolio_context() -> str:
                 else ""
             )
             + ":\n"
-            + "\n".join(holding_lines[:30])
+            + "\n".join(holding_lines)
+            + (
+                f"\n- ... {omitted} smaller positions omitted from chat context for speed."
+                if omitted
+                else ""
+            )
         )
         if total_market_value or total_cost or margin_loan is not None:
             parts.append(
@@ -412,6 +447,18 @@ def _build_portfolio_context() -> str:
 
     report = st.session_state.get("report")
     if report:
+        try:
+            from datetime import datetime
+
+            last_ts = st.session_state.get("_last_analysis_ts")
+            if last_ts:
+                parts.append(
+                    "Analysis freshness: latest risk run at "
+                    + datetime.fromtimestamp(float(last_ts)).strftime("%Y-%m-%d %H:%M:%S")
+                    + " local time."
+                )
+        except Exception:
+            pass
         parts.append(
             f"Latest risk report: "
             f"Annual Return={report.annual_return:.2%}, "
@@ -448,12 +495,15 @@ def _build_portfolio_context() -> str:
 
 
 _SYSTEM_PROMPT = (
-    "You are a senior institutional portfolio risk analyst embedded in a risk "
-    "dashboard app.  You have access to the user's live portfolio data shown "
-    "below.  Answer questions concisely and authoritatively, citing specific "
-    "numbers.  Use bullet points for clarity.  Keep answers to 3-5 sentences "
-    "unless the user asks for more detail.  Do not invent holdings or prices; "
-    "if a field is missing, say it is unavailable.  Answer in {language}.\n\n"
+    "You are a senior institutional portfolio risk analyst embedded in MindMarket AI. "
+    "Use only the portfolio/risk context below plus the user's question. "
+    "Be concise, professional, and numeric: cite exact VaR, CVaR, Sharpe, drawdown, "
+    "weights, prices, or exposures when available. Do not invent holdings, prices, "
+    "returns, targets, news, or data sources. If data is missing or stale, say so. "
+    "Default format: 1) direct answer, 2) evidence from the portfolio, 3) risk/action "
+    "watchpoint. Keep normal answers under 5 bullets; expand only when the user asks "
+    "for a detailed/deep/full report. This is educational analysis, not investment "
+    "advice. Answer in {language}.\n\n"
     "--- PORTFOLIO CONTEXT ---\n{context}\n--- END CONTEXT ---"
 )
 
@@ -558,11 +608,12 @@ def _handle_user_input(user_input: str, chat_container):
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
+                    max_tokens = _response_budget(user_input)
                     response = _chat_call_llm(
                         prompt=full_prompt,
                         system=system,
-                        max_tokens=800,
-                        temperature=0.3,
+                        max_tokens=max_tokens,
+                        temperature=0.15,
                     )
                 except ConnectionError as e:
                     response = (

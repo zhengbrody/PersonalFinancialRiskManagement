@@ -74,3 +74,36 @@ def test_build_portfolio_context_asks_for_analysis_when_empty(floating_chat_modu
 
     assert "No portfolio data is loaded yet" in context
     assert "Refresh & Run Analysis" in context
+
+
+def test_response_budget_defaults_fast_and_expands_for_deep_dive(floating_chat_module):
+    module, _fake_st = floating_chat_module
+
+    assert module._response_budget("what is my VaR?") == 500
+    assert module._response_budget("give me a detailed hedge scenario") == 800
+
+
+def test_build_portfolio_context_truncates_smaller_positions(monkeypatch, floating_chat_module):
+    module, fake_st = floating_chat_module
+    tickers = [f"T{i:02d}" for i in range(20)]
+    fake_st.session_state.update(
+        {
+            "weights": {ticker: 1 / len(tickers) for ticker in tickers},
+            "prices": pd.DataFrame([{ticker: float(100 - i) for i, ticker in enumerate(tickers)}]),
+            "_portfolio_meta": {"portfolio_name": "Many", "portfolio_source": "user"},
+        }
+    )
+
+    monkeypatch.setattr(
+        "libs.auth.active_portfolio.get_active_holdings",
+        lambda: {ticker: {"shares": i + 1, "avg_cost": 10} for i, ticker in enumerate(tickers)},
+    )
+    monkeypatch.setattr("libs.auth.active_portfolio.get_active_margin_loan", lambda: 0)
+    monkeypatch.setattr(
+        "libs.auth.active_portfolio.get_active_portfolio_meta",
+        lambda: {"name": "Many", "source": "user"},
+    )
+
+    context = module._build_portfolio_context()
+
+    assert "... 5 smaller positions omitted from chat context for speed." in context
