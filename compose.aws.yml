@@ -64,6 +64,7 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./assets/brand:/srv/brand:ro
+      - ./assets/seo:/srv/seo:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
