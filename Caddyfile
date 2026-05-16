@@ -27,6 +27,13 @@
 	@www host www.{$SITE_HOST}
 	redir @www https://{$SITE_HOST}{uri} permanent
 
+	@brand_assets path /favicon.ico /favicon.svg /favicon-192.png /favicon-512.png /apple-touch-icon.png /site.webmanifest
+	handle @brand_assets {
+		root * /srv/brand
+		header Cache-Control "public, max-age=86400"
+		file_server
+	}
+
 	handle /robots.txt {
 		header Content-Type "text/plain; charset=utf-8"
 		respond `User-agent: *
@@ -73,8 +80,17 @@ Sitemap: https://{$SITE_HOST}/sitemap.xml
   <meta name="robots" content="index, follow">
   <meta name="google-site-verification" content="cpW5HG50AaWNMEfTxdGBF6JxeviA-0QFaHDYS0xw_N8">
   <link rel="canonical" href="https://{$SITE_HOST}/about">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
   <title>MindMarket AI | Mind Market Portfolio Risk Analytics</title>
   <meta name="description" content="MindMarket AI, also searched as Mind Market, is a portfolio risk analytics platform for investors, with AI analysis, VaR, stress testing, market context, ticker research, and portfolio tools.">
+  <meta property="og:site_name" content="MindMarket AI">
+  <meta property="og:title" content="MindMarket AI | Portfolio Risk Analytics">
+  <meta property="og:description" content="AI portfolio risk analytics, VaR, stress testing, market context, ticker research, and portfolio tools.">
+  <meta property="og:image" content="https://{$SITE_HOST}/favicon-512.png">
+  <meta name="twitter:card" content="summary">
   <style>
     body { margin:0; background:#0B0E11; color:#E2E8F0; font-family:Inter,Arial,sans-serif; line-height:1.6; }
     main { max-width:880px; margin:0 auto; padding:72px 24px; }
@@ -115,6 +131,15 @@ Sitemap: https://{$SITE_HOST}/sitemap.xml
     </p>
     <a class="cta" href="https://{$SITE_HOST}/">Open MindMarket AI</a>
   </main>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "MindMarket AI",
+    "url": "https://{$SITE_HOST}/",
+    "logo": "https://{$SITE_HOST}/favicon-512.png"
+  }
+  </script>
 </body>
 </html>
 `

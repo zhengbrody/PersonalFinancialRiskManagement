@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="MindMarket AI">
+  <rect width="512" height="512" rx="96" fill="#0B0E11"/>
+  <circle cx="256" cy="256" r="188" fill="#0B7285"/>
+  <path d="M128 344V168h52l76 108 76-108h52v176h-52V250l-58 82h-36l-58-82v94h-52z" fill="#F8FAFC"/>
+  <path d="M122 372h268" stroke="#F8FAFC" stroke-width="22" stroke-linecap="round" opacity=".95"/>
+  <path d="M306 372l70-76 54 39" fill="none" stroke="#D4A017" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

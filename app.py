@@ -166,7 +166,7 @@ def render_plotly(fig: go.Figure) -> None:
 # ══════════════════════════════════════════════════════════════
 st.set_page_config(
     page_title="MindMarket AI",
-    page_icon="M",
+    page_icon=Path(__file__).resolve().parent / "assets/brand/favicon-512.png",
     layout="wide",
     initial_sidebar_state="expanded",
 )

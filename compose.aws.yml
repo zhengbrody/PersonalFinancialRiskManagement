@@ -63,6 +63,7 @@ services:
       - SITE_HOST=${SITE_HOST}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./assets/brand:/srv/brand:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
