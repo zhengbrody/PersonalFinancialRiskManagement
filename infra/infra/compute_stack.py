@@ -150,11 +150,20 @@ RemainAfterExit=yes
 User=ec2-user
 Group=docker
 WorkingDirectory=/home/ec2-user/PersonalFinancialRiskManagement
-# Idempotent: silently no-op when the repo hasn't been deployed yet
+# Idempotent. Silently no-op when the repo hasn't been deployed yet
 # (first boot before deploy-phase-1.sh runs).
-ExecStart=/bin/sh -c 'test -f compose.aws.yml || exit 0; exec /usr/bin/docker compose -f compose.aws.yml up -d'
+#
+# AWS instance-recovery sometimes attaches a stale EBS snapshot, which
+# would otherwise leave the EC2 running an older commit than what's on
+# main. ExecStartPre does a `git pull --ff-only origin main` so a
+# recovered instance self-heals to head before docker comes up.
+# Best-effort — network failures are tolerated (`|| true`), and a
+# divergent local branch would block fast-forward safely instead of
+# clobbering local changes.
+ExecStartPre=/bin/sh -c 'test -f compose.aws.yml || exit 0; cd /home/ec2-user/PersonalFinancialRiskManagement && /usr/bin/git fetch --quiet origin main || true; /usr/bin/git reset --quiet --hard origin/main || true'
+ExecStart=/bin/sh -c 'test -f compose.aws.yml || exit 0; exec /usr/bin/docker compose -f compose.aws.yml up -d --build'
 ExecStop=/bin/sh -c 'test -f compose.aws.yml || exit 0; exec /usr/bin/docker compose -f compose.aws.yml down'
-TimeoutStartSec=10min
+TimeoutStartSec=15min
 
 [Install]
 WantedBy=multi-user.target

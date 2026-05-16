@@ -373,11 +373,8 @@ def _fmt_market_cap(val) -> str:
 # ══════════════════════════════════════════════════════════════
 
 
-def fetch_vix_data(period: str = "1y") -> pd.DataFrame:
-    """
-    获取 VIX 恐慌指数历史数据。
-    返回 DataFrame: Date, Close, 及计算的移动平均。
-    """
+def _fetch_vix_data_uncached(period: str = "1y") -> pd.DataFrame:
+    """Raw VIX history fetcher (no caching)."""
     try:
         vix = yf.download("^VIX", period=period, auto_adjust=True, progress=False)
         if isinstance(vix.columns, pd.MultiIndex):
@@ -400,8 +397,26 @@ def fetch_vix_data(period: str = "1y") -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def get_vix_current() -> Dict:
-    """获取 VIX 当前值和关键统计。"""
+def fetch_vix_data(period: str = "1y") -> pd.DataFrame:
+    """VIX history with 10-minute cache (Streamlit-aware).
+
+    Why: Markets page auto-loads VIX/yield/F&G on first visit; without a
+    cache every widget rerun re-hits yfinance (~1-2s each call).
+    """
+    try:
+        import streamlit as _st  # type: ignore
+
+        @_st.cache_data(ttl=600, show_spinner=False)
+        def _cached(p: str) -> pd.DataFrame:
+            return _fetch_vix_data_uncached(p)
+
+        return _cached(period)
+    except Exception:
+        return _fetch_vix_data_uncached(period)
+
+
+def _get_vix_current_uncached() -> Dict:
+    """Raw VIX current fetcher (no caching)."""
     try:
         tk = yf.Ticker("^VIX")
         info = tk.info or {}
@@ -451,6 +466,20 @@ def get_vix_current() -> Dict:
         return {"current": None, "level": "N/A", "level_icon": "⚪", "change": None}
 
 
+def get_vix_current() -> Dict:
+    """Current VIX value/level with 10-minute cache (Streamlit-aware)."""
+    try:
+        import streamlit as _st  # type: ignore
+
+        @_st.cache_data(ttl=600, show_spinner=False)
+        def _cached() -> Dict:
+            return _get_vix_current_uncached()
+
+        return _cached()
+    except Exception:
+        return _get_vix_current_uncached()
+
+
 # 美债收益率曲线关键期限
 YIELD_CURVE_TICKERS = {
     "^IRX": "3M",  # 3 个月 T-Bill
@@ -468,13 +497,8 @@ YIELD_TICKERS_FULL = {
 }
 
 
-def fetch_yield_curve() -> Tuple[pd.DataFrame, Dict]:
-    """
-    获取当前美国国债收益率曲线。
-    返回:
-      - DataFrame: 期限 vs 收益率（当前 + 30天前 + 90天前）
-      - Dict: 曲线分析结果（倒挂判定、期限利差等）
-    """
+def _fetch_yield_curve_uncached() -> Tuple[pd.DataFrame, Dict]:
+    """Raw yield-curve fetcher (no caching)."""
     tickers = list(YIELD_TICKERS_FULL.keys())
 
     try:
@@ -556,6 +580,24 @@ def fetch_yield_curve() -> Tuple[pd.DataFrame, Dict]:
         return pd.DataFrame(), {}
 
 
+def fetch_yield_curve() -> Tuple[pd.DataFrame, Dict]:
+    """US Treasury yield curve with 10-minute cache (Streamlit-aware).
+
+    Returns (DataFrame, analysis dict). 10-min TTL is conservative — the
+    curve barely moves intraday, but we still want fresh end-of-day data.
+    """
+    try:
+        import streamlit as _st  # type: ignore
+
+        @_st.cache_data(ttl=600, show_spinner=False)
+        def _cached() -> Tuple[pd.DataFrame, Dict]:
+            return _fetch_yield_curve_uncached()
+
+        return _cached()
+    except Exception:
+        return _fetch_yield_curve_uncached()
+
+
 # ══════════════════════════════════════════════════════════════
 #  3b. CNN Fear & Greed Index
 # ══════════════════════════════════════════════════════════════
@@ -571,12 +613,8 @@ FEAR_GREED_RATINGS = {
 }
 
 
-def fetch_fear_greed(timeout: int = 10) -> Dict:
-    """
-    Fetch CNN Fear & Greed Index.
-    Returns {score, rating, rating_icon, previous_close, one_week_ago,
-             one_month_ago, one_year_ago, timestamp, historical, sub_indices}.
-    """
+def _fetch_fear_greed_uncached(timeout: int = 10) -> Dict:
+    """Raw CNN Fear & Greed fetcher (no caching)."""
     try:
         headers = {
             "User-Agent": "Mozilla/5.0 (compatible; PortfolioRisk/1.0)",
@@ -641,6 +679,25 @@ def fetch_fear_greed(timeout: int = 10) -> Dict:
         return result
     except Exception:
         return {"score": None, "rating": "N/A", "rating_icon": "⚪", "sub_indices": {}}
+
+
+def fetch_fear_greed(timeout: int = 10) -> Dict:
+    """CNN Fear & Greed Index with 10-minute cache (Streamlit-aware).
+
+    The index updates a few times per day at most; 10-min TTL is plenty
+    fresh while eliminating redundant HTTP hits on every Markets page
+    rerun.
+    """
+    try:
+        import streamlit as _st  # type: ignore
+
+        @_st.cache_data(ttl=600, show_spinner=False)
+        def _cached(timeout: int) -> Dict:
+            return _fetch_fear_greed_uncached(timeout)
+
+        return _cached(timeout)
+    except Exception:
+        return _fetch_fear_greed_uncached(timeout)
 
 
 # ══════════════════════════════════════════════════════════════

@@ -133,3 +133,56 @@ def test_webhook_handler_rejects_missing_signature(monkeypatch):
 
     resp = handler.lambda_handler({"body": "{}", "headers": {}}, None)
     assert resp["statusCode"] == 400
+
+
+def test_webhook_rejects_invalid_signature(monkeypatch):
+    """A forged/invalid signature must produce a 400 (NOT 200, NOT 500).
+
+    - 200 would be a silent accept — game over for billing integrity.
+    - 500 would tell Stripe the failure is transient and it would keep
+      replaying the same forged event, amplifying the attack.
+    Only 400 makes Stripe drop the delivery, which is the desired
+    behavior. The downstream `handle_stripe_event` must also NEVER be
+    invoked when the signature fails to verify.
+    """
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec")
+    handler = _load_webhook_handler()
+
+    # Fake stripe module whose construct_event raises a Stripe-shaped
+    # SignatureVerificationError. We don't depend on the real stripe
+    # package being installed; the handler only catches `Exception`.
+    class _SignatureVerificationError(Exception):
+        pass
+
+    def _raise(*_args, **_kwargs):
+        raise _SignatureVerificationError("No signatures found matching the expected signature")
+
+    fake_stripe = SimpleNamespace()
+    fake_stripe.Webhook = SimpleNamespace(construct_event=MagicMock(side_effect=_raise))
+    fake_stripe.error = SimpleNamespace(SignatureVerificationError=_SignatureVerificationError)
+    monkeypatch.setitem(sys.modules, "stripe", fake_stripe)
+
+    # If the handler ever calls handle_stripe_event after a bad sig,
+    # this spy will record it and the assert below will fail.
+    spy = MagicMock(return_value={"synced": "BOOM"})
+    monkeypatch.setattr(handler, "handle_stripe_event", spy)
+
+    resp = handler.lambda_handler(
+        {
+            "body": json.dumps({"type": "checkout.session.completed", "data": {}}),
+            "headers": {"stripe-signature": "t=1,v1=forged"},
+        },
+        None,
+    )
+
+    # 400 — Stripe will stop retrying. This is the critical assertion.
+    assert resp["statusCode"] == 400
+    body = json.loads(resp["body"])
+    assert "error" in body
+    # The error surface should mention the invalid webhook so operators
+    # can grep logs. Keep the assertion loose so message tweaks don't
+    # break the test.
+    assert "Invalid" in body["error"] or "signature" in body["error"].lower()
+
+    # Most important: the forged event must never reach the sync path.
+    spy.assert_not_called()

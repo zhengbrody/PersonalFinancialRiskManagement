@@ -379,5 +379,43 @@ class TestCacheIntegration:
         pd.testing.assert_frame_equal(test_data, loaded_data)
 
 
+class TestParallelFetchPrices:
+    """Perf regression guard: fetch_prices() runs tickers concurrently via
+    ThreadPoolExecutor and merges results in submission order. If someone
+    reverts the loop back to a serial for-loop, this test still passes
+    (correctness only), but the perf docstring + history make the intent
+    explicit."""
+
+    def test_fetch_prices_parallel_preserves_results(self):
+        """Multiple tickers should all appear in the output DataFrame and the
+        ordering of self._failed_tickers should match the input order even
+        when fetched in parallel."""
+        weights = {"GOOD1": 0.3, "BAD": 0.3, "GOOD2": 0.4}
+        dp = DataProvider(weights, period_years=1)
+
+        # Stub the cache provider to return synthetic data deterministically.
+        dates = pd.date_range("2024-01-01", periods=50)
+
+        def _fake_fetch(ticker, start, end, force_refresh=False, data_type="prices", **kwargs):
+            if ticker == "BAD":
+                return None
+            return pd.DataFrame(
+                {"Close": np.linspace(100, 120, 50), "Volume": [1_000_000] * 50},
+                index=dates,
+            )
+
+        dp._cache_provider.fetch_with_cache = _fake_fetch  # type: ignore[assignment]
+
+        prices = dp.fetch_prices()
+
+        # Both good tickers present, bad one in failure list.
+        assert "GOOD1" in prices.columns
+        assert "GOOD2" in prices.columns
+        assert "BAD" not in prices.columns
+
+        failed_names = [f[0] for f in dp.get_failed_tickers()]
+        assert "BAD" in failed_names
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

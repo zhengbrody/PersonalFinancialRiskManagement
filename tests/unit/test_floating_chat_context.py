@@ -83,6 +83,61 @@ def test_response_budget_defaults_fast_and_expands_for_deep_dive(floating_chat_m
     assert module._response_budget("give me a detailed hedge scenario") == 800
 
 
+def test_chat_call_llm_stream_returns_generator(monkeypatch, floating_chat_module):
+    """Perf fix: Claude streaming should return a generator so that
+    st.write_stream can render tokens as they arrive. Regression guard:
+    if someone collapses _chat_call_llm back to a single-shot
+    .messages.create call, this test fails."""
+    module, fake_st = floating_chat_module
+
+    # Admin mode → skip quota gate.
+    monkeypatch.setenv("MINDMARKET_ADMIN_MODE", "true")
+    fake_st.session_state.update(
+        {
+            "_model_provider": "Anthropic Claude",
+            "_api_key_input": "sk-ant-fake",
+        }
+    )
+
+    # Stub anthropic client so we never make a real API call.
+    class _FakeStream:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        @property
+        def text_stream(self):
+            yield "Hello "
+            yield "world"
+
+    class _FakeMessages:
+        def stream(self, **kwargs):
+            return _FakeStream()
+
+    class _FakeAnthropic:
+        def __init__(self, api_key):
+            self.messages = _FakeMessages()
+
+    fake_anthropic = MagicMock()
+    fake_anthropic.Anthropic = _FakeAnthropic
+    monkeypatch.setitem(sys.modules, "anthropic", fake_anthropic)
+
+    result = module._chat_call_llm(
+        prompt="test",
+        system="sys",
+        max_tokens=300,
+        stream=True,
+    )
+
+    # Must be an iterator/generator, not a string.
+    assert hasattr(result, "__iter__")
+    assert not isinstance(result, str)
+    chunks = list(result)
+    assert "".join(chunks) == "Hello world"
+
+
 def test_build_portfolio_context_truncates_smaller_positions(monkeypatch, floating_chat_module):
     module, fake_st = floating_chat_module
     tickers = [f"T{i:02d}" for i in range(20)]

@@ -90,8 +90,12 @@ def _call_deepseek(
 #  Self-contained LLM call (avoids circular import with app.py)
 # ──────────────────────────────────────────────────────────────
 def _chat_call_llm(
-    prompt: str, system: str = "", max_tokens: int = 600, temperature: float = 0.3
-) -> str:
+    prompt: str,
+    system: str = "",
+    max_tokens: int = 600,
+    temperature: float = 0.3,
+    stream: bool = False,
+):
     """
     Minimal LLM call that mirrors app.call_llm but lives in this module
     to avoid circular imports (app.py -> ui.floating_chat -> app.call_llm).
@@ -99,6 +103,11 @@ def _chat_call_llm(
 
     Quota: in non-admin mode, decrements the user's monthly chat counter.
     Admin mode (MINDMARKET_ADMIN_MODE=true) bypasses quota for local dev.
+
+    When ``stream=True`` and the active provider is Anthropic Claude, this
+    function returns a generator yielding text chunks (compatible with
+    ``st.write_stream``). Non-Claude providers and error paths fall back to
+    the standard synchronous str return (callers should handle both).
     """
     import os as _os
     import time
@@ -226,6 +235,32 @@ def _chat_call_llm(
 
         client = anthropic.Anthropic(api_key=api_key_input)
         claude_model = "claude-haiku-4-5" if max_tokens <= 700 else "claude-sonnet-4-6"
+
+        if stream:
+            # Streaming branch — return a generator so the caller can
+            # render tokens via st.write_stream(). TTFT drops from
+            # 3-8s (waiting for the full response) to ~300ms.
+            def _stream_chunks():
+                try:
+                    with client.messages.stream(
+                        model=claude_model,
+                        max_tokens=max_tokens,
+                        system=system_prompt,
+                        messages=[{"role": "user", "content": prompt}],
+                    ) as s:
+                        for text in s.text_stream:
+                            yield text
+                except Exception as e:
+                    if _is_provider_auth_error(e):
+                        yield (
+                            "\n\n**Configuration Error:** Claude API key was rejected. "
+                            "Ask the site owner to rotate ANTHROPIC_API_KEY."
+                        )
+                    else:
+                        yield f"\n\n**Error:** {e}"
+
+            return _stream_chunks()
+
         for attempt in range(3):
             try:
                 resp = client.messages.create(
@@ -645,29 +680,50 @@ def _handle_user_input(user_input: str, chat_container):
         conversation_parts.append(f"{role_label}: {msg['content']}")
     full_prompt = "\n\n".join(conversation_parts)
 
+    max_tokens = _response_budget(user_input)
+    provider = st.session_state.get("_model_provider", "")
+    # Stream only Claude — DeepSeek/Ollama branches already use single-shot
+    # HTTP and rewriting them would touch billing/quota plumbing we don't
+    # want to disturb in this perf pass.
+    use_stream = provider == "Anthropic Claude"
+
+    response = ""
     with chat_container:
         with st.chat_message("assistant"):
-            with st.spinner("Thinking..."):
-                try:
-                    max_tokens = _response_budget(user_input)
-                    response = _chat_call_llm(
+            try:
+                if use_stream:
+                    stream_iter = _chat_call_llm(
                         prompt=full_prompt,
                         system=system,
                         max_tokens=max_tokens,
                         temperature=0.15,
+                        stream=True,
                     )
-                except ConnectionError as e:
-                    response = (
-                        f"**Connection Error:** {e}\n\n"
-                        "Please check your AI provider settings in the sidebar."
-                    )
-                except ValueError as e:
-                    response = f"**Configuration Error:** {e}"
-                except Exception as e:
-                    response = (
-                        f"**Error:** {e}\n\n" "Try again or switch AI provider in the sidebar."
-                    )
-            st.markdown(response)
+                    # st.write_stream renders tokens as they arrive AND
+                    # returns the concatenated final string for us to
+                    # persist into the chat history.
+                    response = st.write_stream(stream_iter) or ""
+                else:
+                    with st.spinner("Thinking..."):
+                        response = _chat_call_llm(
+                            prompt=full_prompt,
+                            system=system,
+                            max_tokens=max_tokens,
+                            temperature=0.15,
+                        )
+                    st.markdown(response)
+            except ConnectionError as e:
+                response = (
+                    f"**Connection Error:** {e}\n\n"
+                    "Please check your AI provider settings in the sidebar."
+                )
+                st.markdown(response)
+            except ValueError as e:
+                response = f"**Configuration Error:** {e}"
+                st.markdown(response)
+            except Exception as e:
+                response = f"**Error:** {e}\n\n" "Try again or switch AI provider in the sidebar."
+                st.markdown(response)
 
     st.session_state._fc_messages.append({"role": "assistant", "content": response})
     st.rerun()
