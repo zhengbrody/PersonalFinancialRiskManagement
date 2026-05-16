@@ -70,16 +70,18 @@ def _make_mock_response(text: str, status: int = 200):
 # 1. Success path
 # ──────────────────────────────────────────────────────────────
 def test_fetch_macro_releases_returns_rows_on_success(monkeypatch):
+    """FRED helper uses requests.get directly (not _http_session) — see
+    the comment in _fred_fetch_series_raw for the why."""
     _reset_memo()
 
-    def _fake_get(url, timeout=5, **kw):
+    def _fake_get(url, timeout=10, **kw):
         # Every series returns the same CSV body but renamed to that series id.
         # Extract the requested id from the URL.
         sid = url.split("id=")[-1]
         body = _SAMPLE_CPI_CSV.replace("CPIAUCSL", sid)
         return _make_mock_response(body)
 
-    monkeypatch.setattr(mi._http_session, "get", _fake_get)
+    monkeypatch.setattr(mi.requests, "get", _fake_get)
 
     rows = mi.fetch_macro_releases()
 
@@ -105,12 +107,14 @@ def test_fetch_macro_releases_returns_rows_on_success(monkeypatch):
 # 2. Failure path
 # ──────────────────────────────────────────────────────────────
 def test_fetch_macro_releases_returns_empty_on_failure(monkeypatch):
+    """Network failures must be swallowed silently — chat / briefing
+    survive a FRED outage."""
     _reset_memo()
 
     def _boom(*a, **kw):
         raise ConnectionError("FRED is down")
 
-    monkeypatch.setattr(mi._http_session, "get", _boom)
+    monkeypatch.setattr(mi.requests, "get", _boom)
 
     rows = mi.fetch_macro_releases()
 
