@@ -127,6 +127,41 @@ if [ ! -f /swapfile ]; then
     echo "/swapfile none swap sw 0 0" >> /etc/fstab
 fi
 
+# Systemd unit so the app comes back automatically on reboot or AWS
+# auto-recovery (we got bitten by this in May 2026: AWS replaced the
+# instance, EBS volume reattached with repo + secrets intact, but Docker
+# Engine started without any containers — `docker ps` was empty, site
+# was 503 until a human ran `docker compose up`. This unit fixes that.)
+#
+# The deploy-phase-1.sh writes the repo + .env + secrets.toml, so first-
+# boot has nothing to start (compose.aws.yml absent → unit exits cleanly).
+# Subsequent reboots find the repo on the EBS volume and bring the stack
+# back up.
+cat > /etc/systemd/system/mindmarket.service <<'UNIT'
+[Unit]
+Description=MindMarket app stack (docker compose)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=ec2-user
+Group=docker
+WorkingDirectory=/home/ec2-user/PersonalFinancialRiskManagement
+# Idempotent: silently no-op when the repo hasn't been deployed yet
+# (first boot before deploy-phase-1.sh runs).
+ExecStart=/bin/sh -c 'test -f compose.aws.yml || exit 0; exec /usr/bin/docker compose -f compose.aws.yml up -d'
+ExecStop=/bin/sh -c 'test -f compose.aws.yml || exit 0; exec /usr/bin/docker compose -f compose.aws.yml down'
+TimeoutStartSec=10min
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable mindmarket.service
+
 # Marker file. deploy-phase-1.sh polls for this to know bootstrap is done.
 touch /var/lib/mindmarket-bootstrap-complete
 echo "==> bootstrap finished $(date -u)"

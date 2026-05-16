@@ -693,11 +693,17 @@ def _fred_fetch_series_raw(series_id: str) -> list[tuple]:
         return cached[1]
 
     url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+    # 5s was too aggressive: _http_session has urllib3.Retry(total=3,
+    # backoff=1.5) so each retry inherits the per-attempt timeout but the
+    # response budget is per-attempt, not cumulative — FRED's CSV
+    # endpoint occasionally takes 6-8s under load, all retries timed
+    # out, returning zero rows in production. 15s is conservative and
+    # still safe inside Streamlit's default 30s widget timeout.
     try:
-        resp = _http_session.get(url, timeout=5)
+        resp = _http_session.get(url, timeout=15)
         resp.raise_for_status()
     except Exception as exc:
-        logger.debug("FRED fetch failed for %s: %s", series_id, exc)
+        logger.warning("FRED fetch failed for %s: %s", series_id, exc)
         return []
 
     from io import StringIO
