@@ -27,7 +27,7 @@
 	@www host www.{$SITE_HOST}
 	redir @www https://{$SITE_HOST}{uri} permanent
 
-	@brand_assets path /favicon.ico /favicon.svg /favicon-192.png /favicon-512.png /apple-touch-icon.png /site.webmanifest
+	@brand_assets path /favicon.ico /favicon.png /favicon.svg /favicon-192.png /favicon-512.png /apple-touch-icon.png /site.webmanifest
 	handle @brand_assets {
 		root * /srv/brand
 		header Cache-Control "public, max-age=86400"
