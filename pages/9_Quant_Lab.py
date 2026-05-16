@@ -69,6 +69,18 @@ Comment on risk-adjusted performance quality and whether the return justifies th
     except Exception:
         pass
 
+    from libs.data_quality import quant_lab_report, render_data_quality_panel  # noqa: E402
+
+    _ql_report = st.session_state.get("report")
+    if _ql_report is not None:
+        render_data_quality_panel(
+            quant_lab_report(
+                weights=st.session_state.get("weights") or {},
+                prices_df=st.session_state.get("prices"),
+                report_obj=_ql_report,
+            )
+        )
+
 
 # ══════════════════════════════════════════════════════════════
 #  Plotly helpers

@@ -324,6 +324,17 @@ What should traders watch for today? Comment on volatility regime and positionin
     except Exception:
         pass
 
+    from libs.data_quality import render_data_quality_panel, trading_floor_report  # noqa: E402
+
+    render_data_quality_panel(
+        trading_floor_report(
+            regime_data=st.session_state.get("_tf_regime"),
+            sector_data=st.session_state.get("_tf_sectors"),
+            movers_data=st.session_state.get("_tf_movers"),
+            market_regime_data=st.session_state.get("_tf_market_regime"),
+        )
+    )
+
 
 # ════════════════════════════════════════════════════════════
 #  SECTION 2: Sector Heatmap + Top Movers  (side by side)

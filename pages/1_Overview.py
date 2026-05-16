@@ -529,6 +529,12 @@ except Exception:
         f"Portfolio VaR is {report.var_95:.1%}. Max drawdown {report.max_drawdown:.1%}. Sharpe {report.sharpe_ratio:.2f}.",
     )
 
+from libs.data_quality import overview_report, render_data_quality_panel  # noqa: E402
+
+render_data_quality_panel(
+    overview_report(weights=weights or {}, prices_df=prices, meta=meta_kpi or {})
+)
+
 # ── Historical Portfolio Value (dollar time series) ─────────────────────
 if meta_kpi and cumret is not None and len(cumret) > 1:
     _base = meta_kpi.get("contributed_capital") or meta_kpi.get("cost_basis")

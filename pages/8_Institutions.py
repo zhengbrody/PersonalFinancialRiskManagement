@@ -17,6 +17,7 @@ import streamlit as st
 
 from app import cached_digest
 from i18n import get_translator
+from market_intelligence import fetch_macro_releases
 from ui.components import render_ai_digest, render_kpi_row, render_section
 from ui.shared_sidebar import render_shared_sidebar
 
@@ -224,37 +225,28 @@ def _series_snapshot(series_id: str, label: str, cadence: str, unit: str) -> dic
 
 
 def _macro_release_rows() -> list[dict]:
-    specs = [
-        ("CPIAUCSL", "CPI", "Monthly", "index"),
-        ("CPILFESL", "Core CPI", "Monthly", "index"),
-        ("PCEPI", "PCE Price Index", "Monthly", "index"),
-        ("PCEPILFE", "Core PCE Price Index", "Monthly", "index"),
-        ("UMCSENT", "University of Michigan Sentiment", "Monthly", "index"),
-        ("FEDFUNDS", "Effective Fed Funds Rate", "Monthly", "pct"),
-        ("DFEDTARL", "Fed Target Range Lower", "Daily", "pct"),
-        ("DFEDTARU", "Fed Target Range Upper", "Daily", "pct"),
-        ("DGS10", "10Y Treasury Yield", "Daily", "pct"),
-        ("T10Y2Y", "10Y-2Y Treasury Spread", "Daily", "pct"),
-        ("UNRATE", "Unemployment Rate", "Monthly", "pct"),
-        ("PAYEMS", "Nonfarm Payrolls", "Monthly", "thousands"),
-    ]
-    rows = []
-    for series_id, label, cadence, unit in specs:
-        try:
-            rows.append(_series_snapshot(series_id, label, cadence, unit))
-        except Exception as exc:
-            rows.append(
-                {
-                    "Indicator": label,
-                    "Cadence": cadence,
-                    "Latest Date": "--",
-                    "Latest": "--",
-                    "Last Change": "--",
-                    "YoY": "--",
-                    "Source": f"FRED unavailable: {exc}",
-                }
-            )
-    return rows
+    """Thin wrapper around the shared :func:`fetch_macro_releases` helper.
+
+    Strips the internal/AI-only keys so the dataframe shows the original
+    column set (Indicator / Cadence / Latest Date / Latest / Last Change /
+    YoY / Source). The shared helper is the single source of truth used
+    by both this page and the AI briefing / floating chat.
+    """
+    raw = fetch_macro_releases()
+    if not raw:
+        return [
+            {
+                "Indicator": "FRED unavailable",
+                "Cadence": "--",
+                "Latest Date": "--",
+                "Latest": "--",
+                "Last Change": "--",
+                "YoY": "--",
+                "Source": "FRED",
+            }
+        ]
+    cols = ("Indicator", "Cadence", "Latest Date", "Latest", "Last Change", "YoY", "Source")
+    return [{c: row.get(c, "--") for c in cols} for row in raw]
 
 
 def _latest_numeric(series_id: str) -> float | None:

@@ -433,6 +433,47 @@ def _build_portfolio_context() -> str:
                 f"margin_loan=${float(margin_loan or 0):,.0f}"
             )
 
+    # Recent FRED macroeconomic releases. Pulled via the shared helper so
+    # the chat sees the same numbers as the page 8 table and the AI risk
+    # briefing prompt. Failures are silenced -- the chat must keep working
+    # if FRED is down. Only injected when the user actually has some
+    # portfolio context to discuss (otherwise we want the "no portfolio
+    # loaded yet" fallback to fire downstream).
+    if parts:
+        try:
+            from market_intelligence import fetch_macro_releases
+
+            macro_rows = fetch_macro_releases() or []
+            _ai_focus = {
+                "CPIAUCSL",
+                "CPILFESL",
+                "PCEPI",
+                "PCEPILFE",
+                "FEDFUNDS",
+                "UNRATE",
+                "PAYEMS",
+                "DGS10",
+                "T10Y2Y",
+            }
+            focused = [r for r in macro_rows if r.get("fred_id") in _ai_focus][:6]
+            if not focused:
+                focused = macro_rows[:6]
+            if focused:
+                macro_lines = []
+                for row in focused:
+                    series = row.get("Series", "?")
+                    latest = row.get("Latest", "--")
+                    date = row.get("Date", "--")
+                    fred_id = row.get("fred_id", "")
+                    fred_tag = f" ({fred_id})" if fred_id else ""
+                    macro_lines.append(f"- {series}{fred_tag}: {latest} as of {date}")
+                parts.append("Recent macro releases (FRED):\n" + "\n".join(macro_lines))
+        except Exception:
+            # FRED unreachable, dependency missing, etc. The chat
+            # shouldn't fail just because we couldn't inject this
+            # optional context.
+            pass
+
     meta = st.session_state.get("_portfolio_meta")
     if meta:
         parts.append(

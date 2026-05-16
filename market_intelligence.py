@@ -644,6 +644,192 @@ def fetch_fear_greed(timeout: int = 10) -> Dict:
 
 
 # ══════════════════════════════════════════════════════════════
+#  3.5  FRED Macroeconomic Releases
+# ──────────────────────────────────────────────────────────────
+#  Public helper used by both pages/8_Institutions.py (UI table)
+#  AND build_ai_risk_briefing / floating_chat (prompt injection).
+#  Single source of truth so the LLM sees the same numbers the
+#  user sees on screen.
+# ══════════════════════════════════════════════════════════════
+
+# FRED series we surface. Order matters: the first ~6 entries are
+# the macro-relevant ones we inject into the LLM prompt (inflation
+# + jobs + Fed funds + 10Y). The rest are page-table only.
+_FRED_SPECS = [
+    # series_id,    label,                              cadence,   unit
+    ("CPIAUCSL", "CPI", "Monthly", "index"),
+    ("CPILFESL", "Core CPI", "Monthly", "index"),
+    ("PCEPI", "PCE Price Index", "Monthly", "index"),
+    ("PCEPILFE", "Core PCE Price Index", "Monthly", "index"),
+    ("UMCSENT", "University of Michigan Sentiment", "Monthly", "index"),
+    ("FEDFUNDS", "Effective Fed Funds Rate", "Monthly", "pct"),
+    ("DFEDTARL", "Fed Target Range Lower", "Daily", "pct"),
+    ("DFEDTARU", "Fed Target Range Upper", "Daily", "pct"),
+    ("DGS10", "10Y Treasury Yield", "Daily", "pct"),
+    ("T10Y2Y", "10Y-2Y Treasury Spread", "Daily", "pct"),
+    ("UNRATE", "Unemployment Rate", "Monthly", "pct"),
+    ("PAYEMS", "Nonfarm Payrolls", "Monthly", "thousands"),
+]
+
+
+# Module-level memo for Lambda / non-streamlit environments. Keyed by
+# series_id → (timestamp, list_of_observations).
+_FRED_MEMO: dict = {}
+_FRED_MEMO_TTL_SECONDS = 1800  # 30 min, matches the st.cache_data TTL
+
+
+def _fred_fetch_series_raw(series_id: str) -> list[tuple]:
+    """Fetch a FRED series via the public CSV endpoint.
+
+    Returns a list of (datetime, float) tuples, oldest first. Always uses
+    a short timeout so it can't block the Streamlit thread; on any error
+    returns []. Memoised at module level with a 30 min TTL so callers
+    outside of Streamlit (tests, Lambda) don't hammer FRED either.
+    """
+    import time as _time
+
+    cached = _FRED_MEMO.get(series_id)
+    if cached and (_time.time() - cached[0] < _FRED_MEMO_TTL_SECONDS):
+        return cached[1]
+
+    url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+    try:
+        resp = _http_session.get(url, timeout=5)
+        resp.raise_for_status()
+    except Exception as exc:
+        logger.debug("FRED fetch failed for %s: %s", series_id, exc)
+        return []
+
+    from io import StringIO
+
+    try:
+        df = pd.read_csv(StringIO(resp.text))
+    except Exception as exc:
+        logger.debug("FRED CSV parse failed for %s: %s", series_id, exc)
+        return []
+
+    if "observation_date" not in df.columns or series_id not in df.columns:
+        return []
+
+    df = df.rename(columns={"observation_date": "date", series_id: "value"})
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df["value"] = pd.to_numeric(df["value"], errors="coerce")
+    df = df.dropna(subset=["date", "value"]).sort_values("date")
+    obs = [(row.date, float(row.value)) for row in df.itertuples(index=False)]
+    _FRED_MEMO[series_id] = (_time.time(), obs)
+    return obs
+
+
+def _format_macro_row(series_id: str, label: str, cadence: str, unit: str) -> Optional[dict]:
+    """Build one release row. Returns None if data is missing entirely."""
+    obs = _fred_fetch_series_raw(series_id)
+    if not obs:
+        return None
+
+    latest_date, latest_value = obs[-1]
+    prev = obs[-2] if len(obs) >= 2 else None
+    year_ago = obs[-13] if cadence == "Monthly" and len(obs) >= 13 else None
+
+    last_change = (latest_value - prev[1]) if prev is not None else None
+    yoy = ((latest_value / year_ago[1]) - 1.0) * 100 if year_ago is not None else None
+
+    if unit == "pct":
+        latest_text = f"{latest_value:.2f}%"
+        change_text = f"{last_change:+.2f} pp" if last_change is not None else "--"
+    elif unit == "index":
+        latest_text = f"{latest_value:.1f}"
+        change_text = f"{last_change:+.1f}" if last_change is not None else "--"
+    elif unit == "thousands":
+        latest_text = f"{latest_value:,.0f}K"
+        change_text = f"{last_change:+,.0f}K" if last_change is not None else "--"
+    else:
+        latest_text = f"{latest_value:.2f}"
+        change_text = f"{last_change:+.2f}" if last_change is not None else "--"
+
+    # Friendly "Series" label: prefer YoY phrasing for index series so the
+    # LLM can read "CPI YoY: 3.20%" without needing to know it's an index.
+    if unit == "index" and yoy is not None:
+        series_label = f"{label} YoY"
+        ai_value_text = f"{yoy:+.2f}%"
+    else:
+        series_label = label
+        ai_value_text = latest_text
+
+    date_text = pd.Timestamp(latest_date).strftime("%Y-%m-%d")
+
+    return {
+        # --- Spec-mandated keys (consumed by AI prompt + chat) ---
+        "Series": series_label,
+        "Latest": ai_value_text,
+        "Date": date_text,
+        "Source": "FRED",
+        "fred_id": series_id,
+        # --- Legacy keys preserved for the page 8 dataframe layout ---
+        "Indicator": label,
+        "Cadence": cadence,
+        "Latest Date": date_text,
+        "Last Change": change_text,
+        "YoY": f"{yoy:+.2f}%" if yoy is not None else "--",
+        "_raw_value": latest_value,
+        "_raw_date": pd.Timestamp(latest_date),
+    }
+
+
+def _fetch_macro_releases_uncached(max_age_days: int = 60) -> List[dict]:
+    """Internal implementation — see fetch_macro_releases for docs."""
+    rows: List[dict] = []
+    cutoff = pd.Timestamp.utcnow().tz_localize(None) - pd.Timedelta(days=max_age_days)
+    for series_id, label, cadence, unit in _FRED_SPECS:
+        try:
+            row = _format_macro_row(series_id, label, cadence, unit)
+        except Exception as exc:  # never raise into Streamlit
+            logger.debug("Macro row build failed for %s: %s", series_id, exc)
+            row = None
+        if row is None:
+            continue
+        # Drop stale rows (e.g. discontinued series)
+        try:
+            if row["_raw_date"] < cutoff and cadence == "Daily":
+                continue
+        except Exception:
+            pass
+        rows.append(row)
+    return rows
+
+
+def fetch_macro_releases(max_age_days: int = 60) -> List[dict]:
+    """Return the latest FRED economic release rows.
+
+    Each row contains:
+        Series   -- friendly label (e.g. "CPI YoY")
+        Latest   -- formatted current value (e.g. "3.20%")
+        Date     -- ISO date string (e.g. "2026-04-01")
+        Source   -- always "FRED"
+        fred_id  -- FRED series id (e.g. "CPIAUCSL")
+        ...plus legacy keys (Indicator/Cadence/Last Change/YoY) used
+        by the page 8 dataframe layout.
+
+    Returns [] if FRED is unreachable. Cached for 30 minutes via
+    st.cache_data when Streamlit is importable; otherwise memoised in
+    a module-level dict so Lambda / test environments still avoid
+    hitting FRED on every call.
+    """
+    try:
+        import streamlit as _st  # type: ignore
+
+        @_st.cache_data(ttl=1800, show_spinner=False)
+        def _cached(max_age_days: int) -> List[dict]:
+            return _fetch_macro_releases_uncached(max_age_days)
+
+        # cache_data hashes args; pass through.
+        return _cached(max_age_days)
+    except Exception:
+        # Streamlit not importable or cache failure → fall back to
+        # module-level memo (already in _fred_fetch_series_raw).
+        return _fetch_macro_releases_uncached(max_age_days)
+
+
+# ══════════════════════════════════════════════════════════════
 #  4. AI 综合风险简报
 # ══════════════════════════════════════════════════════════════
 
@@ -656,6 +842,7 @@ def build_ai_risk_briefing(
     fundamentals_df: pd.DataFrame,
     macro_news: List[Dict],
     sentiment_data: Optional[Dict] = None,
+    macro_releases: Optional[List[Dict]] = None,
     lang: str = "en",
 ) -> str:
     """
@@ -761,6 +948,39 @@ def build_ai_risk_briefing(
         for tk, data in sorted(sentiment_data.items(), key=lambda x: x[1]["score"]):
             sections.append(f"  {tk}: {data['score']:+d}/10 — {data['summary'][:60]}")
         sections.append("")
+
+    # ── F. Recent macroeconomic releases (FRED) ─────────────────
+    if macro_releases:
+        # Show only the most macro-relevant series so we don't drown the
+        # prompt. We prefer inflation / jobs / policy rate / curve.
+        _ai_focus = {
+            "CPIAUCSL",
+            "CPILFESL",
+            "PCEPI",
+            "PCEPILFE",
+            "FEDFUNDS",
+            "UNRATE",
+            "PAYEMS",
+            "DGS10",
+            "T10Y2Y",
+        }
+        focused = [r for r in macro_releases if r.get("fred_id") in _ai_focus][:6]
+        if not focused:
+            focused = macro_releases[:6]
+        if focused:
+            sections.append(
+                "## F. 最新宏观经济数据（FRED）"
+                if use_zh
+                else "## F. Recent Macroeconomic Releases (FRED)"
+            )
+            for row in focused:
+                series = row.get("Series", "?")
+                latest = row.get("Latest", "--")
+                date = row.get("Date", "--")
+                fred_id = row.get("fred_id", "")
+                fred_tag = f" ({fred_id})" if fred_id else ""
+                sections.append(f"  {series}{fred_tag}: {latest} as of {date}")
+            sections.append("")
 
     # ── 生成提示 ──────────────────────────────────────────────
     if use_zh:

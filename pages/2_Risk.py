@@ -127,6 +127,16 @@ except Exception:
         sources="Risk Engine",
     )
 
+from libs.data_quality import render_data_quality_panel, risk_report  # noqa: E402
+
+render_data_quality_panel(
+    risk_report(
+        weights=st.session_state.get("weights") or {},
+        prices_df=st.session_state.get("prices"),
+        report_obj=report,
+    )
+)
+
 meta_kpi = getattr(st.session_state, "_portfolio_meta", None)
 total_long_val = meta_kpi["total_long"] if meta_kpi else None
 
