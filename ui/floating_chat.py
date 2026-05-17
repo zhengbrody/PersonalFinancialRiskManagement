@@ -19,7 +19,45 @@ _CHAT_LANGUAGE_OPTIONS = {
 
 _FAST_CHAT_MAX_TOKENS = 500
 _DEEP_CHAT_MAX_TOKENS = 800
+_SHORT_CHAT_MAX_TOKENS = 350
 _MAX_CONTEXT_HOLDINGS = 15
+
+# Keywords that flip "auto" depth classification to "deep". These are the
+# kinds of questions where shipping a short context would make the answer
+# either wrong (no factor betas to cite) or unhelpfully generic.
+_DEEP_CONTEXT_KEYWORDS = (
+    "var",
+    "cvar",
+    "hedge",
+    "scenario",
+    "stress",
+    "beta",
+    "factor",
+    "drawdown",
+    "allocation",
+    "rebalance",
+    "optimize",
+    "regime",
+    "exposure",
+)
+_DEEP_CONTEXT_LENGTH_THRESHOLD = 80
+
+
+def _classify_context_depth(user_message: str) -> str:
+    """Auto-classify a chat message as "short" or "deep" context.
+
+    Heuristic: deep when the message is long (>80 chars) OR mentions any
+    risk/scenario/hedging keyword. Otherwise short. Casual messages like
+    "hi" or "what's NVDA" stay on the short path so we don't ship 1500
+    tokens of factor betas just to greet the user.
+    """
+    text = (user_message or "").lower()
+    if len(text) > _DEEP_CONTEXT_LENGTH_THRESHOLD:
+        return "deep"
+    for kw in _DEEP_CONTEXT_KEYWORDS:
+        if kw in text:
+            return "deep"
+    return "short"
 
 
 def _is_provider_auth_error(exc: Exception) -> bool:
@@ -40,8 +78,18 @@ def _mark_chat_dialog_closed():
     st.session_state._fc_dialog_open = False
 
 
-def _response_budget(user_input: str) -> int:
-    """Use shorter generations by default; only deep-dive requests get more room."""
+def _response_budget(user_input: str, depth: str = "auto") -> int:
+    """Pick the max_tokens budget for a chat response.
+
+    Short questions (depth="short") get the smallest budget so Haiku can
+    return quickly; deep-dive prompts get the larger budget. When depth is
+    "auto" we fall back to the legacy keyword scan over ``user_input``.
+    """
+    if depth == "short":
+        return _SHORT_CHAT_MAX_TOKENS
+    if depth == "deep":
+        return _DEEP_CHAT_MAX_TOKENS
+
     text = (user_input or "").lower()
     deep_markers = (
         "详细",
@@ -354,9 +402,25 @@ def _chat_call_llm(
 # ──────────────────────────────────────────────────────────────
 #  Build portfolio context string from session_state
 # ──────────────────────────────────────────────────────────────
-def _build_portfolio_context() -> str:
-    """Assemble a concise context block from session_state and active DB holdings."""
+def _build_portfolio_context(*, depth: str = "auto", user_message: str = "") -> str:
+    """Build the LLM context for the floating chat.
+
+    depth:
+        "short"  -- weights + net equity + top 3 holdings only (~300 tokens)
+        "deep"   -- everything we have (~1500 tokens)
+        "auto"   -- classify from ``user_message``: short for casual questions
+                    ("hi", "what's NVDA"), deep for risk/scenario keywords.
+
+    Auto-classification heuristic: deep when ``user_message`` length > 80 OR
+    contains any of: var, cvar, hedge, scenario, stress, beta, factor,
+    drawdown, allocation, rebalance, optimize, regime, exposure.
+    """
     import json
+
+    if depth == "auto":
+        depth = _classify_context_depth(user_message)
+    if depth not in ("short", "deep"):
+        depth = "short"
 
     parts = []
 
@@ -387,6 +451,9 @@ def _build_portfolio_context() -> str:
             holdings = {}
             portfolio_meta = {}
 
+    # Short depth caps the weights at the top 3 holdings; deep keeps the
+    # full top-20 list so factor / concentration questions can be answered.
+    weights_cap = 3 if depth == "short" else 20
     if weights:
         weight_items = sorted(
             ((str(t).upper(), float(w)) for t, w in weights.items()),
@@ -395,9 +462,12 @@ def _build_portfolio_context() -> str:
         )
         parts.append(
             "Current portfolio weights:\n"
-            + "\n".join(f"- {ticker}: {weight:.2%}" for ticker, weight in weight_items[:20])
+            + "\n".join(
+                f"- {ticker}: {weight:.2%}" for ticker, weight in weight_items[:weights_cap]
+            )
         )
 
+    holdings_cap = 3 if depth == "short" else _MAX_CONTEXT_HOLDINGS
     if holdings:
         latest_prices = {}
         prices = st.session_state.get("prices")
@@ -443,7 +513,7 @@ def _build_portfolio_context() -> str:
             )
             holding_rows.append((sort_value or 0.0, line))
         holding_rows.sort(key=lambda row: row[0], reverse=True)
-        holding_lines = [line for _, line in holding_rows[:_MAX_CONTEXT_HOLDINGS]]
+        holding_lines = [line for _, line in holding_rows[:holdings_cap]]
         omitted = max(0, len(holding_rows) - len(holding_lines))
         parts.append(
             "Active user portfolio holdings"
@@ -473,8 +543,10 @@ def _build_portfolio_context() -> str:
     # briefing prompt. Failures are silenced -- the chat must keep working
     # if FRED is down. Only injected when the user actually has some
     # portfolio context to discuss (otherwise we want the "no portfolio
-    # loaded yet" fallback to fire downstream).
-    if parts:
+    # loaded yet" fallback to fire downstream). Skipped entirely for
+    # "short" depth: macro releases aren't relevant to casual questions
+    # and they're the heaviest single context section.
+    if parts and depth == "deep":
         try:
             from market_intelligence import fetch_macro_releases
 
@@ -521,7 +593,10 @@ def _build_portfolio_context() -> str:
             f"Leverage={meta.get('leverage', 0):.2f}x"
         )
 
-    report = st.session_state.get("report")
+    # The risk report block (Sharpe, VaR, CVaR, factor betas, component
+    # VaR contributors) is the heaviest section and is only useful when
+    # the user is actually asking risk-shaped questions. Skip on short.
+    report = st.session_state.get("report") if depth == "deep" else None
     if report:
         try:
             from datetime import datetime
@@ -666,7 +741,11 @@ def _handle_user_input(user_input: str, chat_container):
         with st.chat_message("user"):
             st.markdown(user_input)
 
-    context = _build_portfolio_context()
+    # Tiered context: a one-word "hi" no longer ships 1500 tokens of
+    # factor betas. Risk/scenario keywords (or long messages) flip to the
+    # deep context that includes the full risk report + macro releases.
+    depth = _classify_context_depth(user_input)
+    context = _build_portfolio_context(depth=depth, user_message=user_input)
     language = _CHAT_LANGUAGE_OPTIONS.get(
         st.session_state.get("_fc_response_language", "English"),
         "English",
@@ -680,7 +759,7 @@ def _handle_user_input(user_input: str, chat_container):
         conversation_parts.append(f"{role_label}: {msg['content']}")
     full_prompt = "\n\n".join(conversation_parts)
 
-    max_tokens = _response_budget(user_input)
+    max_tokens = _response_budget(user_input, depth=depth)
     provider = st.session_state.get("_model_provider", "")
     # Stream only Claude — DeepSeek/Ollama branches already use single-shot
     # HTTP and rewriting them would touch billing/quota plumbing we don't

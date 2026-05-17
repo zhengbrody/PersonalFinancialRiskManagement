@@ -221,8 +221,10 @@ def test_chat_context_includes_macro_when_available(monkeypatch, floating_chat_m
             "Source": "FRED",
         },
     ]
+    # FRED macro injection lives on the deep-context path (the short
+    # path skips it because casual questions don't need macro releases).
     with patch("market_intelligence.fetch_macro_releases", return_value=fake_rows):
-        context = module._build_portfolio_context()
+        context = module._build_portfolio_context(depth="deep")
 
     assert "CPI YoY" in context
     assert "Unemployment Rate" in context

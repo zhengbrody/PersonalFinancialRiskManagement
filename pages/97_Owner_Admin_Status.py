@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta, timezone
 
 import streamlit as st
 
+from libs.admin.cost_dashboard import (
+    check_budget_thresholds,
+    compute_cost_summary,
+)
 from libs.admin.status import (
     IntegrationStatus,
     configured_status,
@@ -232,6 +237,95 @@ def _render_usage_dashboard() -> None:
     st.dataframe(recent, use_container_width=True, hide_index=True)
 
 
+def _budget_from_env(name: str, default: float) -> float:
+    """Read an AI budget threshold from env, then Streamlit secrets."""
+    raw = os.environ.get(name) or read_secret(name)
+    try:
+        return float(raw) if raw not in (None, "") else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _render_ai_cost_dashboard() -> None:
+    """Owner-only AI cost + failure summary.
+
+    Appended below the existing Cost & Usage panel. Uses the same
+    ``_fetch_usage_rows`` data source but reduces it through the pure
+    helper in ``libs.admin.cost_dashboard`` so the logic is unit-tested.
+    """
+    st.markdown("### AI Cost & Failures")
+
+    scope, rows, error = _fetch_usage_rows(days=30)
+    if error:
+        st.warning(f"Usage log unavailable: {error}")
+        return
+    if scope != "all users":
+        st.caption(
+            "Showing the current owner account's rows only. Add "
+            "SUPABASE_SERVICE_KEY on the server for cross-user visibility."
+        )
+
+    summary = compute_cost_summary(rows or [])
+
+    daily_limit = _budget_from_env("MINDMARKET_AI_DAILY_BUDGET_USD", 5.0)
+    monthly_limit = _budget_from_env("MINDMARKET_AI_MONTHLY_BUDGET_USD", 50.0)
+
+    for warn in check_budget_thresholds(summary, daily_limit, monthly_limit):
+        if warn["level"] == "error":
+            st.error(warn["text"])
+        else:
+            st.warning(warn["text"])
+
+    today_calls = int(summary["today_calls"])
+    fail_rate = (summary["today_failures"] / today_calls * 100.0) if today_calls else 0.0
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Today $", f"${summary['today_usd']:.4f}")
+    c2.metric("MTD $", f"${summary['month_to_date_usd']:.4f}")
+    c3.metric("Today calls", f"{today_calls:,}")
+    c4.metric("Today fail rate", f"{fail_rate:.1f}%")
+
+    st.caption(
+        f"Budgets — daily ${daily_limit:.2f} / monthly ${monthly_limit:.2f} "
+        "(override via MINDMARKET_AI_DAILY_BUDGET_USD / "
+        "MINDMARKET_AI_MONTHLY_BUDGET_USD)"
+    )
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.markdown("#### By provider")
+        if summary["by_provider"]:
+            st.dataframe(summary["by_provider"], use_container_width=True, hide_index=True)
+        else:
+            st.caption("No data this month.")
+    with col_b:
+        st.markdown("#### By model")
+        if summary["by_model"]:
+            st.dataframe(summary["by_model"], use_container_width=True, hide_index=True)
+        else:
+            st.caption("No data this month.")
+
+    st.markdown("#### Top pages / features (this month)")
+    if summary["by_page"]:
+        st.dataframe(summary["by_page"], use_container_width=True, hide_index=True)
+    else:
+        st.caption("No page attribution available.")
+
+    st.markdown("#### Recent failure reasons (last 7 days)")
+    if summary["recent_failures"]:
+        rows_view = [
+            {
+                "date": r["date"],
+                "page": r["page"],
+                "reason": (r["reason"][:140] + "…") if len(r["reason"]) > 140 else r["reason"],
+            }
+            for r in summary["recent_failures"]
+        ]
+        st.dataframe(rows_view, use_container_width=True, hide_index=True)
+    else:
+        st.caption("No failures in the last 7 days.")
+
+
 def _anthropic_live() -> tuple[bool, str]:
     import anthropic
 
@@ -339,6 +433,8 @@ st.markdown("### Configuration")
 _render_status_rows(configured)
 
 _render_usage_dashboard()
+
+_render_ai_cost_dashboard()
 
 run_live = st.button(
     "Run live checks",

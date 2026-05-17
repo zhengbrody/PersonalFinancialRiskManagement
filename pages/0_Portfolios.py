@@ -19,7 +19,10 @@ import streamlit as st
 from libs.admin.status import is_owner_email
 from libs.auth import current_user, is_authenticated
 from libs.auth.client import AuthError
-from libs.auth.portfolio_csv import parse_holdings_csv
+from libs.auth.portfolio_csv import (
+    parse_holdings_csv,
+    parse_holdings_csv_with_diagnostics,
+)
 from libs.auth.portfolios import (
     create_portfolio,
     delete_portfolio,
@@ -364,19 +367,69 @@ uploaded_csv = st.file_uploader(
 
 csv_holdings = None
 if uploaded_csv is not None:
+    raw_bytes = uploaded_csv.getvalue()
     try:
-        csv_holdings = parse_holdings_csv(uploaded_csv.getvalue())
+        # Strict parse — all-or-nothing. Most well-formed broker CSVs land here.
+        csv_holdings = parse_holdings_csv(raw_bytes)
         preview_rows = [
             {
                 "ticker": ticker,
                 "shares": data["shares"],
                 "avg_cost": data.get("avg_cost"),
+                "sector": data.get("sector"),
             }
             for ticker, data in csv_holdings.items()
         ]
+        st.success(
+            f"Preview: {len(preview_rows)} positions parsed. Review below "
+            "and click Import to save."
+        )
         st.dataframe(preview_rows, hide_index=True, use_container_width=True)
-    except ValueError as e:
-        st.error(str(e))
+    except ValueError as strict_error:
+        # Strict parse hit a per-row problem (bad ticker, NaN shares, …) OR
+        # a structural problem (missing header, oversized file). Show the
+        # strict error first; then fall back to the diagnostic parser so
+        # the user sees WHICH rows failed and can opt in to importing the
+        # valid subset.
+        st.error(str(strict_error))
+        try:
+            diag = parse_holdings_csv_with_diagnostics(raw_bytes)
+        except ValueError as struct_error:
+            # Structural error (missing column, too big) — no recovery path.
+            st.caption(f"Cannot continue: {struct_error}")
+            diag = None
+
+        if diag and (diag["valid"] or diag["errors"]):
+            valid_rows = [
+                {
+                    "ticker": ticker,
+                    "shares": data["shares"],
+                    "avg_cost": data.get("avg_cost"),
+                    "sector": data.get("sector"),
+                }
+                for ticker, data in diag["valid"].items()
+            ]
+            error_rows = diag["errors"]
+            colA, colB = st.columns(2)
+            with colA:
+                st.markdown(f"**Valid rows ({len(valid_rows)})**")
+                if valid_rows:
+                    st.dataframe(valid_rows, hide_index=True, use_container_width=True)
+                else:
+                    st.caption("None.")
+            with colB:
+                st.markdown(f"**Rejected rows ({len(error_rows)})**")
+                if error_rows:
+                    st.dataframe(error_rows, hide_index=True, use_container_width=True)
+                else:
+                    st.caption("None.")
+            if diag["skipped"]:
+                st.caption(f"{diag['skipped']} blank/zero-share rows skipped without error.")
+            if valid_rows and st.checkbox(
+                "Import valid rows only (skip rejected)",
+                key="csv_import_lenient_toggle",
+            ):
+                csv_holdings = diag["valid"]
 
 if csv_holdings:
     with st.form("csv_import_form", clear_on_submit=False):

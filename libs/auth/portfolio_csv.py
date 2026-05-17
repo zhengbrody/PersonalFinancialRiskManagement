@@ -137,6 +137,145 @@ def parse_holdings_csv(raw: bytes | str) -> dict:
     }
 
 
+def parse_holdings_csv_with_diagnostics(raw: bytes | str) -> dict:
+    """Same parsing as `parse_holdings_csv`, but per-row tolerant.
+
+    Returns:
+        {
+          "valid":      {ticker: {shares, avg_cost?, sector?}, ...},
+          "errors":     [{"row": int, "ticker": str|None, "reason": str}, ...],
+          "skipped":    int,   # rows dropped silently (blank ticker, shares=0)
+          "row_count":  int,
+        }
+
+    Used by the UI when the strict parser raised, so the operator can
+    see which specific rows failed and import the valid ones explicitly.
+
+    Top-level structural problems (header missing, oversized file, too
+    many rows) still raise ValueError — those can't be recovered row-by-row.
+    """
+    raw_size = len(raw) if isinstance(raw, (bytes, str)) else 0
+    if raw_size > _MAX_CSV_BYTES:
+        raise ValueError(
+            f"CSV is too large ({raw_size:,} bytes). Limit is "
+            f"{_MAX_CSV_BYTES:,} bytes (~{_MAX_CSV_BYTES // 1000} KB)."
+        )
+
+    text = raw.decode("utf-8-sig") if isinstance(raw, bytes) else raw
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames:
+        raise ValueError("CSV is empty or missing a header row.")
+
+    normalized = {_clean_header(name): name for name in reader.fieldnames if name}
+    ticker_col = _first_present(normalized, _TICKER_COLUMNS)
+    shares_col = _first_present(normalized, _SHARES_COLUMNS)
+    avg_cost_col = _first_present(normalized, _AVG_COST_COLUMNS)
+    sector_col = _first_present(normalized, _SECTOR_COLUMNS)
+
+    missing = []
+    if ticker_col is None:
+        missing.append("ticker/symbol")
+    if shares_col is None:
+        missing.append("shares/quantity")
+    if missing:
+        raise ValueError(f"CSV missing required column(s): {', '.join(missing)}.")
+
+    holdings: dict[str, dict] = {}
+    errors: list[dict] = []
+    skipped = 0
+    row_count = 0
+    for idx, row in enumerate(reader, start=2):
+        row_count += 1
+        if row_count > _MAX_ROWS:
+            raise ValueError(
+                f"CSV has more than {_MAX_ROWS} rows. Please trim to your actual positions."
+            )
+        raw_ticker = str(row.get(ticker_col) or "").strip()
+        ticker = raw_ticker.upper()
+        if not ticker:
+            skipped += 1
+            continue
+        if not _TICKER_RE.match(ticker):
+            errors.append(
+                {
+                    "row": idx,
+                    "ticker": raw_ticker,
+                    "reason": "ticker not a recognizable symbol (letters/digits/. - /, max 12 chars)",
+                }
+            )
+            continue
+
+        try:
+            shares = _parse_number(row.get(shares_col), f"row {idx} shares")
+        except ValueError as exc:
+            errors.append({"row": idx, "ticker": ticker, "reason": str(exc)})
+            continue
+        if not math.isfinite(shares):
+            errors.append({"row": idx, "ticker": ticker, "reason": "shares must be finite"})
+            continue
+        if shares < 0:
+            errors.append(
+                {
+                    "row": idx,
+                    "ticker": ticker,
+                    "reason": f"negative shares ({shares}); shorts not supported",
+                }
+            )
+            continue
+        if shares > _MAX_SHARES:
+            errors.append(
+                {
+                    "row": idx,
+                    "ticker": ticker,
+                    "reason": f"shares={shares:,.0f} is unreasonably large",
+                }
+            )
+            continue
+        if shares == 0:
+            skipped += 1
+            continue
+
+        position = holdings.setdefault(ticker, {"shares": 0.0})
+        position["shares"] += shares
+
+        if avg_cost_col:
+            raw_avg_cost = row.get(avg_cost_col)
+            if raw_avg_cost not in (None, ""):
+                try:
+                    avg_cost = _parse_number(raw_avg_cost, f"row {idx} avg_cost")
+                except ValueError as exc:
+                    # Cost basis is optional; report but don't drop the row.
+                    errors.append(
+                        {
+                            "row": idx,
+                            "ticker": ticker,
+                            "reason": f"{exc}; shares kept, cost dropped",
+                        }
+                    )
+                else:
+                    if math.isfinite(avg_cost) and avg_cost > 0:
+                        position["avg_cost"] = _weighted_avg_cost(
+                            existing_shares=position["shares"] - shares,
+                            existing_cost=position.get("avg_cost"),
+                            added_shares=shares,
+                            added_cost=avg_cost,
+                        )
+
+        if sector_col:
+            raw_sector = str(row.get(sector_col) or "").strip()
+            if raw_sector:
+                position.setdefault("sector", raw_sector)
+
+    valid = {
+        ticker: {
+            key: round(value, 6) if isinstance(value, float) else value
+            for key, value in data.items()
+        }
+        for ticker, data in sorted(holdings.items())
+    }
+    return {"valid": valid, "errors": errors, "skipped": skipped, "row_count": row_count}
+
+
 def _clean_header(name: str) -> str:
     return name.strip().lower().replace(" ", "_").replace("-", "_")
 

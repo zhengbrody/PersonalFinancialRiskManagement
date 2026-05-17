@@ -308,3 +308,89 @@ def test_active_returns_empty_when_user_has_no_portfolios(mock_supabase):
     meta = ap.get_active_portfolio_meta()
     assert meta["source"] == "empty"
     assert ap.is_active_portfolio_empty() is True
+
+
+# ── Owner-only fallback to dev portfolio ──────────────────────────────
+
+
+def test_active_owner_with_no_db_falls_back_to_hardcoded(mock_supabase, monkeypatch):
+    """Privileged exception: when the SIGNED-IN user is the configured
+    owner and has no DB portfolio, they see the dev's portfolio_config
+    holdings — their own data. Non-owners in the same shape must NOT.
+    """
+    monkeypatch.setenv("MINDMARKET_OWNER_EMAIL", "owner@example.com")
+    # Owner is the current session user.
+    import sys
+
+    sys.modules["streamlit"].session_state["_auth_user"] = {
+        "id": "owner-id",
+        "email": "owner@example.com",
+        "user_metadata": {},
+    }
+    mock_supabase.execute.return_value = MagicMock(data=[])
+
+    from libs.auth import active_portfolio as ap
+
+    holdings = ap.get_active_holdings()
+    # Owner sees the dev's portfolio_config holdings — non-empty.
+    assert len(holdings) > 0, "owner must fall back to hardcoded when no DB portfolio"
+
+    meta = ap.get_active_portfolio_meta()
+    assert meta["source"] == "owner_default"
+    # Critical: is_active_portfolio_empty must be False so the sidebar
+    # doesn't block the owner from running analysis.
+    assert ap.is_active_portfolio_empty() is False
+
+
+def test_active_non_owner_never_falls_back_to_hardcoded(mock_supabase, monkeypatch):
+    """Regression guard against the data-leak bug we fixed in earlier
+    commits: a random signed-in user must NEVER see the dev's portfolio
+    via the fallback path, regardless of how their DB state looks."""
+    monkeypatch.setenv("MINDMARKET_OWNER_EMAIL", "owner@example.com")
+    import sys
+
+    # Random non-owner email.
+    sys.modules["streamlit"].session_state["_auth_user"] = {
+        "id": "attacker-id",
+        "email": "attacker@example.com",
+        "user_metadata": {},
+    }
+    mock_supabase.execute.return_value = MagicMock(data=[])
+
+    from libs.auth import active_portfolio as ap
+
+    holdings = ap.get_active_holdings()
+    assert holdings == {}
+
+    meta = ap.get_active_portfolio_meta()
+    assert meta["source"] == "empty"
+
+
+def test_active_owner_with_supabase_outage_still_gets_dev_portfolio(
+    fake_streamlit, supabase_env, monkeypatch
+):
+    """Owner-account survival path: Supabase 5xx during owner session
+    → fall back to hardcoded (owner's data), not empty. Non-owners in
+    the same outage still see empty (covered by the existing
+    `test_active_returns_empty_when_db_query_fails` regression)."""
+    monkeypatch.setenv("MINDMARKET_OWNER_EMAIL", "owner@example.com")
+    fake_streamlit.session_state["_auth_user"] = {
+        "id": "owner-id",
+        "email": "owner@example.com",
+        "user_metadata": {},
+    }
+    from libs.auth import client as auth_client
+
+    auth_client.reset_client_cache()
+
+    sb = MagicMock()
+    sb.table.side_effect = Exception("DB unreachable")
+    with patch("supabase.create_client", return_value=sb):
+        from libs.auth import active_portfolio as ap
+
+        holdings = ap.get_active_holdings()
+        assert len(holdings) > 0, "owner must see their dev portfolio even when DB is down"
+
+        meta = ap.get_active_portfolio_meta()
+        assert meta["source"] == "owner_default"
+    auth_client.reset_client_cache()

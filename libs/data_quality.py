@@ -11,9 +11,11 @@ something usable.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
 Status = Literal["ok", "partial", "missing", "stale"]
+Freshness = Literal["live", "cached", "fallback", "unavailable"]
 
 _STATUS_ICON = {
     "ok": "✅",
@@ -22,14 +24,35 @@ _STATUS_ICON = {
     "stale": "⚠️",
 }
 
+_FRESHNESS_LABEL = {
+    "live": "live",
+    "cached": "cached",
+    "fallback": "fallback",
+    "unavailable": "unavailable",
+}
+
 
 @dataclass(frozen=True)
 class DataSource:
-    """A single upstream data source feeding an analysis page."""
+    """A single upstream data source feeding an analysis page.
 
-    name: str  # human-readable, e.g. "Yahoo Finance prices"
+    Attributes:
+        name:        human-readable, e.g. "Yahoo Finance prices"
+        status:      ok / partial / missing / stale
+        note:        free-form e.g. "8/10 tickers loaded"
+        freshness:   live / cached / fallback / unavailable. Optional —
+                     omit when the page doesn't have a meaningful answer.
+                     Surfaces in the panel so the user can tell at a
+                     glance whether a number is real-time or stale.
+        last_updated: when the source was last refreshed. Optional;
+                     rendered as relative time ("12m ago"). UTC datetime.
+    """
+
+    name: str
     status: Status
-    note: Optional[str] = None  # e.g. "8/10 tickers loaded"
+    note: Optional[str] = None
+    freshness: Optional[Freshness] = None
+    last_updated: Optional[datetime] = None
 
 
 @dataclass(frozen=True)
@@ -93,16 +116,44 @@ def render_data_quality_panel(report: DataQualityReport, *, expanded: bool = Fal
         _render_source_rows(st, report)
 
 
+def _humanize_age(dt: Optional[datetime]) -> Optional[str]:
+    """Render a datetime as a short relative-time string ('12m ago')."""
+    if dt is None:
+        return None
+    try:
+        now = datetime.now(timezone.utc)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        delta = now - dt
+        sec = int(delta.total_seconds())
+        if sec < 0:
+            return "in the future"
+        if sec < 60:
+            return f"{sec}s ago"
+        if sec < 3600:
+            return f"{sec // 60}m ago"
+        if sec < 86400:
+            return f"{sec // 3600}h ago"
+        return f"{sec // 86400}d ago"
+    except Exception:
+        return None
+
+
 def _render_source_rows(st: Any, report: DataQualityReport) -> None:
     if not report.sources:
         st.caption("No data sources tracked.")
         return
     for s in report.sources:
         icon = _STATUS_ICON.get(s.status, "•")
-        label = f"{icon} **{s.name}** — _{s.status}_"
+        bits = [f"{icon} **{s.name}** — _{s.status}_"]
+        if s.freshness:
+            bits.append(f"_{_FRESHNESS_LABEL[s.freshness]}_")
+        age = _humanize_age(s.last_updated)
+        if age:
+            bits.append(age)
         if s.note:
-            label += f"  ·  {s.note}"
-        st.markdown(label)
+            bits.append(s.note)
+        st.markdown("  ·  ".join(bits))
 
 
 # ── Per-page report-builders ────────────────────────────────
@@ -188,14 +239,35 @@ def overview_report(*, weights: dict, prices_df: Any, meta: Optional[dict]) -> D
         else None
     )
 
+    # Freshness signals — Yahoo Finance prices come from a cached
+    # DataProvider (24h TTL via @st.cache_resource), so "live" is rarely
+    # accurate. Mark them as cached unless they're missing entirely.
+    yf_freshness: Optional[Freshness]
+    yf_last: Optional[datetime]
+    if price_status == "missing":
+        yf_freshness = "unavailable"
+        yf_last = None
+    else:
+        yf_freshness = "cached"
+        yf_last = _now_utc()
     return DataQualityReport(
         sources=(
             DataSource("Portfolio holdings", holdings_status, holdings_note),
-            DataSource("Price history (Yahoo Finance)", price_status, price_note),
+            DataSource(
+                "Price history (Yahoo Finance)",
+                price_status,
+                price_note,
+                freshness=yf_freshness,
+                last_updated=yf_last,
+            ),
             DataSource("Cost basis coverage", cost_status, cost_note),
             DataSource("Portfolio meta (equity, leverage)", meta_status, meta_note),
         )
     )
+
+
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _has_values(obj: Any) -> bool:
@@ -242,13 +314,30 @@ def risk_report(*, weights: dict, prices_df: Any, report_obj: Any) -> DataQualit
     margin_info = getattr(report_obj, "margin_call_info", None)
     margin_status: Status = "ok" if margin_info else "missing"
 
+    # MC + factor + component-VaR all derived from the current run.
+    # Their freshness mirrors the underlying analysis: "live" when the
+    # report exists, "unavailable" otherwise.
+    derived_freshness: Freshness = "live" if mc_status == "ok" else "unavailable"
+    now = _now_utc()
     return DataQualityReport(
         sources=(
-            DataSource("Price history (Yahoo Finance)", price_status, price_note),
-            DataSource("Monte Carlo simulation", mc_status, mc_note),
-            DataSource("Factor exposures", factor_status),
-            DataSource("Component VaR", comp_status),
-            DataSource("Margin call check", margin_status),
+            DataSource(
+                "Price history (Yahoo Finance)",
+                price_status,
+                price_note,
+                freshness="cached" if price_status != "missing" else "unavailable",
+                last_updated=now if price_status != "missing" else None,
+            ),
+            DataSource(
+                "Monte Carlo simulation",
+                mc_status,
+                mc_note,
+                freshness=derived_freshness,
+                last_updated=now if mc_status == "ok" else None,
+            ),
+            DataSource("Factor exposures", factor_status, freshness=derived_freshness),
+            DataSource("Component VaR", comp_status, freshness=derived_freshness),
+            DataSource("Margin call check", margin_status, freshness=derived_freshness),
         )
     )
 

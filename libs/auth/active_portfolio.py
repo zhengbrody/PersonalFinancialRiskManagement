@@ -60,19 +60,51 @@ def get_active_margin_loan() -> float:
     return margin
 
 
+def _is_owner_session() -> bool:
+    """True when the current signed-in user is the configured owner.
+
+    The owner email(s) come from MINDMARKET_OWNER_EMAIL / _EMAILS, which
+    is the same allow-list that gates `pages/97_Owner_Admin_Status.py`.
+    Non-owners must NEVER take the owner-fallback branch in `_resolve()`
+    — that would re-introduce the data leak we fixed in earlier commits.
+    """
+    try:
+        from libs.admin.status import is_owner_email
+
+        from .session import current_user
+
+        user = current_user()
+        if user is None:
+            return False
+        return bool(is_owner_email(user.get("email")))
+    except Exception:
+        # Defensive: if owner gating import fails for any reason, treat
+        # as non-owner. Fail-closed wrt portfolio access.
+        return False
+
+
 def get_active_portfolio_meta() -> Dict[str, Any]:
     """Diagnostics: name + source + record id (if from DB).
 
     Sources:
-      "supabase"  — user's own DB portfolio
-      "hardcoded" — anonymous visitor sees the demo
-      "empty"     — authed user has not created a portfolio yet
+      "supabase"      — user's own DB portfolio
+      "hardcoded"     — anonymous visitor sees the public demo
+      "owner_default" — signed-in OWNER who hasn't created a DB portfolio
+                        yet; gets the dev's portfolio_config holdings
+      "empty"         — any OTHER signed-in user with no DB portfolio
+                        (CTA to create one — never shows owner data)
     """
     if not is_authenticated():
         return {"name": "Built-in demo portfolio", "source": "hardcoded", "id": None}
 
     portfolio = _fetch_db_portfolio()
     if portfolio is None or not (portfolio.get("holdings") or {}):
+        if _is_owner_session():
+            return {
+                "name": "Owner default portfolio",
+                "source": "owner_default",
+                "id": None,
+            }
         return {
             "name": "No portfolio yet",
             "source": "empty",
@@ -94,17 +126,30 @@ def is_active_portfolio_empty() -> bool:
 
 
 def _resolve() -> tuple[Dict[str, Dict[str, Any]], float]:
-    """Single source of truth for "what portfolio + margin do we use?"."""
+    """Single source of truth for "what portfolio + margin do we use?".
+
+    Branches:
+      not authed         → hardcoded demo (public landing experience)
+      authed + DB hit    → user's own portfolio
+      authed + no DB:
+        owner email      → hardcoded fallback (owner's default portfolio)
+        any other email  → empty (NEVER leak owner's data)
+    """
     if not is_authenticated():
         return _hardcoded_fallback()
 
     portfolio = _fetch_db_portfolio()
     if portfolio is None:
-        # Authed but no portfolios — do NOT leak the dev's hardcoded holdings.
+        # Owner with no DB portfolio yet → see the dev portfolio_config
+        # holdings (their own data). Any other authed user → empty.
+        if _is_owner_session():
+            return _hardcoded_fallback()
         return ({}, 0.0)
 
     raw_holdings = portfolio.get("holdings") or {}
     if not raw_holdings:
+        if _is_owner_session():
+            return _hardcoded_fallback()
         return ({}, 0.0)
 
     # Normalize DB shape → portfolio_config-compatible shape.

@@ -245,3 +245,68 @@ def test_render_panel_handles_empty_sources(fake_streamlit):
     assert fake_streamlit.expander.called
     # Caption used instead of markdown rows.
     assert fake_streamlit.caption.called
+
+
+# ── Freshness + last_updated transparency ─────────────────────────────
+
+
+def test_source_carries_freshness_and_timestamp_into_render(fake_streamlit):
+    """When a DataSource declares freshness='cached' and a last_updated,
+    the rendered row must mention both — the user needs to know if a
+    "live" price is actually 12 minutes old from a cache."""
+    from datetime import datetime, timedelta, timezone
+
+    twelve_min_ago = datetime.now(timezone.utc) - timedelta(minutes=12)
+    rpt = DataQualityReport(
+        sources=(
+            DataSource(
+                name="Yahoo Finance prices",
+                status="ok",
+                freshness="cached",
+                last_updated=twelve_min_ago,
+                note="all 5 tickers loaded",
+            ),
+        )
+    )
+    render_data_quality_panel(rpt)
+
+    # Capture every st.markdown call's first positional arg.
+    rendered = "\n".join(
+        str(call.args[0]) if call.args else "" for call in fake_streamlit.markdown.call_args_list
+    )
+    assert "cached" in rendered.lower(), "freshness label must appear in panel"
+    assert "m ago" in rendered, "humanized timestamp must appear in panel"
+
+
+def test_source_without_freshness_renders_cleanly(fake_streamlit):
+    """Legacy callers that don't set freshness/last_updated still render
+    (we only added optional kwargs — no break)."""
+    rpt = DataQualityReport(
+        sources=(DataSource(name="Portfolio holdings", status="ok", note="3 positions"),)
+    )
+    render_data_quality_panel(rpt)
+
+    rendered = "\n".join(
+        str(call.args[0]) if call.args else "" for call in fake_streamlit.markdown.call_args_list
+    )
+    assert "Portfolio holdings" in rendered
+    # No freshness/age clutter when the caller didn't provide them.
+    assert "ago" not in rendered
+    # ✅ icon still shows for ok status.
+    assert "✅" in rendered
+
+
+def test_humanize_age_thresholds():
+    """Edge cases for the relative-time formatter."""
+    from datetime import datetime, timedelta, timezone
+
+    from libs.data_quality import _humanize_age
+
+    now = datetime.now(timezone.utc)
+    assert _humanize_age(None) is None
+    assert _humanize_age(now - timedelta(seconds=5)).endswith("s ago")
+    assert _humanize_age(now - timedelta(minutes=15)).endswith("m ago")
+    assert _humanize_age(now - timedelta(hours=3)).endswith("h ago")
+    assert _humanize_age(now - timedelta(days=2)).endswith("d ago")
+    # Naive datetime is normalized as UTC, doesn't crash.
+    assert _humanize_age(datetime.now()) is not None
