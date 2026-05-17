@@ -77,10 +77,20 @@ def test_build_portfolio_context_asks_for_analysis_when_empty(floating_chat_modu
 
 
 def test_response_budget_defaults_fast_and_expands_for_deep_dive(floating_chat_module):
+    """The budget tier values themselves are tuning knobs (we raised them
+    after Claude was getting cut off mid-AECRA-section). The invariant
+    the test locks in: 'deep' must be strictly larger than 'fast', and
+    'fast' must be strictly larger than 'short' — so that the auto
+    classifier always escalates budget when it escalates context."""
     module, _fake_st = floating_chat_module
 
-    assert module._response_budget("what is my VaR?") == 500
-    assert module._response_budget("give me a detailed hedge scenario") == 800
+    fast = module._response_budget("what is my VaR?")
+    deep = module._response_budget("give me a detailed hedge scenario")
+    assert fast == module._FAST_CHAT_MAX_TOKENS
+    assert deep == module._DEEP_CHAT_MAX_TOKENS
+    assert module._SHORT_CHAT_MAX_TOKENS < fast < deep, (
+        f"budgets must escalate: short={module._SHORT_CHAT_MAX_TOKENS} " f"fast={fast} deep={deep}"
+    )
 
 
 def test_chat_call_llm_stream_returns_generator(monkeypatch, floating_chat_module):
@@ -314,9 +324,11 @@ def test_classify_context_depth_keywords_and_length(floating_chat_module):
 
 
 def test_response_budget_respects_explicit_depth(floating_chat_module):
+    """Explicit depth args dominate the auto-classifier."""
     module, _fake_st = floating_chat_module
 
-    assert module._response_budget("anything", depth="short") == 350
-    assert module._response_budget("anything", depth="deep") == 800
-    # Auto path preserves the legacy behavior tested above.
-    assert module._response_budget("plain question", depth="auto") == 500
+    assert module._response_budget("anything", depth="short") == module._SHORT_CHAT_MAX_TOKENS
+    assert module._response_budget("anything", depth="deep") == module._DEEP_CHAT_MAX_TOKENS
+    # Auto path reads the constants directly so the test stays stable
+    # as the tuning knobs evolve.
+    assert module._response_budget("plain question", depth="auto") == module._FAST_CHAT_MAX_TOKENS

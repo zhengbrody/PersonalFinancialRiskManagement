@@ -17,9 +17,20 @@ _CHAT_LANGUAGE_OPTIONS = {
     "Match my message": "the same language as the user's latest message",
 }
 
-_FAST_CHAT_MAX_TOKENS = 500
-_DEEP_CHAT_MAX_TOKENS = 800
-_SHORT_CHAT_MAX_TOKENS = 350
+# Token budgets for Claude chat. Set to "comfortable headroom for the
+# Assessment / Evidence / Risks / Actions structured reply" + a margin
+# for verbose tickers. The previous 350/500/800 caps routinely cut
+# Claude off mid-Actions section because each AECRA section is ~80-120
+# tokens — four short sections + filler easily exceeds 500 tokens.
+#
+# Routing note: the Haiku-vs-Sonnet split lives in `_chat_call_llm`
+# at `max_tokens <= 700`. SHORT and FAST stay under 700 so casual
+# chat keeps routing to Haiku 4.5 (TTFT ~300ms, throughput ~150 tok/s).
+# DEEP intentionally crosses the threshold — multi-step scenarios /
+# hedging questions are worth the slower Sonnet reasoning.
+_SHORT_CHAT_MAX_TOKENS = 600
+_FAST_CHAT_MAX_TOKENS = 700
+_DEEP_CHAT_MAX_TOKENS = 1600
 _MAX_CONTEXT_HOLDINGS = 15
 
 # Keywords that flip "auto" depth classification to "deep". These are the
@@ -288,6 +299,15 @@ def _chat_call_llm(
             # Streaming branch — return a generator so the caller can
             # render tokens via st.write_stream(). TTFT drops from
             # 3-8s (waiting for the full response) to ~300ms.
+            #
+            # Truncation guard: after the stream ends, inspect
+            # `stop_reason` from the final message. Claude returns
+            # "end_turn" for a complete reply, "max_tokens" when it ran
+            # out of budget, "stop_sequence" for matched stop tokens.
+            # If we hit "max_tokens" the user just saw a sentence cut
+            # mid-word — yield an explicit "[…truncated]" hint so they
+            # know they can ask for more rather than wondering if the
+            # network broke.
             def _stream_chunks():
                 try:
                     with client.messages.stream(
@@ -298,6 +318,19 @@ def _chat_call_llm(
                     ) as s:
                         for text in s.text_stream:
                             yield text
+                        try:
+                            final = s.get_final_message()
+                            stop_reason = getattr(final, "stop_reason", None)
+                            if stop_reason == "max_tokens":
+                                yield (
+                                    "\n\n_…(response hit the token budget — "
+                                    "ask a follow-up like 'continue' or "
+                                    "'expand on the Actions section' for more)_"
+                                )
+                        except Exception:
+                            # final-message accessor isn't critical; if
+                            # it fails, the streamed text is still valid.
+                            pass
                 except Exception as e:
                     if _is_provider_auth_error(e):
                         yield (
