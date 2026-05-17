@@ -32,11 +32,13 @@ services:
       - STRIPE_BASIC_PRICE_ID=${STRIPE_BASIC_PRICE_ID:-}
       - STRIPE_PRO_PRICE_ID=${STRIPE_PRO_PRICE_ID:-}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
-      # Supabase Auth + per-user portfolios. anon key is safe to expose
-      # (RLS at the DB enforces tenant isolation); service-role key is
-      # NEVER passed here — that's for admin scripts only.
+      # Supabase Auth + per-user portfolios. The anon key is safe to expose
+      # because RLS enforces tenant isolation. The service-role key is still
+      # server-only; it is used by trusted owner/admin paths for platform-wide
+      # usage/cost visibility and must never be rendered in the UI.
       - SUPABASE_URL=${SUPABASE_URL:-}
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
     # python:3.10-slim doesn't include curl; use urllib (always present).
     healthcheck:
       test: ["CMD", "python", "-c",

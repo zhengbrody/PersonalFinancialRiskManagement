@@ -132,10 +132,11 @@ ENVFILE
 
 # Pull secrets into env vars too (compose.aws.yml expects them).
 # Includes Supabase URL + anon key for the per-user auth flow.
-# Anon key is intentionally exposed (RLS enforces isolation server-side);
-# service-role key is NEVER copied here.
+# The service-role key is copied into the server-only container env for
+# trusted owner/admin cost dashboards and platform-wide spend guardrails.
+# It must never be rendered in the UI or shipped to client-side code.
 {
-    grep -E '^(ANTHROPIC_API_KEY|ANTHROPIC_MODEL|DEEPSEEK_API_KEY|DEEPSEEK_BASE_URL|FMP_API_KEY|MINDMARKET_OWNER_EMAIL|MINDMARKET_OWNER_EMAILS|MINDMARKET_APP_URL|STRIPE_SECRET_KEY|STRIPE_BASIC_PRICE_ID|STRIPE_PRO_PRICE_ID|STRIPE_WEBHOOK_SECRET|SUPABASE_URL|SUPABASE_ANON_KEY)' .streamlit/secrets.toml \
+    grep -E '^(ANTHROPIC_API_KEY|ANTHROPIC_MODEL|DEEPSEEK_API_KEY|DEEPSEEK_BASE_URL|FMP_API_KEY|MINDMARKET_OWNER_EMAIL|MINDMARKET_OWNER_EMAILS|MINDMARKET_APP_URL|STRIPE_SECRET_KEY|STRIPE_BASIC_PRICE_ID|STRIPE_PRO_PRICE_ID|STRIPE_WEBHOOK_SECRET|SUPABASE_URL|SUPABASE_ANON_KEY|SUPABASE_SERVICE_KEY)' .streamlit/secrets.toml \
         | sed 's/ *= */=/; s/"//g' || true
 } >> .env
 
