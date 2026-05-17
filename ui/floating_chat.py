@@ -30,7 +30,18 @@ _CHAT_LANGUAGE_OPTIONS = {
 # hedging questions are worth the slower Sonnet reasoning.
 _SHORT_CHAT_MAX_TOKENS = 600
 _FAST_CHAT_MAX_TOKENS = 700
-_DEEP_CHAT_MAX_TOKENS = 1600
+# Deep cap intentionally generous because Chinese responses cost ~1-2
+# tokens per character vs ~1 token per 4 English chars — a 1600-token
+# Chinese answer is only ~800-1000 Chinese characters, which can be cut
+# mid-sentence for multi-step scenario analyses. 2500 gives ~12s wall
+# time on Sonnet (≤ 700 still routes to Haiku, so casual chat is
+# unaffected). The truncation hint below now only fires when the
+# response is genuinely too short to be useful (< 500 chars).
+_DEEP_CHAT_MAX_TOKENS = 2500
+# When stop_reason == "max_tokens" we only nudge the user about
+# truncation if the response would feel cut. A long, substantive
+# answer that just happens to land at the cap is fine — no nag.
+_TRUNCATION_HINT_THRESHOLD_CHARS = 500
 _MAX_CONTEXT_HOLDINGS = 15
 
 # Keywords that flip "auto" depth classification to "deep". These are the
@@ -309,6 +320,7 @@ def _chat_call_llm(
             # know they can ask for more rather than wondering if the
             # network broke.
             def _stream_chunks():
+                accumulated_chars = 0
                 try:
                     with client.messages.stream(
                         model=claude_model,
@@ -317,16 +329,23 @@ def _chat_call_llm(
                         messages=[{"role": "user", "content": prompt}],
                     ) as s:
                         for text in s.text_stream:
+                            accumulated_chars += len(text)
                             yield text
                         try:
                             final = s.get_final_message()
                             stop_reason = getattr(final, "stop_reason", None)
-                            if stop_reason == "max_tokens":
-                                yield (
-                                    "\n\n_…(response hit the token budget — "
-                                    "ask a follow-up like 'continue' or "
-                                    "'expand on the Actions section' for more)_"
-                                )
+                            # Only nag about truncation when the answer
+                            # is genuinely too short to be useful. A
+                            # 1500+ char substantive answer that just
+                            # happens to land at the cap is fine —
+                            # adding "(response hit the token budget)"
+                            # at the end of a long, complete-looking
+                            # reply feels alarming, not helpful.
+                            if (
+                                stop_reason == "max_tokens"
+                                and accumulated_chars < _TRUNCATION_HINT_THRESHOLD_CHARS
+                            ):
+                                yield ("\n\n_…(reply truncated — ask " "'continue' for more)_")
                         except Exception:
                             # final-message accessor isn't critical; if
                             # it fails, the streamed text is still valid.
