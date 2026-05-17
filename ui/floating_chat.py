@@ -548,7 +548,7 @@ def _build_portfolio_context(*, depth: str = "auto", user_message: str = "") -> 
     # and they're the heaviest single context section.
     if parts and depth == "deep":
         try:
-            from market_intelligence import fetch_macro_releases
+            from market_intelligence import fetch_10y_yield, fetch_macro_releases
 
             macro_rows = fetch_macro_releases() or []
             _ai_focus = {
@@ -559,22 +559,44 @@ def _build_portfolio_context(*, depth: str = "auto", user_message: str = "") -> 
                 "FEDFUNDS",
                 "UNRATE",
                 "PAYEMS",
-                "DGS10",
                 "T10Y2Y",
             }
+            # Skip DGS10 here — we replace it below with the fresher
+            # yfinance ^TNX value so the LLM doesn't tell users a stale
+            # T-1 close. Spread (T10Y2Y) stays on FRED, which is the
+            # authoritative spread series.
             focused = [r for r in macro_rows if r.get("fred_id") in _ai_focus][:6]
             if not focused:
-                focused = macro_rows[:6]
-            if focused:
-                macro_lines = []
-                for row in focused:
-                    series = row.get("Series", "?")
-                    latest = row.get("Latest", "--")
-                    date = row.get("Date", "--")
-                    fred_id = row.get("fred_id", "")
-                    fred_tag = f" ({fred_id})" if fred_id else ""
-                    macro_lines.append(f"- {series}{fred_tag}: {latest} as of {date}")
-                parts.append("Recent macro releases (FRED):\n" + "\n".join(macro_lines))
+                focused = macro_rows[:5]
+            macro_lines = []
+            for row in focused:
+                series = row.get("Series", "?")
+                latest = row.get("Latest", "--")
+                date = row.get("Date", "--")
+                fred_id = row.get("fred_id", "")
+                fred_tag = f" ({fred_id})" if fred_id else ""
+                macro_lines.append(f"- {series}{fred_tag}: {latest} as of {date}")
+
+            # 10Y Treasury yield: prefer yfinance ^TNX (intraday/EOD,
+            # same-day) over FRED DGS10 (T-1, ~24h stale during US
+            # trading hours). Both sources verified live 2026-05; see
+            # the comment block above fetch_10y_yield in
+            # market_intelligence.py. Wrapped defensively so any
+            # transient failure (network, mock, cache) can't take down
+            # the rest of the macro section.
+            try:
+                ten_y = fetch_10y_yield()
+                if isinstance(ten_y, dict) and isinstance(ten_y.get("value"), (int, float)):
+                    macro_lines.append(
+                        f"- 10Y Treasury Yield: {float(ten_y['value']):.2f}% "
+                        f"as of {ten_y.get('date', 'N/A')} "
+                        f"(source: {ten_y.get('source', 'live')})"
+                    )
+            except Exception:
+                pass
+
+            if macro_lines:
+                parts.append("Recent macro releases:\n" + "\n".join(macro_lines))
         except Exception:
             # FRED unreachable, dependency missing, etc. The chat
             # shouldn't fail just because we couldn't inject this

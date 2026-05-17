@@ -17,7 +17,7 @@ import streamlit as st
 
 from app import cached_digest
 from i18n import get_translator
-from market_intelligence import fetch_macro_releases
+from market_intelligence import fetch_10y_yield, fetch_macro_releases
 from ui.components import render_ai_digest, render_kpi_row, render_section
 from ui.shared_sidebar import render_shared_sidebar
 
@@ -336,7 +336,12 @@ with tab_macro:
     fed_lower = _latest_numeric("DFEDTARL")
     fed_upper = _latest_numeric("DFEDTARU")
     fed_funds = _latest_numeric("FEDFUNDS")
-    ten_year = _latest_numeric("DGS10")
+    # 10Y comes from the shared fetch_10y_yield helper (yfinance ^TNX
+    # first, FRED DGS10 fallback) so this KPI matches the value the
+    # floating chat injects into the LLM. FRED's DGS10 lags ~1 trading
+    # day during US hours, which previously made this KPI disagree
+    # with the page 7 banner.
+    ten_y_info = fetch_10y_yield()
     curve = _latest_numeric("T10Y2Y")
 
     fed_range = (
@@ -344,6 +349,12 @@ with tab_macro:
         if fed_lower is not None and fed_upper is not None
         else "--"
     )
+    if ten_y_info is not None:
+        ten_y_value = f"{ten_y_info['value']:.2f}%"
+        ten_y_delta = f"as of {ten_y_info['date']}"
+    else:
+        ten_y_value = "--"
+        ten_y_delta = None
     render_kpi_row(
         [
             {"label": "Fed Target Range", "value": fed_range},
@@ -353,7 +364,9 @@ with tab_macro:
             },
             {
                 "label": "10Y Treasury",
-                "value": f"{ten_year:.2f}%" if ten_year is not None else "--",
+                "value": ten_y_value,
+                "delta": ten_y_delta,
+                "delta_color": "neutral",
             },
             {
                 "label": "10Y-2Y Spread",

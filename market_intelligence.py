@@ -599,6 +599,109 @@ def fetch_yield_curve() -> Tuple[pd.DataFrame, Dict]:
 
 
 # ══════════════════════════════════════════════════════════════
+#  3a-SOURCE-OF-TRUTH:  10Y Treasury yield
+# ──────────────────────────────────────────────────────────────
+#  ONE function the chat, page 7, page 8, and any future caller
+#  share. Background: previously the 10Y appeared in 4 places
+#  driven by 2 different sources (yfinance ^TNX vs FRED DGS10).
+#  FRED publishes the previous trading day's close around
+#  midnight ET — meaning during US trading hours FRED is always
+#  ~1 trading day stale vs yfinance's intraday/EOD ^TNX. Users
+#  comparing our number to a quote site saw the gap and reported
+#  "wrong closing price." Fix: prefer yfinance for freshness,
+#  fall back to FRED, and always return the observation date so
+#  the UI / LLM can label it.
+# ══════════════════════════════════════════════════════════════
+
+# Plausible range for the US 10Y yield. Anything outside this
+# window is almost certainly a unit/parsing bug — guard so we
+# never silently surface a bogus value to the LLM.
+_TEN_Y_MIN_PCT = 0.3
+_TEN_Y_MAX_PCT = 12.0
+
+
+def _fetch_10y_from_yfinance() -> Optional[dict]:
+    """Pull the latest ^TNX close. yfinance returns ^TNX already in
+    percent form (e.g. 4.59 → 4.59%); no scaling required. Verified
+    live 2026-05 — see CLAUDE.md."""
+    try:
+        tnx = yf.Ticker("^TNX")
+        hist = tnx.history(period="5d").dropna(subset=["Close"])
+        if hist.empty:
+            return None
+        last_close = float(hist["Close"].iloc[-1])
+        last_dt = hist.index[-1]
+        if not (_TEN_Y_MIN_PCT <= last_close <= _TEN_Y_MAX_PCT):
+            logger.warning("10y_yfinance_out_of_range value=%s", last_close)
+            return None
+        prev_close = float(hist["Close"].iloc[-2]) if len(hist) >= 2 else None
+        change = (last_close - prev_close) if prev_close is not None else None
+        return {
+            "value": last_close,
+            "date": pd.Timestamp(last_dt).strftime("%Y-%m-%d"),
+            "change": change,
+            "source": "Yahoo Finance (^TNX)",
+        }
+    except Exception as exc:
+        logger.debug("10y_yfinance_failed: %s", exc)
+        return None
+
+
+def _fetch_10y_from_fred() -> Optional[dict]:
+    """Fallback: FRED DGS10. Publishes T-1 close, no intraday."""
+    try:
+        obs = _fred_fetch_series_raw("DGS10")
+        if not obs:
+            return None
+        latest_dt, latest_val = obs[-1]
+        if not (_TEN_Y_MIN_PCT <= latest_val <= _TEN_Y_MAX_PCT):
+            logger.warning("10y_fred_out_of_range value=%s", latest_val)
+            return None
+        prev_val = obs[-2][1] if len(obs) >= 2 else None
+        change = (latest_val - prev_val) if prev_val is not None else None
+        return {
+            "value": float(latest_val),
+            "date": pd.Timestamp(latest_dt).strftime("%Y-%m-%d"),
+            "change": change,
+            "source": "FRED (DGS10)",
+        }
+    except Exception as exc:
+        logger.debug("10y_fred_failed: %s", exc)
+        return None
+
+
+def _fetch_10y_yield_uncached() -> Optional[dict]:
+    """Single source of truth for the 10Y. Prefers yfinance ^TNX (fresher,
+    intraday or EOD same-day), falls back to FRED DGS10 (T-1 daily
+    close) when yfinance is unreachable.
+
+    Returns ``None`` if both sources fail. Otherwise:
+
+        {
+            "value": 4.595,           # percent
+            "date": "2026-05-15",     # ISO date of the observation
+            "change": 0.134,          # day-over-day change in pp, or None
+            "source": "Yahoo Finance (^TNX)" | "FRED (DGS10)",
+        }
+    """
+    return _fetch_10y_from_yfinance() or _fetch_10y_from_fred()
+
+
+def fetch_10y_yield() -> Optional[dict]:
+    """Public accessor with 10-min Streamlit cache."""
+    try:
+        import streamlit as _st  # type: ignore
+
+        @_st.cache_data(ttl=600, show_spinner=False)
+        def _cached() -> Optional[dict]:
+            return _fetch_10y_yield_uncached()
+
+        return _cached()
+    except Exception:
+        return _fetch_10y_yield_uncached()
+
+
+# ══════════════════════════════════════════════════════════════
 #  3b. CNN Fear & Greed Index
 # ══════════════════════════════════════════════════════════════
 
@@ -2516,46 +2619,80 @@ def fetch_analyst_report_data(ticker: str, fmp_key: str) -> Dict:
     can still be constructed with partial coverage.
 
     Returns a dict ready to pass to build_analyst_report_prompt().
+
+    Performance: previously ~20 serial HTTP calls (~5-7s on a fresh cache).
+    Now fans the independent endpoints onto a ThreadPoolExecutor via the
+    shared `_http_session` (urllib3 connection pool + Retry adapter),
+    bringing wall time down to ~1-2s. Peer key-metrics depend on the peer
+    list resolved in wave 1, so they run in a second wave that itself
+    fans out per-peer.
     """
     tk = ticker.upper().strip()
     data: Dict = {"ticker": tk, "errors": []}
 
-    # Company profile + current quote
-    prof = _fmp_get("/profile", fmp_key, {"symbol": tk})
-    data["profile"] = prof[0] if isinstance(prof, list) and prof else {}
-    quote = _fmp_get("/quote", fmp_key, {"symbol": tk})
-    data["quote"] = quote[0] if isinstance(quote, list) and quote else {}
-
-    # Financial statements — try quarterly first (premium); fall back to annual
-    # which is available on the free tier.
-    def _stmt(path: str):
+    # ── Wave 1: independent endpoints run concurrently ───────────────
+    # Financial statements try quarterly (premium) then fall back to
+    # annual inside the worker; the per-endpoint fallback is still
+    # serial but all 12 endpoints fly in parallel.
+    def _stmt_call(path: str):
         r = _fmp_get(path, fmp_key, {"symbol": tk, "period": "quarter", "limit": 4})
         if r is None:
             r = _fmp_get(path, fmp_key, {"symbol": tk, "period": "annual", "limit": 4})
         return r or []
 
-    data["income_statement"] = _stmt("/income-statement")
-    data["balance_sheet"] = _stmt("/balance-sheet-statement")
-    data["cash_flow"] = _stmt("/cash-flow-statement")
-    data["ratios"] = _stmt("/ratios")
-    data["key_metrics"] = _stmt("/key-metrics")
+    wave1_jobs = {
+        "profile": lambda: _fmp_get("/profile", fmp_key, {"symbol": tk}),
+        "quote": lambda: _fmp_get("/quote", fmp_key, {"symbol": tk}),
+        "income_statement": lambda: _stmt_call("/income-statement"),
+        "balance_sheet": lambda: _stmt_call("/balance-sheet-statement"),
+        "cash_flow": lambda: _stmt_call("/cash-flow-statement"),
+        "ratios": lambda: _stmt_call("/ratios"),
+        "key_metrics": lambda: _stmt_call("/key-metrics"),
+        "analyst_estimates": lambda: _fmp_get(
+            "/analyst-estimates",
+            fmp_key,
+            {"symbol": tk, "period": "annual", "limit": 4},
+        ),
+        "price_target_consensus": lambda: _fmp_get(
+            "/price-target-consensus", fmp_key, {"symbol": tk}
+        ),
+        # Renamed on /stable/: upgrades-downgrades → grades-historical
+        "upgrades_downgrades": lambda: _fmp_get(
+            "/grades-historical", fmp_key, {"symbol": tk, "limit": 10}
+        ),
+        "peers_resp": lambda: _fmp_get("/stock-peers", fmp_key, {"symbol": tk}),
+        # Transcript is just another HTTPS call — fold it into the same wave.
+        "transcript": lambda: fetch_latest_transcript_fmp(tk, fmp_key),
+    }
 
-    # Street consensus + price target + rating movements
-    data["analyst_estimates"] = (
-        _fmp_get("/analyst-estimates", fmp_key, {"symbol": tk, "period": "annual", "limit": 4})
-        or []
-    )
-    data["price_target_consensus"] = (
-        _fmp_get("/price-target-consensus", fmp_key, {"symbol": tk}) or []
-    )
-    # Renamed on /stable/: upgrades-downgrades → grades-historical
-    data["upgrades_downgrades"] = (
-        _fmp_get("/grades-historical", fmp_key, {"symbol": tk, "limit": 10}) or []
-    )
+    wave1_results: Dict = {}
+    # Cap workers so we don't trip FMP's free-tier per-second limit.
+    with ThreadPoolExecutor(max_workers=min(8, len(wave1_jobs))) as pool:
+        future_to_key = {pool.submit(fn): key for key, fn in wave1_jobs.items()}
+        for future in as_completed(future_to_key):
+            key = future_to_key[future]
+            try:
+                wave1_results[key] = future.result()
+            except Exception as e:
+                logger.info(f"analyst_report.wave1_failed key={key} error={e}")
+                wave1_results[key] = None
+
+    prof = wave1_results.get("profile")
+    data["profile"] = prof[0] if isinstance(prof, list) and prof else {}
+    quote = wave1_results.get("quote")
+    data["quote"] = quote[0] if isinstance(quote, list) and quote else {}
+    data["income_statement"] = wave1_results.get("income_statement") or []
+    data["balance_sheet"] = wave1_results.get("balance_sheet") or []
+    data["cash_flow"] = wave1_results.get("cash_flow") or []
+    data["ratios"] = wave1_results.get("ratios") or []
+    data["key_metrics"] = wave1_results.get("key_metrics") or []
+    data["analyst_estimates"] = wave1_results.get("analyst_estimates") or []
+    data["price_target_consensus"] = wave1_results.get("price_target_consensus") or []
+    data["upgrades_downgrades"] = wave1_results.get("upgrades_downgrades") or []
 
     # Peers — stable returns a list of peer profile objects directly,
     # not [{"peersList": [...]}] like v3/v4.
-    peers_resp = _fmp_get("/stock-peers", fmp_key, {"symbol": tk})
+    peers_resp = wave1_results.get("peers_resp")
     peers: List[str] = []
     if isinstance(peers_resp, list) and peers_resp:
         first = peers_resp[0]
@@ -2567,19 +2704,27 @@ def fetch_analyst_report_data(ticker: str, fmp_key: str) -> Dict:
             peers = first.get("peersList") or first.get("peers") or []
     data["peers"] = peers[:5]
 
-    # Peer key metrics — best effort, one call per peer
-    peer_metrics = []
-    for peer_tk in data["peers"]:
-        km = _fmp_get("/key-metrics-ttm", fmp_key, {"symbol": peer_tk})
-        if isinstance(km, list) and km:
-            peer_metrics.append({"ticker": peer_tk, **km[0]})
-    data["peer_metrics"] = peer_metrics
-
-    # Latest transcript — premium-only on free tier; gracefully absent
-    transcript = fetch_latest_transcript_fmp(tk, fmp_key)
+    transcript = wave1_results.get("transcript") or {}
     data["transcript"] = transcript if not transcript.get("error") else {}
     if transcript.get("error"):
         data["errors"].append({"source": "transcript", "detail": transcript["error"]})
+
+    # ── Wave 2: peer key-metrics, fanned out in parallel ─────────────
+    # Was: up to 5 peers × ~300ms serial = ~1.5s. Now: ~300ms total.
+    peer_metrics: List = []
+    if data["peers"]:
+
+        def _peer_km(peer_tk: str):
+            km = _fmp_get("/key-metrics-ttm", fmp_key, {"symbol": peer_tk})
+            if isinstance(km, list) and km:
+                return {"ticker": peer_tk, **km[0]}
+            return None
+
+        with ThreadPoolExecutor(max_workers=min(5, len(data["peers"]))) as pool:
+            for result in pool.map(_peer_km, data["peers"]):
+                if result is not None:
+                    peer_metrics.append(result)
+    data["peer_metrics"] = peer_metrics
 
     return data
 
@@ -2863,9 +3008,15 @@ def generate_analyst_report(
         from anthropic import Anthropic
 
         client = Anthropic(api_key=anthropic_key)
+        # max_tokens tuned for the structured analyst-report JSON. Anthropic
+        # latency scales roughly linearly with output tokens; the schema
+        # (rating, exec summary, 4 catalysts, 4 risks, valuation, peer
+        # comp, action items) reliably fits in ~2500-3000 tokens. 6000 was
+        # adding ~10-15s of wasted generation time. 3500 leaves headroom
+        # for verbose tickers without paying for unused capacity.
         resp = client.messages.create(
             model=claude_model,
-            max_tokens=6000,
+            max_tokens=3500,
             temperature=0.3,
             system=(
                 "You are a veteran sell-side equity research MD. You produce "

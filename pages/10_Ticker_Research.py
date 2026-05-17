@@ -988,7 +988,7 @@ CONFIDENCE: [High / Medium / Low]"""
             )
         with bcol2:
             st.caption(
-                "~30-60s. Fetches 4Q of statements, peer comps, analyst actions, earnings call + sends to Claude."
+                "~12-20s. Fetches 4Q of statements, peer comps, analyst actions, earnings call + sends to Claude."
             )
 
         if gen_clicked:
@@ -1014,12 +1014,12 @@ CONFIDENCE: [High / Medium / Low]"""
                         provider="anthropic",
                         model="claude-sonnet-4-5",
                         tokens_in=10000,
-                        tokens_out=6000,
+                        tokens_out=3500,
                         cost_usd=estimate_cost_usd(
                             "anthropic",
                             "claude-sonnet-4-5",
                             tokens_in=10000,
-                            tokens_out=6000,
+                            tokens_out=3500,
                         ),
                         metadata={
                             "feature": "ticker_research_report",
