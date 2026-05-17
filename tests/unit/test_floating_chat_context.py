@@ -332,3 +332,73 @@ def test_response_budget_respects_explicit_depth(floating_chat_module):
     # Auto path reads the constants directly so the test stays stable
     # as the tuning knobs evolve.
     assert module._response_budget("plain question", depth="auto") == module._FAST_CHAT_MAX_TOKENS
+
+
+# ── Scenario-grounding context (P: bad SPX hallucination fix) ──
+
+
+def test_deep_context_annotates_stress_loss_with_market_shock(monkeypatch, floating_chat_module):
+    """Stress loss must be labeled with the scenario shock that produced
+    it so the LLM connects 'Stress Loss' to 'what happens if SPX drops X%'.
+    Previously the LLM treated stress_loss as an opaque number."""
+    module, fake_st = floating_chat_module
+    _seed_portfolio(monkeypatch, fake_st)
+    fake_st.session_state["market_shock"] = -0.15
+
+    context = module._build_portfolio_context(depth="deep")
+
+    assert "Stress Loss (under -15% market shock)" in context
+
+
+def test_deep_context_uses_default_shock_label_when_missing(monkeypatch, floating_chat_module):
+    """If market_shock isn't set, fall back to a clear default-label
+    rather than emitting a confusing 'Stress Loss=12%' that the LLM
+    can't tie to a scenario."""
+    module, fake_st = floating_chat_module
+    _seed_portfolio(monkeypatch, fake_st)
+    # market_shock intentionally not set
+
+    context = module._build_portfolio_context(depth="deep")
+
+    # Default fallback path: -10% shock label, NOT "default" string.
+    assert "Stress Loss (under -10% market shock)" in context
+
+
+def test_deep_context_includes_portfolio_weighted_beta(monkeypatch, floating_chat_module):
+    """Scenario-question grounding: the LLM needs portfolio-weighted
+    beta to compute 'if SPX moves X% → portfolio moves Y%'."""
+    module, fake_st = floating_chat_module
+    _seed_portfolio(monkeypatch, fake_st)
+
+    context = module._build_portfolio_context(depth="deep")
+
+    assert "Portfolio-weighted beta" in context
+    # The label must hint at the application so the LLM uses it.
+    assert "port_beta" in context.lower() or "market_move" in context
+
+
+def test_short_context_omits_market_state_and_beta(monkeypatch, floating_chat_module):
+    """Short context is for casual questions — skip the macro / market
+    state / weighted-beta section that's only needed for scenario depth."""
+    module, fake_st = floating_chat_module
+    _seed_portfolio(monkeypatch, fake_st)
+
+    context = module._build_portfolio_context(depth="short")
+
+    assert "S&P 500 (^GSPC)" not in context
+    assert "Portfolio-weighted beta" not in context
+
+
+def test_system_prompt_forbids_disclaimer_preamble():
+    """The chat system prompt must explicitly prohibit 'I cannot' /
+    'I lack' openings — that's the bug a user reported on 2026-05-17
+    where the LLM led with disclaimers instead of using available data."""
+    from ui import floating_chat as fc
+
+    prompt = fc._SYSTEM_PROMPT
+    # Lock in the institutional-tone rules.
+    assert "NEVER open with" in prompt
+    assert "'I cannot'" in prompt or "'I lack'" in prompt
+    assert "Caveats go" in prompt and "END" in prompt
+    # Lead-with-the-answer + show-the-math.
+    assert "best estimate" in prompt

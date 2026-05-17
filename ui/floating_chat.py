@@ -577,9 +577,32 @@ def _build_portfolio_context(*, depth: str = "auto", user_message: str = "") -> 
     # if FRED is down. Only injected when the user actually has some
     # portfolio context to discuss (otherwise we want the "no portfolio
     # loaded yet" fallback to fire downstream). Skipped entirely for
-    # "short" depth: macro releases aren't relevant to casual questions
-    # and they're the heaviest single context section.
+    # "short" depth: macro releases + market state aren't relevant to
+    # casual questions and they're the heaviest single context section.
     if parts and depth == "deep":
+        # Current SPX + VIX level. Without these, Claude has no way to
+        # answer "what if SPX drops to 7000" — it would have to GUESS
+        # the current SPX level (we caught this on 2026-05-17, the LLM
+        # made up "SPX ~7,778"). Cached at the yfinance layer.
+        try:
+            import yfinance as _yf
+
+            spx_tk = _yf.Ticker("^GSPC")
+            spx_hist = spx_tk.history(period="2d", auto_adjust=True)
+            if not spx_hist.empty:
+                spx_close = float(spx_hist["Close"].iloc[-1])
+                spx_date = str(spx_hist.index[-1].date())
+                spx_change = None
+                if len(spx_hist) >= 2:
+                    prev = float(spx_hist["Close"].iloc[-2])
+                    spx_change = (spx_close - prev) / prev if prev else None
+                line = f"- S&P 500 (^GSPC): {spx_close:,.2f} as of {spx_date}"
+                if spx_change is not None:
+                    line += f" ({spx_change:+.2%} d/d)"
+                parts.append("Current market state:\n" + line)
+        except Exception:
+            pass
+
         try:
             from market_intelligence import fetch_10y_yield, fetch_macro_releases
 
@@ -665,6 +688,14 @@ def _build_portfolio_context(*, depth: str = "auto", user_message: str = "") -> 
                 )
         except Exception:
             pass
+        # Annotate stress_loss with its underlying scenario shock so the
+        # LLM connects "stress_loss" to "what happens if the market drops
+        # X%". Without this it was treating stress_loss as a vague number.
+        try:
+            shock_pct = float(st.session_state.get("market_shock") or -0.10)
+            shock_label = f"under {shock_pct:+.0%} market shock"
+        except Exception:
+            shock_label = "under default market shock"
         parts.append(
             f"Latest risk report: "
             f"Annual Return={report.annual_return:.2%}, "
@@ -673,8 +704,23 @@ def _build_portfolio_context(*, depth: str = "auto", user_message: str = "") -> 
             f"VaR95={report.var_95:.2%}, "
             f"CVaR95={report.cvar_95:.2%}, "
             f"Max Drawdown={report.max_drawdown:.2%}, "
-            f"Stress Loss={report.stress_loss:.2%}"
+            f"Stress Loss ({shock_label})={report.stress_loss:.2%}"
         )
+        # Portfolio-weighted beta (when betas + weights are both present).
+        # Useful proxy for scenario questions like "what if SPX drops X%":
+        # estimated portfolio impact ≈ portfolio_beta × market_shock.
+        try:
+            betas = report.betas or {}
+            weights_for_beta = st.session_state.get("weights") or {}
+            if betas and weights_for_beta:
+                total_w = sum(weights_for_beta.values()) or 1.0
+                port_beta = sum(weights_for_beta.get(t, 0) * b for t, b in betas.items()) / total_w
+                parts.append(
+                    f"Portfolio-weighted beta (vs SPX): {port_beta:.2f} "
+                    f"(estimate portfolio_pnl ≈ port_beta × market_move)."
+                )
+        except Exception:
+            pass
         if report.betas:
             top_beta = sorted(report.betas.items(), key=lambda x: abs(x[1]), reverse=True)[:5]
             parts.append("Top betas: " + ", ".join(f"{t}={b:.2f}" for t, b in top_beta))
@@ -702,14 +748,30 @@ def _build_portfolio_context(*, depth: str = "auto", user_message: str = "") -> 
 
 _SYSTEM_PROMPT = (
     "You are a senior institutional portfolio risk analyst embedded in MindMarket AI. "
-    "Use only the portfolio/risk context below plus the user's question. "
-    "Be concise, professional, and numeric: cite exact VaR, CVaR, Sharpe, drawdown, "
-    "weights, prices, or exposures when available. Do not invent holdings, prices, "
-    "returns, targets, news, or data sources. If data is missing or stale, say so. "
-    "Default format: 1) direct answer, 2) evidence from the portfolio, 3) risk/action "
-    "watchpoint. Keep normal answers under 5 bullets; expand only when the user asks "
-    "for a detailed/deep/full report. This is educational analysis, not investment "
-    "advice. Answer in {language}.\n\n"
+    "You speak like a desk strategist briefing a PM: direct, numeric, decisive. "
+    "Use only numbers from the PORTFOLIO CONTEXT below — never invent prices, "
+    "returns, betas, VaR, or any other metric. "
+    "\n\n"
+    "RESPONSE RULES (these override anything that conflicts):\n"
+    "1. Lead with the answer. NEVER open with 'I cannot' / 'I lack' / 'Without more "
+    "information'. Use the data you DO have and give your best estimate. Caveats go "
+    "at the END, in one short line.\n"
+    "2. For scenario questions (e.g. 'if SPX drops to 7000'), compute the answer "
+    "using the data in context: current SPX level, portfolio-weighted beta, stress_loss "
+    "(which already encodes the market_shock scenario), margin ratios. Show the math "
+    "in one line, then the result.\n"
+    "3. Quote SPECIFIC numbers from the context — ticker symbols, exact percentages, "
+    "dollar amounts. Generic phrasing ('your large-cap position') is not allowed.\n"
+    "4. Structure: Assessment (1 line) · Evidence (2-4 bullets, with numbers) · "
+    "Risks (2-3 bullets) · Actions (2-3 concrete moves). Skip a section only if "
+    "nothing useful to say there.\n"
+    "5. If a number is truly absent from context, label your estimate as such — e.g. "
+    "'(estimated; portfolio beta not measured)' inline, NOT in a preamble. The user "
+    "should still get a number.\n"
+    "6. Do not add boilerplate disclaimers ('This is not investment advice') unless "
+    "asked. The app shows that disclaimer in the legal footer already.\n"
+    "\n"
+    "Answer in {language}.\n\n"
     "--- PORTFOLIO CONTEXT ---\n{context}\n--- END CONTEXT ---"
 )
 
