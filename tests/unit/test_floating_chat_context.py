@@ -334,6 +334,15 @@ def test_response_budget_respects_explicit_depth(floating_chat_module):
     assert module._response_budget("plain question", depth="auto") == module._FAST_CHAT_MAX_TOKENS
 
 
+def test_detect_response_language_matches_latest_message(floating_chat_module):
+    module, _fake_st = floating_chat_module
+
+    assert module._detect_response_language("分析一下我的持仓") == "Simplified Chinese"
+    assert module._detect_response_language("what is my portfolio risk?") == "English"
+    assert module._detect_response_language("NVDA 下跌 10% 会怎样?") == "Simplified Chinese"
+    assert module._detect_response_language("") == "English"
+
+
 # ── Scenario-grounding context (P: bad SPX hallucination fix) ──
 
 
@@ -402,3 +411,12 @@ def test_system_prompt_forbids_disclaimer_preamble():
     assert "Caveats go" in prompt and "END" in prompt
     # Lead-with-the-answer + show-the-math.
     assert "best estimate" in prompt
+
+
+def test_system_prompt_enforces_latest_message_language():
+    from ui import floating_chat as fc
+
+    prompt = fc._SYSTEM_PROMPT
+    assert "Language is mandatory" in prompt
+    assert "matching the user's latest message" in prompt
+    assert "prior assistant language" in prompt

@@ -11,12 +11,6 @@ LLM (Anthropic Claude, DeepSeek API, or local Ollama).
 
 import streamlit as st
 
-_CHAT_LANGUAGE_OPTIONS = {
-    "English": "English",
-    "Chinese": "Simplified Chinese",
-    "Match my message": "the same language as the user's latest message",
-}
-
 # Token budgets for Claude chat. Set to "comfortable headroom for the
 # Assessment / Evidence / Risks / Actions structured reply" + a margin
 # for verbose tickers. The previous 350/500/800 caps routinely cut
@@ -63,6 +57,20 @@ _DEEP_CONTEXT_KEYWORDS = (
     "exposure",
 )
 _DEEP_CONTEXT_LENGTH_THRESHOLD = 80
+
+
+def _detect_response_language(user_message: str) -> str:
+    """Return the response language for the latest user message.
+
+    The product UI is English-first, but chat should mirror the user's
+    current message. Keep this deterministic instead of exposing another
+    setting in the modal: any CJK character means Simplified Chinese;
+    otherwise answer in English.
+    """
+    text = user_message or ""
+    if any("\u4e00" <= ch <= "\u9fff" for ch in text):
+        return "Simplified Chinese"
+    return "English"
 
 
 def _classify_context_depth(user_message: str) -> str:
@@ -789,8 +797,10 @@ _SYSTEM_PROMPT = (
     "should still get a number.\n"
     "6. Do not add boilerplate disclaimers ('This is not investment advice') unless "
     "asked. The app shows that disclaimer in the legal footer already.\n"
+    "7. Language is mandatory: answer entirely in {language}, matching the user's "
+    "latest message. Do not use the app UI language, prior assistant language, or "
+    "portfolio context language to override this.\n"
     "\n"
-    "Answer in {language}.\n\n"
     "--- PORTFOLIO CONTEXT ---\n{context}\n--- END CONTEXT ---"
 )
 
@@ -822,13 +832,10 @@ def _open_chat_dialog():
         "Ask about your portfolio risk, market conditions, or strategy"
     )
 
-    st.selectbox(
-        "Response language",
-        list(_CHAT_LANGUAGE_OPTIONS.keys()),
-        index=0,
-        key="_fc_response_language",
-        help="Only the chat assistant uses this language setting. The app UI stays English.",
-    )
+    # Retire the old manual language selector. Chat now mirrors the latest
+    # user message automatically: Chinese question -> Chinese answer,
+    # English question -> English answer.
+    st.session_state.pop("_fc_response_language", None)
 
     chat_container = st.container(height=420)
     with chat_container:
@@ -882,10 +889,7 @@ def _handle_user_input(user_input: str, chat_container):
     # deep context that includes the full risk report + macro releases.
     depth = _classify_context_depth(user_input)
     context = _build_portfolio_context(depth=depth, user_message=user_input)
-    language = _CHAT_LANGUAGE_OPTIONS.get(
-        st.session_state.get("_fc_response_language", "English"),
-        "English",
-    )
+    language = _detect_response_language(user_input)
     system = _SYSTEM_PROMPT.format(context=context, language=language)
 
     recent = st.session_state._fc_messages[-10:]
