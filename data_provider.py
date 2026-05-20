@@ -183,6 +183,15 @@ class DataProvider:
         self._macro_prices: Optional[pd.DataFrame] = None
         self._macro_returns: Optional[pd.DataFrame] = None
         self._volume_30d: Optional[pd.DataFrame] = None
+        # Instance-level memo for benchmark + risk-free fetches. These
+        # were uncached and got called 2-3 times per engine.run() — once
+        # for single-factor beta (SPY), once for multi-factor (SPY+QQQ+
+        # GLD+TLT), and once for risk-free (^IRX). That was 3-6s of
+        # redundant yfinance downloads per Run Analysis. With the
+        # DataProvider itself cached via @st.cache_resource(ttl=24h),
+        # these memos persist for the same window.
+        self._benchmark_returns_cache: dict[tuple, pd.DataFrame] = {}
+        self._risk_free_rate_cached: Optional[float] = None
 
         # 初始化缓存提供者
         self._cache_provider = CachedDataProvider()
@@ -801,9 +810,22 @@ class DataProvider:
 
         Used by RiskEngine for single-factor and multi-factor beta fits.
         Aligned to project's SIMPLE-return convention.
+
+        Memoized on the DataProvider instance — `engine.run()` calls
+        this twice (single-factor SPY, then 4-factor SPY+QQQ+GLD+TLT),
+        and previously each call did a fresh yfinance HTTP roundtrip.
+        With the cache, the second call (and any subsequent re-runs)
+        return instantly.
         """
         if not benchmarks:
             return pd.DataFrame()
+
+        # Cache key includes the benchmark set + window so different
+        # callers don't share each other's data.
+        cache_key = (tuple(sorted(benchmarks)), start, end)
+        cached = self._benchmark_returns_cache.get(cache_key)
+        if cached is not None:
+            return cached.copy()
 
         start_str = start or (
             self.end_date - timedelta(days=int(self.period_years * 365) + 10)
@@ -847,13 +869,21 @@ class DataProvider:
         if close.empty:
             return pd.DataFrame(columns=benchmarks)
 
-        return close.pct_change().dropna(how="all")
+        result = close.pct_change().dropna(how="all")
+        self._benchmark_returns_cache[cache_key] = result
+        return result.copy()
 
     def get_risk_free_rate(self, fallback: float = 0.045) -> float:
         """
         Fetch latest 13-week Treasury yield (^IRX, in %) and convert to decimal.
         Returns the supplied fallback on any failure so callers never crash.
+
+        Memoized — `engine.run()` calls this once per analysis but with
+        the DataProvider cached for 24h, repeat Run Analysis clicks were
+        re-downloading ^IRX every time. Cache lives on the instance.
         """
+        if self._risk_free_rate_cached is not None:
+            return self._risk_free_rate_cached
         try:
             raw = yf.download("^IRX", period="5d", auto_adjust=True, progress=False, threads=False)
         except Exception as exc:
@@ -874,6 +904,7 @@ class DataProvider:
             latest = float(close.dropna().iloc[-1])
             # ^IRX is quoted in percent; convert to decimal. Sanity-clip to [0, 0.20].
             rate = max(0.0, min(0.20, latest / 100.0))
+            self._risk_free_rate_cached = rate
             return rate
         except Exception as exc:
             logger.warning("data.risk_free.parse_failed", error=str(exc))

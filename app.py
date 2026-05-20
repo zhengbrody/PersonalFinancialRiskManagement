@@ -2137,7 +2137,7 @@ def execute_analysis(force: bool = False) -> bool:
 
             # ── Step 4: Load price data ───────────────────────────────────
             try:
-                with st.spinner("Downloading market data. This can take 30-60 seconds..."):
+                with st.spinner("Downloading market data (cold cache ~10-15s, warm ~1s)..."):
                     report, prices, cumret = run_portfolio_analysis(
                         weights_json,
                         period_years,
