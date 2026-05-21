@@ -37,6 +37,7 @@ _NAV_GROUPS = [
             ("pages/1_Overview.py", "Overview"),
             ("pages/2_Risk.py", "Risk"),
             ("pages/4_Portfolio.py", "Portfolio Actions"),
+            ("pages/11_Portfolio_Copilot_Beta.py", "AI Portfolio Copilot Beta"),
         ],
     ),
     (
