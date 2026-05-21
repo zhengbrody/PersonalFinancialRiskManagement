@@ -583,11 +583,9 @@ _render_sandbox(
     risk_free_rate,
 )
 
-# The chat fragment reads the draft via session_state so the sandbox's
-# re-runs don't propagate into the chat (and vice versa).
-draft_score = st.session_state.get("_copilot_draft_score", current_score)
-draft_positions = st.session_state.get("_copilot_draft_positions", base_positions)
-draft_enabled = "_copilot_draft_score" in st.session_state
+# The chat fragment reads any active draft directly from session_state
+# inside _render_chat() so sandbox re-runs don't propagate into the
+# chat (and vice versa). No module-level pass-through needed.
 
 st.markdown("---")
 st.markdown("### AI Assistant")
