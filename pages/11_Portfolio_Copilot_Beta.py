@@ -17,6 +17,7 @@ import yfinance as yf
 #   domain/  → type-safe Pydantic input + frozen-dataclass re-exports
 #   engine/  → pure NumPy/Pandas math (no LLM, no network)
 #   agents/  → lightweight ReAct dispatcher with Pydantic-typed output
+import portfolio_config as pc
 from agents import route_message
 from domain import AssetPosition, PortfolioScore
 from engine import (
@@ -28,6 +29,52 @@ from engine import (
 )
 from ui.shared_sidebar import render_shared_sidebar
 from ui.tokens import T
+
+
+def _user_positions_from_session() -> list[AssetPosition] | None:
+    """Build the user's real portfolio as ``AssetPosition`` records.
+
+    Reads holdings (shares + avg_cost) from ``portfolio_config`` and live
+    prices from ``st.session_state["prices"]`` (populated by the main
+    Run Analysis flow). Returns ``None`` if the user hasn't run an
+    analysis yet — the caller is expected to short-circuit with a hint
+    rather than silently falling back to demo data.
+    """
+    if not st.session_state.get("analysis_ready"):
+        return None
+    prices = st.session_state.get("prices")
+    if prices is None or getattr(prices, "empty", True):
+        return None
+
+    positions: list[AssetPosition] = []
+    for ticker, h in pc.PORTFOLIO_HOLDINGS.items():
+        shares = float(h.get("shares", 0) or 0)
+        if shares <= 0:
+            continue
+        if ticker not in prices.columns:
+            continue
+        series = prices[ticker].dropna()
+        if series.empty:
+            continue
+        last_price = float(series.iloc[-1])
+        if not np.isfinite(last_price) or last_price <= 0:
+            continue
+        market_value = shares * last_price
+        avg_cost = h.get("avg_cost")
+        cost_basis = float(shares) * float(avg_cost) if avg_cost not in (None, 0, 0.0) else 0.0
+        asset_type_raw = str(h.get("asset_type") or pc._infer_asset_type(ticker))
+        ap_type = "crypto" if asset_type_raw == "crypto" else "public_security"
+        positions.append(
+            AssetPosition(
+                ticker=ticker,
+                name=ticker,
+                asset_type=ap_type,
+                market_value=market_value,
+                cost_basis=cost_basis,
+                source="brokerage",
+            )
+        )
+    return positions or None
 
 
 def _maybe_fragment(func):
@@ -377,9 +424,28 @@ render_shared_sidebar()
 _inject_css()
 
 st.markdown("## AI Portfolio Copilot Beta")
-st.caption("Exact quant scoring, draft portfolio sandbox, and lightweight resident agents.")
+st.caption(
+    "Exact quant scoring, draft portfolio sandbox, and lightweight "
+    "resident agents — running on your real portfolio."
+)
 
-base_positions = demo_asset_positions(100_000.0)
+_user_positions = _user_positions_from_session()
+if _user_positions is None:
+    # No prior Run Analysis → fall back to demo so first-time visitors
+    # can still see what the page does. Banner makes the data origin
+    # explicit so they don't think the demo is their own portfolio.
+    st.info(
+        "📊 No analysis yet. Showing a **demo portfolio** so you can "
+        "preview the Copilot. Run **Run Analysis** on the Dashboard "
+        "to switch this page to your real holdings.",
+        icon="ℹ️",
+    )
+    base_positions = demo_asset_positions(100_000.0)
+    _portfolio_source_label = "Demo portfolio"
+else:
+    base_positions = _user_positions
+    _portfolio_source_label = f"Your portfolio ({len(base_positions)} positions)"
+    st.caption(f"📁 Data source: {_portfolio_source_label}")
 public_tickers = _public_tickers(base_positions)
 market_returns, market_source = _load_market_returns(public_tickers, period="2y")
 benchmark_returns = market_returns["SPY"] if "SPY" in market_returns.columns else None
