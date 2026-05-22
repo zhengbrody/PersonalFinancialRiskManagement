@@ -252,7 +252,7 @@ if portfolios:
                     column_config=_holdings_editor_columns(),
                     num_rows="dynamic",
                     hide_index=True,
-                    use_container_width=True,
+                    width="stretch",
                     key=f"holdings_table_{p['id']}",
                 )
                 with st.expander("Advanced JSON preview", expanded=False):
@@ -276,7 +276,7 @@ if portfolios:
                 if st.button(
                     "💾 Save changes",
                     key=f"save_{p['id']}",
-                    use_container_width=True,
+                    width="stretch",
                 ):
                     try:
                         new_holdings = _rows_to_holdings(edited_rows)
@@ -295,7 +295,7 @@ if portfolios:
                     if st.button(
                         "🌟 Set as default",
                         key=f"default_{p['id']}",
-                        use_container_width=True,
+                        width="stretch",
                     ):
                         try:
                             update_portfolio(p["id"], is_default=True)
@@ -307,7 +307,7 @@ if portfolios:
                 if st.button(
                     "🗑️ Delete",
                     key=f"delete_{p['id']}",
-                    use_container_width=True,
+                    width="stretch",
                     type="secondary",
                 ):
                     confirm_key = f"confirm_delete_{p['id']}"
@@ -339,7 +339,7 @@ if is_owner_email(user.get("email")):
             if st.button(
                 "Sync server config to my default portfolio",
                 type="primary",
-                use_container_width=True,
+                width="stretch",
             ):
                 updated = _upsert_default_portfolio(
                     "Owner Portfolio",
@@ -384,7 +384,7 @@ if uploaded_csv is not None:
             f"Preview: {len(preview_rows)} positions parsed. Review below "
             "and click Import to save."
         )
-        st.dataframe(preview_rows, hide_index=True, use_container_width=True)
+        st.dataframe(preview_rows, hide_index=True, width="stretch")
     except ValueError as strict_error:
         # Strict parse hit a per-row problem (bad ticker, NaN shares, …) OR
         # a structural problem (missing header, oversized file). Show the
@@ -414,13 +414,13 @@ if uploaded_csv is not None:
             with colA:
                 st.markdown(f"**Valid rows ({len(valid_rows)})**")
                 if valid_rows:
-                    st.dataframe(valid_rows, hide_index=True, use_container_width=True)
+                    st.dataframe(valid_rows, hide_index=True, width="stretch")
                 else:
                     st.caption("None.")
             with colB:
                 st.markdown(f"**Rejected rows ({len(error_rows)})**")
                 if error_rows:
-                    st.dataframe(error_rows, hide_index=True, use_container_width=True)
+                    st.dataframe(error_rows, hide_index=True, width="stretch")
                 else:
                     st.caption("None.")
             if diag["skipped"]:
@@ -453,7 +453,7 @@ if csv_holdings:
         csv_submitted = st.form_submit_button(
             "Import portfolio",
             type="primary",
-            use_container_width=True,
+            width="stretch",
         )
 
     if csv_submitted:
@@ -492,7 +492,7 @@ with st.form("new_portfolio_form", clear_on_submit=True):
         column_config=_holdings_editor_columns(),
         num_rows="dynamic",
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
         key="new_portfolio_holdings_table",
     )
     new_margin = st.number_input(
@@ -508,7 +508,7 @@ with st.form("new_portfolio_form", clear_on_submit=True):
     submitted = st.form_submit_button(
         "➕ Create",
         type="primary",
-        use_container_width=True,
+        width="stretch",
     )
 
 if submitted:

@@ -17,7 +17,6 @@ import yfinance as yf
 #   domain/  → type-safe Pydantic input + frozen-dataclass re-exports
 #   engine/  → pure NumPy/Pandas math (no LLM, no network)
 #   agents/  → lightweight ReAct dispatcher with Pydantic-typed output
-import portfolio_config as pc
 from agents import route_message
 from domain import AssetPosition, PortfolioScore
 from engine import (
@@ -34,11 +33,10 @@ from ui.tokens import T
 def _user_positions_from_session() -> list[AssetPosition] | None:
     """Build the user's real portfolio as ``AssetPosition`` records.
 
-    Reads holdings (shares + avg_cost) from ``portfolio_config`` and live
-    prices from ``st.session_state["prices"]`` (populated by the main
-    Run Analysis flow). Returns ``None`` if the user hasn't run an
-    analysis yet — the caller is expected to short-circuit with a hint
-    rather than silently falling back to demo data.
+    Reads holdings from the active-portfolio resolver and live prices from
+    ``st.session_state["prices"]`` (populated by the main Run Analysis flow).
+    Never reads ``portfolio_config.PORTFOLIO_HOLDINGS`` directly here:
+    authenticated users must see their own portfolio, not the owner's default.
     """
     if not st.session_state.get("analysis_ready"):
         return None
@@ -46,8 +44,19 @@ def _user_positions_from_session() -> list[AssetPosition] | None:
     if prices is None or getattr(prices, "empty", True):
         return None
 
+    try:
+        from libs.auth.active_portfolio import get_active_holdings
+
+        active_holdings = get_active_holdings() or {}
+    except Exception:
+        active_holdings = {}
+    if not active_holdings:
+        return None
+
     positions: list[AssetPosition] = []
-    for ticker, h in pc.PORTFOLIO_HOLDINGS.items():
+    for ticker, h in active_holdings.items():
+        if not isinstance(h, dict):
+            continue
         shares = float(h.get("shares", 0) or 0)
         if shares <= 0:
             continue
@@ -62,7 +71,7 @@ def _user_positions_from_session() -> list[AssetPosition] | None:
         market_value = shares * last_price
         avg_cost = h.get("avg_cost")
         cost_basis = float(shares) * float(avg_cost) if avg_cost not in (None, 0, 0.0) else 0.0
-        asset_type_raw = str(h.get("asset_type") or pc._infer_asset_type(ticker))
+        asset_type_raw = str(h.get("asset_type") or _infer_asset_type(ticker))
         ap_type = "crypto" if asset_type_raw == "crypto" else "public_security"
         positions.append(
             AssetPosition(
@@ -75,6 +84,15 @@ def _user_positions_from_session() -> list[AssetPosition] | None:
             )
         )
     return positions or None
+
+
+def _infer_asset_type(ticker: str) -> str:
+    tk = ticker.upper()
+    if tk.endswith("-USD"):
+        return "crypto"
+    if tk in ("SPY", "QQQ", "IWM", "VTI", "GLD", "TLT", "VTV"):
+        return "etf"
+    return "equity"
 
 
 def _maybe_fragment(func):
@@ -486,7 +504,7 @@ if current_score.metrics.data_quality_notes:
 
 st.plotly_chart(
     _score_bar(current_score, "Score Dimensions"),
-    use_container_width=True,
+    width="stretch",
     config={"displayModeBar": False},
 )
 
@@ -510,7 +528,7 @@ st.dataframe(
         ]
     ],
     hide_index=True,
-    use_container_width=True,
+    width="stretch",
     column_config={
         "Market Value": st.column_config.NumberColumn(format="$%.0f"),
         "Weight": st.column_config.NumberColumn(format="%.1%"),
@@ -526,7 +544,7 @@ with st.expander("Reserved connectors", expanded=False):
     st.dataframe(
         reserved[["Ticker", "Name", "Type", "Source", "Enabled"]],
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )
 
 st.markdown("---")
@@ -633,7 +651,7 @@ def _render_sandbox(
     )
     st.plotly_chart(
         _weights_bar(base_positions_arg, draft_positions_local),
-        use_container_width=True,
+        width="stretch",
         config={"displayModeBar": False},
     )
     with st.expander("Draft score detail", expanded=True):
@@ -719,7 +737,7 @@ def _render_chat(
             st.dataframe(
                 pd.DataFrame(response.draft_trades),
                 hide_index=True,
-                use_container_width=True,
+                width="stretch",
             )
         with st.expander("Agent trace", expanded=False):
             st.write(f"Route: {response.agent_name}")

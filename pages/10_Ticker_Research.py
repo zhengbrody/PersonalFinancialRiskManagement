@@ -374,7 +374,7 @@ with st.form("ticker_research_search_form", clear_on_submit=False):
         search_clicked = st.form_submit_button(
             "Search",
             type="primary",
-            use_container_width=True,
+            width="stretch",
         )
 
 if search_clicked and ticker_input:
@@ -588,7 +588,7 @@ try:
                 ]
                 if not display_cols:
                     display_cols = list(ug_df.columns)[:5]
-                st.dataframe(ug_df[display_cols], use_container_width=True, hide_index=True)
+                st.dataframe(ug_df[display_cols], width="stretch", hide_index=True)
             except Exception:
                 st.caption("Could not display upgrades/downgrades data.")
 
@@ -803,9 +803,7 @@ try:
                 ]
                 if not display_cols:
                     display_cols = list(txn_df.columns)[:5]
-                st.dataframe(
-                    txn_df[display_cols].head(10), use_container_width=True, hide_index=True
-                )
+                st.dataframe(txn_df[display_cols].head(10), width="stretch", hide_index=True)
             except Exception:
                 st.caption("Could not display insider transactions.")
 
@@ -846,7 +844,7 @@ try:
             ]
             if not display_cols:
                 display_cols = list(holders_df.columns)[:5]
-            st.dataframe(holders_df[display_cols], use_container_width=True, hide_index=True)
+            st.dataframe(holders_df[display_cols], width="stretch", hide_index=True)
         except Exception:
             st.caption("Could not display institutional holders.")
     else:
@@ -984,7 +982,7 @@ CONFIDENCE: [High / Medium / Low]"""
                 _btn_label,
                 key="generate_analyst_report",
                 type="primary",
-                use_container_width=True,
+                width="stretch",
             )
         with bcol2:
             st.caption(

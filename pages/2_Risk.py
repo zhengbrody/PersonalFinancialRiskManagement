@@ -337,7 +337,7 @@ if report.component_var_pct is not None:
                 ["Ticker", "Sector", "Weight %", "VaR Contribution %", "Risk/Weight Ratio"]
             ].sort_values("VaR Contribution %", ascending=False),
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
         )
 
 # Sector breakdown
@@ -359,7 +359,7 @@ with pie_col:
 with tbl_col:
     sec_display = sec_df.copy()
     sec_display["Weight"] = sec_display["Weight"].map("{:.2%}".format)
-    st.dataframe(sec_display, hide_index=True, use_container_width=True)
+    st.dataframe(sec_display, hide_index=True, width="stretch")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -471,7 +471,7 @@ if fb is not None and not fb.empty:
                     return f"color: {T.signal_negative}; font-weight: 600"
 
                 styled = final_df.style.map(_style_significance, subset=["Significant"])
-                st.dataframe(styled, hide_index=True, use_container_width=True)
+                st.dataframe(styled, hide_index=True, width="stretch")
 
                 # 警告：不显著因子过多
                 insignificant_count = sum(~ticker_sig["is_significant"])
@@ -507,7 +507,7 @@ if fb is not None and not fb.empty:
 
         if factor_summary:
             summary_df = pd.DataFrame(factor_summary)
-            st.dataframe(summary_df, hide_index=True, use_container_width=True)
+            st.dataframe(summary_df, hide_index=True, width="stretch")
 
             # AI 洞察
             low_sig_factors = [
@@ -579,7 +579,7 @@ if barra:
         pnl_data = barra["factor_pnl"]
         pnl_rows = [{"Factor": k, "P&L": f"{v:.4%}"} for k, v in pnl_data.items()]
         pnl_rows.append({"Factor": "TOTAL", "P&L": f"{barra['total_return']:.4%}"})
-        st.dataframe(pd.DataFrame(pnl_rows), hide_index=True, use_container_width=True)
+        st.dataframe(pd.DataFrame(pnl_rows), hide_index=True, width="stretch")
 
         exp_df = barra["factor_exposures"]
         top_assets = sorted(weights, key=lambda x: -weights[x])[:15]
@@ -764,7 +764,7 @@ with render_section("Liquidity Risk", collapsed=True):
             )
         if "Weight" in display_liq.columns:
             display_liq["Weight"] = display_liq["Weight"].apply(lambda x: f"{x:.2%}")
-        st.dataframe(display_liq, use_container_width=True)
+        st.dataframe(display_liq, width="stretch")
         st.caption(
             "AI: Illiquid positions (>1 day to liquidate) create slippage risk during forced selling."
         )

@@ -99,6 +99,10 @@ def _make_fake_streamlit() -> MagicMock:
 
     fake.tabs = _tabs
 
+    # Real Streamlit buttons return False until clicked. A bare MagicMock is
+    # truthy, which makes tests accidentally execute click-only branches.
+    fake.button.return_value = False
+
     # context manager-y things (st.spinner, st.sidebar, st.expander,
     # st.container) come for free from MagicMock.
     return fake

@@ -162,7 +162,7 @@ with load_col:
         "LOAD MARKET DATA",
         type="primary",
         key="tf_load_data",
-        use_container_width=True,
+        width="stretch",
     )
 
 if load_data:
@@ -380,7 +380,7 @@ with col_sectors:
             }
         ).map(_color_change, subset=["Change %", "YTD %"])
 
-        st.dataframe(styled_sector, hide_index=True, use_container_width=True)
+        st.dataframe(styled_sector, hide_index=True, width="stretch")
     else:
         st.info("Load market data to view sector heatmap")
 
@@ -435,7 +435,7 @@ with col_movers:
                 }
             ).map(_color_movers, subset=["Change %"])
 
-            st.dataframe(styled_movers, hide_index=True, use_container_width=True)
+            st.dataframe(styled_movers, hide_index=True, width="stretch")
     else:
         st.info("Load market data to view top movers")
 

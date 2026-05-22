@@ -492,7 +492,7 @@ if not account_df.empty:
             ]
         ],
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )
 
 render_section("AI Risk Digest")
@@ -639,7 +639,7 @@ with col_left:
                     "Beta": beta_str,
                 }
             )
-        st.dataframe(pd.DataFrame(risk_rows), hide_index=True, use_container_width=True)
+        st.dataframe(pd.DataFrame(risk_rows), hide_index=True, width="stretch")
 
 with col_right:
     st.markdown("**Sector Exposure**")

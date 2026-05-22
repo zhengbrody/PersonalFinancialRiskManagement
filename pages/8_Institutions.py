@@ -376,7 +376,7 @@ with tab_macro:
         ]
     )
 
-    st.dataframe(macro_df, hide_index=True, use_container_width=True)
+    st.dataframe(macro_df, hide_index=True, width="stretch")
     st.caption(
         "Cadence reflects publication frequency. Latest Date is the latest observation "
         "available from FRED, not a forecast. CPI/PCE/Michigan/Unemployment/Payrolls "
@@ -411,7 +411,7 @@ with tab_macro:
         yaxis_title="Index / Rate",
         legend_orientation="h",
     )
-    st.plotly_chart(fig_macro, use_container_width=True)
+    st.plotly_chart(fig_macro, width="stretch")
 
     with st.expander("How this feeds portfolio risk", expanded=False):
         st.markdown("""
@@ -448,86 +448,96 @@ with tab_smart:
         )
         _rescan = st.button(_scan_label, key="institutions_rescan", type="primary")
 
-        try:
-            cached_signals = st.session_state.get("smart_money_data")
-            if cached_signals and not _rescan:
-                signals = cached_signals
-            else:
-                with st.spinner("Scanning institutional 13F filings via SEC EDGAR..."):
-                    from institutional_tracker import get_smart_money_signals
+        cached_signals = st.session_state.get("smart_money_data")
+        signals = cached_signals if cached_signals and not _rescan else None
+        if signals is None and not _rescan:
+            st.info(
+                "Click **Scan 13F filings** to fetch SEC EDGAR positioning. "
+                "This is intentionally manual because the scan can make many SEC requests."
+            )
+        else:
+            try:
+                if _rescan or signals is None:
+                    with st.spinner("Scanning institutional 13F filings via SEC EDGAR..."):
+                        from institutional_tracker import get_smart_money_signals
 
-                    signals = get_smart_money_signals(portfolio_tickers)
-                st.session_state["smart_money_data"] = signals
+                        signals = get_smart_money_signals(portfolio_tickers)
+                    st.session_state["smart_money_data"] = signals
 
-            if not signals:
-                st.info(
-                    "No institutional signal data available. "
-                    "13F filings are updated quarterly -- data may not yet be cached. "
-                    "Try refreshing or check back later."
-                )
-            else:
-                # Summary strip using render_kpi_row
-                total = len(signals)
-                high_ct = sum(1 for s in signals if s["signal"] == "HIGH_CONVICTION")
-                mod_ct = sum(1 for s in signals if s["signal"] == "MODERATE")
-                low_ct = sum(1 for s in signals if s["signal"] == "LOW")
+                if not signals:
+                    st.info(
+                        "No institutional signal data available. "
+                        "13F filings are updated quarterly -- data may not yet be cached. "
+                        "Try refreshing or check back later."
+                    )
+                else:
+                    # Summary strip using render_kpi_row
+                    total = len(signals)
+                    high_ct = sum(1 for s in signals if s["signal"] == "HIGH_CONVICTION")
+                    mod_ct = sum(1 for s in signals if s["signal"] == "MODERATE")
+                    low_ct = sum(1 for s in signals if s["signal"] == "LOW")
 
-                render_kpi_row(
-                    [
-                        {"label": "Total Holdings", "value": str(total)},
-                        {
-                            "label": "High Conviction",
-                            "value": str(high_ct),
-                            "delta_color": "positive",
-                        },
-                        {"label": "Moderate", "value": str(mod_ct), "delta_color": "neutral"},
-                        {"label": "Low", "value": str(low_ct), "delta_color": "negative"},
-                    ]
-                )
-
-                # Sort by conviction descending (HIGH first)
-                conviction_order = {"HIGH_CONVICTION": 0, "MODERATE": 1, "LOW": 2}
-                signals_sorted = sorted(
-                    signals,
-                    key=lambda s: (conviction_order.get(s["signal"], 99), -s["num_institutions"]),
-                )
-
-                # Build dataframe for display
-                table_rows = []
-                for s in signals_sorted:
-                    top_holders_str = ", ".join(s.get("top_holders", [])[:3])
-                    if len(s.get("top_holders", [])) > 3:
-                        top_holders_str += f" +{len(s['top_holders']) - 3} more"
-
-                    crowding_pct = f"{s['crowding_score'] * 100:.0f}%"
-
-                    table_rows.append(
-                        {
-                            "Ticker": s["ticker"],
-                            "# Institutions": s["num_institutions"],
-                            "Crowding": crowding_pct,
-                            "Top Holders": top_holders_str,
-                            "Conviction": f"{_signal_emoji(s['signal'])} {_badge_text(s['signal'])}",
-                        }
+                    render_kpi_row(
+                        [
+                            {"label": "Total Holdings", "value": str(total)},
+                            {
+                                "label": "High Conviction",
+                                "value": str(high_ct),
+                                "delta_color": "positive",
+                            },
+                            {"label": "Moderate", "value": str(mod_ct), "delta_color": "neutral"},
+                            {"label": "Low", "value": str(low_ct), "delta_color": "negative"},
+                        ]
                     )
 
-                st.dataframe(
-                    pd.DataFrame(table_rows),
-                    hide_index=True,
-                    use_container_width=True,
-                )
+                    # Sort by conviction descending (HIGH first)
+                    conviction_order = {"HIGH_CONVICTION": 0, "MODERATE": 1, "LOW": 2}
+                    signals_sorted = sorted(
+                        signals,
+                        key=lambda s: (
+                            conviction_order.get(s["signal"], 99),
+                            -s["num_institutions"],
+                        ),
+                    )
 
-                # Legend
-                st.caption(
-                    "Conviction thresholds: HIGH = >10 of top 30 funds hold | "
-                    "MODERATE = 5-10 | LOW = <5.  "
-                    "Crowding = % of tracked institutions holding the stock.  "
-                    "Source: SEC EDGAR 13F filings (quarterly, cached 24h)."
-                )
+                    # Build dataframe for display
+                    table_rows = []
+                    for s in signals_sorted:
+                        top_holders_str = ", ".join(s.get("top_holders", [])[:3])
+                        if len(s.get("top_holders", [])) > 3:
+                            top_holders_str += f" +{len(s['top_holders']) - 3} more"
 
-        except Exception as exc:
-            st.error(f"Failed to load smart money signals: {exc}")
-            st.caption("Ensure SEC EDGAR is reachable. 13F data is fetched from data.sec.gov.")
+                        crowding_pct = f"{s['crowding_score'] * 100:.0f}%"
+
+                        table_rows.append(
+                            {
+                                "Ticker": s["ticker"],
+                                "# Institutions": s["num_institutions"],
+                                "Crowding": crowding_pct,
+                                "Top Holders": top_holders_str,
+                                "Conviction": (
+                                    f"{_signal_emoji(s['signal'])} {_badge_text(s['signal'])}"
+                                ),
+                            }
+                        )
+
+                    st.dataframe(
+                        pd.DataFrame(table_rows),
+                        hide_index=True,
+                        width="stretch",
+                    )
+
+                    # Legend
+                    st.caption(
+                        "Conviction thresholds: HIGH = >10 of top 30 funds hold | "
+                        "MODERATE = 5-10 | LOW = <5.  "
+                        "Crowding = % of tracked institutions holding the stock.  "
+                        "Source: SEC EDGAR 13F filings (quarterly, cached 24h)."
+                    )
+
+            except Exception as exc:
+                st.error(f"Failed to load smart money signals: {exc}")
+                st.caption("Ensure SEC EDGAR is reachable. 13F data is fetched from data.sec.gov.")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -670,7 +680,7 @@ with tab_deepdive:
                 st.dataframe(
                     pd.DataFrame(holdings_rows),
                     hide_index=True,
-                    use_container_width=True,
+                    width="stretch",
                 )
 
                 # Show QoQ changes detail in expander
@@ -699,7 +709,7 @@ with tab_deepdive:
                                 st.dataframe(
                                     pd.DataFrame(new_rows),
                                     hide_index=True,
-                                    use_container_width=True,
+                                    width="stretch",
                                 )
                             else:
                                 st.caption("No new positions this quarter.")
@@ -722,7 +732,7 @@ with tab_deepdive:
                                 st.dataframe(
                                     pd.DataFrame(exit_rows),
                                     hide_index=True,
-                                    use_container_width=True,
+                                    width="stretch",
                                 )
                             else:
                                 st.caption("No exited positions this quarter.")

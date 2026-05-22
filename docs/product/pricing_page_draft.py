@@ -61,7 +61,7 @@ def _plan_card(plan: str, description: str, best_for: str) -> None:
     if is_free:
         st.page_link("pages/0_Login.py", label="Start free")
     else:
-        st.button("Checkout disabled during beta", disabled=True, use_container_width=True)
+        st.button("Checkout disabled during beta", disabled=True, width="stretch")
 
 
 st.markdown(

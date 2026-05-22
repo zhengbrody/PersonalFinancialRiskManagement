@@ -192,7 +192,7 @@ if ef:
             cmp_data.append(row)
 
     cmp_sig = pd.DataFrame(cmp_data)
-    st.dataframe(cmp_sig, hide_index=True, use_container_width=True)
+    st.dataframe(cmp_sig, hide_index=True, width="stretch")
 
     # Grouped bar chart
     tickers_plot = [d["Ticker"] for d in cmp_data]
@@ -301,7 +301,7 @@ if ef:
                 }
             )
         if blotter_rows:
-            st.dataframe(pd.DataFrame(blotter_rows), hide_index=True, use_container_width=True)
+            st.dataframe(pd.DataFrame(blotter_rows), hide_index=True, width="stretch")
             render_ai_digest(
                 "The trade blotter shows the specific orders needed to move from your current allocation to the optimized target."
             )
@@ -317,9 +317,7 @@ render_section(t("briefing_title"), subtitle=t("briefing_caption"))
 
 brief_col, _ = st.columns([1, 3])
 with brief_col:
-    run_brief = st.button(
-        t("briefing_btn"), type="primary", key="run_briefing", use_container_width=True
-    )
+    run_brief = st.button(t("briefing_btn"), type="primary", key="run_briefing", width="stretch")
 
 if run_brief:
     from market_intelligence import (
@@ -532,7 +530,7 @@ if _scenario_market_move != 0:
                 "New Value ($)": f"${r['new_value']:,.0f}",
             }
         )
-    st.dataframe(pd.DataFrame(_table_data), hide_index=True, use_container_width=True)
+    st.dataframe(pd.DataFrame(_table_data), hide_index=True, width="stretch")
 
     # --- Waterfall chart ---
     _wf_tickers = [r["ticker"] for r in _scenario_rows_sorted]
@@ -593,7 +591,7 @@ if _scenario_market_move != 0:
                 "Custom Move (%)": st.column_config.NumberColumn(format="%.2f"),
             },
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
             key="scenario_override_editor",
         )
 
@@ -644,7 +642,7 @@ if _scenario_market_move != 0:
                 },
             ]
         )
-        st.dataframe(pd.DataFrame(_custom_rows), hide_index=True, use_container_width=True)
+        st.dataframe(pd.DataFrame(_custom_rows), hide_index=True, width="stretch")
 
     # --- AI Summary ---
     _top3_movers = ", ".join(
@@ -827,7 +825,7 @@ with render_section("Margin Monitor", collapsed=True):
                     "Status": status,
                 }
             )
-        st.dataframe(pd.DataFrame(scenarios_data), hide_index=True, use_container_width=True)
+        st.dataframe(pd.DataFrame(scenarios_data), hide_index=True, width="stretch")
     else:
         st.info(t("margin_no_data"))
 

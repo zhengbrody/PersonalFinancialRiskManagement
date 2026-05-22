@@ -120,7 +120,7 @@ with tab_login:
     if st.button(
         "🔵  Continue with Google",
         key="oauth_google_login",
-        use_container_width=True,
+        width="stretch",
     ):
         _start_oauth("google")
     st.caption("Or sign in with email below:")
@@ -138,7 +138,7 @@ with tab_login:
         submitted = st.form_submit_button(
             "Sign in",
             type="primary",
-            use_container_width=True,
+            width="stretch",
         )
     if submitted:
         if not email or not password:
@@ -180,7 +180,7 @@ with tab_signup:
     if st.button(
         "🔵  Continue with Google",
         key="oauth_google_signup",
-        use_container_width=True,
+        width="stretch",
     ):
         _start_oauth("google")
     st.caption("Or create an account with email + password:")
@@ -203,7 +203,7 @@ with tab_signup:
         submitted = st.form_submit_button(
             "Create account",
             type="primary",
-            use_container_width=True,
+            width="stretch",
         )
     if submitted:
         if not email or not password:

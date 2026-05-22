@@ -95,7 +95,7 @@ with load_col:
         "Refresh Market Data",
         type="primary",
         key="run_regime",
-        use_container_width=True,
+        width="stretch",
     )
 with refresh_col:
     if _needs_regime_load:
@@ -211,7 +211,7 @@ render_section(t("macro_news_title"))
 mnews_col, _ = st.columns([1, 3])
 with mnews_col:
     run_mnews = st.button(
-        t("macro_news_btn"), type="primary", key="run_macro_news", use_container_width=True
+        t("macro_news_btn"), type="primary", key="run_macro_news", width="stretch"
     )
 
 if run_mnews:
@@ -296,14 +296,14 @@ else:
         )
     with sent_col:
         run_sent = st.button(
-            t("sentiment_btn"), type="primary", key="run_sentiment", use_container_width=True
+            t("sentiment_btn"), type="primary", key="run_sentiment", width="stretch"
         )
     with reddit_col:
         _apify_key = os.environ.get("APIFY_API_KEY", "") or _safe_get_secret("APIFY_API_KEY")
         run_reddit = st.button(
             "Reddit FOMO",
             key="run_reddit",
-            use_container_width=True,
+            width="stretch",
             help=("Reddit sentiment covers equities + crypto via r/wallstreetbets and r/stocks"),
         )
 
@@ -497,7 +497,7 @@ else:
             )
         st.dataframe(
             pd.DataFrame(_rows),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             height=min(400, 40 + 35 * len(_rows)),
         )
@@ -603,7 +603,7 @@ if fund_data is not None and not fund_data.empty:
         fund_sorted = fund_data.loc[order].copy()
         fund_sorted.insert(0, "Weight", [f"{weights.get(tk, 0):.1%}" for tk in fund_sorted.index])
         display_df = format_fundamentals_for_display(fund_sorted)
-        st.dataframe(display_df, use_container_width=True, height=500)
+        st.dataframe(display_df, width="stretch", height=500)
 
 # Floating AI Assistant
 try:

@@ -185,11 +185,7 @@ def render_shared_sidebar():
         # use that; otherwise fall back to the hardcoded portfolio_config defaults.
         # See libs/auth/active_portfolio.py for the decision tree.
         try:
-            from libs.auth.active_portfolio import (
-                get_active_holdings,
-                get_active_margin_loan,
-                get_active_portfolio_meta,
-            )
+            from libs.auth.active_portfolio import get_active_portfolio_meta
 
             _active_meta = get_active_portfolio_meta()
         except Exception:
@@ -216,28 +212,14 @@ def render_shared_sidebar():
             st.button(
                 _run_label_live,
                 type="primary",
-                use_container_width=True,
+                width="stretch",
                 key="refresh_and_run",
                 disabled=_block_run,
             )
             and not _block_run
         ):
             try:
-                import importlib
-
-                import yfinance as yf
-
-                import portfolio_config as _pc
-
-                importlib.reload(_pc)
-                # Resolved at click-time so changes to user's DB portfolio
-                # picked up without restarting Streamlit.
-                try:
-                    PORTFOLIO_HOLDINGS = get_active_holdings()
-                    MARGIN_LOAN = get_active_margin_loan()
-                except Exception:
-                    PORTFOLIO_HOLDINGS = _pc.PORTFOLIO_HOLDINGS
-                    MARGIN_LOAN = _pc.MARGIN_LOAN
+                from libs.auth.portfolio_runtime import build_live_portfolio_payload
                 from logging_config import get_logger
 
                 logger = get_logger(__name__)
@@ -247,167 +229,26 @@ def render_shared_sidebar():
                     portfolio_name=_active_meta.get("name"),
                 )
 
-                def _shares(t):
-                    h = PORTFOLIO_HOLDINGS[t]
-                    return h["shares"] if isinstance(h, dict) else h
-
                 with st.spinner("Fetching live prices..."):
-                    tickers = list(PORTFOLIO_HOLDINGS.keys())
-                    data = yf.download(tickers, period="5d", progress=False)
-                    current_prices = {}
-                    for tk in tickers:
-                        try:
-                            if isinstance(data.columns, __import__("pandas").MultiIndex):
-                                if tk in data["Close"].columns:
-                                    price = data["Close"][tk].dropna().iloc[-1]
-                                    current_prices[tk] = float(price)
-                            else:
-                                price = data["Close"].dropna().iloc[-1]
-                                current_prices[tk] = float(price)
-                        except Exception:
-                            logger.warning("ui.refresh.price_missing", ticker=tk)
+                    payload = build_live_portfolio_payload(active_meta=_active_meta)
 
-                values = {t: _shares(t) * current_prices.get(t, 0) for t in tickers}
-                total_value = sum(values.values())
-
-                if total_value <= 0:
-                    st.error("Failed: could not fetch any prices")
-                else:
-                    live_weights = {t: v / total_value for t, v in values.items() if v > 0}
-                    net_equity = total_value - MARGIN_LOAN
-                    # Contributed-capital from portfolio_config is the dev's
-                    # principal. Only use it for the anonymous-demo source;
-                    # for real users we derive from holdings' avg_cost below
-                    # (Position P&L), and leave return-on-capital unset.
-                    if _active_meta.get("source") == "hardcoded":
-                        contributed_capital = getattr(
-                            _pc,
-                            "CONTRIBUTED_CAPITAL",
-                            getattr(_pc, "TOTAL_COST_BASIS", 0),
-                        )
-                    else:
-                        contributed_capital = 0
-                    return_on_capital_dollar = (
-                        net_equity - contributed_capital if contributed_capital > 0 else None
-                    )
-                    return_on_capital_pct = (
-                        (net_equity - contributed_capital) / contributed_capital
-                        if contributed_capital > 0
-                        else None
-                    )
-
-                    # Position-level P&L from avg_cost (works for both DB and
-                    # hardcoded sources because PORTFOLIO_HOLDINGS is the unified
-                    # shape now).
-                    position_pnl_dollar = None
-                    position_pnl_pct = None
-                    position_cost_info = None
-                    try:
-                        # Compute inline so we don't depend on portfolio_config's
-                        # `position_cost_summary` helper (which only sees the
-                        # hardcoded constants, not the user's DB rows).
-                        total_position_cost = 0.0
-                        tickers_with_cost = []
-                        for tk, h in PORTFOLIO_HOLDINGS.items():
-                            if isinstance(h, dict) and h.get("avg_cost") is not None:
-                                cost = float(h["shares"]) * float(h["avg_cost"])
-                                total_position_cost += cost
-                                tickers_with_cost.append(tk)
-                        if total_position_cost > 0:
-                            known = set(tickers_with_cost)
-                            covered_long = sum(v for tk, v in values.items() if tk in known)
-                            position_pnl_dollar = covered_long - total_position_cost
-                            position_pnl_pct = position_pnl_dollar / total_position_cost
-                            position_cost_info = {
-                                "total_position_cost": total_position_cost,
-                                "tickers_with_cost": tickers_with_cost,
-                                "coverage_by_value": (
-                                    covered_long / total_value if total_value > 0 else 0
-                                ),
-                            }
-                    except Exception:
-                        pass
-
-                    # Per-account breakdown.
-                    # _pc.ACCOUNTS + _pc.account_summary() iterate the dev's
-                    # hardcoded holdings, so we only use that path for the
-                    # anonymous demo. For DB-backed users, group by each
-                    # holding's "account" key.
-                    account_breakdown = {}
-                    try:
-                        if (
-                            _active_meta.get("source") == "hardcoded"
-                            and hasattr(_pc, "ACCOUNTS")
-                            and hasattr(_pc, "account_summary")
-                        ):
-                            for acct_name in _pc.ACCOUNTS:
-                                account_breakdown[acct_name] = _pc.account_summary(
-                                    acct_name, values
-                                )
-                        else:
-                            for tk, h in PORTFOLIO_HOLDINGS.items():
-                                if not isinstance(h, dict):
-                                    continue
-                                acct = h.get("account") or "default"
-                                bucket = account_breakdown.setdefault(
-                                    acct,
-                                    {
-                                        "total_long": 0.0,
-                                        "tickers": [],
-                                        "margin_loan": 0.0,
-                                    },
-                                )
-                                bucket["total_long"] += float(values.get(tk, 0.0))
-                                bucket["tickers"].append(tk)
-                            # Attribute the user's total margin loan to the
-                            # first account containing a margin-eligible
-                            # holding (single-loan model — keeps schema simple).
-                            if MARGIN_LOAN and account_breakdown:
-                                first_acct = next(iter(account_breakdown))
-                                account_breakdown[first_acct]["margin_loan"] = float(MARGIN_LOAN)
-                    except Exception:
-                        pass
-
-                    meta = {
-                        "portfolio_name": _active_meta.get("name"),
-                        "portfolio_source": _active_meta.get("source"),
-                        "portfolio_id": _active_meta.get("id"),
-                        "total_long": total_value,
-                        "net_equity": net_equity,
-                        "margin_loan": MARGIN_LOAN,
-                        "sector_map": _pc.build_sector_map(PORTFOLIO_HOLDINGS),
-                        "leverage": total_value / net_equity if net_equity > 0 else float("inf"),
-                        "missing": [t for t in tickers if t not in current_prices],
-                        "contributed_capital": contributed_capital,
-                        "return_on_capital_dollar": return_on_capital_dollar,
-                        "return_on_capital_pct": return_on_capital_pct,
-                        "position_pnl_dollar": position_pnl_dollar,
-                        "position_pnl_pct": position_pnl_pct,
-                        "position_cost_info": position_cost_info,
-                        "account_breakdown": account_breakdown,
-                        # Back-compat aliases
-                        "cost_basis": contributed_capital,
-                        "total_pnl": return_on_capital_dollar,
-                        "total_pnl_pct": return_on_capital_pct,
-                    }
-
-                    st.session_state.weights_json = json.dumps(live_weights, indent=2)
-                    st.session_state.weights_input = st.session_state.weights_json
-                    st.session_state._portfolio_meta = meta
-                    st.session_state.last_weights_json = None
-                    logger.info(
-                        "ui.refresh_and_run.success",
-                        ticker_count=len(live_weights),
-                        total_long=round(total_value, 2),
-                        net_equity=round(net_equity, 2),
-                    )
-                    _queue_analysis_and_route(force_refresh=True)
+                st.session_state.weights_json = payload.weights_json
+                st.session_state.weights_input = payload.weights_json
+                st.session_state._portfolio_meta = payload.meta
+                st.session_state.last_weights_json = None
+                logger.info(
+                    "ui.refresh_and_run.success",
+                    ticker_count=len(payload.weights),
+                    total_long=round(payload.meta["total_long"], 2),
+                    net_equity=round(payload.meta["net_equity"], 2),
+                )
+                _queue_analysis_and_route(force_refresh=True)
             except Exception as e:
                 st.error(f"Failed: {str(e)}")
 
         # Secondary "Run with current weights" — for when user edits JSON manually
         _run_label_current = "Run with Current Weights"
-        if st.button(_run_label_current, use_container_width=True, key="run_current_only"):
+        if st.button(_run_label_current, width="stretch", key="run_current_only"):
             _queue_analysis_and_route(force_refresh=False)
 
         # Force Refresh — bypasses cache regardless of whether any param changed.
@@ -416,7 +257,7 @@ def render_shared_sidebar():
         _force_label = "🔄 Force Refresh"
         if st.button(
             _force_label,
-            use_container_width=True,
+            width="stretch",
             key="force_refresh_btn",
             help="Invalidate the analysis cache and recompute from scratch.",
         ):
@@ -824,7 +665,7 @@ def render_shared_sidebar():
 
         # ── Quick Actions ─────────────────────────────────────────
         with st.expander("⚡ Quick Actions"):
-            if st.button("📋 Load Tech Portfolio", use_container_width=True):
+            if st.button("📋 Load Tech Portfolio", width="stretch"):
                 st.session_state.weights_json = json.dumps(
                     {
                         "AAPL": 0.20,
@@ -838,13 +679,13 @@ def render_shared_sidebar():
                 )
                 st.rerun()
 
-            if st.button("🛡️ Load Balanced Portfolio", use_container_width=True):
+            if st.button("🛡️ Load Balanced Portfolio", width="stretch"):
                 st.session_state.weights_json = json.dumps(
                     {"SPY": 0.40, "TLT": 0.20, "GLD": 0.15, "QQQ": 0.15, "IWM": 0.10}, indent=2
                 )
                 st.rerun()
 
-            if st.button("🔥 Clear Cache", use_container_width=True):
+            if st.button("🔥 Clear Cache", width="stretch"):
                 st.cache_data.clear()
                 st.cache_resource.clear()
                 st.success("Cache cleared!")

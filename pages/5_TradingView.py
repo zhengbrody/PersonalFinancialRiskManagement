@@ -292,7 +292,7 @@ with tab_ta:
                     )
 
             df = pd.DataFrame(rows)
-            st.dataframe(df, hide_index=True, use_container_width=True)
+            st.dataframe(df, hide_index=True, width="stretch")
 
             buys = sum(1 for r in rows if "BUY" in r.get("Signal", ""))
             sells = sum(1 for r in rows if "SELL" in r.get("Signal", ""))

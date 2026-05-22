@@ -156,9 +156,7 @@ def render_plotly(fig: go.Figure) -> None:
     )
     if fig.layout.polar and fig.layout.polar.bgcolor:
         fig.update_layout(polar=dict(bgcolor="rgba(0,0,0,0)"))
-    st.plotly_chart(
-        fig, use_container_width=True, theme="streamlit", config={"displayModeBar": False}
-    )
+    st.plotly_chart(fig, width="stretch", theme="streamlit", config={"displayModeBar": False})
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1849,18 +1847,28 @@ def execute_analysis(force: bool = False) -> bool:
     #
     #  Pure st.markdown(unsafe_allow_html=True) using design tokens — no
     #  new dependencies, no streamlit-components-v2. The "Get Started"
-    #  CTA just sets _auto_run and rerun()s, reusing the existing run path.
+    #  CTA prepares the same live portfolio payload as the sidebar run button,
+    #  then routes through the canonical analysis executor.
     # ══════════════════════════════════════════════════════════════
 
     def _render_landing() -> None:
         """First-impression hero + features + CTA for unauth visitors."""
+        try:
+            from libs.auth.active_portfolio import get_active_portfolio_meta
+
+            _landing_portfolio_source = get_active_portfolio_meta().get("source")
+        except Exception:
+            _landing_portfolio_source = None
+
         # Hero
         hero_title = "Institutional-grade portfolio risk, made accessible."
         hero_sub = (
             "Start with the question that matters: capital protection, risk drivers, "
             "allocation changes, or new ideas."
         )
-        cta_label = "Run Demo Portfolio"
+        cta_label = (
+            "Create Portfolio" if _landing_portfolio_source == "empty" else "Run Demo Portfolio"
+        )
         skip_label = "Skip to dashboard"
 
         st.markdown(
@@ -1976,13 +1984,27 @@ def execute_analysis(force: bool = False) -> bool:
         st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
         cta_col1, cta_col2, cta_col3 = st.columns([1, 1, 2])
         with cta_col1:
-            if st.button(cta_label, type="primary", use_container_width=True, key="landing_cta"):
-                st.session_state._auto_run = True
-                st.session_state._route_after_analysis = "pages/1_Overview.py"
-                st.session_state._skip_landing = True
-                st.rerun()
+            if st.button(cta_label, type="primary", width="stretch", key="landing_cta"):
+                if _landing_portfolio_source == "empty":
+                    st.switch_page("pages/0_Portfolios.py")
+                    return
+                try:
+                    from libs.auth.portfolio_runtime import build_live_portfolio_payload
+
+                    with st.spinner("Preparing live demo portfolio..."):
+                        payload = build_live_portfolio_payload()
+                    st.session_state.weights_json = payload.weights_json
+                    st.session_state.weights_input = payload.weights_json
+                    st.session_state._portfolio_meta = payload.meta
+                    st.session_state._run_trigger = True
+                    st.session_state._force_refresh = True
+                    st.session_state._route_after_analysis = "pages/1_Overview.py"
+                    st.session_state._skip_landing = True
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Could not prepare the portfolio: {exc}")
         with cta_col2:
-            if st.button(skip_label, use_container_width=True, key="landing_skip"):
+            if st.button(skip_label, width="stretch", key="landing_skip"):
                 st.session_state._skip_landing = True
                 st.rerun()
         with cta_col3:
@@ -2026,9 +2048,6 @@ def execute_analysis(force: bool = False) -> bool:
     # ══════════════════════════════════════════════════════════════
     #  Run Analysis
     # ══════════════════════════════════════════════════════════════
-    if st.session_state.pop("_auto_run", False):
-        run_btn = True
-
     if run_btn:
         import time
 
@@ -2350,7 +2369,7 @@ def _main_ui():
     # ══════════════════════════════════════════════════════════════
     def render_chat_popover(page_key: str = "home"):
         """Add a chat popover to the bottom of any page. Call from each page file."""
-        with st.popover("💬 AI Chat", use_container_width=False):
+        with st.popover("💬 AI Chat", width="content"):
             st.markdown("**AI Risk Analyst**")
             if st.session_state.get("analysis_ready"):
                 _input = st.text_input(

@@ -255,7 +255,7 @@ with tab_bt:
     run_backtest_btn = st.button(
         "Run Backtest",
         type="primary",
-        use_container_width=True,
+        width="stretch",
         key="bt_run",
     )
 
@@ -422,7 +422,7 @@ with tab_bt:
 
             _dark_layout(fig_eq, "Equity Curve", height=380)
             fig_eq.update_yaxes(tickprefix="$", tickformat=",")
-            st.plotly_chart(fig_eq, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(fig_eq, width="stretch", config={"displayModeBar": False})
 
         # -- Drawdown chart --
         if result.drawdown_series is not None:
@@ -439,7 +439,7 @@ with tab_bt:
             )
             _dark_layout(fig_dd, "Drawdown", height=220)
             fig_dd.update_yaxes(tickformat=".1%")
-            st.plotly_chart(fig_dd, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(fig_dd, width="stretch", config={"displayModeBar": False})
 
         # -- Monthly returns heatmap --
         if result.monthly_returns is not None and len(result.monthly_returns) > 2:
@@ -505,7 +505,7 @@ with tab_bt:
                     )
                 )
                 _dark_layout(fig_hm, "Monthly Returns", height=max(200, len(pivot) * 45 + 80))
-                st.plotly_chart(fig_hm, use_container_width=True, config={"displayModeBar": False})
+                st.plotly_chart(fig_hm, width="stretch", config={"displayModeBar": False})
 
             except Exception as e:
                 st.caption(f"Could not render monthly heatmap: {e}")
@@ -544,9 +544,7 @@ with tab_bt:
                         annotation_font_color=T.positive,
                     )
                     _dark_layout(fig_rs, "Rolling 252-day Sharpe Ratio", height=300)
-                    st.plotly_chart(
-                        fig_rs, use_container_width=True, config={"displayModeBar": False}
-                    )
+                    st.plotly_chart(fig_rs, width="stretch", config={"displayModeBar": False})
                 else:
                     st.caption("Insufficient data for 252-day rolling Sharpe.")
             except Exception as e:
@@ -584,7 +582,7 @@ with tab_attr:
         run_attr_btn = st.button(
             "Run Attribution Analysis",
             type="primary",
-            use_container_width=True,
+            width="stretch",
             key="attr_run",
         )
 
@@ -735,9 +733,7 @@ with tab_attr:
                     fig_brinson.update_layout(barmode="stack")
                     _dark_layout(fig_brinson, "Allocation / Selection / Interaction", height=280)
                     fig_brinson.update_yaxes(tickformat=".4f")
-                    st.plotly_chart(
-                        fig_brinson, use_container_width=True, config={"displayModeBar": False}
-                    )
+                    st.plotly_chart(fig_brinson, width="stretch", config={"displayModeBar": False})
 
                 # Per-sector breakdown table
                 sector_df = brinson.get("sector_detail")
@@ -776,7 +772,7 @@ with tab_attr:
                                 vmin=-0.01,
                                 vmax=0.01,
                             ),
-                            use_container_width=True,
+                            width="stretch",
                         )
 
             # -- Factor Attribution --
@@ -808,7 +804,7 @@ with tab_attr:
                                     "Contribution (ann.)": "{:+.6f}",
                                 }
                             ),
-                            use_container_width=True,
+                            width="stretch",
                         )
 
                     # Pie chart: return decomposition
@@ -850,9 +846,7 @@ with tab_attr:
                             ]
                         )
                         _dark_layout(fig_pie, "Return Decomposition", height=360)
-                        st.plotly_chart(
-                            fig_pie, use_container_width=True, config={"displayModeBar": False}
-                        )
+                        st.plotly_chart(fig_pie, width="stretch", config={"displayModeBar": False})
 
 
 # ══════════════════════════════════════════════════════════════
@@ -870,7 +864,7 @@ with tab_regime:
     run_regime_btn = st.button(
         "Detect Current Regime",
         type="primary",
-        use_container_width=True,
+        width="stretch",
         key="regime_run",
     )
 
@@ -994,9 +988,7 @@ with tab_regime:
                     yaxis=dict(visible=False),
                     bargap=0,
                 )
-                st.plotly_chart(
-                    fig_hist, use_container_width=True, config={"displayModeBar": False}
-                )
+                st.plotly_chart(fig_hist, width="stretch", config={"displayModeBar": False})
 
             except Exception as e:
                 st.caption(f"Could not render regime history chart: {e}")
@@ -1063,7 +1055,7 @@ with tab_regime:
                         )
 
                 stats_df = pd.DataFrame(stats_rows).set_index("Regime")
-                st.dataframe(stats_df, use_container_width=True)
+                st.dataframe(stats_df, width="stretch")
 
             except Exception as e:
                 st.caption(f"Could not compute regime statistics: {e}")
@@ -1106,9 +1098,7 @@ with tab_regime:
                     _dark_layout(fig_tm, "Transition Probabilities (HMM Regimes)", height=320)
                     fig_tm.update_xaxes(title="To Regime")
                     fig_tm.update_yaxes(title="From Regime")
-                    st.plotly_chart(
-                        fig_tm, use_container_width=True, config={"displayModeBar": False}
-                    )
+                    st.plotly_chart(fig_tm, width="stretch", config={"displayModeBar": False})
 
             except Exception as e:
                 st.caption(f"Could not render transition matrix: {e}")

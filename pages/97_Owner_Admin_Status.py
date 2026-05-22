@@ -48,7 +48,7 @@ def _render_status_rows(statuses: list[IntegrationStatus]) -> None:
         }
         for item in statuses
     ]
-    st.dataframe(rows, use_container_width=True, hide_index=True)
+    st.dataframe(rows, width="stretch", hide_index=True)
 
 
 def _usage_client():
@@ -175,7 +175,7 @@ def _render_usage_dashboard() -> None:
         .sort_values("date")
     )
     st.markdown("#### Daily cost trend")
-    st.bar_chart(by_day.set_index("date")["cost_usd"], use_container_width=True)
+    st.bar_chart(by_day.set_index("date")["cost_usd"], width="stretch")
 
     by_status = (
         df.groupby(["kind", "status"], dropna=False)
@@ -185,7 +185,7 @@ def _render_usage_dashboard() -> None:
     )
     by_status["cost_usd"] = by_status["cost_usd"].map(lambda x: round(float(x), 6))
     st.markdown("#### Success / failure")
-    st.dataframe(by_status, use_container_width=True, hide_index=True)
+    st.dataframe(by_status, width="stretch", hide_index=True)
 
     by_kind = (
         df.groupby("kind", dropna=False)
@@ -200,7 +200,7 @@ def _render_usage_dashboard() -> None:
     )
     by_kind["cost_usd"] = by_kind["cost_usd"].map(lambda x: round(float(x), 6))
     st.markdown("#### By feature")
-    st.dataframe(by_kind, use_container_width=True, hide_index=True)
+    st.dataframe(by_kind, width="stretch", hide_index=True)
 
     by_user = (
         df.groupby(["email", "plan"], dropna=False)
@@ -216,7 +216,7 @@ def _render_usage_dashboard() -> None:
     )
     by_user["cost_usd"] = by_user["cost_usd"].map(lambda x: round(float(x), 6))
     st.markdown("#### Top users")
-    st.dataframe(by_user, use_container_width=True, hide_index=True)
+    st.dataframe(by_user, width="stretch", hide_index=True)
 
     recent = df[
         [
@@ -234,7 +234,7 @@ def _render_usage_dashboard() -> None:
     ].head(50)
     recent["cost_usd"] = recent["cost_usd"].map(lambda x: round(float(x), 6))
     st.markdown("#### Recent events")
-    st.dataframe(recent, use_container_width=True, hide_index=True)
+    st.dataframe(recent, width="stretch", hide_index=True)
 
 
 def _budget_from_env(name: str, default: float) -> float:
@@ -295,19 +295,19 @@ def _render_ai_cost_dashboard() -> None:
     with col_a:
         st.markdown("#### By provider")
         if summary["by_provider"]:
-            st.dataframe(summary["by_provider"], use_container_width=True, hide_index=True)
+            st.dataframe(summary["by_provider"], width="stretch", hide_index=True)
         else:
             st.caption("No data this month.")
     with col_b:
         st.markdown("#### By model")
         if summary["by_model"]:
-            st.dataframe(summary["by_model"], use_container_width=True, hide_index=True)
+            st.dataframe(summary["by_model"], width="stretch", hide_index=True)
         else:
             st.caption("No data this month.")
 
     st.markdown("#### Top pages / features (this month)")
     if summary["by_page"]:
-        st.dataframe(summary["by_page"], use_container_width=True, hide_index=True)
+        st.dataframe(summary["by_page"], width="stretch", hide_index=True)
     else:
         st.caption("No page attribution available.")
 
@@ -321,7 +321,7 @@ def _render_ai_cost_dashboard() -> None:
             }
             for r in summary["recent_failures"]
         ]
-        st.dataframe(rows_view, use_container_width=True, hide_index=True)
+        st.dataframe(rows_view, width="stretch", hide_index=True)
     else:
         st.caption("No failures in the last 7 days.")
 

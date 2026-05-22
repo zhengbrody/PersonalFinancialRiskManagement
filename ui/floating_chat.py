@@ -850,7 +850,7 @@ def _open_chat_dialog():
         cols = st.columns(2)
         for idx, suggestion in enumerate(_SUGGESTION_PROMPTS):
             with cols[idx % 2]:
-                if st.button(suggestion, key=f"_fc_sug_{idx}", use_container_width=True):
+                if st.button(suggestion, key=f"_fc_sug_{idx}", width="stretch"):
                     _handle_user_input(suggestion, chat_container)
 
     user_input = st.chat_input(

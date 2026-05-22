@@ -279,7 +279,7 @@ def render_chart(fig: go.Figure, insight: str = None, height: int = None):
 
     st.plotly_chart(
         fig,
-        use_container_width=True,
+        width="stretch",
         theme="streamlit",
         config={"displayModeBar": False},
     )
@@ -962,7 +962,7 @@ def render_analyst_report(report: dict, ticker: str, current_price: float = None
                 }
             ),
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
         )
 
     # ── Valuation table ──────────────────────────────────────
@@ -991,7 +991,7 @@ def render_analyst_report(report: dict, ticker: str, current_price: float = None
                 }
             ),
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
         )
 
     # ── Investment thesis (bull/base/bear) ────────────────────
@@ -1055,7 +1055,7 @@ def render_analyst_report(report: dict, ticker: str, current_price: float = None
                 }
             ),
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
         )
 
     # ── Street consensus diff ────────────────────────────────
