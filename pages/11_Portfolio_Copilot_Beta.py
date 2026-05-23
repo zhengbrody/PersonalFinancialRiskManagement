@@ -34,16 +34,15 @@ from ui.tokens import T
 def _user_positions_from_session() -> list[AssetPosition] | None:
     """Build the user's real portfolio as ``AssetPosition`` records.
 
-    Reads holdings from the active-portfolio resolver and live prices from
-    ``st.session_state["prices"]`` (populated by the main Run Analysis flow).
-    Never reads ``portfolio_config.PORTFOLIO_HOLDINGS`` directly here:
-    authenticated users must see their own portfolio, not the owner's default.
+    Thin wrapper over the shared :func:`build_user_positions` so this
+    page and the Overview hero render the same score. Always uses
+    ``get_active_holdings()`` (per-user DB row or signed-out fallback)
+    — never reads ``portfolio_config.PORTFOLIO_HOLDINGS`` directly, to
+    avoid leaking the owner's portfolio to fresh authenticated users.
     """
     if not st.session_state.get("analysis_ready"):
         return None
     prices = st.session_state.get("prices")
-    if prices is None or getattr(prices, "empty", True):
-        return None
 
     try:
         from libs.auth.active_portfolio import get_active_holdings
@@ -54,36 +53,13 @@ def _user_positions_from_session() -> list[AssetPosition] | None:
     if not active_holdings:
         return None
 
-    positions: list[AssetPosition] = []
-    for ticker, h in active_holdings.items():
-        if not isinstance(h, dict):
-            continue
-        shares = float(h.get("shares", 0) or 0)
-        if shares <= 0:
-            continue
-        if ticker not in prices.columns:
-            continue
-        series = prices[ticker].dropna()
-        if series.empty:
-            continue
-        last_price = float(series.iloc[-1])
-        if not np.isfinite(last_price) or last_price <= 0:
-            continue
-        market_value = shares * last_price
-        avg_cost = h.get("avg_cost")
-        cost_basis = float(shares) * float(avg_cost) if avg_cost not in (None, 0, 0.0) else 0.0
-        asset_type_raw = str(h.get("asset_type") or _infer_asset_type(ticker))
-        ap_type = "crypto" if asset_type_raw == "crypto" else "public_security"
-        positions.append(
-            AssetPosition(
-                ticker=ticker,
-                name=ticker,
-                asset_type=ap_type,
-                market_value=market_value,
-                cost_basis=cost_basis,
-                source="brokerage",
-            )
-        )
+    from libs.mindmarket_core.session_loader import build_user_positions
+
+    positions = build_user_positions(
+        active_holdings,
+        prices,
+        infer_asset_type=_infer_asset_type,
+    )
     return positions or None
 
 

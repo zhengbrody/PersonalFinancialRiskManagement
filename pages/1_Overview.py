@@ -354,6 +354,206 @@ _leverage_display = (
     f"{_leverage:.2f}x" if _leverage is not None and _leverage != float("inf") else "∞"
 )
 
+
+# ─────────────────────────────────────────────────────────────────────
+# Portfolio Health Score — hero block (PortfolioPilot-style).
+# ─────────────────────────────────────────────────────────────────────
+# This is the *only* number we want a brand-new user to see first. Drop
+# the wall of KPIs further down the page; lead with one big number, a
+# story sentence, and three things they can click on next.
+def _render_health_hero(report_obj, weight_map, current_prices) -> bool:
+    """Render the 0-1000 portfolio score + 3 dimension cards + 3 actions.
+
+    Returns True if the hero rendered successfully. Returns False when
+    the score engine can't run (no prices / no positions), in which
+    case the existing detailed KPIs below still show.
+    """
+    try:
+        from engine import score_portfolio
+        from libs.auth.active_portfolio import get_active_holdings
+        from libs.mindmarket_core.session_loader import (
+            build_user_positions,
+            returns_from_prices,
+        )
+    except Exception:
+        return False
+
+    try:
+        active_holdings = get_active_holdings() or {}
+    except Exception:
+        active_holdings = {}
+    if not active_holdings:
+        return False
+
+    try:
+        import portfolio_config as _pc_local
+
+        positions = build_user_positions(
+            active_holdings,
+            current_prices,
+            infer_asset_type=_pc_local._infer_asset_type,
+        )
+    except Exception:
+        return False
+    if not positions:
+        return False
+
+    asset_returns = returns_from_prices(current_prices)
+    if asset_returns.empty:
+        return False
+    benchmark = asset_returns["SPY"] if "SPY" in asset_returns.columns else None
+
+    risk_pref = int(st.session_state.get("copilot_risk_preference", 3))
+    try:
+        score = score_portfolio(
+            positions,
+            asset_returns,
+            benchmark_returns=benchmark,
+            risk_preference=risk_pref,
+            risk_free_rate=float(report_obj.risk_free_rate or 0.045),
+        )
+    except Exception:
+        return False
+
+    # ── Big number + 3 dimension cards ───────────────────────────────
+    score_value = int(score.overall_score)
+    if score_value >= 800:
+        score_color = T.positive
+        score_status = "Excellent"
+    elif score_value >= 600:
+        score_color = T.accent
+        score_status = "Good"
+    elif score_value >= 400:
+        score_color = T.warning
+        score_status = "Needs Work"
+    else:
+        score_color = T.negative
+        score_status = "Poor"
+
+    hero_cols = st.columns([1, 2])
+    with hero_cols[0]:
+        st.markdown(
+            f"""
+<div style="background:{T.surface};border:1px solid {T.border_subtle};
+            border-radius:{T.radius_lg};padding:{T.sp_lg};text-align:center;">
+  <div style="{T.font_overline};color:{T.text_secondary};">Portfolio Health Score</div>
+  <div style="font-size:84px;line-height:1;font-weight:800;color:{score_color};margin:{T.sp_md} 0 0 0;">
+    {score_value}
+  </div>
+  <div style="{T.font_caption};color:{T.text_secondary};margin-top:{T.sp_xs};">
+    out of 1000 · {score_status}
+  </div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
+    with hero_cols[1]:
+        dim_cols = st.columns(3)
+        for col, (key, dim) in zip(dim_cols, score.dimensions.items()):
+            if dim.status == "Excellent":
+                accent = T.positive
+            elif dim.status == "Good":
+                accent = T.accent
+            elif dim.status == "Needs Work":
+                accent = T.warning
+            else:
+                accent = T.negative
+            with col:
+                st.markdown(
+                    f"""
+<div style="background:{T.surface};border:1px solid {T.border_subtle};
+            border-radius:{T.radius_lg};padding:{T.sp_md};min-height:148px;">
+  <div style="{T.font_overline};color:{accent};">{dim.name}</div>
+  <div style="font-size:32px;font-weight:700;color:{T.text};margin-top:{T.sp_xs};">
+    {int(dim.score)}
+    <span style="{T.font_caption};color:{T.text_secondary};font-weight:500;"> / 1000</span>
+  </div>
+  <div style="{T.font_caption};color:{T.text_secondary};margin-top:{T.sp_sm};line-height:1.45;">
+    {dim.detail}
+  </div>
+</div>
+""",
+                    unsafe_allow_html=True,
+                )
+
+    # ── One-sentence AI summary (cached) ─────────────────────────────
+    weakest = min(
+        score.dimensions.values(),
+        key=lambda d: d.score,
+    )
+    summary_prompt = (
+        "Write ONE sentence (≤ 28 words, no preamble, no markdown) summarizing "
+        "this portfolio for a retail investor. Highlight the weakest dimension "
+        "and what the next action should be. Facts:\n"
+        f"- Overall score: {score_value}/1000 ({score_status})\n"
+        f"- Risk Match: {int(score.dimensions['risk_match'].score)}/1000\n"
+        f"- Risk-Adjusted Return: {int(score.dimensions['risk_adjusted_return'].score)}/1000\n"
+        f"- Downside Protection: {int(score.dimensions['downside_protection'].score)}/1000\n"
+        f"- Weakest dimension: {weakest.name} — {weakest.detail}"
+    )
+    try:
+        one_liner = cached_digest(
+            "overview_health_hero",
+            prompt=summary_prompt,
+            max_tokens=120,
+            temperature=0.2,
+            invalidate_on=(score_value, weakest.name, int(weakest.score)),
+        )
+    except Exception:
+        one_liner = (
+            f"Your portfolio scores {score_value}/1000 with the weakest area "
+            f"being {weakest.name.lower()} — focus on that first."
+        )
+
+    st.markdown(
+        f"""
+<div style="background:{T.surface};border-left:3px solid {score_color};
+            padding:{T.sp_md} {T.sp_lg};margin-top:{T.sp_md};border-radius:{T.radius};
+            color:{T.text};{T.font_body};line-height:1.55;">
+  {one_liner}
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    # ── 3 action cards ───────────────────────────────────────────────
+    st.markdown(
+        f'<div style="{T.font_overline};color:{T.text_secondary};margin-top:{T.sp_lg};">'
+        "Suggested next steps"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+    act_cols = st.columns(3)
+    with act_cols[0]:
+        st.page_link(
+            "pages/11_Portfolio_Copilot_Beta.py",
+            label="🤖  Ask the AI Copilot",
+            width="stretch",
+        )
+    with act_cols[1]:
+        st.page_link(
+            "pages/2_Risk.py",
+            label="📉  Inspect risk breakdown",
+            width="stretch",
+        )
+    with act_cols[2]:
+        st.page_link(
+            "pages/4_Portfolio.py",
+            label="⚙️  Optimize allocation",
+            width="stretch",
+        )
+    st.markdown("---")
+    return True
+
+
+_hero_rendered = _render_health_hero(report, weights, prices)
+
+
+# Original detail KPIs — keep them, but collapse to "Details" when the
+# hero has already given the user the headline.
+_kpi_section_open = not _hero_rendered
+
 render_section(
     "Executive Snapshot",
     ("Six numbers first. Everything else should explain or support these."),
