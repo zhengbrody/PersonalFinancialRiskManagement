@@ -24,7 +24,18 @@ from ui.shared_sidebar import render_shared_sidebar
 
 # ── Shared sidebar ────────────────────────────────────────────
 render_shared_sidebar()
-require_auth_page("Macro & Institutions")
+require_auth_page(
+    "Macro & Institutions",
+    description=(
+        "Macro context and institutional-positioning tools for validating "
+        "portfolio exposures against rates, releases, and smart-money flows."
+    ),
+    features=[
+        "Track macro releases, rates context, and market backdrop.",
+        "Review institutional ownership and 13F-style signals.",
+        "Use macro and positioning evidence before increasing exposure.",
+    ],
+)
 
 lang = st.session_state.get("_lang", "en")
 t = get_translator(lang)

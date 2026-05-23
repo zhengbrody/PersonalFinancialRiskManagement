@@ -28,7 +28,18 @@ from ui.tokens import T
 
 # ── Shared sidebar ────────────────────────────────────────────
 render_shared_sidebar()
-require_auth_page("Ticker Research")
+require_auth_page(
+    "Ticker Research",
+    description=(
+        "Single-name research for fundamentals, valuation, technical context, "
+        "institutional signals, and AI-assisted investment summaries."
+    ),
+    features=[
+        "Research any ticker before adding it to a portfolio.",
+        "Review fundamentals, valuation, technicals, and price-target context.",
+        "Generate an institutional-style analyst report from server-managed data.",
+    ],
+)
 lang = st.session_state.get("_lang", "en")
 t = get_translator(lang)
 

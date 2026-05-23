@@ -46,7 +46,19 @@ def _active_margin_loan() -> float:
 
 
 render_shared_sidebar()
-require_auth_page("Portfolio Actions")
+require_auth_page(
+    "Portfolio Actions",
+    description=(
+        "Optimization and action tools for an existing portfolio: efficient "
+        "frontier, scenario simulator, margin monitoring, compliance checks, "
+        "and draft trade ideas."
+    ),
+    features=[
+        "Compare current weights against risk-adjusted alternatives.",
+        "Run downside and upside scenarios before changing positions.",
+        "Review margin exposure, concentration, and proposed actions.",
+    ],
+)
 
 # ── Guard ────────────────────────────────────────────────────
 if not st.session_state.get("analysis_ready"):

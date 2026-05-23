@@ -20,7 +20,18 @@ from ui.shared_sidebar import render_shared_sidebar
 
 # ── Shared sidebar ─────────────────────────────────────────
 render_shared_sidebar()
-require_auth_page("Trading Floor")
+require_auth_page(
+    "Trading Floor",
+    description=(
+        "A trading-desk style monitor for market regime, sector signals, "
+        "portfolio context, and the next most relevant workflow."
+    ),
+    features=[
+        "Read market regime and risk-on/risk-off conditions.",
+        "Connect market signals to your active portfolio exposures.",
+        "Route quickly into Risk, Markets, or Ticker Research based on evidence.",
+    ],
+)
 
 lang = st.session_state.get("_lang", "en")
 t = get_translator(lang)

@@ -114,12 +114,14 @@ def _render_custom_navigation() -> None:
             if "97_Owner_Admin_Status.py" in path and not show_owner:
                 continue
             requires_auth = path in _AUTH_REQUIRED_NAV_PATHS
-            locked = requires_auth and not is_signed_in
             st.page_link(
                 path,
                 label=label,
-                disabled=locked,
-                help="Sign in to unlock this tool." if locked else None,
+                help=(
+                    "Open the feature overview. Sign in to run this workflow."
+                    if requires_auth and not is_signed_in
+                    else None
+                ),
             )
 
 

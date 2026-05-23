@@ -24,10 +24,19 @@ def test_require_auth_page_stops_for_anonymous_user(guards_module):
     module, fake_st = guards_module
 
     with pytest.raises(RuntimeError, match="streamlit stopped"):
-        module.require_auth_page("Ticker Research")
+        module.require_auth_page(
+            "Ticker Research",
+            description="Single-name research.",
+            features=["Review fundamentals.", "Generate an analyst report."],
+        )
 
-    fake_st.warning.assert_called_once_with("Sign in to access Ticker Research.")
-    fake_st.page_link.assert_called_once_with("pages/0_Login.py", label="Go to Login")
+    fake_st.markdown.assert_any_call("## Ticker Research")
+    fake_st.write.assert_called_once_with("Single-name research.")
+    fake_st.markdown.assert_any_call("### What you can do after signing in")
+    fake_st.markdown.assert_any_call("- Review fundamentals.")
+    fake_st.markdown.assert_any_call("- Generate an analyst report.")
+    fake_st.info.assert_called_once()
+    fake_st.page_link.assert_called_once_with("pages/0_Login.py", label="Sign in to continue")
     fake_st.stop.assert_called_once()
 
 
@@ -37,6 +46,6 @@ def test_require_auth_page_allows_signed_in_user(guards_module):
 
     module.require_auth_page("Ticker Research")
 
-    fake_st.warning.assert_not_called()
+    fake_st.info.assert_not_called()
     fake_st.page_link.assert_not_called()
     fake_st.stop.assert_not_called()

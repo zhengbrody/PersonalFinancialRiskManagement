@@ -440,7 +440,19 @@ def _render_scoring_panel(score: PortfolioScore, source_label: str) -> None:
 
 
 render_shared_sidebar()
-require_auth_page("AI Portfolio Copilot Beta")
+require_auth_page(
+    "AI Portfolio Copilot Beta",
+    description=(
+        "A portfolio workbench that combines deterministic quant scoring, "
+        "draft portfolio changes, and lightweight AI assistance for your own "
+        "holdings."
+    ),
+    features=[
+        "Score your portfolio across concentration, diversification, and risk dimensions.",
+        "Draft sandbox allocations before committing changes.",
+        "Ask a portfolio-aware assistant about tradeoffs and next actions.",
+    ],
+)
 _inject_css()
 
 st.markdown("## AI Portfolio Copilot Beta")

@@ -20,7 +20,18 @@ from ui.tokens import T
 
 # ── Shared sidebar ─────────────────────────────────────────
 lang, t = render_shared_sidebar()
-require_auth_page("Quant Lab")
+require_auth_page(
+    "Quant Lab",
+    description=(
+        "A quantitative research workspace for backtesting, attribution, "
+        "regime analysis, and risk-adjusted performance diagnostics."
+    ),
+    features=[
+        "Analyze Sharpe, drawdown, volatility, and return quality.",
+        "Break down performance attribution by factor and position.",
+        "Study behavior across market regimes and historical periods.",
+    ],
+)
 
 # ── Page config ────────────────────────────────────────────
 st.markdown(

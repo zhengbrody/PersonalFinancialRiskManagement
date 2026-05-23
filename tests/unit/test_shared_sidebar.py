@@ -58,17 +58,20 @@ def test_public_navigation_excludes_pricing(sidebar_module):
     assert all("pricing" not in path.lower() for path, _label in nav_items)
 
 
-def test_public_navigation_locks_auth_required_tools_until_login(sidebar_module):
+def test_public_navigation_keeps_auth_required_tools_clickable_until_login(sidebar_module):
     module, fake_st = sidebar_module
 
     module._render_custom_navigation()
 
-    locked_paths = {
-        call.args[0]
+    auth_calls = [
+        call
         for call in fake_st.page_link.call_args_list
-        if call.kwargs.get("disabled") is True
-    }
-    assert module._AUTH_REQUIRED_NAV_PATHS.issubset(locked_paths)
+        if call.args and call.args[0] in module._AUTH_REQUIRED_NAV_PATHS
+    ]
+    disabled_paths = {call.args[0] for call in auth_calls if call.kwargs.get("disabled") is True}
+    preview_paths = {call.args[0] for call in auth_calls if call.kwargs.get("help")}
+    assert module._AUTH_REQUIRED_NAV_PATHS.isdisjoint(disabled_paths)
+    assert module._AUTH_REQUIRED_NAV_PATHS.issubset(preview_paths)
 
 
 def test_signed_in_navigation_unlocks_auth_required_tools(sidebar_module):
