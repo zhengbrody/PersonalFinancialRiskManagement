@@ -103,6 +103,47 @@ def create_checkout_session(
     return CheckoutResult(url=url, session_id=session_id)
 
 
+def create_customer_portal_session(
+    *,
+    stripe_customer_id: str,
+    return_path: str = "/Settings",
+) -> str:
+    """Return a one-time URL into the Stripe Customer Portal.
+
+    The portal is Stripe's own hosted page where users update payment
+    methods, view invoices, switch plans, or cancel — we don't need to
+    build any of those flows ourselves. We just hand them the URL.
+
+    Args:
+        stripe_customer_id: Looked up from public.subscriptions for the
+            current user. Returns 4xx from Stripe if the customer no
+            longer exists (e.g. test data cleared); the caller should
+            surface that as a friendly error.
+        return_path: Where to send the user after they close the portal.
+            Relative to MINDMARKET_APP_URL.
+    """
+    secret_key = _read_secret("STRIPE_SECRET_KEY")
+    if not secret_key:
+        raise StripeConfigError("Missing STRIPE_SECRET_KEY.")
+
+    try:
+        import stripe
+    except ImportError as e:
+        raise StripeConfigError("stripe package not installed.") from e
+
+    stripe.api_key = secret_key
+    base = _app_url()
+
+    session = stripe.billing_portal.Session.create(
+        customer=stripe_customer_id,
+        return_url=f"{base}{return_path}",
+    )
+    url = getattr(session, "url", None) or session.get("url")
+    if not url:
+        raise StripeConfigError("Stripe did not return a portal URL.")
+    return str(url)
+
+
 def paid_plan_cards() -> list[dict]:
     """Return pricing metadata for UI rendering."""
     return [

@@ -173,6 +173,32 @@ def get_user_plan(user_id: str) -> str:
     return "free"
 
 
+def get_subscription_record(user_id: str) -> dict[str, Any] | None:
+    """Return the user's Stripe subscription row, or None if they're on
+    the implicit free tier (never paid → never had a subscription row).
+
+    Shape mirrors the public.subscriptions table:
+      stripe_customer_id, stripe_subscription_id, plan, status,
+      current_period_start, current_period_end, cancel_at_period_end.
+    """
+    try:
+        resp = (
+            _client()
+            .table("subscriptions")
+            .select(
+                "stripe_customer_id, stripe_subscription_id, plan, status, "
+                "current_period_start, current_period_end, cancel_at_period_end"
+            )
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        rows = resp.data or []
+        return rows[0] if rows else None
+    except Exception:
+        return None
+
+
 def get_cost_since(user_id: str, since_iso: str) -> float:
     """Return summed usage_events.cost_usd since an ISO timestamp.
 

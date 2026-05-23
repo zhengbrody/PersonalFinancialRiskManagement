@@ -58,6 +58,12 @@ _NAV_GROUPS = [
         ],
     ),
     (
+        "Account",
+        [
+            ("pages/12_Settings.py", "Settings"),
+        ],
+    ),
+    (
         "System",
         [
             ("pages/97_Owner_Admin_Status.py", "Owner Admin Status"),
@@ -73,6 +79,7 @@ _AUTH_REQUIRED_NAV_PATHS = {
     "pages/8_Institutions.py",
     "pages/9_Quant_Lab.py",
     "pages/10_Ticker_Research.py",
+    "pages/12_Settings.py",
 }
 
 
