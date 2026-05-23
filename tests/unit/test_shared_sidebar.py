@@ -49,13 +49,12 @@ def test_queue_analysis_force_refresh_falls_back_to_rerun(sidebar_module):
     fake_st.rerun.assert_called_once()
 
 
-def test_public_navigation_excludes_pricing(sidebar_module):
+def test_public_navigation_includes_pricing(sidebar_module):
     module, _fake_st = sidebar_module
 
     nav_items = [item for _group, items in module._NAV_GROUPS for item in items]
 
-    assert all("Pricing" not in label for _path, label in nav_items)
-    assert all("pricing" not in path.lower() for path, _label in nav_items)
+    assert ("pages/11_Pricing.py", "Pricing") in nav_items
 
 
 def test_public_navigation_keeps_auth_required_tools_clickable_until_login(sidebar_module):

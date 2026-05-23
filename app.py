@@ -41,7 +41,7 @@ logger = get_logger(__name__)
 def _remove_retired_public_pages() -> None:
     """Delete retired Streamlit pages that may linger on long-lived deploy hosts."""
     pages_dir = Path(__file__).resolve().parent / "pages"
-    retired_pages = ("11_Pricing.py",)
+    retired_pages: tuple[str, ...] = ()
     for filename in retired_pages:
         page_path = pages_dir / filename
         if page_path.exists():
