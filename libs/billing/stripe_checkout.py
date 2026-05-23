@@ -117,7 +117,7 @@ def paid_plan_cards() -> list[dict]:
             "plan": "pro",
             "label": PLAN_PRICING["pro"]["label"],
             "price": PLAN_PRICING["pro"]["price_usd_per_month"],
-            "analysis": 150,
-            "chat": 500,
+            "analysis": 100,
+            "chat": 300,
         },
     ]

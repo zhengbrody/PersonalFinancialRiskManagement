@@ -68,7 +68,7 @@ def test_pricing_matches_plan_keys():
     assert set(PLAN_PRICING.keys()) == set(PLAN_LIMITS.keys())
     assert PLAN_PRICING["free"]["price_usd_per_month"] == 0
     assert PLAN_PRICING["basic"]["price_usd_per_month"] == 10
-    assert PLAN_PRICING["pro"]["price_usd_per_month"] == 29
+    assert PLAN_PRICING["pro"]["price_usd_per_month"] == 25
 
 
 def test_billing_migration_does_not_allow_client_plan_updates():

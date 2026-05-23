@@ -28,8 +28,8 @@ PLAN_LIMITS: dict[str, dict[str, Optional[int]]] = {
         "tool_call": None,
     },
     "pro": {
-        "analysis": 150,
-        "chat": 500,
+        "analysis": 100,
+        "chat": 300,
         "tool_call": None,
     },
     "owner": {
@@ -42,7 +42,7 @@ PLAN_LIMITS: dict[str, dict[str, Optional[int]]] = {
 PLAN_PRICING: dict[str, dict[str, Any]] = {
     "free": {"price_usd_per_month": 0, "label": "Free"},
     "basic": {"price_usd_per_month": 10, "label": "Basic"},
-    "pro": {"price_usd_per_month": 29, "label": "Pro"},
+    "pro": {"price_usd_per_month": 25, "label": "Pro"},
     "owner": {"price_usd_per_month": 0, "label": "Owner"},
 }
 
