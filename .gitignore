@@ -28,17 +28,17 @@ Thumbs.db
 # Output files
 portfolio_risk_report.xlsx
 
-# 测试和覆盖率
+# Test + coverage caches
 .pytest_cache/
 .coverage
 htmlcov/
 .cache/
 
-# 开发工具
+# Dev tool caches
 .mypy_cache/
 .ruff_cache/
 
-# 日志
+# Logs
 logs/
 *.log
 
@@ -47,3 +47,20 @@ logs/
 CLAUDE.md
 docs/session-*.md
 docs/interview/
+
+# AWS CDK build artifacts (large; can be regenerated with `cdk synth`)
+infra/cdk.out/
+**/cdk.out/
+missfont.log
+
+# Marketing media — keep scripts (.md, .txt) but exclude rendered audio/video
+docs/marketing/**/*.wav
+docs/marketing/**/*.m4a
+docs/marketing/**/*.mp3
+docs/marketing/**/*.mp4
+docs/marketing/**/*.webm
+docs/marketing/**/*.mov
+docs/marketing/**/*.png
+docs/marketing/**/*.jpg
+docs/marketing/**/*.jpeg
+docs/marketing/youtube/rendered/**/*.html
