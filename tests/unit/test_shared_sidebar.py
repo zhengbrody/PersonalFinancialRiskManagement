@@ -56,3 +56,30 @@ def test_public_navigation_excludes_pricing(sidebar_module):
 
     assert all("Pricing" not in label for _path, label in nav_items)
     assert all("pricing" not in path.lower() for path, _label in nav_items)
+
+
+def test_public_navigation_locks_research_tools_until_login(sidebar_module):
+    module, fake_st = sidebar_module
+
+    module._render_custom_navigation()
+
+    locked_paths = {
+        call.args[0]
+        for call in fake_st.page_link.call_args_list
+        if call.kwargs.get("disabled") is True
+    }
+    assert module._AUTH_REQUIRED_NAV_PATHS.issubset(locked_paths)
+
+
+def test_signed_in_navigation_unlocks_research_tools(sidebar_module):
+    module, fake_st = sidebar_module
+    fake_st.session_state["_auth_user"] = {"id": "user-1", "email": "user@example.com"}
+
+    module._render_custom_navigation()
+
+    disabled_paths = {
+        call.args[0]
+        for call in fake_st.page_link.call_args_list
+        if call.kwargs.get("disabled") is True
+    }
+    assert module._AUTH_REQUIRED_NAV_PATHS.isdisjoint(disabled_paths)

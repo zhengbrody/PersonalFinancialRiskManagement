@@ -1,7 +1,7 @@
 """
 pages/10_Ticker_Research.py
 Ticker Research: Deep-dive single-stock analysis with AI investment summary.
-Works standalone -- no portfolio analysis required.
+Requires sign-in; no portfolio analysis run is required.
 """
 
 import os
@@ -15,6 +15,7 @@ import yfinance as yf
 
 from app import CLR_ACCENT, CLR_DANGER, CLR_GOLD, CLR_GOOD, CLR_MUTED, call_llm
 from i18n import get_translator
+from libs.auth.guards import require_auth_page
 from ui.components import (
     render_ai_digest,
     render_chart,
@@ -27,6 +28,7 @@ from ui.tokens import T
 
 # ── Shared sidebar ────────────────────────────────────────────
 render_shared_sidebar()
+require_auth_page("Ticker Research")
 lang = st.session_state.get("_lang", "en")
 t = get_translator(lang)
 

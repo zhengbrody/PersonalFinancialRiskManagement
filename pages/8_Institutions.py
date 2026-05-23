@@ -17,12 +17,14 @@ import streamlit as st
 
 from app import cached_digest
 from i18n import get_translator
+from libs.auth.guards import require_auth_page
 from market_intelligence import fetch_10y_yield, fetch_macro_releases
 from ui.components import render_ai_digest, render_kpi_row, render_section
 from ui.shared_sidebar import render_shared_sidebar
 
 # ── Shared sidebar ────────────────────────────────────────────
 render_shared_sidebar()
+require_auth_page("Macro & Institutions")
 
 lang = st.session_state.get("_lang", "en")
 t = get_translator(lang)

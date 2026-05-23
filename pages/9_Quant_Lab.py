@@ -13,12 +13,14 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from app import cached_digest
+from libs.auth.guards import require_auth_page
 from ui.components import render_ai_digest, render_kpi_row, render_section
 from ui.shared_sidebar import render_shared_sidebar
 from ui.tokens import T
 
 # ── Shared sidebar ─────────────────────────────────────────
 lang, t = render_shared_sidebar()
+require_auth_page("Quant Lab")
 
 # ── Page config ────────────────────────────────────────────
 st.markdown(

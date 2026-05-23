@@ -65,6 +65,13 @@ _NAV_GROUPS = [
     ),
 ]
 
+_AUTH_REQUIRED_NAV_PATHS = {
+    "pages/7_Trading_Floor.py",
+    "pages/8_Institutions.py",
+    "pages/9_Quant_Lab.py",
+    "pages/10_Ticker_Research.py",
+}
+
 
 def _render_custom_navigation() -> None:
     """Render custom English navigation because Streamlit's native page nav is static."""
@@ -82,11 +89,13 @@ def _render_custom_navigation() -> None:
 
     try:
         from libs.admin.status import is_owner_email
-        from libs.auth.session import current_user
+        from libs.auth.session import current_user, is_authenticated
 
+        is_signed_in = is_authenticated()
         _user = current_user() or {}
         show_owner = is_owner_email(_user.get("email"))
     except Exception:
+        is_signed_in = False
         show_owner = False
 
     st.markdown("### Navigation")
@@ -102,7 +111,14 @@ def _render_custom_navigation() -> None:
         for path, label in items:
             if "97_Owner_Admin_Status.py" in path and not show_owner:
                 continue
-            st.page_link(path, label=label)
+            requires_auth = path in _AUTH_REQUIRED_NAV_PATHS
+            locked = requires_auth and not is_signed_in
+            st.page_link(
+                path,
+                label=label,
+                disabled=locked,
+                help="Sign in to unlock this research tool." if locked else None,
+            )
 
 
 def _queue_analysis_and_route(

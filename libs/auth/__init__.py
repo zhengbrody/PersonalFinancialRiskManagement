@@ -20,6 +20,7 @@ Env vars read (or st.secrets fallback):
 """
 
 from .client import AuthError, get_supabase
+from .guards import require_auth_page
 from .session import (
     complete_oauth_with_code,
     current_user,
@@ -35,6 +36,7 @@ from .session import (
 __all__ = [
     "get_supabase",
     "AuthError",
+    "require_auth_page",
     "current_user",
     "sign_in_with_password",
     "sign_in_with_oauth",
