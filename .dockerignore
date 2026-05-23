@@ -28,6 +28,11 @@ infra/.venv/
 # Phase 1 EC2 deploy detritus
 docs/screenshots/
 
+# Marketing/video source assets are not needed at runtime and can exceed the
+# tiny EC2 instance's Docker build storage.
+docs/marketing/youtube/audio/
+docs/marketing/youtube/video/
+
 # Editor / OS noise
 .vscode/
 .idea/
