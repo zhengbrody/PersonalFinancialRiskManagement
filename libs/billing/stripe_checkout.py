@@ -54,7 +54,7 @@ def _price_id_for_plan(plan: str) -> str:
 
 
 def _app_url() -> str:
-    url = _read_secret("MINDMARKET_APP_URL") or "http://localhost:8501"
+    url = _read_secret("MINDMARKET_APP_URL") or "https://mindmarket.app"
     return url.rstrip("/")
 
 

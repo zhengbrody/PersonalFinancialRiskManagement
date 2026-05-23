@@ -39,6 +39,28 @@ def test_create_checkout_session_uses_server_config(monkeypatch):
     assert kwargs["subscription_data"]["metadata"]["user_id"] == "user-1"
 
 
+def test_create_checkout_session_defaults_to_public_app_url(monkeypatch):
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test")
+    monkeypatch.setenv("STRIPE_PRO_PRICE_ID", "price_pro")
+    monkeypatch.delenv("MINDMARKET_APP_URL", raising=False)
+
+    fake_stripe = SimpleNamespace()
+    fake_stripe.checkout = SimpleNamespace()
+    fake_stripe.checkout.Session = SimpleNamespace()
+    fake_stripe.checkout.Session.create = MagicMock(
+        return_value={"id": "cs_test", "url": "https://checkout.stripe.com/cs_test"}
+    )
+    monkeypatch.setitem(sys.modules, "stripe", fake_stripe)
+
+    from libs.billing.stripe_checkout import create_checkout_session
+
+    create_checkout_session(user_id="user-1", email="x@y.com", plan="pro")
+
+    kwargs = fake_stripe.checkout.Session.create.call_args.kwargs
+    assert kwargs["success_url"] == "https://mindmarket.app/Pricing?checkout=success"
+    assert kwargs["cancel_url"] == "https://mindmarket.app/Pricing?checkout=cancelled"
+
+
 def test_create_checkout_session_requires_paid_plan(monkeypatch):
     monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test")
     from libs.billing.stripe_checkout import StripeConfigError, create_checkout_session
