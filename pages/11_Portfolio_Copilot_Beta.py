@@ -26,6 +26,7 @@ from engine import (
     positions_to_frame,
     score_portfolio,
 )
+from libs.auth.guards import require_auth_page
 from ui.shared_sidebar import render_shared_sidebar
 from ui.tokens import T
 
@@ -439,6 +440,7 @@ def _render_scoring_panel(score: PortfolioScore, source_label: str) -> None:
 
 
 render_shared_sidebar()
+require_auth_page("AI Portfolio Copilot Beta")
 _inject_css()
 
 st.markdown("## AI Portfolio Copilot Beta")

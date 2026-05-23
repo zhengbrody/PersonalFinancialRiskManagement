@@ -58,7 +58,7 @@ def test_public_navigation_excludes_pricing(sidebar_module):
     assert all("pricing" not in path.lower() for path, _label in nav_items)
 
 
-def test_public_navigation_locks_research_tools_until_login(sidebar_module):
+def test_public_navigation_locks_auth_required_tools_until_login(sidebar_module):
     module, fake_st = sidebar_module
 
     module._render_custom_navigation()
@@ -71,7 +71,7 @@ def test_public_navigation_locks_research_tools_until_login(sidebar_module):
     assert module._AUTH_REQUIRED_NAV_PATHS.issubset(locked_paths)
 
 
-def test_signed_in_navigation_unlocks_research_tools(sidebar_module):
+def test_signed_in_navigation_unlocks_auth_required_tools(sidebar_module):
     module, fake_st = sidebar_module
     fake_st.session_state["_auth_user"] = {"id": "user-1", "email": "user@example.com"}
 

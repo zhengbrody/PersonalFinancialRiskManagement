@@ -66,6 +66,8 @@ _NAV_GROUPS = [
 ]
 
 _AUTH_REQUIRED_NAV_PATHS = {
+    "pages/4_Portfolio.py",
+    "pages/11_Portfolio_Copilot_Beta.py",
     "pages/7_Trading_Floor.py",
     "pages/8_Institutions.py",
     "pages/9_Quant_Lab.py",
@@ -117,7 +119,7 @@ def _render_custom_navigation() -> None:
                 path,
                 label=label,
                 disabled=locked,
-                help="Sign in to unlock this research tool." if locked else None,
+                help="Sign in to unlock this tool." if locked else None,
             )
 
 

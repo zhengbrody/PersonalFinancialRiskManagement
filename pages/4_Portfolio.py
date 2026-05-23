@@ -20,6 +20,7 @@ from app import (
 )
 from data_provider import DataProvider
 from i18n import get_translator
+from libs.auth.guards import require_auth_page
 from market_intelligence import build_ai_risk_briefing
 from risk_engine import RiskEngine
 from ui.components import (
@@ -45,6 +46,7 @@ def _active_margin_loan() -> float:
 
 
 render_shared_sidebar()
+require_auth_page("Portfolio Actions")
 
 # ── Guard ────────────────────────────────────────────────────
 if not st.session_state.get("analysis_ready"):
