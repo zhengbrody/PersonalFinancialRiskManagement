@@ -33,6 +33,16 @@ def test_save_refresh_token_uses_long_lived_lax_secure_cookie(monkeypatch):
     assert 89 <= (kwargs["expires_at"] - before).days <= 90
 
 
+def test_load_refresh_token_decodes_component_cookie(monkeypatch):
+    cm = MagicMock()
+    cm.get.return_value = "refresh%2Etoken%2Fwith%2Bchars"
+    _install_fake_cookie_runtime(monkeypatch, cm)
+
+    from libs.auth.cookie_persist import load_refresh_token
+
+    assert load_refresh_token() == "refresh.token/with+chars"
+
+
 def test_try_restore_session_hydrates_state_and_rotates_cookie(monkeypatch):
     cm = MagicMock()
     cm.get.return_value = "old-refresh"

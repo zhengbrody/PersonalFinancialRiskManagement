@@ -200,7 +200,7 @@ def _handle_oauth_callback() -> None:
             return
         complete_oauth_with_code(qp["code"])
         st.query_params.clear()
-        st.rerun()
+        st.success("Signed in. Your login has been saved on this browser.")
     except Exception as e:
         st.error(f"Sign-in failed: {e}")
         st.query_params.clear()

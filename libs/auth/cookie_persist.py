@@ -38,6 +38,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from urllib.parse import quote, unquote
 
 _logger = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ _logger = logging.getLogger(__name__)
 # bytes in users' browsers — bump if the storage format changes.
 _COOKIE_NAME = "mm_auth_v1"
 _COOKIE_DAYS = 90
+_COOKIE_MAX_AGE_SECONDS = _COOKIE_DAYS * 24 * 60 * 60
 
 
 def _cookies():
@@ -81,6 +83,7 @@ def save_refresh_token(refresh_token: str) -> None:
     """
     if not refresh_token:
         return
+    _write_cookie_via_component(refresh_token)
     cm = _cookies()
     if cm is None:
         return
@@ -111,7 +114,7 @@ def load_refresh_token() -> Optional[str]:
         # the next call within the same script run will see it once the
         # iframe has reported back.
         val = cm.get(_COOKIE_NAME)
-        return val if isinstance(val, str) and val else None
+        return unquote(val) if isinstance(val, str) and val else None
     except Exception as e:
         _logger.warning("cookie_persist.load_failed: %s", e)
         return None
@@ -119,6 +122,7 @@ def load_refresh_token() -> Optional[str]:
 
 def clear_refresh_token() -> None:
     """Delete the cookie. Called on explicit sign-out."""
+    _delete_cookie_via_component()
     cm = _cookies()
     if cm is None:
         return
@@ -126,6 +130,47 @@ def clear_refresh_token() -> None:
         cm.delete(_COOKIE_NAME, key="auth_cookie_delete")
     except Exception as e:
         _logger.warning("cookie_persist.clear_failed: %s", e)
+
+
+def _write_cookie_via_component(refresh_token: str) -> None:
+    """Best-effort direct browser write.
+
+    extra-streamlit-components writes through an iframe and can miss the
+    cookie when a page immediately reruns or leaves for Stripe. A tiny
+    same-origin component gives the browser a second, faster path to commit
+    the cookie before checkout navigation.
+    """
+    try:
+        import streamlit.components.v1 as components
+
+        encoded = quote(refresh_token, safe="")
+        components.html(
+            f"""
+<script>
+document.cookie = "{_COOKIE_NAME}={encoded}; Max-Age={_COOKIE_MAX_AGE_SECONDS}; Path=/; SameSite=Lax; Secure";
+</script>
+""",
+            height=0,
+        )
+    except Exception as e:
+        _logger.debug("cookie_persist.component_save_skipped: %s", e)
+
+
+def _delete_cookie_via_component() -> None:
+    """Best-effort direct browser delete for sign-out."""
+    try:
+        import streamlit.components.v1 as components
+
+        components.html(
+            f"""
+<script>
+document.cookie = "{_COOKIE_NAME}=; Max-Age=0; Path=/; SameSite=Lax; Secure";
+</script>
+""",
+            height=0,
+        )
+    except Exception as e:
+        _logger.debug("cookie_persist.component_clear_skipped: %s", e)
 
 
 _FLAG_TRIED = "_auth_cookie_restore_attempted"

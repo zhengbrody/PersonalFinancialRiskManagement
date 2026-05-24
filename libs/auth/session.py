@@ -268,6 +268,20 @@ def _persist_refresh_token(refresh_token: str) -> None:
         _logger.warning("auth.session.persist_failed: %s", e)
 
 
+def persist_current_session_cookie() -> bool:
+    """Rewrite the current refresh token to the browser cookie.
+
+    Use this immediately before handing a signed-in user to Stripe. It gives
+    the browser a fresh long-lived cookie even if the original login happened
+    in a short-lived Streamlit session.
+    """
+    refresh_token = _ss().get(_KEY_REFRESH)
+    if not refresh_token:
+        return False
+    _persist_refresh_token(refresh_token)
+    return True
+
+
 def _clear_persisted_refresh_token() -> None:
     try:
         from .cookie_persist import clear_refresh_token

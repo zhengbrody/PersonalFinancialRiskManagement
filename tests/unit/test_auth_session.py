@@ -122,6 +122,28 @@ def test_sign_out_clears_session(fake_streamlit, supabase_env):
     fake_client.auth.sign_out.assert_called_once()
 
 
+def test_persist_current_session_cookie_rewrites_refresh_token(fake_streamlit):
+    from libs.auth import session as auth_session
+
+    fake_streamlit.session_state["_auth_refresh_token"] = "refresh-token"
+    spy = MagicMock()
+
+    with patch.object(auth_session, "_persist_refresh_token", spy):
+        assert auth_session.persist_current_session_cookie() is True
+
+    spy.assert_called_once_with("refresh-token")
+
+
+def test_persist_current_session_cookie_returns_false_without_token(fake_streamlit):
+    from libs.auth import session as auth_session
+
+    spy = MagicMock()
+    with patch.object(auth_session, "_persist_refresh_token", spy):
+        assert auth_session.persist_current_session_cookie() is False
+
+    spy.assert_not_called()
+
+
 def test_is_authenticated_reflects_session(fake_streamlit):
     from libs.auth import session as auth_session
 

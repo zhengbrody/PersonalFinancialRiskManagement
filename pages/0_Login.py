@@ -69,6 +69,17 @@ def _start_oauth(provider: str) -> None:
     st.stop()
 
 
+def _render_auth_complete(message: str) -> None:
+    """Keep the page alive long enough for the browser cookie to commit."""
+    st.success(message)
+    st.caption(
+        "Your login has been saved on this browser, so Stripe checkout can return "
+        "to MindMarket without signing you out."
+    )
+    st.page_link("app.py", label="Continue to dashboard", width="stretch")
+    st.stop()
+
+
 render_shared_sidebar()
 
 
@@ -147,7 +158,7 @@ with tab_login:
             try:
                 with st.spinner("Authenticating..."):
                     sign_in_with_password(email, password)
-                st.rerun()
+                _render_auth_complete("Signed in.")
             except AuthError as e:
                 err_text = str(e).lower()
                 # Supabase returns "Email not confirmed" when the user signed
@@ -218,8 +229,7 @@ with tab_signup:
                     user_info = sign_up_with_password(email, password)
                 if user_info.get("email_confirmed"):
                     # Project has Confirm Email = OFF → auto-signed-in.
-                    st.success("Account created and signed in. Redirecting...")
-                    st.rerun()
+                    _render_auth_complete("Account created and signed in.")
                 else:
                     # Project has Confirm Email = ON → user must click link.
                     st.success(

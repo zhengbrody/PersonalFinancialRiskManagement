@@ -17,7 +17,7 @@ from __future__ import annotations
 import streamlit as st
 
 from libs.auth.guards import require_auth_page
-from libs.auth.session import current_user
+from libs.auth.session import current_user, persist_current_session_cookie
 from libs.billing.stripe_checkout import (
     StripeConfigError,
     create_customer_portal_session,
@@ -220,10 +220,13 @@ with action_cols[0]:
             else:
                 # Hand off to Stripe in the same tab. The portal will
                 # come back to /Settings?portal=back after they finish.
-                st.link_button("Continue to Stripe", url, width="stretch")
-                st.markdown(
-                    f'<meta http-equiv="refresh" content="0; url={url}">',
-                    unsafe_allow_html=True,
+                persist_current_session_cookie()
+                st.success("Billing portal ready. Your login has been saved for the Stripe return.")
+                st.link_button(
+                    "Continue to Stripe",
+                    url,
+                    type="primary",
+                    width="stretch",
                 )
                 st.stop()
     else:

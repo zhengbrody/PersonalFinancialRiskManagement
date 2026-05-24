@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from libs.auth.session import current_user, is_authenticated
+from libs.auth.session import current_user, is_authenticated, persist_current_session_cookie
 from libs.billing.stripe_checkout import StripeConfigError, create_checkout_session
 from libs.billing.usage import PLAN_LIMITS, PLAN_PRICING, get_user_plan
 from ui.shared_sidebar import render_shared_sidebar
@@ -53,11 +53,13 @@ def _checkout_button(plan: str) -> None:
             st.error(f"Could not create Stripe Checkout: {exc}")
             return
 
-        st.success("Checkout session created.")
-        st.link_button("Continue to Stripe Checkout", result.url, width="stretch")
-        st.markdown(
-            f'<meta http-equiv="refresh" content="0; url={result.url}">',
-            unsafe_allow_html=True,
+        persist_current_session_cookie()
+        st.success("Checkout session created. Your login has been saved for the Stripe return.")
+        st.link_button(
+            "Continue to Stripe Checkout",
+            result.url,
+            type="primary",
+            width="stretch",
         )
         st.stop()
 
