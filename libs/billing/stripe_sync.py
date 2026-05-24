@@ -15,6 +15,7 @@ from typing import Any, Optional
 from libs.auth.admin_client import get_supabase_admin
 
 VALID_PLANS = {"free", "basic", "pro"}
+PLAN_AMOUNT_CENTS = {"basic": 1000, "pro": 2500}
 
 
 def _read_secret(key: str) -> str:
@@ -44,6 +45,19 @@ def _plan_from_price_id(price_id: Optional[str], fallback: str = "free") -> str:
     return plan if plan in VALID_PLANS else "free"
 
 
+def _plan_from_price_object(price: dict[str, Any] | None) -> Optional[str]:
+    if not price:
+        return None
+    try:
+        amount = int(price.get("unit_amount"))
+    except (TypeError, ValueError):
+        return None
+    for plan, expected in PLAN_AMOUNT_CENTS.items():
+        if amount == expected:
+            return plan
+    return None
+
+
 def _plan_from_subscription(subscription: dict[str, Any], fallback: str = "free") -> str:
     meta_plan = (subscription.get("metadata") or {}).get("plan")
     if meta_plan in VALID_PLANS:
@@ -51,7 +65,11 @@ def _plan_from_subscription(subscription: dict[str, Any], fallback: str = "free"
 
     try:
         item = (subscription.get("items") or {}).get("data", [])[0]
-        price_id = (item.get("price") or {}).get("id")
+        price = item.get("price") or {}
+        price_plan = _plan_from_price_object(price)
+        if price_plan:
+            return price_plan
+        price_id = price.get("id")
     except Exception:
         price_id = None
     return _plan_from_price_id(price_id, fallback=fallback)

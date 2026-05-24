@@ -28,9 +28,9 @@ Security notes
   and survives top-level navigation back from Stripe (Lax allows
   GET-style returns, blocks third-party POST). Strict would break the
   Stripe-return restore.
-- Expiry: 30 days, matching Supabase's default refresh-token lifetime.
-  When the refresh token itself expires, we clear the cookie and
-  surface a normal sign-in prompt.
+- Expiry: 90 days. Supabase refresh tokens are rotated on every restore;
+  if the server-side token has expired or been revoked, we clear the
+  cookie and surface a normal sign-in prompt.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ _logger = logging.getLogger(__name__)
 # Versioned cookie name so we can rotate without colliding with stale
 # bytes in users' browsers — bump if the storage format changes.
 _COOKIE_NAME = "mm_auth_v1"
-_COOKIE_DAYS = 30
+_COOKIE_DAYS = 90
 
 
 def _cookies():

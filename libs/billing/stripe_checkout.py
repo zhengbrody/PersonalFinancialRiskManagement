@@ -10,11 +10,14 @@ All Stripe keys and price IDs are server-side settings:
 
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from typing import Optional
 
 from .usage import PLAN_PRICING
+
+logger = logging.getLogger(__name__)
 
 
 class StripeConfigError(RuntimeError):
@@ -39,17 +42,74 @@ def _read_secret(key: str) -> str:
         return ""
 
 
-def _price_id_for_plan(plan: str) -> str:
+def _expected_amount_cents(plan: str) -> int:
+    return int(round(float(PLAN_PRICING[plan]["price_usd_per_month"]) * 100))
+
+
+def _price_amount_cents(price: object) -> Optional[int]:
+    if price is None:
+        return None
+    if isinstance(price, dict):
+        amount = price.get("unit_amount")
+    else:
+        amount = getattr(price, "unit_amount", None)
+    try:
+        return int(amount) if amount is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _retrieve_price_amount(stripe_module: object, price_id: str) -> Optional[int]:
+    price_api = getattr(stripe_module, "Price", None)
+    retrieve = getattr(price_api, "retrieve", None)
+    if retrieve is None or not price_id:
+        return None
+    try:
+        return _price_amount_cents(retrieve(price_id))
+    except Exception as exc:
+        logger.warning("stripe.price_lookup_failed", extra={"error": str(exc)})
+        return None
+
+
+def _price_id_for_plan(plan: str, *, stripe_module: object | None = None) -> str:
     if plan == "basic":
         env_key = "STRIPE_BASIC_PRICE_ID"
+        other_key = "STRIPE_PRO_PRICE_ID"
+        other_plan = "pro"
     elif plan == "pro":
         env_key = "STRIPE_PRO_PRICE_ID"
+        other_key = "STRIPE_BASIC_PRICE_ID"
+        other_plan = "basic"
     else:
         raise StripeConfigError(f"Unsupported paid plan: {plan}")
 
     price_id = _read_secret(env_key)
     if not price_id:
         raise StripeConfigError(f"Missing {env_key}. Create the Stripe price first.")
+
+    if stripe_module is None:
+        return price_id
+
+    expected_amount = _expected_amount_cents(plan)
+    actual_amount = _retrieve_price_amount(stripe_module, price_id)
+    if actual_amount == expected_amount:
+        return price_id
+
+    other_price_id = _read_secret(other_key)
+    other_amount = _retrieve_price_amount(stripe_module, other_price_id)
+    if other_amount == expected_amount:
+        logger.warning(
+            "stripe.price_ids_swapped",
+            extra={"requested_plan": plan, "configured_env_key": env_key},
+        )
+        return other_price_id
+
+    if actual_amount is not None or other_amount is not None:
+        raise StripeConfigError(
+            f"{env_key} does not match {PLAN_PRICING[plan]['label']} "
+            f"(${PLAN_PRICING[plan]['price_usd_per_month']}/mo). "
+            f"Check Stripe price IDs for {plan} and {other_plan}."
+        )
     return price_id
 
 
@@ -80,7 +140,7 @@ def create_checkout_session(
         raise StripeConfigError("stripe package not installed. Add stripe to requirements.") from e
 
     stripe.api_key = secret_key
-    price_id = _price_id_for_plan(plan)
+    price_id = _price_id_for_plan(plan, stripe_module=stripe)
     base = _app_url()
 
     session = stripe.checkout.Session.create(

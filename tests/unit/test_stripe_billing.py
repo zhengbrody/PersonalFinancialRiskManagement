@@ -61,6 +61,57 @@ def test_create_checkout_session_defaults_to_public_app_url(monkeypatch):
     assert kwargs["cancel_url"] == "https://mindmarket.app/Pricing?checkout=cancelled"
 
 
+def test_create_checkout_session_corrects_swapped_price_ids(monkeypatch):
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test")
+    monkeypatch.setenv("STRIPE_BASIC_PRICE_ID", "price_pro")
+    monkeypatch.setenv("STRIPE_PRO_PRICE_ID", "price_basic")
+
+    def _retrieve(price_id):
+        amounts = {"price_basic": 1000, "price_pro": 2500}
+        return {"id": price_id, "unit_amount": amounts[price_id]}
+
+    fake_stripe = SimpleNamespace()
+    fake_stripe.Price = SimpleNamespace(retrieve=MagicMock(side_effect=_retrieve))
+    fake_stripe.checkout = SimpleNamespace()
+    fake_stripe.checkout.Session = SimpleNamespace()
+    fake_stripe.checkout.Session.create = MagicMock(
+        return_value={"id": "cs_test", "url": "https://checkout.stripe.com/cs_test"}
+    )
+    monkeypatch.setitem(sys.modules, "stripe", fake_stripe)
+
+    from libs.billing.stripe_checkout import create_checkout_session
+
+    create_checkout_session(user_id="user-1", email="x@y.com", plan="basic")
+    kwargs = fake_stripe.checkout.Session.create.call_args.kwargs
+
+    assert kwargs["line_items"][0]["price"] == "price_basic"
+    assert kwargs["metadata"] == {"user_id": "user-1", "plan": "basic"}
+
+
+def test_create_checkout_session_rejects_mismatched_price_amount(monkeypatch):
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test")
+    monkeypatch.setenv("STRIPE_BASIC_PRICE_ID", "price_wrong")
+    monkeypatch.setenv("STRIPE_PRO_PRICE_ID", "price_also_wrong")
+
+    def _retrieve(price_id):
+        amounts = {"price_wrong": 5000, "price_also_wrong": 7500}
+        return {"id": price_id, "unit_amount": amounts[price_id]}
+
+    fake_stripe = SimpleNamespace()
+    fake_stripe.Price = SimpleNamespace(retrieve=MagicMock(side_effect=_retrieve))
+    fake_stripe.checkout = SimpleNamespace()
+    fake_stripe.checkout.Session = SimpleNamespace()
+    fake_stripe.checkout.Session.create = MagicMock()
+    monkeypatch.setitem(sys.modules, "stripe", fake_stripe)
+
+    from libs.billing.stripe_checkout import StripeConfigError, create_checkout_session
+
+    with pytest.raises(StripeConfigError, match="does not match"):
+        create_checkout_session(user_id="user-1", email="x@y.com", plan="basic")
+
+    fake_stripe.checkout.Session.create.assert_not_called()
+
+
 def test_create_checkout_session_requires_paid_plan(monkeypatch):
     monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test")
     from libs.billing.stripe_checkout import StripeConfigError, create_checkout_session
@@ -117,6 +168,39 @@ def test_sync_deleted_subscription_downgrades_profile(monkeypatch):
     assert result["plan"] == "free"
     profile_upsert = sb.upsert.call_args_list[-1].args[0]
     assert profile_upsert["plan"] == "free"
+
+
+def test_sync_subscription_uses_price_amount_before_price_id_mapping(monkeypatch):
+    from libs.billing import stripe_sync
+
+    monkeypatch.setenv("STRIPE_BASIC_PRICE_ID", "price_pro")
+    monkeypatch.setenv("STRIPE_PRO_PRICE_ID", "price_basic")
+    sb = MagicMock()
+    sb.table.return_value = sb
+    sb.upsert.return_value = sb
+    sb.execute.return_value = MagicMock(data=[])
+    monkeypatch.setattr(stripe_sync, "get_supabase_admin", lambda: sb)
+
+    result = stripe_sync.sync_subscription(
+        {
+            "id": "sub_1",
+            "customer": "cus_1",
+            "status": "active",
+            "metadata": {"user_id": "user-1"},
+            "items": {
+                "data": [
+                    {
+                        "price": {
+                            "id": "price_basic",
+                            "unit_amount": 1000,
+                        }
+                    }
+                ]
+            },
+        }
+    )
+
+    assert result["plan"] == "basic"
 
 
 def _load_webhook_handler():
