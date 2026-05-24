@@ -71,6 +71,29 @@ if return_status == "back":
     st.toast("Welcome back from the billing portal.", icon="✅")
 
 
+# ── Pending-portal redirect ─────────────────────────────────────────
+# If the user just clicked "Open Stripe Customer Portal", the URL is
+# stashed in session_state. Render the redirect block at the top so
+# any cookie-write rerun doesn't lose the URL.
+_pending_portal = st.session_state.pop("_pending_portal_url", None)
+if _pending_portal:
+    st.success("Billing portal ready. Your login has been saved.")
+    st.link_button(
+        "Continue to Stripe",
+        _pending_portal,
+        type="primary",
+        width="stretch",
+    )
+    st.markdown(
+        f"""
+<script>setTimeout(function() {{ window.location.href = {_pending_portal!r}; }}, 1500);</script>
+<meta http-equiv="refresh" content="2; url={_pending_portal}">
+""",
+        unsafe_allow_html=True,
+    )
+    st.stop()
+
+
 # ── Plan + renewal ──────────────────────────────────────────────────
 quota = get_quota_status(user_id)
 plan = quota["plan"]
@@ -218,17 +241,13 @@ with action_cols[0]:
             except Exception as exc:
                 st.error(f"Could not open billing portal: {exc}")
             else:
-                # Hand off to Stripe in the same tab. The portal will
-                # come back to /Settings?portal=back after they finish.
+                # Stash URL + force rerun so the redirect banner at the
+                # top of the page picks it up. Without this, the cookie-
+                # write rerun nukes the inline st.link_button before the
+                # user can see/click it.
                 persist_current_session_cookie()
-                st.success("Billing portal ready. Your login has been saved for the Stripe return.")
-                st.link_button(
-                    "Continue to Stripe",
-                    url,
-                    type="primary",
-                    width="stretch",
-                )
-                st.stop()
+                st.session_state["_pending_portal_url"] = url
+                st.rerun()
     else:
         st.button(
             "Open Stripe Customer Portal",
