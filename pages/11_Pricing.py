@@ -20,6 +20,34 @@ st.set_page_config(page_title="Pricing · MindMarket AI", layout="wide")
 render_shared_sidebar()
 
 
+# ── Pending-checkout banner ──────────────────────────────────────────
+# Stash the Stripe URL in session_state when checkout is created. We
+# render the redirect block at the TOP of the page so it survives any
+# Streamlit reruns caused by side-effects (components.html cookie
+# writes, etc.). This is what fixes "click Subscribe → success banner
+# flashes → button disappears → nowhere to click".
+_pending = st.session_state.pop("_pending_checkout_url", None)
+if _pending:
+    st.success("Checkout session created. Your login has been saved.")
+    st.link_button(
+        "Continue to Stripe Checkout",
+        _pending,
+        type="primary",
+        width="stretch",
+    )
+    # Belt-and-suspenders: auto-redirect after 1.5s so users don't have
+    # to click manually. JS path works in most browsers; meta refresh
+    # covers the rest.
+    st.markdown(
+        f"""
+<script>setTimeout(function() {{ window.location.href = {_pending!r}; }}, 1500);</script>
+<meta http-equiv="refresh" content="2; url={_pending}">
+""",
+        unsafe_allow_html=True,
+    )
+    st.stop()
+
+
 def _checkout_button(plan: str) -> None:
     """Render the CTA for a plan and create Stripe Checkout on demand."""
     if plan == "free":
@@ -53,15 +81,13 @@ def _checkout_button(plan: str) -> None:
             st.error(f"Could not create Stripe Checkout: {exc}")
             return
 
+        # Write cookie BEFORE storing the URL, so the rerun caused by
+        # the components.html cookie write happens AFTER the URL is
+        # already in session_state — the banner block at the top of the
+        # page will then pick it up and render the redirect.
         persist_current_session_cookie()
-        st.success("Checkout session created. Your login has been saved for the Stripe return.")
-        st.link_button(
-            "Continue to Stripe Checkout",
-            result.url,
-            type="primary",
-            width="stretch",
-        )
-        st.stop()
+        st.session_state["_pending_checkout_url"] = result.url
+        st.rerun()
 
 
 def _plan_card(plan: str, description: str, best_for: str, badge: str) -> None:
