@@ -128,6 +128,9 @@ def clear_refresh_token() -> None:
         _logger.warning("cookie_persist.clear_failed: %s", e)
 
 
+_FLAG_TRIED = "_auth_cookie_restore_attempted"
+
+
 def try_restore_session() -> bool:
     """Read the cookie, exchange the refresh token for a fresh access
     token, and hydrate ``st.session_state``.
@@ -135,14 +138,37 @@ def try_restore_session() -> bool:
     Returns True if a session was restored, False otherwise. Idempotent:
     safe to call on every page load; the Supabase call is skipped when
     session_state already has a logged-in user.
+
+    First-render quirk
+    ------------------
+    ``extra-streamlit-components`` CookieManager renders an invisible
+    iframe to read ``document.cookie``. On the FIRST script run after a
+    full page load, the iframe hasn't yet reported the cookie value back
+    to Python — so ``load_refresh_token()`` returns None even when the
+    cookie genuinely exists in the browser.
+
+    To survive this, we ``st.rerun()`` exactly once when we get an empty
+    cookie on first attempt; the iframe will have populated by then.
+    The ``_FLAG_TRIED`` session-state flag prevents an infinite rerun
+    loop for genuinely-signed-out users.
     """
     import streamlit as st
 
     if st.session_state.get("_auth_user") is not None:
-        return True  # Already signed in via session_state — nothing to do.
+        # Already signed in via session_state — nothing to do. Clear the
+        # retry flag so the next genuine logout/login cycle gets a fresh
+        # chance to rerun once.
+        st.session_state.pop(_FLAG_TRIED, None)
+        return True
 
     rt = load_refresh_token()
     if not rt:
+        # No cookie value YET. Could mean (a) the iframe hasn't reported
+        # back yet, or (b) the user really has no cookie. Try once more
+        # via a single rerun; after that, accept they're signed out.
+        if not st.session_state.get(_FLAG_TRIED):
+            st.session_state[_FLAG_TRIED] = True
+            st.rerun()
         return False
 
     try:
@@ -168,6 +194,7 @@ def try_restore_session() -> bool:
         }
         st.session_state["_auth_access_token"] = session.access_token
         st.session_state["_auth_refresh_token"] = session.refresh_token
+        st.session_state.pop(_FLAG_TRIED, None)
         # Rotate cookie to the new refresh token so the next restore
         # uses a fresh one (Supabase issues a new refresh token on each
         # successful exchange).
