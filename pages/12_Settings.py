@@ -36,7 +36,7 @@ render_shared_sidebar()
 # Settings is a logged-in-only page; show the preview/redirect to login
 # if the visitor isn't authenticated yet.
 require_auth_page(
-    name="Account Settings",
+    "Account Settings",
     description="View your plan, usage, and manage billing.",
     features=[
         "Current plan + renewal date",

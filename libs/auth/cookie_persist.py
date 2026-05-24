@@ -103,8 +103,47 @@ def save_refresh_token(refresh_token: str) -> None:
         _logger.warning("cookie_persist.save_failed: %s", e)
 
 
+def _read_from_http_header() -> Optional[str]:
+    """Synchronous read straight from the HTTP ``Cookie`` request header.
+
+    The browser sends ``document.cookie`` on every request, so the Cookie
+    header carries whatever JS wrote on the previous page load — no
+    iframe round-trip required. This is the path that makes "Stripe
+    Checkout return preserves login" actually work: by the time the
+    request hits us, the cookie is already in the header.
+
+    Falls back to None on Streamlit versions that don't expose
+    ``st.context.headers`` (pre-1.32).
+    """
+    try:
+        import streamlit as st
+
+        ctx = getattr(st, "context", None)
+        headers = getattr(ctx, "headers", None) if ctx else None
+        if not headers:
+            return None
+        raw = headers.get("cookie") or headers.get("Cookie") or ""
+        for chunk in raw.split(";"):
+            name, _, val = chunk.strip().partition("=")
+            if name == _COOKIE_NAME and val:
+                return unquote(val) or None
+        return None
+    except Exception as e:
+        _logger.warning("cookie_persist.http_read_failed: %s", e)
+        return None
+
+
 def load_refresh_token() -> Optional[str]:
-    """Return the persisted refresh_token, or None if no cookie exists."""
+    """Return the persisted refresh_token, or None if no cookie exists.
+
+    Tries the synchronous HTTP-header path first (works on the very
+    first script run with zero iframe lag) and only falls back to the
+    component-iframe path if the header didn't carry the cookie.
+    """
+    fast = _read_from_http_header()
+    if fast:
+        return fast
+
     cm = _cookies()
     if cm is None:
         return None
