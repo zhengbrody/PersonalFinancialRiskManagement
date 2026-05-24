@@ -25,3 +25,8 @@ supabase>=2.9
 
 # Billing (Stripe Checkout + subscription webhooks)
 stripe>=10.0
+
+# Browser cookies — persists Supabase refresh_token across full-page
+# navigations (Stripe Checkout return, browser restart). Without it,
+# st.session_state evaporates and users have to re-login every time.
+extra-streamlit-components>=0.1.71

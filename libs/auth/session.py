@@ -100,6 +100,7 @@ def sign_up_with_password(email: str, password: str) -> dict:
         state[_KEY_USER] = user_dict
         state[_KEY_ACCESS] = resp.session.access_token
         state[_KEY_REFRESH] = resp.session.refresh_token
+        _persist_refresh_token(resp.session.refresh_token)
     return user_dict
 
 
@@ -166,6 +167,7 @@ def complete_oauth_with_code(code: str) -> dict:
     state[_KEY_USER] = user_dict
     state[_KEY_ACCESS] = session.access_token
     state[_KEY_REFRESH] = session.refresh_token
+    _persist_refresh_token(session.refresh_token)
     return user_dict
 
 
@@ -193,6 +195,7 @@ def hydrate_session_from_tokens(access_token: str, refresh_token: str) -> dict:
     state[_KEY_USER] = user_dict
     state[_KEY_ACCESS] = access_token
     state[_KEY_REFRESH] = refresh_token
+    _persist_refresh_token(refresh_token)
     return user_dict
 
 
@@ -233,6 +236,7 @@ def sign_in_with_password(email: str, password: str) -> dict:
     state[_KEY_USER] = user_dict
     state[_KEY_ACCESS] = resp.session.access_token
     state[_KEY_REFRESH] = resp.session.refresh_token
+    _persist_refresh_token(resp.session.refresh_token)
     return user_dict
 
 
@@ -246,6 +250,49 @@ def sign_out() -> None:
             pass  # best-effort; even if the network call fails, we still clear locally
     for k in (_KEY_USER, _KEY_ACCESS, _KEY_REFRESH):
         state.pop(k, None)
+    _clear_persisted_refresh_token()
+
+
+def _persist_refresh_token(refresh_token: str) -> None:
+    """Best-effort cookie write so the next page load can restore us.
+
+    Imported lazily because the cookie module pulls in
+    extra-streamlit-components, which is an optional dep — auth must
+    still work without it (e.g. CI containers, Lambda smoke tests).
+    """
+    try:
+        from .cookie_persist import save_refresh_token
+
+        save_refresh_token(refresh_token)
+    except Exception as e:
+        _logger.warning("auth.session.persist_failed: %s", e)
+
+
+def _clear_persisted_refresh_token() -> None:
+    try:
+        from .cookie_persist import clear_refresh_token
+
+        clear_refresh_token()
+    except Exception as e:
+        _logger.warning("auth.session.clear_persisted_failed: %s", e)
+
+
+def restore_session_from_cookie() -> bool:
+    """Page-load hook: if the in-memory session is empty but the cookie
+    has a valid refresh_token, hydrate session_state. Returns True if
+    a session was restored.
+
+    Call this once at the top of pages (via the shared sidebar) BEFORE
+    reading current_user() / is_authenticated(). It's a no-op when the
+    user is already logged in via session_state.
+    """
+    try:
+        from .cookie_persist import try_restore_session
+
+        return try_restore_session()
+    except Exception as e:
+        _logger.info("auth.session.restore_failed: %s", e)
+        return False
 
 
 def access_token() -> Optional[str]:
@@ -295,6 +342,9 @@ def _maybe_refresh_token() -> None:
         if resp and resp.session is not None:
             state[_KEY_ACCESS] = resp.session.access_token
             state[_KEY_REFRESH] = resp.session.refresh_token
+            # Rotate the cookie too — Supabase issues a new refresh token
+            # on each exchange; the old one is invalidated.
+            _persist_refresh_token(resp.session.refresh_token)
             _logger.info("auth.session.refreshed")
     except Exception as e:
         # Leave stale token in place — the next downstream 401 will surface

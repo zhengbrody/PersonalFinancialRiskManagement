@@ -178,6 +178,18 @@ def render_shared_sidebar():
     except Exception:
         pass  # If we can't detect duplicate, just render
 
+    # Restore login from cookie BEFORE any auth-aware UI renders.
+    # The first call per script-run will hydrate session_state if the
+    # browser has a valid refresh-token cookie — fixes "logged out after
+    # Stripe checkout return" and lets browsers stay signed in for 30
+    # days (Supabase default refresh-token lifetime).
+    try:
+        from libs.auth.session import restore_session_from_cookie
+
+        restore_session_from_cookie()
+    except Exception:
+        pass  # Auth is not strictly required to render the sidebar.
+
     # Product simplification: keep the app UI in English only.
     # Browser translation works better than maintaining a second visible UI layer.
     st.session_state["_lang"] = "en"
