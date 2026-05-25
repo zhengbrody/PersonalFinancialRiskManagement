@@ -739,6 +739,47 @@ def render_empty_state(title: str, description: str, action_hint: str = None):
     st.markdown(html, unsafe_allow_html=True)
 
 
+def render_analysis_required(
+    page_name: str,
+    describes: str,
+    *,
+    action_hint: str = "Takes ~5–10 seconds on first run (cached after that).",
+) -> None:
+    """Empty-state shown on authed analytics pages before Run Analysis.
+
+    Single source of truth for the "no analysis yet" placeholder so every
+    page (Overview / Risk / Portfolio Actions / Trading Floor / etc.)
+    speaks the same language and CTA. Below the dark card we add a
+    primary "Run analysis" button that routes back to the Dashboard
+    where the user's sidebar Run buttons live — Streamlit doesn't let us
+    trigger sidebar actions from a page, so the link is the cleanest UX.
+
+    Parameters
+    ----------
+    page_name:
+        Short page title for the headline (e.g. ``"Risk"``).
+    describes:
+        One sentence describing what the page will show once an analysis
+        has been run.
+    action_hint:
+        Optional small caption under the card. Defaults to a timing hint.
+    """
+    render_empty_state(
+        title=f"No analysis yet for {page_name}",
+        description=(
+            f"{describes} Click **Refresh & Run Analysis** in the sidebar "
+            "(or jump to the Dashboard) to populate this page."
+        ),
+        action_hint=action_hint,
+    )
+    try:
+        st.page_link("app.py", label="→ Go to Dashboard to run analysis", width="stretch")
+    except Exception:
+        # Streamlit < 1.27 has no page_link; ignore silently — the empty
+        # state itself still tells the user what to do.
+        pass
+
+
 # ══════════════════════════════════════════════════════════════
 #  Loading Skeleton (placeholder blocks while data loads)
 # ══════════════════════════════════════════════════════════════

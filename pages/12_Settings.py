@@ -86,7 +86,7 @@ if _pending_portal:
         st.error("Stripe returned an invalid billing portal URL. Please retry.")
         st.stop()
     _pending_portal_html = escape(_pending_portal, quote=True)
-    st.success("Billing portal ready. Your login has been saved.")
+    st.success("Opening Stripe billing portal — your session is saved.")
     st.link_button(
         "Continue to Stripe",
         _pending_portal,
@@ -151,16 +151,18 @@ with col_renew:
             unsafe_allow_html=True,
         )
     else:
+        # No subscription row yet — render the Free-plan status as a
+        # positive call to action, not as a negative "missing" state.
         st.markdown(
             f"""
 <div style="background:{T.surface};border:1px solid {T.border_subtle};
             border-radius:{T.radius_lg};padding:{T.sp_lg};">
   <div style="{T.font_overline};color:{T.accent};">Status</div>
   <div style="font-size:24px;font-weight:700;color:{T.text};margin-top:{T.sp_xs};">
-    No active subscription
+    Free plan · Active
   </div>
   <div style="{T.font_caption};color:{T.text_secondary};margin-top:{T.sp_xs};">
-    Upgrade any time on the Pricing page.
+    Includes a small monthly AI allowance. Upgrade any time for more capacity.
   </div>
 </div>
 """,

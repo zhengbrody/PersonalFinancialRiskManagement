@@ -38,6 +38,10 @@ create table if not exists public.portfolios (
     holdings    jsonb not null default '{}'::jsonb,
     margin_loan numeric(14, 2) not null default 0
                 check (margin_loan >= 0),
+    contributed_capital numeric(14, 2) not null default 0
+                check (contributed_capital >= 0),
+    cash_balance numeric(14, 2) not null default 0
+                check (cash_balance >= 0),
     is_default  boolean not null default false,
     created_at  timestamptz not null default now(),
     updated_at  timestamptz not null default now()

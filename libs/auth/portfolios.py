@@ -11,6 +11,8 @@ Schema (defined SQL-side):
         name         text    NOT NULL,
         holdings     jsonb   NOT NULL,    -- {ticker: {shares, avg_cost?}, ...}
         margin_loan  numeric DEFAULT 0,
+        contributed_capital numeric DEFAULT 0,
+        cash_balance numeric DEFAULT 0,
         is_default   boolean DEFAULT false,
         created_at   timestamptz DEFAULT now(),
         updated_at   timestamptz DEFAULT now()
@@ -134,6 +136,8 @@ def create_portfolio(
     name: str,
     holdings: dict,
     margin_loan: float = 0.0,
+    contributed_capital: float = 0.0,
+    cash_balance: float = 0.0,
     is_default: bool = False,
 ) -> dict:
     """Insert a new portfolio. user_id is set server-side via DEFAULT auth.uid()
@@ -153,6 +157,8 @@ def create_portfolio(
                 "name": name,
                 "holdings": _sanitize_holdings(holdings),
                 "margin_loan": _finite_or_zero(margin_loan),
+                "contributed_capital": _finite_or_zero(contributed_capital),
+                "cash_balance": _finite_or_zero(cash_balance),
                 "is_default": is_default,
             }
         )
@@ -166,7 +172,14 @@ def create_portfolio(
 
 def update_portfolio(portfolio_id: str, **fields) -> dict:
     """Patch fields on a single portfolio. RLS prevents touching others' rows."""
-    allowed = {"name", "holdings", "margin_loan", "is_default"}
+    allowed = {
+        "name",
+        "holdings",
+        "margin_loan",
+        "contributed_capital",
+        "cash_balance",
+        "is_default",
+    }
     bad = set(fields) - allowed
     if bad:
         raise ValueError(f"Cannot update fields: {bad}")
@@ -176,6 +189,10 @@ def update_portfolio(portfolio_id: str, **fields) -> dict:
         fields["holdings"] = _sanitize_holdings(fields["holdings"])
     if "margin_loan" in fields and fields["margin_loan"] is not None:
         fields["margin_loan"] = _finite_or_zero(fields["margin_loan"])
+    if "contributed_capital" in fields and fields["contributed_capital"] is not None:
+        fields["contributed_capital"] = _finite_or_zero(fields["contributed_capital"])
+    if "cash_balance" in fields and fields["cash_balance"] is not None:
+        fields["cash_balance"] = _finite_or_zero(fields["cash_balance"])
 
     sb = _authed_client()
     if fields.get("is_default"):

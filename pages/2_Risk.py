@@ -22,8 +22,8 @@ from i18n import get_translator
 from risk_engine import RiskEngine
 from ui.components import (
     render_ai_digest,
+    render_analysis_required,
     render_chart,
-    render_empty_state,
     render_section,
 )
 
@@ -35,21 +35,11 @@ render_shared_sidebar()
 
 # ── Guard ────────────────────────────────────────────────────
 if not st.session_state.get("analysis_ready"):
-    _lang = st.session_state.get("_lang", "en")
-    render_empty_state(
-        title="Risk analytics require a portfolio" if _lang == "en" else "风险分析需要组合数据",
-        description=(
-            "This page shows VaR/CVaR, component VaR, factor betas, stress tests "
-            "and the AI risk digest. Run Analysis from the sidebar to unlock."
-            if _lang == "en"
-            else "本页展示 VaR/CVaR、边际 VaR、因子 Beta、压力测试和 AI 风险摘要。"
-            "请从侧边栏点击 Run Analysis 解锁。"
-        ),
-        action_hint=(
-            "Monte Carlo @ 10k paths · 6-factor OLS · stress scenarios"
-            if _lang == "en"
-            else "蒙特卡洛 10k 路径 · 6 因子 OLS · 压力场景"
-        ),
+    render_analysis_required(
+        "Risk",
+        "VaR / CVaR, component VaR, 6-factor betas, stress tests and the "
+        "AI risk digest are computed from your analysis run.",
+        action_hint="Monte Carlo · 6-factor OLS · stress scenarios",
     )
     st.stop()
 

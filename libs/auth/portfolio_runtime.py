@@ -17,6 +17,7 @@ import pandas as pd
 import portfolio_config as _pc
 
 from .active_portfolio import (
+    get_active_capital_inputs,
     get_active_holdings,
     get_active_margin_loan,
     get_active_portfolio_meta,
@@ -128,6 +129,7 @@ def _group_account_breakdown(
     holdings: Mapping[str, Any],
     values: Mapping[str, float],
     margin_loan: float,
+    cash_balance: float,
     source: str,
 ) -> dict[str, dict[str, Any]]:
     if source in ("hardcoded", "owner_default") and hasattr(_pc, "ACCOUNTS"):
@@ -161,10 +163,23 @@ def _group_account_breakdown(
         breakdown[first_account]["margin_loan"] = float(margin_loan)
         breakdown[first_account]["type"] = "margin"
 
+    if cash_balance:
+        cash_bucket = breakdown.setdefault(
+            "cash",
+            {
+                "type": "cash",
+                "total_long": 0.0,
+                "margin_loan": 0.0,
+                "tickers": [],
+            },
+        )
+        cash_bucket["cash_balance"] = float(cash_balance)
+
     for info in breakdown.values():
         total_long = float(info.get("total_long", 0.0))
         loan = float(info.get("margin_loan", 0.0))
-        net_equity = total_long - loan
+        cash = float(info.get("cash_balance", 0.0))
+        net_equity = total_long + cash - loan
         info["net_equity"] = net_equity
         info["leverage"] = total_long / net_equity if net_equity > 0 else float("inf")
     return breakdown
@@ -174,6 +189,8 @@ def build_live_portfolio_payload(
     *,
     holdings: Mapping[str, Any] | None = None,
     margin_loan: float | None = None,
+    contributed_capital: float | None = None,
+    cash_balance: float | None = None,
     active_meta: dict[str, Any] | None = None,
     price_fetcher: Callable[[list[str]], dict[str, float]] | None = None,
 ) -> LivePortfolioPayload:
@@ -188,6 +205,20 @@ def build_live_portfolio_payload(
         holdings = get_active_holdings()
     if margin_loan is None:
         margin_loan = get_active_margin_loan()
+    if contributed_capital is None or cash_balance is None:
+        if source in ("hardcoded", "owner_default"):
+            capital_inputs = {
+                "contributed_capital": float(
+                    getattr(_pc, "CONTRIBUTED_CAPITAL", getattr(_pc, "TOTAL_COST_BASIS", 0))
+                ),
+                "cash_balance": float(getattr(_pc, "CASH_BALANCE", 0.0)),
+            }
+        else:
+            capital_inputs = get_active_capital_inputs()
+        if contributed_capital is None:
+            contributed_capital = float(capital_inputs.get("contributed_capital", 0.0))
+        if cash_balance is None:
+            cash_balance = float(capital_inputs.get("cash_balance", 0.0))
 
     normalized_holdings = {str(tk).upper(): holding for tk, holding in holdings.items()}
     tickers = list(normalized_holdings.keys())
@@ -206,14 +237,10 @@ def build_live_portfolio_payload(
         raise PortfolioPayloadError("Could not fetch any usable live prices.")
 
     live_weights = {ticker: value / total_value for ticker, value in values.items() if value > 0}
-    net_equity = total_value - float(margin_loan or 0.0)
+    cash_balance = float(cash_balance or 0.0)
+    net_equity = total_value + cash_balance - float(margin_loan or 0.0)
 
-    uses_owner_config = source in ("hardcoded", "owner_default")
-    contributed_capital = (
-        float(getattr(_pc, "CONTRIBUTED_CAPITAL", getattr(_pc, "TOTAL_COST_BASIS", 0)))
-        if uses_owner_config
-        else 0.0
-    )
+    contributed_capital = float(contributed_capital or 0.0)
     return_on_capital_dollar = net_equity - contributed_capital if contributed_capital > 0 else None
     return_on_capital_pct = (
         (net_equity - contributed_capital) / contributed_capital
@@ -229,6 +256,7 @@ def build_live_portfolio_payload(
         "portfolio_source": source,
         "portfolio_id": active_meta.get("id"),
         "total_long": total_value,
+        "cash_balance": cash_balance,
         "net_equity": net_equity,
         "margin_loan": float(margin_loan or 0.0),
         "sector_map": _pc.build_sector_map(dict(normalized_holdings)),
@@ -244,6 +272,7 @@ def build_live_portfolio_payload(
             holdings=normalized_holdings,
             values=values,
             margin_loan=float(margin_loan or 0.0),
+            cash_balance=cash_balance,
             source=source,
         ),
         # Back-compat aliases

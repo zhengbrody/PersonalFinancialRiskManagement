@@ -85,6 +85,22 @@ def _holdings_to_rows(h: dict) -> list[dict]:
     return rows
 
 
+def _estimate_position_cost(holdings: dict) -> float:
+    """Sum shares * avg_cost where avg_cost is known."""
+    total = 0.0
+    for data in (holdings or {}).values():
+        if not isinstance(data, dict):
+            continue
+        try:
+            shares = float(data.get("shares") or 0.0)
+            avg_cost = data.get("avg_cost")
+            if avg_cost not in (None, ""):
+                total += shares * float(avg_cost)
+        except (TypeError, ValueError):
+            continue
+    return total
+
+
 def _holdings_editor_columns() -> dict:
     return {
         "ticker": st.column_config.TextColumn("Ticker", required=True),
@@ -190,7 +206,7 @@ def _parse_holdings_json(s: str) -> dict:
     return cleaned
 
 
-def _server_config_portfolio() -> tuple[dict, float]:
+def _server_config_portfolio() -> tuple[dict, float, float, float]:
     """Read the currently deployed portfolio_config.py into DB-ready shape."""
     import importlib
 
@@ -204,10 +220,20 @@ def _server_config_portfolio() -> tuple[dict, float]:
             if key in raw and raw[key] is not None:
                 row[key] = raw[key]
         holdings[ticker.upper()] = row
-    return holdings, float(_pc.MARGIN_LOAN)
+    contributed_capital = float(
+        getattr(_pc, "CONTRIBUTED_CAPITAL", getattr(_pc, "TOTAL_COST_BASIS", 0.0))
+    )
+    cash_balance = float(getattr(_pc, "CASH_BALANCE", 0.0))
+    return holdings, float(_pc.MARGIN_LOAN), contributed_capital, cash_balance
 
 
-def _upsert_default_portfolio(name: str, holdings: dict, margin_loan: float) -> dict:
+def _upsert_default_portfolio(
+    name: str,
+    holdings: dict,
+    margin_loan: float,
+    contributed_capital: float,
+    cash_balance: float,
+) -> dict:
     default_portfolio = get_default_portfolio()
     if default_portfolio:
         return update_portfolio(
@@ -215,12 +241,16 @@ def _upsert_default_portfolio(name: str, holdings: dict, margin_loan: float) -> 
             name=name,
             holdings=holdings,
             margin_loan=margin_loan,
+            contributed_capital=contributed_capital,
+            cash_balance=cash_balance,
             is_default=True,
         )
     return create_portfolio(
         name=name,
         holdings=holdings,
         margin_loan=margin_loan,
+        contributed_capital=contributed_capital,
+        cash_balance=cash_balance,
         is_default=True,
     )
 
@@ -240,7 +270,8 @@ if portfolios:
         default_badge = " 🌟 default" if p.get("is_default") else ""
         with st.expander(
             f"**{p['name']}**{default_badge}  · {len(p.get('holdings', {}))} positions"
-            f"  · margin ${p.get('margin_loan', 0):,.0f}",
+            f"  · principal ${(p.get('contributed_capital') or 0):,.0f}"
+            f"  · margin ${(p.get('margin_loan') or 0):,.0f}",
             expanded=False,
         ):
             edit_col, action_col = st.columns([3, 1])
@@ -270,6 +301,25 @@ if portfolios:
                     step=1000.0,
                     key=f"margin_{p['id']}",
                 )
+                cap_col, cash_col = st.columns(2)
+                with cap_col:
+                    edited_contributed = st.number_input(
+                        "Contributed capital ($)",
+                        value=float(p.get("contributed_capital") or 0),
+                        min_value=0.0,
+                        step=1000.0,
+                        key=f"contributed_{p['id']}",
+                        help="Your net deposits/principal. Used for total account P&L.",
+                    )
+                with cash_col:
+                    edited_cash = st.number_input(
+                        "Cash balance ($)",
+                        value=float(p.get("cash_balance") or 0),
+                        min_value=0.0,
+                        step=100.0,
+                        key=f"cash_{p['id']}",
+                        help="Idle cash included in net equity.",
+                    )
 
             with action_col:
                 st.markdown("&nbsp;", unsafe_allow_html=True)
@@ -285,6 +335,8 @@ if portfolios:
                             name=edited_name.strip(),
                             holdings=new_holdings,
                             margin_loan=float(edited_margin),
+                            contributed_capital=float(edited_contributed),
+                            cash_balance=float(edited_cash),
                         )
                         st.success("Saved.")
                         st.rerun()
@@ -334,8 +386,13 @@ if is_owner_email(user.get("email")):
             "Sync the currently deployed portfolio_config.py into your default DB portfolio."
         )
         try:
-            server_holdings, server_margin = _server_config_portfolio()
-            st.caption(f"{len(server_holdings)} positions · margin loan ${server_margin:,.0f}")
+            server_holdings, server_margin, server_contributed, server_cash = (
+                _server_config_portfolio()
+            )
+            st.caption(
+                f"{len(server_holdings)} positions · principal ${server_contributed:,.0f} "
+                f"· cash ${server_cash:,.0f} · margin loan ${server_margin:,.0f}"
+            )
             if st.button(
                 "Sync server config to my default portfolio",
                 type="primary",
@@ -345,6 +402,8 @@ if is_owner_email(user.get("email")):
                     "Owner Portfolio",
                     server_holdings,
                     server_margin,
+                    server_contributed,
+                    server_cash,
                 )
                 st.success(f"Default portfolio updated: {updated['name']}")
                 st.rerun()
@@ -445,6 +504,25 @@ if csv_holdings:
             step=1000.0,
             key="csv_margin_loan",
         )
+        csv_contributed = st.number_input(
+            "Contributed capital ($)",
+            value=float(_estimate_position_cost(csv_holdings)),
+            min_value=0.0,
+            step=1000.0,
+            key="csv_contributed_capital",
+            help=(
+                "Net deposits/principal. Default is estimated from shares × avg_cost "
+                "where available; adjust if you know actual deposits."
+            ),
+        )
+        csv_cash = st.number_input(
+            "Cash balance ($)",
+            value=0.0,
+            min_value=0.0,
+            step=100.0,
+            key="csv_cash_balance",
+            help="Idle cash not represented by holdings.",
+        )
         csv_is_default = st.checkbox(
             "Set as default portfolio",
             value=len(portfolios) == 0,
@@ -465,6 +543,8 @@ if csv_holdings:
                     name=csv_name.strip(),
                     holdings=csv_holdings,
                     margin_loan=float(csv_margin),
+                    contributed_capital=float(csv_contributed),
+                    cash_balance=float(csv_cash),
                     is_default=csv_is_default,
                 )
                 st.success(f"Imported portfolio: {created['name']}")
@@ -501,6 +581,20 @@ with st.form("new_portfolio_form", clear_on_submit=True):
         min_value=0.0,
         step=1000.0,
     )
+    new_contributed = st.number_input(
+        "Contributed capital ($)",
+        value=0.0,
+        min_value=0.0,
+        step=1000.0,
+        help="Your net deposits/principal. Leave 0 if unknown; total P&L will be hidden.",
+    )
+    new_cash = st.number_input(
+        "Cash balance ($)",
+        value=0.0,
+        min_value=0.0,
+        step=100.0,
+        help="Idle cash not represented by holdings.",
+    )
     new_is_default = st.checkbox(
         "Set as default portfolio",
         value=len(portfolios) == 0,  # first portfolio = default automatically
@@ -521,6 +615,8 @@ if submitted:
                 name=new_name.strip(),
                 holdings=holdings_dict,
                 margin_loan=float(new_margin),
+                contributed_capital=float(new_contributed),
+                cash_balance=float(new_cash),
                 is_default=new_is_default,
             )
             st.success(f"Created portfolio: {created['name']}")

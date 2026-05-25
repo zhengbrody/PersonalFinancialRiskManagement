@@ -1980,38 +1980,86 @@ def execute_analysis(force: bool = False) -> bool:
                     unsafe_allow_html=True,
                 )
 
-        # CTA row
-        st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
-        cta_col1, cta_col2, cta_col3 = st.columns([1, 1, 2])
-        with cta_col1:
-            if st.button(cta_label, type="primary", width="stretch", key="landing_cta"):
-                if _landing_portfolio_source == "empty":
-                    st.switch_page("pages/0_Portfolios.py")
-                    return
-                try:
-                    from libs.auth.portfolio_runtime import build_live_portfolio_payload
+        # CTA row — tailor to auth state.
+        # Anon visitors get conversion-focused CTAs (Sign in / View pricing /
+        # try demo). Authed users get task-focused CTAs (Run demo / Skip /
+        # if their DB portfolio is empty, jump straight to Portfolios).
+        try:
+            from libs.auth.session import is_authenticated as _is_authed
 
-                    with st.spinner("Preparing live demo portfolio..."):
-                        payload = build_live_portfolio_payload()
-                    st.session_state.weights_json = payload.weights_json
-                    st.session_state.weights_input = payload.weights_json
-                    st.session_state._portfolio_meta = payload.meta
-                    st.session_state._run_trigger = True
-                    st.session_state._force_refresh = True
-                    st.session_state._route_after_analysis = "pages/1_Overview.py"
+            _signed_in = _is_authed()
+        except Exception:
+            _signed_in = False
+
+        st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+
+        if not _signed_in:
+            # Anonymous visitor: lead with Sign in, then Pricing, with demo
+            # as a low-commitment third option.
+            cta_col1, cta_col2, cta_col3 = st.columns([1, 1, 1])
+            with cta_col1:
+                if st.button(
+                    "Sign in / Create account",
+                    type="primary",
+                    width="stretch",
+                    key="landing_signin",
+                ):
+                    st.switch_page("pages/0_Login.py")
+            with cta_col2:
+                if st.button("View pricing", width="stretch", key="landing_pricing"):
+                    st.switch_page("pages/11_Pricing.py")
+            with cta_col3:
+                if st.button("Try sample portfolio", width="stretch", key="landing_demo"):
+                    try:
+                        from libs.auth.portfolio_runtime import build_live_portfolio_payload
+
+                        with st.spinner("Preparing live demo portfolio..."):
+                            payload = build_live_portfolio_payload()
+                        st.session_state.weights_json = payload.weights_json
+                        st.session_state.weights_input = payload.weights_json
+                        st.session_state._portfolio_meta = payload.meta
+                        st.session_state._run_trigger = True
+                        st.session_state._force_refresh = True
+                        st.session_state._route_after_analysis = "pages/1_Overview.py"
+                        st.session_state._skip_landing = True
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(f"Could not prepare the portfolio: {exc}")
+            st.caption(
+                "Sample portfolio uses built-in holdings — no signup required. "
+                "Create an account to analyze your own."
+            )
+        else:
+            cta_col1, cta_col2, cta_col3 = st.columns([1, 1, 2])
+            with cta_col1:
+                if st.button(cta_label, type="primary", width="stretch", key="landing_cta"):
+                    if _landing_portfolio_source == "empty":
+                        st.switch_page("pages/0_Portfolios.py")
+                        return
+                    try:
+                        from libs.auth.portfolio_runtime import build_live_portfolio_payload
+
+                        with st.spinner("Preparing live demo portfolio..."):
+                            payload = build_live_portfolio_payload()
+                        st.session_state.weights_json = payload.weights_json
+                        st.session_state.weights_input = payload.weights_json
+                        st.session_state._portfolio_meta = payload.meta
+                        st.session_state._run_trigger = True
+                        st.session_state._force_refresh = True
+                        st.session_state._route_after_analysis = "pages/1_Overview.py"
+                        st.session_state._skip_landing = True
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(f"Could not prepare the portfolio: {exc}")
+            with cta_col2:
+                if st.button(skip_label, width="stretch", key="landing_skip"):
                     st.session_state._skip_landing = True
                     st.rerun()
-                except Exception as exc:
-                    st.error(f"Could not prepare the portfolio: {exc}")
-        with cta_col2:
-            if st.button(skip_label, width="stretch", key="landing_skip"):
-                st.session_state._skip_landing = True
-                st.rerun()
-        with cta_col3:
-            st.caption(
-                "💡 Demo runs with built-in sample holdings. Sign in to save and analyze "
-                "your own portfolio; API keys stay server-side."
-            )
+            with cta_col3:
+                st.caption(
+                    "💡 Demo runs with built-in sample holdings. "
+                    "Add your own on the Portfolios page; API keys stay server-side."
+                )
 
         # Footer micro-strip — tech stack + GitHub
         st.markdown(

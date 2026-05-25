@@ -118,12 +118,16 @@ def test_create_sends_insert_with_expected_fields(mock_supabase):
         name="Tech",
         holdings={"AAPL": {"shares": 10}},
         margin_loan=5000,
+        contributed_capital=15000,
+        cash_balance=250,
     )
     assert out["id"] == "new"
     sent = mock_supabase.insert.call_args[0][0]
     assert sent["name"] == "Tech"
     assert sent["holdings"] == {"AAPL": {"shares": 10}}
     assert sent["margin_loan"] == 5000
+    assert sent["contributed_capital"] == 15000
+    assert sent["cash_balance"] == 250
     assert sent["is_default"] is False
     # user_id should NOT be present — DB DEFAULT auth.uid() fills it server-side
     assert "user_id" not in sent
@@ -143,6 +147,8 @@ def test_create_strips_nan_avg_cost_before_insert(mock_supabase):
             "MSFT": {"shares": 3.0},
         },
         margin_loan=float("nan"),
+        contributed_capital=float("inf"),
+        cash_balance=float("nan"),
     )
     sent = mock_supabase.insert.call_args[0][0]
     # nan/inf avg_cost stripped, valid holdings kept, margin_loan defanged
@@ -150,6 +156,8 @@ def test_create_strips_nan_avg_cost_before_insert(mock_supabase):
     assert sent["holdings"]["NVDA"] == {"shares": 5.0}
     assert sent["holdings"]["MSFT"] == {"shares": 3.0}
     assert sent["margin_loan"] == 0.0
+    assert sent["contributed_capital"] == 0.0
+    assert sent["cash_balance"] == 0.0
 
 
 def test_create_default_demotes_others_first(mock_supabase):
@@ -252,6 +260,8 @@ def test_active_uses_db_when_authenticated(mock_supabase):
         "name": "Tech",
         "holdings": db_holdings,
         "margin_loan": 5000,
+        "contributed_capital": 20000,
+        "cash_balance": 750,
         "is_default": True,
     }
     # get_default_portfolio() is the only call active_portfolio makes
@@ -269,6 +279,9 @@ def test_active_uses_db_when_authenticated(mock_supabase):
 
     margin = ap.get_active_margin_loan()
     assert margin == 5000.0
+
+    capital = ap.get_active_capital_inputs()
+    assert capital == {"contributed_capital": 20000.0, "cash_balance": 750.0}
 
     meta = ap.get_active_portfolio_meta()
     assert meta["source"] == "supabase"

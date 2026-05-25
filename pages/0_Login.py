@@ -72,10 +72,7 @@ def _start_oauth(provider: str) -> None:
 def _render_auth_complete(message: str) -> None:
     """Keep the page alive long enough for the browser cookie to commit."""
     st.success(message)
-    st.caption(
-        "Your login has been saved on this browser, so Stripe checkout can return "
-        "to MindMarket without signing you out."
-    )
+    st.caption("You're signed in. Your session is saved on this browser.")
     st.page_link("app.py", label="Continue to dashboard", width="stretch")
     st.stop()
 

@@ -1,10 +1,11 @@
 """
 portfolio_config.py — Single source of truth for portfolio state.
 
-Three top-level entities:
+Four top-level entities:
   1. PORTFOLIO_HOLDINGS   : per-ticker positions (shares + optional metadata)
   2. ACCOUNTS             : broker / wallet accounts with per-account margin loan
   3. CONTRIBUTED_CAPITAL  : total self-funded principal (excludes margin draws)
+  4. CASH_BALANCE         : idle cash not represented by holdings
 
 Backward compat aliases:
   - TOTAL_COST_BASIS  == CONTRIBUTED_CAPITAL
@@ -142,6 +143,10 @@ ACCOUNTS: Dict[str, Dict[str, Any]] = {
 # Self-funded principal — money YOU put in, excludes margin draws.
 # Used to compute "Return on Contributed Capital" (how well your own money did).
 CONTRIBUTED_CAPITAL = 19700
+
+# Idle cash not represented by PORTFOLIO_HOLDINGS.
+# Included in net equity: holdings market value + cash - margin loan.
+CASH_BALANCE = 0
 
 # ── Backward-compat aliases (legacy callers) ─────────────────────────────────
 TOTAL_COST_BASIS = CONTRIBUTED_CAPITAL
@@ -414,5 +419,7 @@ def validate_portfolio_config() -> List[str]:
     # Contributed capital sanity
     if CONTRIBUTED_CAPITAL < 0:
         issues.append(f"CONTRIBUTED_CAPITAL must be >= 0 (got {CONTRIBUTED_CAPITAL})")
+    if CASH_BALANCE < 0:
+        issues.append(f"CASH_BALANCE must be >= 0 (got {CASH_BALANCE})")
 
     return issues

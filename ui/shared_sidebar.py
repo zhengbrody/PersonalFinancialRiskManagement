@@ -303,8 +303,10 @@ def render_shared_sidebar():
         ):
             _queue_analysis_and_route(force_refresh=True)
 
-        # Portfolio Metadata (if available)
-        if meta := getattr(st.session_state, "_portfolio_meta", None):
+        # Portfolio Metadata (only after a real analysis run — showing it
+        # earlier confuses users because the numbers are stale or fabricated).
+        _meta_ready = bool(st.session_state.get("analysis_ready"))
+        if _meta_ready and (meta := getattr(st.session_state, "_portfolio_meta", None)):
             st.caption(f"💰 Net Equity: ${meta.get('net_equity', meta['total_long']):,.0f}")
             st.caption(f"📈 Total Long: ${meta['total_long']:,.0f}")
             st.caption(f"🏦 Margin: ${meta.get('margin_loan', 0):,.0f}")
@@ -384,70 +386,88 @@ def render_shared_sidebar():
             st.session_state.weights_json = st.session_state._example_portfolio
             del st.session_state._example_portfolio
 
-        # Weights Input
-        st.caption("Weights (JSON)")
-        weights_json = st.text_area(
-            "Portfolio Weights",
-            value=st.session_state.weights_json,
-            height=120,
-            label_visibility="collapsed",
-        )
+        # When a signed-in user has no DB portfolio, the Weights JSON and
+        # Parameters are dead UI — they can't run an analysis until they
+        # create a portfolio. The empty-state CTA above already routes them
+        # to /Portfolios; hide the editor controls so the sidebar focuses
+        # on that one action. We DO keep them in session_state at sane
+        # defaults so anything that reads them later still works.
+        weights_json = st.session_state.weights_json
+        period_years = st.session_state.get("period_years", 2)
+        mc_sims = st.session_state.get("mc_sims", 10000)
+        mc_horizon = st.session_state.get("mc_horizon", 21)
+        market_shock = st.session_state.get("market_shock", -0.10)
+        risk_free_rate = st.session_state.get("risk_free_fallback", 0.045)
 
-        st.markdown("---")
+        if _active_source != "empty":
+            # Most users never touch these directly — collapsing into an
+            # "Advanced" expander declutters the sidebar without removing
+            # control. The Refresh & Run button above is the primary action.
+            with st.expander("⚙️ Advanced parameters", expanded=False):
+                st.caption("Tune the analysis engine. Most users can leave these at default.")
+                st.caption("Weights (JSON)")
+                weights_json = st.text_area(
+                    "Portfolio Weights",
+                    value=st.session_state.weights_json,
+                    height=120,
+                    label_visibility="collapsed",
+                    help=(
+                        "Manually override the active portfolio's weights. "
+                        "Use 'Run with Current Weights' to apply."
+                    ),
+                )
 
-        # ── Analysis Parameters ───────────────────────────────────
-        st.markdown("### ⚙️ Parameters")
+                col1, col2 = st.columns(2)
+                with col1:
+                    period_years = st.slider(
+                        "History (yr)",
+                        min_value=1,
+                        max_value=5,
+                        value=int(period_years),
+                        key="period_years_sidebar",
+                    )
+                with col2:
+                    mc_sims = st.select_slider(
+                        "MC Sims",
+                        options=[1000, 5000, 10000, 20000, 50000],
+                        value=int(mc_sims),
+                        key="mc_sims_sidebar",
+                        help="Monte Carlo simulation count. Higher = smoother VaR.",
+                    )
 
-        col1, col2 = st.columns(2)
-        with col1:
-            period_years = st.slider(
-                "History (yr)",
-                min_value=1,
-                max_value=5,
-                value=st.session_state.get("period_years", 2),
-                key="period_years_sidebar",
-            )
+                col3, col4 = st.columns(2)
+                with col3:
+                    mc_horizon = st.slider(
+                        "Horizon (d)",
+                        min_value=5,
+                        max_value=63,
+                        value=int(mc_horizon),
+                        key="mc_horizon_sidebar",
+                        help="Forecast window for VaR / drawdown projections.",
+                    )
+                with col4:
+                    market_shock_pct = st.slider(
+                        "Shock (%)",
+                        min_value=-30,
+                        max_value=0,
+                        value=int(float(market_shock) * 100),
+                        key="market_shock_sidebar",
+                        help="Stress-test market move applied to all positions.",
+                    )
+                    market_shock = market_shock_pct / 100
 
-        with col2:
-            mc_sims = st.select_slider(
-                "MC Sims",
-                options=[1000, 5000, 10000, 20000, 50000],
-                value=st.session_state.get("mc_sims", 10000),
-                key="mc_sims_sidebar",
-            )
-
-        col3, col4 = st.columns(2)
-        with col3:
-            mc_horizon = st.slider(
-                "Horizon (d)",
-                min_value=5,
-                max_value=63,
-                value=st.session_state.get("mc_horizon", 21),
-                key="mc_horizon_sidebar",
-            )
-
-        with col4:
-            market_shock_pct = st.slider(
-                "Shock (%)",
-                min_value=-30,
-                max_value=0,
-                value=int(st.session_state.get("market_shock", -0.10) * 100),
-                key="market_shock_sidebar",
-            )
-            market_shock = market_shock_pct / 100
-
-        # Risk-free rate
-        risk_free_rate = (
-            st.number_input(
-                "Risk-Free Rate (%)",
-                min_value=0.0,
-                max_value=15.0,
-                value=4.5,
-                step=0.1,
-                key="risk_free_rate_sidebar",
-            )
-            / 100
-        )
+                risk_free_rate = (
+                    st.number_input(
+                        "Risk-Free Rate (%)",
+                        min_value=0.0,
+                        max_value=15.0,
+                        value=float(risk_free_rate) * 100,
+                        step=0.1,
+                        key="risk_free_rate_sidebar",
+                        help="Treasury proxy for Sharpe ratio. Updated automatically when available.",
+                    )
+                    / 100
+                )
 
         st.markdown("---")
 

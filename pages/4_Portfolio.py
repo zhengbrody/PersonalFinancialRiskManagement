@@ -25,8 +25,8 @@ from market_intelligence import build_ai_risk_briefing
 from risk_engine import RiskEngine
 from ui.components import (
     render_ai_digest,
+    render_analysis_required,
     render_chart,
-    render_empty_state,
     render_kpi_row,
     render_section,
 )
@@ -62,22 +62,12 @@ require_auth_page(
 
 # ── Guard ────────────────────────────────────────────────────
 if not st.session_state.get("analysis_ready"):
-    _lang = st.session_state.get("_lang", "en")
-    render_empty_state(
-        title="Portfolio tools need analysis data" if _lang == "en" else "组合工具需要分析数据",
-        description=(
-            "Efficient frontier, scenario simulator (-30% to +30%), compliance "
-            "auto-correction, margin monitor, and trade blotter — all driven "
-            "by your portfolio's risk profile. Run analysis from the sidebar."
-            if _lang == "en"
-            else "有效前沿、情景模拟器（-30% 至 +30%）、合规自动纠正、保证金监控、"
-            "交易下单单 — 均依赖组合风险画像。请从侧边栏运行分析。"
-        ),
-        action_hint=(
-            "Markowitz optimization · per-ticker impact waterfall"
-            if _lang == "en"
-            else "Markowitz 优化 · 单券影响瀑布图"
-        ),
+    render_analysis_required(
+        "Portfolio Actions",
+        "Efficient frontier, the −30% to +30% scenario simulator, margin "
+        "monitor, compliance checks, and draft trades all read from your "
+        "latest analysis.",
+        action_hint="Markowitz optimization · per-ticker impact waterfall",
     )
     st.stop()
 

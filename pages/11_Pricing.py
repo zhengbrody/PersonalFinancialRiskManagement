@@ -40,7 +40,7 @@ if _pending:
         st.error("Stripe returned an invalid checkout URL. Please retry.")
         st.stop()
     _pending_html = escape(_pending, quote=True)
-    st.success("Checkout session created. Your login has been saved.")
+    st.success("Redirecting to Stripe Checkout — your session is saved.")
     st.link_button(
         "Continue to Stripe Checkout",
         _pending,
@@ -61,13 +61,31 @@ if _pending:
 
 
 def _checkout_button(plan: str) -> None:
-    """Render the CTA for a plan and create Stripe Checkout on demand."""
+    """Render the CTA for a plan and create Stripe Checkout on demand.
+
+    For the Free tier we route signed-in users to the Dashboard (they are
+    already on Free) and anonymous users to Login. For paid tiers we
+    require auth — Stripe sessions must carry a ``client_reference_id``
+    pointing at a Supabase user so the webhook can attribute the
+    subscription back.
+    """
+    plan_label = PLAN_PRICING[plan]["label"]
+
     if plan == "free":
-        st.page_link("pages/0_Login.py", label="Start free", width="stretch")
+        if is_authenticated():
+            st.page_link("app.py", label="Go to dashboard", width="stretch")
+        else:
+            st.page_link("pages/0_Login.py", label="Start free", width="stretch")
         return
 
     if not is_authenticated():
-        st.page_link("pages/0_Login.py", label="Sign in to subscribe", width="stretch")
+        # Anonymous visitor on a paid card: send them to login with a
+        # nudge that hints at *why* (subscribe needs an account).
+        st.page_link(
+            "pages/0_Login.py",
+            label=f"Sign in to subscribe to {plan_label}",
+            width="stretch",
+        )
         return
 
     user = current_user() or {}

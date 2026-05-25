@@ -21,8 +21,8 @@ from app import (
 from i18n import get_translator
 from ui.components import (
     render_ai_digest,
+    render_analysis_required,
     render_chart,
-    render_empty_state,
     render_kpi_row,
     render_metric_list,
     render_section,
@@ -36,20 +36,10 @@ render_shared_sidebar()
 
 # Guard
 if not st.session_state.get("analysis_ready"):
-    _lang = st.session_state.get("_lang", "en")
-    render_empty_state(
-        title="No analysis yet" if _lang == "en" else "暂无分析数据",
-        description=(
-            "Overview shows portfolio KPIs, cumulative returns, drawdown and cost-basis P&L. "
-            "Configure your portfolio in the sidebar and click Run Analysis to populate this page."
-            if _lang == "en"
-            else "概览页展示组合 KPI、累计收益、回撤和本金盈亏。请在侧边栏配置持仓并点击 Run Analysis 加载数据。"
-        ),
-        action_hint=(
-            "Takes ~5-10 seconds (first run) / <3s (cached)"
-            if _lang == "en"
-            else "首次约 5-10 秒 · 缓存命中约 3 秒内"
-        ),
+    render_analysis_required(
+        "Overview",
+        "Headline KPIs, the Portfolio Health Score, cumulative returns, "
+        "and drawdown all live here.",
     )
     st.stop()
 

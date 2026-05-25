@@ -16,6 +16,8 @@ def test_live_payload_uses_supabase_holdings_and_complete_meta():
     payload = build_live_portfolio_payload(
         holdings=holdings,
         margin_loan=50,
+        contributed_capital=500,
+        cash_balance=25,
         active_meta={"name": "User Portfolio", "source": "supabase", "id": "pf-1"},
         price_fetcher=lambda tickers: {"AAPL": 150.0, "MSFT": 300.0},
     )
@@ -23,9 +25,11 @@ def test_live_payload_uses_supabase_holdings_and_complete_meta():
     assert payload.weights == {"AAPL": 0.5, "MSFT": 0.5}
     assert payload.meta["portfolio_source"] == "supabase"
     assert payload.meta["total_long"] == pytest.approx(600.0)
-    assert payload.meta["net_equity"] == pytest.approx(550.0)
-    assert payload.meta["leverage"] == pytest.approx(600.0 / 550.0)
-    assert payload.meta["contributed_capital"] == 0
+    assert payload.meta["cash_balance"] == pytest.approx(25.0)
+    assert payload.meta["net_equity"] == pytest.approx(575.0)
+    assert payload.meta["leverage"] == pytest.approx(600.0 / 575.0)
+    assert payload.meta["contributed_capital"] == pytest.approx(500.0)
+    assert payload.meta["return_on_capital_dollar"] == pytest.approx(75.0)
 
     cost_info = payload.meta["position_cost_info"]
     assert cost_info["coverage_by_mv_pct"] == pytest.approx(0.5)
@@ -37,6 +41,7 @@ def test_live_payload_uses_supabase_holdings_and_complete_meta():
     assert taxable["net_equity"] == pytest.approx(250.0)
     assert taxable["leverage"] == pytest.approx(300.0 / 250.0)
     assert "ira" in payload.meta["account_breakdown"]
+    assert payload.meta["account_breakdown"]["cash"]["cash_balance"] == pytest.approx(25.0)
 
 
 def test_empty_active_portfolio_fails_closed():
@@ -67,6 +72,8 @@ def test_payload_normalizes_lowercase_tickers():
     payload = build_live_portfolio_payload(
         holdings={"aapl": {"shares": 1, "avg_cost": 100, "account": "taxable"}},
         margin_loan=0,
+        contributed_capital=0,
+        cash_balance=0,
         active_meta={"name": "User Portfolio", "source": "supabase", "id": "pf-1"},
         price_fetcher=lambda tickers: {"AAPL": 150.0},
     )

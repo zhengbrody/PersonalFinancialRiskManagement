@@ -48,6 +48,16 @@ def _hardcoded_fallback() -> tuple[Dict[str, Dict[str, Any]], float]:
     return holdings, margin
 
 
+def _hardcoded_capital() -> Dict[str, float]:
+    """Owner/demo capital inputs from portfolio_config."""
+    return {
+        "contributed_capital": float(
+            getattr(_pc, "CONTRIBUTED_CAPITAL", getattr(_pc, "TOTAL_COST_BASIS", 0))
+        ),
+        "cash_balance": float(getattr(_pc, "CASH_BALANCE", 0.0)),
+    }
+
+
 def get_active_holdings() -> Dict[str, Dict[str, Any]]:
     """Return holdings dict for current user (DB) or hardcoded fallback."""
     holdings, _ = _resolve()
@@ -58,6 +68,33 @@ def get_active_margin_loan() -> float:
     """Return margin loan dollar amount for current user (DB) or fallback."""
     _, margin = _resolve()
     return margin
+
+
+def get_active_capital_inputs() -> Dict[str, float]:
+    """Return account-level capital fields for the active portfolio.
+
+    contributed_capital is true user principal (net deposits), while
+    cash_balance is idle cash included in net equity. These are portfolio-row
+    fields for SaaS users and portfolio_config fields for owner/demo mode.
+    """
+    if not is_authenticated():
+        return _hardcoded_capital()
+
+    portfolio = _fetch_db_portfolio()
+    if portfolio is None or not (portfolio.get("holdings") or {}):
+        return (
+            _hardcoded_capital()
+            if _is_owner_session()
+            else {
+                "contributed_capital": 0.0,
+                "cash_balance": 0.0,
+            }
+        )
+
+    return {
+        "contributed_capital": float(portfolio.get("contributed_capital") or 0.0),
+        "cash_balance": float(portfolio.get("cash_balance") or 0.0),
+    }
 
 
 def _is_owner_session() -> bool:
