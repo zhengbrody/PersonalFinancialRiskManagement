@@ -38,6 +38,8 @@ from typing import Optional
 from .client import AuthError, get_supabase
 from .session import access_token, current_user
 
+_CAPITAL_FIELDS = {"contributed_capital", "cash_balance"}
+
 
 def _finite_or_zero(v) -> float:
     """Coerce v to a finite float, or 0 if it's NaN/Inf/garbage.
@@ -83,6 +85,24 @@ def _sanitize_holdings(holdings: dict) -> dict:
             pos["margin_eligible"] = bool(h["margin_eligible"])
         clean[str(tk).strip().upper()] = pos
     return clean
+
+
+def _is_missing_capital_column_error(exc: Exception) -> bool:
+    """True when production DB has not applied migration 0003 yet.
+
+    Supabase/PostgREST reports this as a schema-cache or SQL column error.
+    During rolling deploys we strip the new optional fields and retry so
+    existing portfolio CRUD keeps working until the migration is applied.
+    """
+    msg = str(exc).lower()
+    mentions_capital_field = any(field in msg for field in _CAPITAL_FIELDS)
+    return mentions_capital_field and (
+        "schema cache" in msg or "column" in msg or "42703" in msg or "could not find" in msg
+    )
+
+
+def _strip_capital_fields(payload: dict) -> dict:
+    return {k: v for k, v in payload.items() if k not in _CAPITAL_FIELDS}
 
 
 def _authed_client():
@@ -150,20 +170,20 @@ def create_portfolio(
         # is irrelevant for a single user.
         sb.table("portfolios").update({"is_default": False}).eq("is_default", True).execute()
 
-    resp = (
-        sb.table("portfolios")
-        .insert(
-            {
-                "name": name,
-                "holdings": _sanitize_holdings(holdings),
-                "margin_loan": _finite_or_zero(margin_loan),
-                "contributed_capital": _finite_or_zero(contributed_capital),
-                "cash_balance": _finite_or_zero(cash_balance),
-                "is_default": is_default,
-            }
-        )
-        .execute()
-    )
+    payload = {
+        "name": name,
+        "holdings": _sanitize_holdings(holdings),
+        "margin_loan": _finite_or_zero(margin_loan),
+        "contributed_capital": _finite_or_zero(contributed_capital),
+        "cash_balance": _finite_or_zero(cash_balance),
+        "is_default": is_default,
+    }
+    try:
+        resp = sb.table("portfolios").insert(payload).execute()
+    except Exception as exc:
+        if not _is_missing_capital_column_error(exc):
+            raise
+        resp = sb.table("portfolios").insert(_strip_capital_fields(payload)).execute()
     rows = resp.data or []
     if not rows:
         raise AuthError("Insert returned no row — check RLS policy.")
@@ -200,7 +220,18 @@ def update_portfolio(portfolio_id: str, **fields) -> dict:
             "id", portfolio_id
         ).execute()
 
-    resp = sb.table("portfolios").update(fields).eq("id", portfolio_id).execute()
+    try:
+        resp = sb.table("portfolios").update(fields).eq("id", portfolio_id).execute()
+    except Exception as exc:
+        if not _is_missing_capital_column_error(exc):
+            raise
+        legacy_fields = _strip_capital_fields(fields)
+        if not legacy_fields:
+            raise AuthError(
+                "Portfolio capital fields are not deployed in Supabase yet. "
+                "Run migration 0003_portfolio_capital.sql before saving principal/cash."
+            ) from exc
+        resp = sb.table("portfolios").update(legacy_fields).eq("id", portfolio_id).execute()
     rows = resp.data or []
     if not rows:
         raise AuthError("No row updated — wrong id or RLS blocked you.")

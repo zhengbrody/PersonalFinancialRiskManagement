@@ -160,6 +160,30 @@ def test_create_strips_nan_avg_cost_before_insert(mock_supabase):
     assert sent["cash_balance"] == 0.0
 
 
+def test_create_falls_back_when_capital_columns_not_migrated(mock_supabase):
+    """Rolling deploy safety: old Supabase schemas can still create portfolios."""
+    mock_supabase.execute.side_effect = [
+        Exception(
+            "Could not find the 'contributed_capital' column of 'portfolios' in the schema cache"
+        ),
+        MagicMock(data=[{"id": "new"}]),
+    ]
+    from libs.auth.portfolios import create_portfolio
+
+    out = create_portfolio(
+        name="Tech",
+        holdings={"AAPL": {"shares": 10}},
+        contributed_capital=15000,
+        cash_balance=250,
+    )
+
+    assert out["id"] == "new"
+    retry_payload = mock_supabase.insert.call_args_list[-1].args[0]
+    assert "contributed_capital" not in retry_payload
+    assert "cash_balance" not in retry_payload
+    assert retry_payload["holdings"] == {"AAPL": {"shares": 10}}
+
+
 def test_create_default_demotes_others_first(mock_supabase):
     mock_supabase.execute.return_value = MagicMock(data=[{"id": "p2", "is_default": True}])
     from libs.auth.portfolios import create_portfolio
@@ -174,6 +198,36 @@ def test_update_rejects_unknown_fields():
 
     with pytest.raises(ValueError, match="Cannot update fields"):
         update_portfolio("p1", garbage="bad")
+
+
+def test_update_falls_back_when_capital_columns_not_migrated(mock_supabase):
+    mock_supabase.execute.side_effect = [
+        Exception("column portfolios.cash_balance does not exist"),
+        MagicMock(data=[{"id": "p1", "margin_loan": 1000}]),
+    ]
+    from libs.auth.portfolios import update_portfolio
+
+    out = update_portfolio(
+        "p1",
+        margin_loan=1000,
+        contributed_capital=20000,
+        cash_balance=500,
+    )
+
+    assert out["id"] == "p1"
+    retry_payload = mock_supabase.update.call_args_list[-1].args[0]
+    assert retry_payload == {"margin_loan": 1000}
+
+
+def test_update_capital_only_requires_migration(mock_supabase):
+    mock_supabase.execute.side_effect = [
+        Exception("column portfolios.cash_balance does not exist"),
+    ]
+    from libs.auth.client import AuthError
+    from libs.auth.portfolios import update_portfolio
+
+    with pytest.raises(AuthError, match="migration 0003_portfolio_capital"):
+        update_portfolio("p1", contributed_capital=20000, cash_balance=500)
 
 
 def test_delete_calls_supabase(mock_supabase):
