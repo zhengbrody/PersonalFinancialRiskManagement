@@ -43,6 +43,21 @@ def test_load_refresh_token_decodes_component_cookie(monkeypatch):
     assert load_refresh_token() == "refresh.token/with+chars"
 
 
+def test_load_refresh_token_uses_http_cookie_header_before_component(monkeypatch):
+    fake_st = SimpleNamespace(
+        session_state={},
+        context=SimpleNamespace(headers={"cookie": "other=1; mm_auth_v1=refresh%2Ftoken"}),
+    )
+    fake_stx = SimpleNamespace(CookieManager=MagicMock())
+    monkeypatch.setitem(sys.modules, "streamlit", fake_st)
+    monkeypatch.setitem(sys.modules, "extra_streamlit_components", fake_stx)
+
+    from libs.auth.cookie_persist import load_refresh_token
+
+    assert load_refresh_token() == "refresh/token"
+    fake_stx.CookieManager.assert_not_called()
+
+
 def test_try_restore_session_hydrates_state_and_rotates_cookie(monkeypatch):
     cm = MagicMock()
     cm.get.return_value = "old-refresh"

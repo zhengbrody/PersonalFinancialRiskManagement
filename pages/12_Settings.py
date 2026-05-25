@@ -14,6 +14,8 @@ without that wired up, paid users will see stale "Free" here.
 
 from __future__ import annotations
 
+from html import escape
+
 import streamlit as st
 
 from libs.auth.guards import require_auth_page
@@ -21,6 +23,7 @@ from libs.auth.session import current_user, persist_current_session_cookie
 from libs.billing.stripe_checkout import (
     StripeConfigError,
     create_customer_portal_session,
+    validate_stripe_redirect_url,
 )
 from libs.billing.usage import (
     PLAN_PRICING,
@@ -77,6 +80,12 @@ if return_status == "back":
 # any cookie-write rerun doesn't lose the URL.
 _pending_portal = st.session_state.pop("_pending_portal_url", None)
 if _pending_portal:
+    try:
+        _pending_portal = validate_stripe_redirect_url(_pending_portal)
+    except StripeConfigError:
+        st.error("Stripe returned an invalid billing portal URL. Please retry.")
+        st.stop()
+    _pending_portal_html = escape(_pending_portal, quote=True)
     st.success("Billing portal ready. Your login has been saved.")
     st.link_button(
         "Continue to Stripe",
@@ -87,7 +96,7 @@ if _pending_portal:
     st.markdown(
         f"""
 <script>setTimeout(function() {{ window.location.href = {_pending_portal!r}; }}, 1500);</script>
-<meta http-equiv="refresh" content="2; url={_pending_portal}">
+<meta http-equiv="refresh" content="2; url={_pending_portal_html}">
 """,
         unsafe_allow_html=True,
     )

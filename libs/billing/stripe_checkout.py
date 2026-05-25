@@ -14,6 +14,7 @@ import logging
 import os
 from dataclasses import dataclass
 from typing import Optional
+from urllib.parse import urlparse
 
 from .usage import PLAN_PRICING
 
@@ -40,6 +41,23 @@ def _read_secret(key: str) -> str:
         return st.secrets.get(key, "")
     except Exception:
         return ""
+
+
+def validate_stripe_redirect_url(url: str) -> str:
+    """Return a Stripe-hosted HTTPS redirect URL or raise.
+
+    Checkout and Customer Portal URLs are opaque one-time URLs returned by
+    Stripe. We still validate the destination before placing it in
+    session_state or a meta-refresh block so a corrupted session cannot turn
+    our Pricing/Settings pages into an open redirect.
+    """
+    raw = str(url or "").strip()
+    parsed = urlparse(raw)
+    host = (parsed.hostname or "").lower()
+    is_stripe_host = host == "stripe.com" or host.endswith(".stripe.com")
+    if parsed.scheme != "https" or not is_stripe_host:
+        raise StripeConfigError("Stripe returned an invalid redirect URL.")
+    return raw
 
 
 def _expected_amount_cents(plan: str) -> int:
@@ -160,7 +178,7 @@ def create_checkout_session(
     session_id: Optional[str] = getattr(session, "id", None) or session.get("id")
     if not url or not session_id:
         raise StripeConfigError("Stripe did not return a Checkout URL.")
-    return CheckoutResult(url=url, session_id=session_id)
+    return CheckoutResult(url=validate_stripe_redirect_url(url), session_id=session_id)
 
 
 def create_customer_portal_session(
@@ -201,7 +219,7 @@ def create_customer_portal_session(
     url = getattr(session, "url", None) or session.get("url")
     if not url:
         raise StripeConfigError("Stripe did not return a portal URL.")
-    return str(url)
+    return validate_stripe_redirect_url(str(url))
 
 
 def paid_plan_cards() -> list[dict]:

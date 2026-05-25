@@ -8,10 +8,16 @@ Supabase user id for subscription sync and quota upgrades.
 
 from __future__ import annotations
 
+from html import escape
+
 import streamlit as st
 
 from libs.auth.session import current_user, is_authenticated, persist_current_session_cookie
-from libs.billing.stripe_checkout import StripeConfigError, create_checkout_session
+from libs.billing.stripe_checkout import (
+    StripeConfigError,
+    create_checkout_session,
+    validate_stripe_redirect_url,
+)
 from libs.billing.usage import PLAN_LIMITS, PLAN_PRICING, get_user_plan
 from ui.shared_sidebar import render_shared_sidebar
 from ui.tokens import T
@@ -28,6 +34,12 @@ render_shared_sidebar()
 # flashes → button disappears → nowhere to click".
 _pending = st.session_state.pop("_pending_checkout_url", None)
 if _pending:
+    try:
+        _pending = validate_stripe_redirect_url(_pending)
+    except StripeConfigError:
+        st.error("Stripe returned an invalid checkout URL. Please retry.")
+        st.stop()
+    _pending_html = escape(_pending, quote=True)
     st.success("Checkout session created. Your login has been saved.")
     st.link_button(
         "Continue to Stripe Checkout",
@@ -41,7 +53,7 @@ if _pending:
     st.markdown(
         f"""
 <script>setTimeout(function() {{ window.location.href = {_pending!r}; }}, 1500);</script>
-<meta http-equiv="refresh" content="2; url={_pending}">
+<meta http-equiv="refresh" content="2; url={_pending_html}">
 """,
         unsafe_allow_html=True,
     )

@@ -120,6 +120,36 @@ def test_create_checkout_session_requires_paid_plan(monkeypatch):
         create_checkout_session(user_id="user-1", email="x@y.com", plan="free")
 
 
+def test_stripe_redirect_url_validation_allows_stripe_hosts():
+    from libs.billing.stripe_checkout import validate_stripe_redirect_url
+
+    assert (
+        validate_stripe_redirect_url("https://checkout.stripe.com/c/pay/cs_test")
+        == "https://checkout.stripe.com/c/pay/cs_test"
+    )
+    assert (
+        validate_stripe_redirect_url("https://billing.stripe.com/p/session/test")
+        == "https://billing.stripe.com/p/session/test"
+    )
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://checkout.stripe.com/c/pay/cs_test",
+        "https://checkout.stripe.com.evil.example/c/pay/cs_test",
+        "https://evilstripe.com/c/pay/cs_test",
+        "javascript:alert(1)",
+        "",
+    ],
+)
+def test_stripe_redirect_url_validation_rejects_open_redirects(url):
+    from libs.billing.stripe_checkout import StripeConfigError, validate_stripe_redirect_url
+
+    with pytest.raises(StripeConfigError):
+        validate_stripe_redirect_url(url)
+
+
 def test_sync_subscription_updates_subscription_and_profile(monkeypatch):
     from libs.billing import stripe_sync
 
