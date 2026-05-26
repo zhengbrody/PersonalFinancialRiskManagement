@@ -1156,3 +1156,370 @@ def render_analyst_report(report: dict, ticker: str, current_price: float = None
             f'<ul style="list-style:disc;padding-left:{T.sp_xl};margin:{T.sp_sm} 0">{risk_html}</ul>',
             unsafe_allow_html=True,
         )
+
+
+# ══════════════════════════════════════════════════════════════
+#  Risk Memory + AI Action Loop helpers
+# ══════════════════════════════════════════════════════════════
+#
+#  These render building blocks for:
+#   - the "Since last analysis" delta strip on Overview
+#   - the rule-based action card grid on Overview
+#   - the data source + confidence footer under every AI digest
+#   - the per-block "Save insight" button
+#
+#  Each helper is pure rendering: business logic lives in
+#  libs.auth.snapshots / libs.risk.action_cards / libs.risk.confidence.
+
+
+_SEVERITY_STYLE = {
+    "critical": {"color": "#ff6b6b", "label": "Critical"},
+    "important": {"color": "#ff9f43", "label": "Important"},
+    "watch": {"color": "#f1c40f", "label": "Watch"},
+    "info": {"color": T.text_secondary, "label": "Info"},
+}
+
+_CONFIDENCE_STYLE = {
+    "high": {"color": T.positive if hasattr(T, "positive") else "#26d07c", "label": "High"},
+    "medium": {"color": "#f1c40f", "label": "Medium"},
+    "low": {"color": "#ff6b6b", "label": "Low"},
+}
+
+
+def _fmt_delta_money(value, *, sign: bool = True) -> str:
+    if value is None:
+        return "—"
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return "—"
+    fmt = "${:+,.0f}" if sign else "${:,.0f}"
+    return fmt.format(v)
+
+
+def _fmt_delta_pct(value) -> str:
+    if value is None:
+        return "—"
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return "—"
+    return f"{v:+.1%}"
+
+
+def render_delta_strip(delta: dict) -> None:
+    """Render the "Since your last analysis" compact strip.
+
+    ``delta`` is the dict returned by
+    ``libs.auth.snapshots.compute_delta``. We never compute deltas
+    here — this helper is purely presentation.
+
+    Empty state (``not delta.get("has_prior")``) is rendered as a calm
+    one-liner so the user understands they'll unlock the feature on the
+    next run.
+    """
+    if not delta or not delta.get("has_prior"):
+        st.markdown(
+            (
+                f'<div style="background:{T.surface};border:1px dashed {T.border_subtle};'
+                f"border-radius:{T.radius};padding:{T.sp_md} {T.sp_lg};"
+                f'margin:{T.sp_sm} 0;{T.font_caption};color:{T.text_muted}">'
+                "📈 Run analysis one more time to unlock change tracking."
+                "</div>"
+            ),
+            unsafe_allow_html=True,
+        )
+        return
+
+    def _cell(label: str, body: str, hint: str = "") -> str:
+        hint_html = (
+            f'<div style="{T.font_caption};color:{T.text_muted};margin-top:2px">{hint}</div>'
+            if hint
+            else ""
+        )
+        return (
+            f'<div style="flex:1;min-width:140px;padding:{T.sp_sm} {T.sp_md};">'
+            f'<div style="{T.font_overline};color:{T.text_secondary}">{label}</div>'
+            f'<div style="{T.font_subsection};color:{T.text};margin-top:4px">{body}</div>'
+            f"{hint_html}"
+            f"</div>"
+        )
+
+    cells: list[str] = []
+
+    ne = delta.get("net_equity")
+    if ne:
+        cells.append(
+            _cell(
+                "Net Equity",
+                _fmt_delta_money(ne.get("delta")),
+                _fmt_delta_pct(ne.get("pct_change")),
+            )
+        )
+    lev = delta.get("leverage")
+    if lev:
+        d = lev.get("delta")
+        cells.append(
+            _cell(
+                "Leverage",
+                f"{d:+.2f}x" if d is not None else "—",
+                f"now {lev.get('current'):.2f}x" if lev.get("current") is not None else "",
+            )
+        )
+    ml = delta.get("margin_loan")
+    if ml:
+        cells.append(
+            _cell(
+                "Margin Loan",
+                _fmt_delta_money(ml.get("delta")),
+                _fmt_delta_pct(ml.get("pct_change")),
+            )
+        )
+    var = delta.get("var_95")
+    if var:
+        cells.append(
+            _cell(
+                "VaR 95%",
+                _fmt_delta_pct(var.get("delta")),
+                f"now {var.get('current'):.2%}" if var.get("current") is not None else "",
+            )
+        )
+    sr = delta.get("sharpe")
+    if sr:
+        d = sr.get("delta")
+        cells.append(
+            _cell(
+                "Sharpe",
+                f"{d:+.2f}" if d is not None else "—",
+                f"now {sr.get('current'):.2f}" if sr.get("current") is not None else "",
+            )
+        )
+    top = delta.get("top_concentration")
+    if top and top.get("current"):
+        cur = top["current"]
+        if top.get("changed"):
+            body = f"{cur.get('ticker','?')} {cur.get('weight',0):.0%}"
+            hint = "top position changed"
+        else:
+            d = top.get("delta")
+            body = f"{cur.get('ticker','?')} {cur.get('weight',0):.0%}"
+            hint = _fmt_delta_pct(d) if d is not None else ""
+        cells.append(_cell("Top Concentration", body, hint))
+
+    if not cells:
+        # All scalars came back None — show empty state.
+        render_delta_strip({"has_prior": False})
+        return
+
+    elapsed = delta.get("elapsed_seconds")
+    elapsed_label = ""
+    if isinstance(elapsed, int) and elapsed > 0:
+        if elapsed < 3600:
+            elapsed_label = f"{elapsed // 60}m"
+        elif elapsed < 86400:
+            elapsed_label = f"{elapsed // 3600}h"
+        else:
+            elapsed_label = f"{elapsed // 86400}d"
+
+    header = (
+        f'<div style="{T.font_overline};color:{T.accent};letter-spacing:0.08em">'
+        f"SINCE YOUR LAST ANALYSIS"
+        + (
+            f' <span style="color:{T.text_muted};font-weight:400">· {elapsed_label} ago</span>'
+            if elapsed_label
+            else ""
+        )
+        + "</div>"
+    )
+    st.markdown(
+        (
+            f'<div style="background:{T.surface};border:1px solid {T.border_subtle};'
+            f'border-radius:{T.radius};padding:{T.sp_md} {T.sp_md};margin:{T.sp_md} 0">'
+            f"{header}"
+            f'<div style="display:flex;flex-wrap:wrap;margin-top:{T.sp_sm}">'
+            f'{"".join(cells)}'
+            f"</div></div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def render_action_cards(cards, *, title: str = "Recommended actions") -> None:
+    """Render a grid of rule-based action cards.
+
+    ``cards`` is an iterable of ``ActionCard`` instances (or dicts with
+    the same keys, for forward compatibility with LLM-refined output).
+    Empty input renders nothing.
+    """
+    # Normalise to plain dicts so we accept both the dataclass and a
+    # JSON-loaded list (e.g. saved insight payload).
+    rows: list[dict] = []
+    for c in cards or []:
+        if hasattr(c, "to_dict"):
+            rows.append(c.to_dict())
+        elif isinstance(c, dict):
+            rows.append(c)
+    if not rows:
+        return
+
+    st.markdown(
+        f'<div style="{T.font_overline};color:{T.text_secondary};'
+        f'letter-spacing:0.08em;margin-top:{T.sp_md}">{title}</div>',
+        unsafe_allow_html=True,
+    )
+
+    for c in rows:
+        sev_meta = _SEVERITY_STYLE.get(str(c.get("severity", "info")), _SEVERITY_STYLE["info"])
+        evidence_html = (
+            f'<div style="{T.font_caption};color:{T.text_secondary};margin-top:6px">'
+            f'{c.get("evidence", "")}</div>'
+            if c.get("evidence")
+            else ""
+        )
+        action_html = (
+            f'<div style="{T.font_body};color:{T.text};margin-top:8px">'
+            f'{c.get("suggested_action", "")}</div>'
+            if c.get("suggested_action")
+            else ""
+        )
+        confidence_label = str(c.get("confidence", "high")).title()
+        st.markdown(
+            (
+                f'<div style="background:{T.surface};border-left:3px solid {sev_meta["color"]};'
+                f"border-top:1px solid {T.border_subtle};border-right:1px solid {T.border_subtle};"
+                f"border-bottom:1px solid {T.border_subtle};"
+                f'border-radius:{T.radius};padding:{T.sp_md} {T.sp_lg};margin:{T.sp_sm} 0">'
+                f'<div style="display:flex;justify-content:space-between;align-items:center">'
+                f'<div style="{T.font_subsection};color:{T.text}">{c.get("title", "")}</div>'
+                f'<div style="{T.font_caption};color:{sev_meta["color"]};font-weight:600;'
+                f'text-transform:uppercase;letter-spacing:0.06em">{sev_meta["label"]}</div>'
+                f"</div>"
+                f"{evidence_html}"
+                f"{action_html}"
+                f'<div style="{T.font_caption};color:{T.text_muted};margin-top:8px">'
+                f"Confidence: {confidence_label} · Source: {c.get('source', 'rule')}"
+                f"</div>"
+                f"</div>"
+            ),
+            unsafe_allow_html=True,
+        )
+
+
+def render_confidence_footer(
+    confidence: dict | None,
+    *,
+    sources: str = "",
+    timestamp: str = "",
+) -> None:
+    """Compact footer rendered under any AI block.
+
+    ``confidence`` is the dict returned by ``libs.risk.compute_confidence``.
+    ``sources`` is the human-readable provenance string (the same kwarg
+    we already pass to ``render_ai_digest``).
+    """
+    if not confidence and not sources and not timestamp:
+        return
+
+    level = (confidence or {}).get("level", "high")
+    style = _CONFIDENCE_STYLE.get(level, _CONFIDENCE_STYLE["high"])
+    hints = (confidence or {}).get("hints") or []
+    missing = (confidence or {}).get("missing") or []
+
+    bits: list[str] = []
+    bits.append(
+        f'<span style="display:inline-block;padding:2px 8px;border-radius:10px;'
+        f'background:{style["color"]}22;color:{style["color"]};font-weight:600;'
+        f'font-size:11px;letter-spacing:0.05em">Confidence · {style["label"]}</span>'
+    )
+    if sources:
+        bits.append(f'<span style="color:{T.text_muted}">Sources: {sources}</span>')
+    if timestamp:
+        bits.append(f'<span style="color:{T.text_muted}">{timestamp}</span>')
+    if missing:
+        bits.append(
+            f'<span style="color:{T.text_muted}">Missing: {", ".join(map(str, missing[:4]))}'
+            + ("…" if len(missing) > 4 else "")
+            + "</span>"
+        )
+
+    tooltip_html = ""
+    if hints:
+        items = "".join(f"<li>{h}</li>" for h in hints[:4])
+        tooltip_html = (
+            f'<div style="{T.font_caption};color:{T.text_muted};margin-top:4px">'
+            f'<details><summary style="cursor:pointer">Why this confidence?</summary>'
+            f'<ul style="margin:6px 0 0 18px">{items}</ul></details></div>'
+        )
+
+    st.markdown(
+        (
+            f'<div style="{T.font_caption};margin-top:6px;display:flex;'
+            f'flex-wrap:wrap;gap:10px;align-items:center">'
+            + "".join(bits)
+            + "</div>"
+            + tooltip_html
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def render_save_insight_button(
+    *,
+    key: str,
+    page: str,
+    title: str,
+    content: str,
+    provider: str | None = None,
+    model: str | None = None,
+    tokens_in: int = 0,
+    tokens_out: int = 0,
+    cost_usd: float = 0.0,
+    metadata: dict | None = None,
+    label: str = "💾 Save insight",
+) -> bool:
+    """Render a small inline "Save insight" button.
+
+    Wraps ``libs.auth.saved_insights.save_insight`` so every caller gets
+    consistent error/success behaviour. Returns True once the save
+    succeeds (button was clicked and DB write returned a row); the
+    caller can use this to refresh a "Saved" list or fire a toast.
+
+    Anonymous users see the button disabled — saving requires a Supabase
+    user_id, and silently swallowing the click would feel broken.
+    """
+    try:
+        from libs.auth.session import is_authenticated
+    except Exception:
+        is_authenticated = lambda: False  # noqa: E731
+
+    if not is_authenticated():
+        st.button(
+            label,
+            key=key,
+            disabled=True,
+            help="Sign in to save insights to your account.",
+        )
+        return False
+
+    if not st.button(label, key=key, help="Save this AI output for later review."):
+        return False
+
+    try:
+        from libs.auth.saved_insights import save_insight
+
+        save_insight(
+            page=page,
+            title=title,
+            content=content,
+            provider=provider,
+            model=model,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost_usd=cost_usd,
+            metadata=metadata,
+        )
+    except Exception as exc:
+        st.error(f"Could not save: {exc}")
+        return False
+    st.toast("Saved to your insights ✅", icon="✅")
+    return True

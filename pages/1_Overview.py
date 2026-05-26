@@ -33,6 +33,7 @@ from ui.shared_sidebar import render_shared_sidebar
 from ui.tokens import T
 
 render_shared_sidebar()
+st.session_state["_active_page"] = "overview"
 
 # Guard
 if not st.session_state.get("analysis_ready"):
@@ -685,10 +686,71 @@ if not account_df.empty:
         width="stretch",
     )
 
+# ── Risk Memory: deterministic delta + rule-based action cards ──
+# Computed BEFORE the LLM digest so:
+#  (a) the user sees grounded info even if AI is down / over-budget;
+#  (b) the action card payload can be passed to the chat as evidence.
+_snapshot_delta_payload: dict = {}
+try:
+    from libs.auth.snapshots import compute_delta, list_recent_snapshots
+    from libs.risk import compute_confidence, generate_action_cards
+    from ui.components import (
+        render_action_cards,
+        render_confidence_footer,
+        render_delta_strip,
+        render_save_insight_button,
+    )
+
+    _recent_snaps = list_recent_snapshots(limit=2)
+    _snapshot_delta_payload = compute_delta(
+        _recent_snaps[0] if _recent_snaps else {},
+        _recent_snaps[1] if len(_recent_snaps) > 1 else None,
+    )
+    render_section(
+        "Since your last analysis",
+        "Deterministic deltas — no AI required.",
+    )
+    render_delta_strip(_snapshot_delta_payload)
+
+    _action_cards = generate_action_cards(
+        report=report,
+        weights=weights,
+        meta=meta_kpi or {},
+        snapshot_delta=_snapshot_delta_payload,
+    )
+    if _action_cards:
+        render_action_cards(_action_cards, title="What to look at first")
+        # Persist action cards into session_state so the floating chat
+        # can cite them as evidence ("Why did we flag NVDA?").
+        st.session_state["_recent_action_cards"] = [c.to_dict() for c in _action_cards]
+    # Cache the delta payload for the chat too.
+    st.session_state["_recent_snapshot_delta"] = _snapshot_delta_payload
+except Exception as _delta_exc:
+    # Risk memory must never break the Overview page.
+    st.caption(f"Risk memory unavailable: {_delta_exc}")
+    render_action_cards = None  # type: ignore[assignment]
+    render_confidence_footer = None  # type: ignore[assignment]
+    render_save_insight_button = None  # type: ignore[assignment]
+
+
 render_section("AI Risk Digest")
+_overview_digest_text: str = ""
+_overview_digest_fallback: bool = False
 try:
     top_holding = sorted(weights.items(), key=lambda x: -x[1])[0]
     top_tk, top_wt = top_holding
+    # Inject the deterministic delta so the LLM's "what changed" answer
+    # cannot drift from what we just rendered above. This is the same
+    # grounding pattern the chat uses.
+    _delta_for_prompt = ""
+    if _snapshot_delta_payload.get("has_prior"):
+        ne = _snapshot_delta_payload.get("net_equity") or {}
+        var = _snapshot_delta_payload.get("var_95") or {}
+        if ne.get("delta") is not None:
+            _delta_for_prompt += f"\n- Net Equity change since last run: {ne.get('delta'):+,.0f}"
+        if var.get("delta") is not None:
+            _delta_for_prompt += f"\n- VaR 95% change since last run: {var.get('delta'):+.2%}"
+
     prompt = f"""Based on the following portfolio risk data, generate a concise risk summary (3-4 sentences):
 - Net Equity: ${(meta_kpi or {}).get('net_equity', 0):,.0f}
 - VaR 95% ({mc_horizon}d): {report.var_95:.2%}
@@ -696,9 +758,8 @@ try:
 - Sharpe Ratio: {report.sharpe_ratio:.2f}
 - Top Holding: {top_tk} ({top_wt:.1%})
 - Annual Volatility: {report.annual_volatility:.2%}
-- Stress Loss: {report.stress_loss:.2%}
-Highlight the single most important risk and one practical next step. Plain text, no markdown."""
-    pass
+- Stress Loss: {report.stress_loss:.2%}{_delta_for_prompt}
+Highlight the single most important risk and one practical next step. Plain text, no markdown. Answer in the same language as the user appears to use (default to English)."""
 
     with st.spinner("Generating AI risk digest..."):
         digest = cached_digest(
@@ -713,11 +774,46 @@ Highlight the single most important risk and one practical next step. Plain text
                 top_tk,
             ),
         )
-    render_ai_digest(digest, sources="Monte Carlo VaR, Factor Model")
+    _overview_digest_text = digest or ""
+    render_ai_digest(digest, sources="Monte Carlo VaR · Factor Model · Snapshot delta")
 except Exception:
-    render_ai_digest(
-        f"Portfolio VaR is {report.var_95:.1%}. Max drawdown {report.max_drawdown:.1%}. Sharpe {report.sharpe_ratio:.2f}.",
+    _overview_digest_fallback = True
+    _overview_digest_text = (
+        f"Portfolio VaR is {report.var_95:.1%}. Max drawdown {report.max_drawdown:.1%}. "
+        f"Sharpe {report.sharpe_ratio:.2f}."
     )
+    render_ai_digest(_overview_digest_text)
+
+# Footer + Save-insight button under the digest. Wrapped in try/except
+# because the helpers are conditionally imported above.
+try:
+    _conf = compute_confidence(
+        fmp_ok=not (meta_kpi or {}).get("data_quality", {}).get("fmp_unavailable", False),
+        yfinance_missing=(meta_kpi or {}).get("missing") or [],
+        cost_basis_coverage=(
+            ((meta_kpi or {}).get("position_cost_info") or {}).get("coverage_by_mv_pct")
+        ),
+        stale_data=bool((meta_kpi or {}).get("data_quality", {}).get("stale")),
+        llm_fallback=_overview_digest_fallback,
+        risk_report_present=True,
+    )
+    from datetime import datetime as _dt
+
+    render_confidence_footer(
+        _conf,
+        sources="Monte Carlo VaR · Factor Model · Snapshot delta",
+        timestamp=_dt.now().strftime("%Y-%m-%d %H:%M"),
+    )
+    if _overview_digest_text:
+        render_save_insight_button(
+            key="save_overview_digest",
+            page="overview",
+            title="Risk Digest",
+            content=_overview_digest_text,
+            metadata={"confidence": _conf, "delta": _snapshot_delta_payload},
+        )
+except Exception:
+    pass
 
 from libs.data_quality import overview_report, render_data_quality_panel  # noqa: E402
 

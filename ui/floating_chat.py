@@ -764,6 +764,57 @@ def _build_portfolio_context(*, depth: str = "auto", user_message: str = "") -> 
             except Exception:
                 pass
 
+    # Risk Memory: append the snapshot delta + the most recent rule-based
+    # action cards. These are deterministic, already shown to the user on
+    # Overview, and let the chat answer "what changed since last run?"
+    # without hallucinating.
+    try:
+        delta = st.session_state.get("_recent_snapshot_delta") or {}
+        if isinstance(delta, dict) and delta.get("has_prior"):
+            d_lines: list[str] = ["CHANGE SINCE LAST ANALYSIS:"]
+            for label, key in (
+                ("Net equity", "net_equity"),
+                ("Leverage", "leverage"),
+                ("Margin loan", "margin_loan"),
+                ("VaR 95%", "var_95"),
+                ("Sharpe", "sharpe"),
+            ):
+                slot = delta.get(key) or {}
+                d = slot.get("delta")
+                if d is None:
+                    continue
+                # Format as dollars for capital, percent for ratios.
+                if key in ("net_equity", "margin_loan"):
+                    d_lines.append(f"- {label} change: {d:+,.0f}")
+                elif key == "leverage":
+                    d_lines.append(f"- {label} change: {d:+.2f}x")
+                else:
+                    d_lines.append(f"- {label} change: {d:+.2%}")
+            top = delta.get("top_concentration") or {}
+            if top.get("current"):
+                cur = top["current"]
+                if top.get("changed"):
+                    d_lines.append(
+                        f"- Top concentration is now {cur.get('ticker')} ({cur.get('weight',0):.1%})"
+                    )
+            if len(d_lines) > 1:
+                parts.append("\n".join(d_lines))
+    except Exception:
+        pass
+
+    try:
+        cards = st.session_state.get("_recent_action_cards") or []
+        if cards:
+            c_lines = ["RULE-BASED ACTION CARDS (cite these by title when relevant):"]
+            for c in cards[:5]:
+                title = c.get("title") if isinstance(c, dict) else getattr(c, "title", "")
+                sev = c.get("severity") if isinstance(c, dict) else getattr(c, "severity", "info")
+                ev = c.get("evidence") if isinstance(c, dict) else getattr(c, "evidence", "")
+                c_lines.append(f"- [{sev}] {title} — {ev}")
+            parts.append("\n".join(c_lines))
+    except Exception:
+        pass
+
     if not parts:
         return (
             "No portfolio data is loaded yet. Ask the user to create/select a "
@@ -771,6 +822,53 @@ def _build_portfolio_context(*, depth: str = "auto", user_message: str = "") -> 
         )
 
     return "\n\n".join(parts)
+
+
+# Per-page suggested prompts. Each list is a "chip rail" rendered at the
+# top of the chat dialog. The chip text becomes the user's first message
+# verbatim — so the prompts must read naturally as a question.
+_PAGE_SUGGESTION_PROMPTS: dict[str, list[str]] = {
+    "overview": [
+        "What changed in my portfolio since the last run?",
+        "What is my biggest risk right now?",
+        "Which position should I reduce first?",
+        "Explain my leverage in simple terms.",
+    ],
+    "risk": [
+        "How much can my portfolio fall before I'm in margin danger?",
+        "Which holding contributes the most VaR?",
+        "What scenario would hurt me the most?",
+        "Suggest one hedge to reduce drawdown.",
+    ],
+    "portfolio_actions": [
+        "What's the single best rebalance trade to lower risk?",
+        "Which holding is dragging Sharpe down?",
+        "How much cash should I keep as a buffer?",
+        "Project the impact of trimming my top position by 5%.",
+    ],
+    "ticker_research": [
+        "Is this ticker a fit for my current risk profile?",
+        "What weight would not push my concentration past 15%?",
+        "How does this name correlate with my existing book?",
+        "What's the biggest downside scenario for this ticker?",
+    ],
+}
+
+
+def _resolve_page_suggestions() -> list[str]:
+    """Pick the suggestion chip set based on the active page.
+
+    Streamlit doesn't expose "current page" cleanly, so we read a hint
+    the pages set in session_state (``_active_page``). Falls back to
+    the legacy ``_SUGGESTION_PROMPTS`` list.
+    """
+    try:
+        key = str(st.session_state.get("_active_page") or "").lower()
+    except Exception:
+        key = ""
+    if key in _PAGE_SUGGESTION_PROMPTS:
+        return _PAGE_SUGGESTION_PROMPTS[key]
+    return _SUGGESTION_PROMPTS
 
 
 _SYSTEM_PROMPT = (
@@ -848,7 +946,7 @@ def _open_chat_dialog():
     if not st.session_state._fc_messages:
         st.markdown("**Quick questions:**")
         cols = st.columns(2)
-        for idx, suggestion in enumerate(_SUGGESTION_PROMPTS):
+        for idx, suggestion in enumerate(_resolve_page_suggestions()):
             with cols[idx % 2]:
                 if st.button(suggestion, key=f"_fc_sug_{idx}", width="stretch"):
                     _handle_user_input(suggestion, chat_container)

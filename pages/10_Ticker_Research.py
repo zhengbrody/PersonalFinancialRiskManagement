@@ -28,6 +28,7 @@ from ui.tokens import T
 
 # ── Shared sidebar ────────────────────────────────────────────
 render_shared_sidebar()
+st.session_state["_active_page"] = "ticker_research"
 require_auth_page(
     "Ticker Research",
     description=(

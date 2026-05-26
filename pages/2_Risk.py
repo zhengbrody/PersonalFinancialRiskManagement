@@ -32,6 +32,7 @@ from ui.shared_sidebar import render_shared_sidebar
 from ui.tokens import T
 
 render_shared_sidebar()
+st.session_state["_active_page"] = "risk"
 
 # ── Guard ────────────────────────────────────────────────────
 if not st.session_state.get("analysis_ready"):
@@ -94,6 +95,8 @@ FACTOR EXPOSURE:
 
 Identify the PRIMARY risk, explain its portfolio impact, and give ONE actionable mitigation. Plain text, no markdown."""
 
+    _risk_digest_text = ""
+    _risk_digest_fallback = False
     with st.spinner("Generating risk analysis..."):
         digest = cached_digest(
             "risk_main",
@@ -109,13 +112,47 @@ Identify the PRIMARY risk, explain its portfolio impact, and give ONE actionable
                 market_shock,
             ),
         )
-    render_ai_digest(digest, sources="VaR Model, Factor Analysis, Stress Testing")
+    _risk_digest_text = digest or ""
+    render_ai_digest(digest, sources="VaR Model · Factor Analysis · Stress Testing")
 except Exception:
-    render_ai_digest(
+    _risk_digest_fallback = True
+    _risk_digest_text = (
         f"Portfolio VaR 95% is {report.var_95:.2%} over {mc_horizon} days. "
-        f"Max drawdown {report.max_drawdown:.2%}. Stress loss under {market_shock:.0%} shock: {report.stress_loss:.2%}.",
-        sources="Risk Engine",
+        f"Max drawdown {report.max_drawdown:.2%}. Stress loss under {market_shock:.0%} "
+        f"shock: {report.stress_loss:.2%}."
     )
+    render_ai_digest(_risk_digest_text, sources="Risk Engine (fallback)")
+
+# Confidence footer + Save-insight button under the digest.
+try:
+    from libs.risk import compute_confidence
+    from ui.components import render_confidence_footer, render_save_insight_button
+
+    _risk_meta = st.session_state.get("_portfolio_meta") or {}
+    _risk_conf = compute_confidence(
+        fmp_ok=not (_risk_meta.get("data_quality") or {}).get("fmp_unavailable", False),
+        yfinance_missing=_risk_meta.get("missing") or [],
+        cost_basis_coverage=(
+            (_risk_meta.get("position_cost_info") or {}).get("coverage_by_mv_pct")
+        ),
+        stale_data=bool((_risk_meta.get("data_quality") or {}).get("stale")),
+        llm_fallback=_risk_digest_fallback,
+        risk_report_present=True,
+    )
+    render_confidence_footer(
+        _risk_conf,
+        sources="VaR Model · Factor Analysis · Stress Testing",
+    )
+    if _risk_digest_text:
+        render_save_insight_button(
+            key="save_risk_digest",
+            page="risk",
+            title="Risk Analysis",
+            content=_risk_digest_text,
+            metadata={"confidence": _risk_conf, "mc_horizon": mc_horizon},
+        )
+except Exception:
+    pass
 
 from libs.data_quality import render_data_quality_panel, risk_report  # noqa: E402
 

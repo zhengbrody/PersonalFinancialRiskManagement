@@ -46,6 +46,7 @@ def _active_margin_loan() -> float:
 
 
 render_shared_sidebar()
+st.session_state["_active_page"] = "portfolio_actions"
 require_auth_page(
     "Portfolio Actions",
     description=(

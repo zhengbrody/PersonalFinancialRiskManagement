@@ -432,6 +432,58 @@ configured = [
 st.markdown("### Configuration")
 _render_status_rows(configured)
 
+
+# ── Schema readiness (Risk Memory + capital migrations) ─────────────
+# Surfaces which migrations have actually been applied in the linked
+# Supabase project. Owner-only — regular users never hit this page.
+def _render_schema_readiness() -> None:
+    """One-row-per-table check. We do a cheap SELECT ... LIMIT 0 against
+    each required relation: it succeeds if the table is reachable and
+    the named columns exist, fails (and we report it) if not."""
+
+    checks = [
+        # (label, table, columns to verify)
+        ("portfolios.contributed_capital", "portfolios", "contributed_capital"),
+        ("portfolios.cash_balance", "portfolios", "cash_balance"),
+        ("usage_events", "usage_events", "id"),
+        ("monthly_usage view", "monthly_usage", "user_id"),
+        ("subscriptions", "subscriptions", "stripe_customer_id"),
+        ("portfolio_snapshots (0004)", "portfolio_snapshots", "risk_metrics"),
+        ("saved_insights (0004)", "saved_insights", "content"),
+    ]
+
+    try:
+        sb, _scope = _usage_client()
+    except Exception as exc:
+        st.warning(f"Schema check skipped — no DB client: {exc}")
+        return
+
+    rows: list[dict] = []
+    for label, table, column in checks:
+        ok = True
+        detail = ""
+        try:
+            sb.table(table).select(column).limit(0).execute()
+        except Exception as exc:
+            ok = False
+            detail = str(exc)[:160]
+        rows.append({"check": label, "ok": ok, "detail": detail})
+
+    st.markdown("### Schema Readiness")
+    for row in rows:
+        icon = "✅" if row["ok"] else "❌"
+        line = f"{icon} **{row['check']}**"
+        if not row["ok"]:
+            line += f" — `{row['detail']}`"
+        st.markdown(line)
+    if any(not r["ok"] for r in rows):
+        st.caption(
+            "Missing tables/columns? Apply the matching migration in "
+            "Supabase SQL editor: `supabase/migrations/000{1..4}_*.sql`."
+        )
+
+
+_render_schema_readiness()
 _render_usage_dashboard()
 
 _render_ai_cost_dashboard()

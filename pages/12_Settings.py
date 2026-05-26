@@ -275,6 +275,68 @@ with action_cols[1]:
     )
 
 
+# ── Saved Insights ──────────────────────────────────────────────────
+# Curated AI digests / chat answers the user explicitly chose to keep.
+# Keep this simple: list newest first with a delete button per row.
+st.markdown("")
+st.markdown(
+    f'<div style="{T.font_section};color:{T.text};margin-top:{T.sp_md};">'
+    "Saved insights"
+    "</div>",
+    unsafe_allow_html=True,
+)
+st.caption("AI digests and chat answers you've saved. Insights are private to your account.")
+
+try:
+    from libs.auth.saved_insights import delete_insight, list_insights
+
+    _insights = list_insights(limit=50)
+    if not _insights:
+        st.info(
+            "Nothing saved yet. Tap **💾 Save insight** below any AI digest to keep it here.",
+            icon="📚",
+        )
+    else:
+        for _row in _insights:
+            _row_id = str(_row.get("id") or "")
+            _ts = str(_row.get("created_at") or "")[:16].replace("T", " ")
+            _page = str(_row.get("page") or "")
+            _title = str(_row.get("title") or "Insight")
+            _content = str(_row.get("content") or "")
+            with st.expander(f"📌 {_title} · {_page} · {_ts}", expanded=False):
+                st.markdown(_content)
+                cost = _row.get("cost_usd") or 0
+                model = _row.get("model") or ""
+                provenance = []
+                if model:
+                    provenance.append(f"Model: `{model}`")
+                if cost:
+                    try:
+                        provenance.append(f"Cost: ${float(cost):.4f}")
+                    except (TypeError, ValueError):
+                        pass
+                if provenance:
+                    st.caption(" · ".join(provenance))
+                if st.button(
+                    "Delete",
+                    key=f"saved_insight_delete_{_row_id}",
+                    help="Remove this insight from your saved list.",
+                ):
+                    try:
+                        delete_insight(_row_id)
+                        st.toast("Insight deleted", icon="🗑️")
+                        st.rerun()
+                    except Exception as _del_exc:
+                        st.error(f"Could not delete: {_del_exc}")
+except Exception as _list_exc:
+    # If the migration hasn't been applied yet the table doesn't exist;
+    # surface a friendly hint without blowing up the page.
+    st.caption(
+        "Saved insights are not available yet — run migration 0004_risk_memory.sql "
+        f"in Supabase to enable. ({_list_exc})"
+    )
+
+
 # ── Footnote ────────────────────────────────────────────────────────
 st.markdown("---")
 st.caption(

@@ -2321,6 +2321,38 @@ def execute_analysis(force: bool = False) -> bool:
                     _last_analysis_ts=time.time(),
                 )
             )
+
+            # ── Risk Memory: persist one snapshot per completed run ──
+            # Idempotency: dedupe on the cache key — a fresh "Run with
+            # Current Weights" that lands on the SAME _cache_key didn't
+            # actually re-compute and should not produce a duplicate
+            # snapshot. Real recomputes (different params or force) get
+            # a different key and ARE persisted.
+            try:
+                _last_snap_key = st.session_state.get("_last_snapshot_cache_key")
+                if _last_snap_key != _cache_key:
+                    from libs.auth.snapshots import write_snapshot
+
+                    _snap_meta = st.session_state.get("_portfolio_meta") or {}
+                    _snap_meta = dict(_snap_meta)
+                    _snap_meta.setdefault(
+                        "missing", st.session_state.get("missing_tickers", []) or []
+                    )
+                    _snap_row = write_snapshot(
+                        report=report,
+                        weights=weights,
+                        meta=_snap_meta,
+                        source="auto",
+                    )
+                    # Track the cache key we last persisted so we don't
+                    # double-write on a pure rerender of the same result.
+                    st.session_state["_last_snapshot_cache_key"] = _cache_key
+                    if _snap_row:
+                        st.session_state["_last_snapshot_id"] = _snap_row.get("id")
+            except Exception as _snap_exc:
+                # Snapshot writes must never block analysis success.
+                logger.warning("snapshot.write_failed", error=str(_snap_exc))
+
             target = st.session_state.pop("_route_after_analysis", None)
             if target:
                 st.switch_page(target)
