@@ -237,10 +237,9 @@ st.markdown(
     [data-testid="stStatusWidget"] {display: none !important;}
     header[data-testid="stHeader"] {background: transparent !important;}
 
-    /* Keep sidebar toggle visible when collapsed */
+    /* Keep Streamlit's native sidebar control above the app chrome
+       without forcing its internal icon text to render as visible copy. */
     [data-testid="collapsedControl"] {
-        visibility: visible !important;
-        display: flex !important;
         z-index: 999990;
     }
 

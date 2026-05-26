@@ -219,6 +219,10 @@ def test_inject_global_css_emits_keyframes_and_fonts(monkeypatch):
     # the system font and tabular-nums isn't guaranteed.
     assert "Inter" in css
     assert "JetBrains+Mono" in css or "JetBrains Mono" in css
+    assert "material-symbols" in css
+    assert "Material Symbols Rounded" in css
+    assert ".stApp p, .stApp span, .stApp div" not in css
+    assert "display: flex !important;" not in css
 
     # Utility classes pages opt into.
     for cls in (".mm-ai-glow", ".mm-card", ".mm-pill", ".mm-mono", ".mm-display"):

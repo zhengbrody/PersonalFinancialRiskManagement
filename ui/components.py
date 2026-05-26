@@ -47,20 +47,42 @@ def inject_global_css():
         [data-testid="stDeployButton"],
         [data-testid="stStatusWidget"] {{display: none;}}
 
-        /* Keep sidebar toggle visible when collapsed */
+        /* Keep Streamlit's native sidebar control above the app chrome
+           without forcing its internal icon text to render as visible copy. */
         [data-testid="collapsedControl"] {{
-            visibility: visible !important;
-            display: flex !important;
             z-index: 999990;
         }}
 
         /* ── App background + font stack ───────────────── */
-        .stApp,
-        .stApp p, .stApp span, .stApp div,
-        .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp button,
-        .stApp [data-testid="stMarkdownContainer"] {{
+        .stApp {{
             font-family: "Inter", -apple-system, "SF Pro Display", system-ui, sans-serif;
             font-variant-numeric: tabular-nums;
+        }}
+        .stApp p,
+        .stApp h1, .stApp h2, .stApp h3, .stApp h4,
+        .stApp label,
+        .stApp input,
+        .stApp textarea,
+        .stApp button,
+        .stApp [data-testid="stMarkdownContainer"],
+        .stApp [data-testid="stMarkdownContainer"] * {{
+            font-family: "Inter", -apple-system, "SF Pro Display", system-ui, sans-serif;
+            font-variant-numeric: tabular-nums;
+        }}
+        .stApp [class*="material-symbols"],
+        .stApp [class*="MaterialIcons"],
+        .stApp [data-testid="stIconMaterial"],
+        .stApp [data-testid="collapsedControl"] span {{
+            font-family: "Material Symbols Rounded", "Material Icons", sans-serif !important;
+            font-weight: normal !important;
+            font-style: normal !important;
+            letter-spacing: normal !important;
+            text-transform: none !important;
+            white-space: nowrap;
+            word-wrap: normal;
+            direction: ltr;
+            -webkit-font-feature-settings: "liga";
+            -webkit-font-smoothing: antialiased;
         }}
         .stApp {{
             background-color: {T.bg};
