@@ -947,6 +947,116 @@ CONFIDENCE: [High / Medium / Low]"""
         st.caption("Insufficient data to generate AI analysis.")
 
     # ══════════════════════════════════════════════════════════
+    #  9b. Deep Equity Analysis + PDF Export
+    #      Wraps libs/analysis/equity_research + equity_pdf so the
+    #      user gets a Qlik-style dashboard + a one-click
+    #      institutional PDF without leaving the page.
+    # ══════════════════════════════════════════════════════════
+    st.markdown("---")
+    render_section(
+        "📑 Deep Equity Analysis + PDF",
+        subtitle=(
+            "Wall-Street-style 6-dimension analysis with full evidence trail, "
+            "plus a one-click institutional PDF export."
+        ),
+    )
+
+    try:
+        from libs.analysis.equity_pdf import build_equity_pdf
+        from libs.analysis.equity_research import analyze_equity, build_company_dossier
+        from ui.components import render_equity_dashboard
+
+        deep_btn_col, deep_caption_col = st.columns([1, 3])
+        with deep_btn_col:
+            deep_run_clicked = st.button(
+                "Run deep analysis",
+                key="run_deep_equity_analysis",
+                type="primary",
+                width="stretch",
+            )
+        with deep_caption_col:
+            st.caption(
+                "Uses your active AI provider. Falls back to a data-only view "
+                "when the LLM is unavailable. Educational only — not advice."
+            )
+
+        deep_state_key = f"_deep_equity_{ticker.upper()}"
+        if deep_run_clicked:
+            with st.spinner("Assembling dossier..."):
+                _deep_dossier = build_company_dossier(ticker.upper(), fmp_key=fmp_key or "")
+
+            # We pass the same call_llm wrapper that the floating chat
+            # uses, so quota / cost tracking flows through the existing
+            # libs.billing.usage hooks.
+            _deep_llm = None
+            try:
+                from app import call_llm as _deep_call_llm
+
+                def _deep_llm_fn(*, prompt, system, max_tokens, temperature):
+                    return _deep_call_llm(
+                        prompt=prompt,
+                        system=system,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        stream=False,
+                    )
+
+                _deep_llm = _deep_llm_fn
+            except Exception:
+                _deep_llm = None
+
+            with st.spinner("Analysing with senior-analyst prompt..."):
+                _deep_analysis = analyze_equity(_deep_dossier, llm_callable=_deep_llm)
+
+            st.session_state[deep_state_key] = {
+                "dossier": _deep_dossier,
+                "analysis": _deep_analysis,
+            }
+
+        cached_deep = st.session_state.get(deep_state_key)
+        if cached_deep:
+            render_equity_dashboard(cached_deep["dossier"], cached_deep["analysis"])
+
+            # PDF export — pull 1y price series so the report includes a
+            # close + SMA50/200 chart. Failure to fetch the series isn't
+            # fatal; the chart slot just stays empty.
+            _pdf_price_series = None
+            try:
+                import yfinance as _yf  # noqa: WPS433
+
+                _hist = _yf.Ticker(ticker.upper()).history(period="1y")
+                if _hist is not None and not _hist.empty:
+                    _pdf_price_series = _hist["Close"]
+            except Exception:
+                _pdf_price_series = None
+
+            try:
+                pdf_bytes = build_equity_pdf(
+                    cached_deep["dossier"],
+                    cached_deep["analysis"],
+                    price_history=_pdf_price_series,
+                )
+                st.download_button(
+                    label="📄 Export institutional PDF",
+                    data=pdf_bytes,
+                    file_name=f"{ticker.upper()}_equity_research.pdf",
+                    mime="application/pdf",
+                    type="primary",
+                    width="stretch",
+                    key=f"deep_pdf_dl_{ticker.upper()}",
+                )
+            except Exception as pdf_exc:
+                st.error(f"PDF export unavailable: {pdf_exc}")
+        else:
+            st.info(
+                "Click **Run deep analysis** to generate the dimension "
+                "scorecard, evidence-grounded narrative, and PDF.",
+                icon="📊",
+            )
+    except Exception as deep_exc:
+        st.warning(f"Deep analysis module unavailable: {deep_exc}")
+
+    # ══════════════════════════════════════════════════════════
     #  10. Institutional Analyst Report — full IB-grade research note
     # ══════════════════════════════════════════════════════════
     from ui.components import render_analyst_report, render_unified_error

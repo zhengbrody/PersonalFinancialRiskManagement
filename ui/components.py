@@ -1580,3 +1580,311 @@ def render_save_insight_button(
         return False
     st.toast("Saved to your insights ✅", icon="✅")
     return True
+
+
+# ══════════════════════════════════════════════════════════════
+#  Equity Deep Analysis dashboard (Qlik-style density)
+# ══════════════════════════════════════════════════════════════
+#
+#  Renders the output of libs.analysis.equity_research.DeepAnalysis
+#  next to its source dossier. Pure presentation — all numbers come
+#  from the dossier dict, all narrative comes from DeepAnalysis. No
+#  computation here.
+
+
+_VERDICT_STYLE = {
+    "STRONG_BUY": {"color": "#10A06E", "label": "Strong Buy"},
+    "BUY": {"color": "#10A06E", "label": "Buy"},
+    "HOLD": {"color": "#0B7285", "label": "Hold"},
+    "REDUCE": {"color": "#D99840", "label": "Reduce"},
+    "AVOID": {"color": "#D94B4B", "label": "Avoid"},
+}
+
+
+def _equity_score_color(score: int) -> str:
+    if score >= 70:
+        return "#10A06E"
+    if score >= 50:
+        return "#0B7285"
+    if score >= 30:
+        return "#D99840"
+    return "#D94B4B"
+
+
+def _equity_dash(value):
+    """Pretty-print scalars for the dashboard. Returns em-dash on None."""
+    if value is None:
+        return "—"
+    return value
+
+
+def _fmt_pct_dash(value, signed: bool = False, places: int = 1):
+    if value is None:
+        return "—"
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return "—"
+    fmt = f"{{:+.{places}%}}" if signed else f"{{:.{places}%}}"
+    return fmt.format(f)
+
+
+def _fmt_money_dash(value):
+    if value is None:
+        return "—"
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return "—"
+    if abs(f) >= 1e9:
+        return f"${f/1e9:,.2f}B"
+    if abs(f) >= 1e6:
+        return f"${f/1e6:,.2f}M"
+    return f"${f:,.2f}"
+
+
+def _fmt_num_dash(value, places: int = 2):
+    if value is None:
+        return "—"
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return "—"
+    return f"{f:.{places}f}"
+
+
+def render_equity_dashboard(dossier: dict, analysis) -> None:
+    """Render the institutional dashboard for a single ticker.
+
+    Parameters
+    ----------
+    dossier:
+        Output of ``libs.analysis.equity_research.build_company_dossier``.
+    analysis:
+        A ``DeepAnalysis`` instance (Pydantic model from the same module).
+    """
+    if not dossier:
+        st.info("No dossier loaded yet.")
+        return
+
+    ticker = dossier.get("ticker", "—")
+    profile = dossier.get("profile") or {}
+    market = dossier.get("market") or {}
+    fund = dossier.get("fundamentals") or {}
+    val = dossier.get("valuation") or {}
+    tech = dossier.get("technicals") or {}
+    ratings = dossier.get("ratings") or {}
+    ownership = dossier.get("ownership") or {}
+    insider = dossier.get("insider") or {}
+
+    # ── Verdict ribbon ──────────────────────────────────────────
+    verdict_style = _VERDICT_STYLE.get(
+        getattr(analysis.verdict, "rating", "HOLD"), _VERDICT_STYLE["HOLD"]
+    )
+    conf = (getattr(analysis.verdict, "confidence", "low") or "low").title()
+    thesis = getattr(analysis.verdict, "thesis_one_liner", "") or ""
+    target_band = getattr(analysis.verdict, "target_weight_pct_band", "") or "—"
+
+    st.markdown(
+        f"""
+<div style="background:{T.surface};border:1px solid {T.border_subtle};
+            border-radius:{T.radius_lg};padding:{T.sp_lg};margin:{T.sp_md} 0;">
+  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+    <div style="background:{verdict_style['color']};color:#FFFFFF;
+                padding:6px 14px;border-radius:6px;font-weight:700;
+                letter-spacing:0.05em;font-size:13px;">
+      {verdict_style['label'].upper()}
+    </div>
+    <div style="{T.font_caption};color:{T.text_secondary};">
+      Confidence <strong style="color:{T.text}">{conf}</strong>
+      &nbsp;·&nbsp; Sleeve <strong style="color:{T.text}">{target_band}</strong>
+      &nbsp;·&nbsp; {profile.get('sector','—')} / {profile.get('industry','—')}
+    </div>
+  </div>
+  <div style="{T.font_body};color:{T.text};margin-top:{T.sp_md};line-height:1.55;">
+    {thesis}
+  </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
+
+    # ── Headline KPI row ────────────────────────────────────────
+    kpis = [
+        {"label": "Price", "value": _fmt_money_dash(market.get("current_price"))},
+        {"label": "Market Cap", "value": _fmt_money_dash(market.get("market_cap"))},
+        {"label": "P/E (TTM)", "value": _fmt_num_dash(fund.get("pe_ttm"))},
+        {"label": "ROE", "value": _fmt_pct_dash(fund.get("roe"))},
+        {
+            "label": "Rev Growth Y/Y",
+            "value": _fmt_pct_dash(fund.get("revenue_growth_yoy"), signed=True),
+        },
+        {"label": "Beta", "value": _fmt_num_dash(market.get("beta"))},
+    ]
+    render_kpi_row(kpis)
+
+    # ── 5-card dimension grid ──────────────────────────────────
+    st.markdown(
+        f'<div style="{T.font_overline};color:{T.text_secondary};'
+        f'margin-top:{T.sp_lg}">DIMENSION SCORECARD</div>',
+        unsafe_allow_html=True,
+    )
+    dim_cols = st.columns(5)
+    for col, key in zip(dim_cols, ("quality", "fundamentals", "growth", "technicals", "sentiment")):
+        dim = analysis.dimensions.get(key)
+        if dim is None:
+            continue
+        score = int(getattr(dim, "score_0_100", 50) or 0)
+        color = _equity_score_color(score)
+        first_point = (dim.key_points[0] if dim.key_points else "Insufficient data.")[:160]
+        with col:
+            st.markdown(
+                f"""
+<div style="background:{T.surface};border:1px solid {T.border_subtle};
+            border-radius:{T.radius};padding:{T.sp_md};min-height:148px;">
+  <div style="{T.font_overline};color:{T.text_secondary}">{key.upper()}</div>
+  <div style="font-size:34px;font-weight:800;color:{color};margin-top:4px;line-height:1">
+    {score}
+    <span style="font-size:13px;color:{T.text_muted};font-weight:500"> / 100</span>
+  </div>
+  <div style="{T.font_caption};color:{T.text_secondary};margin-top:{T.sp_sm};line-height:1.45">
+    {first_point}
+  </div>
+</div>
+""",
+                unsafe_allow_html=True,
+            )
+
+    # ── Tabbed deep dive ───────────────────────────────────────
+    tab_fund, tab_growth, tab_tech, tab_sent, tab_risks = st.tabs(
+        ["Fundamentals", "Growth & Valuation", "Technicals", "Sentiment & Insider", "Risks"]
+    )
+
+    with tab_fund:
+        dim_f = analysis.dimensions.get("fundamentals")
+        if dim_f:
+            for point in (dim_f.key_points or [])[:6]:
+                st.markdown(f"- {point}")
+        st.markdown("")
+        df_rows = [
+            ("P/E (TTM)", _fmt_num_dash(fund.get("pe_ttm"))),
+            ("P/S (TTM)", _fmt_num_dash(fund.get("ps_ttm"))),
+            ("P/B", _fmt_num_dash(fund.get("pb"))),
+            ("EV / EBITDA", _fmt_num_dash(fund.get("ev_ebitda"))),
+            ("ROE", _fmt_pct_dash(fund.get("roe"))),
+            ("ROA", _fmt_pct_dash(fund.get("roa"))),
+            ("Gross Margin", _fmt_pct_dash(fund.get("gross_margin"))),
+            ("Operating Margin", _fmt_pct_dash(fund.get("operating_margin"))),
+            ("Net Margin", _fmt_pct_dash(fund.get("net_margin"))),
+            ("Debt / Equity", _fmt_num_dash(fund.get("debt_to_equity"))),
+            ("Current Ratio", _fmt_num_dash(fund.get("current_ratio"))),
+            ("Free Cash Flow", _fmt_money_dash(fund.get("free_cash_flow"))),
+            ("FCF Yield", _fmt_pct_dash(fund.get("fcf_yield"))),
+        ]
+        st.table({"Metric": [r[0] for r in df_rows], "Value": [r[1] for r in df_rows]})
+
+    with tab_growth:
+        dim_g = analysis.dimensions.get("growth")
+        if dim_g:
+            for point in (dim_g.key_points or [])[:6]:
+                st.markdown(f"- {point}")
+        st.markdown("**Valuation (DCF anchor)**")
+        st.table(
+            {
+                "Metric": [
+                    "Revenue Growth Y/Y",
+                    "Earnings Growth Y/Y",
+                    "DCF Intrinsic Value",
+                    "Upside vs. Spot",
+                    "WACC",
+                    "Terminal Growth",
+                ],
+                "Value": [
+                    _fmt_pct_dash(fund.get("revenue_growth_yoy"), signed=True),
+                    _fmt_pct_dash(fund.get("earnings_growth_yoy"), signed=True),
+                    _fmt_money_dash(val.get("dcf_intrinsic_value")),
+                    _fmt_pct_dash(val.get("dcf_upside_pct"), signed=True),
+                    _fmt_pct_dash(val.get("wacc")),
+                    _fmt_pct_dash(val.get("terminal_growth")),
+                ],
+            }
+        )
+
+    with tab_tech:
+        dim_t = analysis.dimensions.get("technicals")
+        if dim_t:
+            for point in (dim_t.key_points or [])[:6]:
+                st.markdown(f"- {point}")
+        st.markdown("")
+        st.table(
+            {
+                "Metric": [
+                    "RSI(14)",
+                    "SMA 50",
+                    "SMA 200",
+                    "MACD",
+                    "MACD Signal",
+                    "52W High",
+                    "52W Low",
+                    "Max Drawdown (1y)",
+                    "Beta",
+                    "Implied Volatility",
+                ],
+                "Value": [
+                    _fmt_num_dash(tech.get("rsi_14")),
+                    _fmt_money_dash(tech.get("sma_50")),
+                    _fmt_money_dash(tech.get("sma_200")),
+                    _fmt_num_dash(tech.get("macd"), places=4),
+                    _fmt_num_dash(tech.get("macd_signal"), places=4),
+                    _fmt_money_dash(tech.get("fifty_two_week_high")),
+                    _fmt_money_dash(tech.get("fifty_two_week_low")),
+                    _fmt_pct_dash(tech.get("max_drawdown_1y"), signed=True),
+                    _fmt_num_dash(market.get("beta")),
+                    _fmt_pct_dash(market.get("implied_volatility")),
+                ],
+            }
+        )
+
+    with tab_sent:
+        dim_s = analysis.dimensions.get("sentiment")
+        if dim_s:
+            for point in (dim_s.key_points or [])[:6]:
+                st.markdown(f"- {point}")
+        pt = ratings.get("price_targets") or {}
+        st.table(
+            {
+                "Metric": [
+                    "Consensus Rating",
+                    "Analyst Count",
+                    "Target (Low)",
+                    "Target (Consensus)",
+                    "Target (High)",
+                    "Institutional %",
+                    "Insider Net Shares (6m)",
+                ],
+                "Value": [
+                    str(ratings.get("analyst_rating") or "—"),
+                    str(ratings.get("analyst_count") or "—"),
+                    _fmt_money_dash(pt.get("low")),
+                    _fmt_money_dash(pt.get("consensus")),
+                    _fmt_money_dash(pt.get("high")),
+                    _fmt_pct_dash(ownership.get("institutional_pct")),
+                    str(insider.get("net_shares_6m") or "—"),
+                ],
+            }
+        )
+
+    with tab_risks:
+        st.markdown("**Risks the PM should track**")
+        for risk in (analysis.risks or [])[:8]:
+            st.markdown(f"- {risk}")
+        if not analysis.risks:
+            st.caption("No risks surfaced.")
+        st.markdown("**90-day catalysts**")
+        for cat in (analysis.catalysts_90d or [])[:8]:
+            st.markdown(f"- {cat}")
+        if not analysis.catalysts_90d:
+            st.caption("No catalysts surfaced.")
+        if analysis.data_gaps:
+            st.markdown("**Data gaps**")
+            st.caption(", ".join(analysis.data_gaps[:8]))

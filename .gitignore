@@ -67,3 +67,9 @@ docs/marketing/**/*.png
 docs/marketing/**/*.jpg
 docs/marketing/**/*.jpeg
 docs/marketing/youtube/rendered/**/*.html
+
+# Equity PDF: CJK font binaries dropped in for production. README
+# explains how to seed this directory on the EC2 host.
+fonts/*.ttf
+fonts/*.ttc
+fonts/*.otf
