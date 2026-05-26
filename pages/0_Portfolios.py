@@ -61,6 +61,26 @@ if not is_authenticated():
 user = current_user()
 st.caption(f"👤 {user['email']}  ·  user_id={user['id'][:8]}…")
 
+# Nudge users mid-onboarding back into the wizard. Cheap call —
+# needs_onboarding() short-circuits when not signed in or already
+# skipped this session.
+try:
+    from libs.auth.onboarding import needs_onboarding as _needs_onboarding
+
+    if _needs_onboarding():
+        st.info(
+            "👋 New here? We can walk you through the 3-step setup — "
+            "add holdings, pick risk preference, run your first analysis.",
+            icon="✨",
+        )
+        st.page_link(
+            "pages/0_Welcome.py",
+            label="→ Open guided setup",
+            width="stretch",
+        )
+except Exception:
+    pass
+
 
 # ── Helpers ────────────────────────────────────────────────────────
 

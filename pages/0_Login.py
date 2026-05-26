@@ -70,9 +70,37 @@ def _start_oauth(provider: str) -> None:
 
 
 def _render_auth_complete(message: str) -> None:
-    """Keep the page alive long enough for the browser cookie to commit."""
+    """Keep the page alive long enough for the browser cookie to commit.
+
+    First-time users (no DB portfolios) are routed into the 3-step
+    Welcome wizard. Returning users land on the Dashboard as before.
+    """
     st.success(message)
     st.caption("You're signed in. Your session is saved on this browser.")
+
+    # Route into onboarding when the user has no portfolio yet.
+    try:
+        from libs.auth.onboarding import needs_onboarding
+
+        if needs_onboarding():
+            st.caption("Setting up your account…")
+            st.page_link(
+                "pages/0_Welcome.py",
+                label="Start the 3-step setup →",
+                width="stretch",
+            )
+            # Auto-redirect after 1.5s so users on slow networks still
+            # see the success toast first.
+            st.markdown(
+                '<meta http-equiv="refresh" content="1; url=/Welcome">',
+                unsafe_allow_html=True,
+            )
+            st.stop()
+    except Exception:
+        # If onboarding plumbing breaks, fall through to the normal
+        # dashboard CTA — never block sign-in on a UX nicety.
+        pass
+
     st.page_link("app.py", label="Continue to dashboard", width="stretch")
     st.stop()
 

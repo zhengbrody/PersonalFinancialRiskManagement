@@ -28,6 +28,7 @@ _NAV_GROUPS = [
         [
             ("app.py", "Dashboard"),
             ("pages/0_Login.py", "Login"),
+            ("pages/0_Welcome.py", "Welcome (Setup)"),
             ("pages/0_Portfolios.py", "Portfolios"),
             ("pages/11_Pricing.py", "Pricing"),
         ],

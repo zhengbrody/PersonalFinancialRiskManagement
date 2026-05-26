@@ -147,6 +147,54 @@ def inject_global_css():
             }}
         }}
 
+        /* ── Mobile: shrink display fonts written as inline style ─
+           Some pages render heroes with font-size:56-84px hardcoded
+           in unsafe_allow_html blocks (Portfolio Health Score,
+           Pricing $price, etc.). Override them at the @media layer so
+           we don't have to rewrite every page. */
+        @media (max-width: 768px) {{
+            div[style*="font-size:84px"],
+            div[style*="font-size: 84px"] {{
+                font-size: 56px !important;
+                line-height: 1.0 !important;
+            }}
+            div[style*="font-size:56px"],
+            div[style*="font-size: 56px"] {{
+                font-size: 40px !important;
+                line-height: 1.0 !important;
+            }}
+            div[style*="font-size:34px"],
+            div[style*="font-size: 34px"] {{
+                font-size: 26px !important;
+            }}
+            div[style*="font-size:28px"],
+            div[style*="font-size: 28px"] {{
+                font-size: 22px !important;
+            }}
+            /* Tighten hero / section padding on mobile */
+            div[style*="padding:48px"],
+            div[style*="padding: 48px"],
+            div[style*="padding:32px"],
+            div[style*="padding: 32px"] {{
+                padding: 20px 12px !important;
+            }}
+            div[style*="padding:24px 8px 8px 8px"] {{
+                padding: 12px 4px 4px 4px !important;
+            }}
+            /* Risk Memory delta strip: cells should stack into 2-col
+               grid below 768px so the labels stay legible. */
+            div[style*="flex:1;min-width:140px"] {{
+                flex: 0 0 50% !important;
+                min-width: 0 !important;
+            }}
+            /* Action card grid: ensure single column even with our
+               wrapper divs */
+            div[style*="border-left:3px solid"] {{
+                margin-left: 0 !important;
+                margin-right: 0 !important;
+            }}
+        }}
+
         /* ── Small phones (iPhone SE / <480px) ─────────── */
         @media (max-width: 480px) {{
             h1 {{
@@ -158,6 +206,15 @@ def inject_global_css():
             }}
             .js-plotly-plot, .plotly-graph-div {{
                 max-height: 280px !important;
+            }}
+            /* Delta strip: stack to 1-col on phone narrower than 480 */
+            div[style*="flex:1;min-width:140px"] {{
+                flex: 1 1 100% !important;
+            }}
+            /* Hero portfolio score: extra trim on tiny screens */
+            div[style*="font-size:84px"],
+            div[style*="font-size: 84px"] {{
+                font-size: 44px !important;
             }}
         }}
     </style>
