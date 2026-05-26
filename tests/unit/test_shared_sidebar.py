@@ -62,15 +62,28 @@ def test_public_navigation_keeps_auth_required_tools_clickable_until_login(sideb
 
     module._render_custom_navigation()
 
+    hidden_until_login = getattr(module, "_SIGNED_IN_ONLY_NAV_PATHS", set())
     auth_calls = [
         call
         for call in fake_st.page_link.call_args_list
-        if call.args and call.args[0] in module._AUTH_REQUIRED_NAV_PATHS
+        if call.args
+        and call.args[0] in module._AUTH_REQUIRED_NAV_PATHS
+        and call.args[0] not in hidden_until_login
     ]
     disabled_paths = {call.args[0] for call in auth_calls if call.kwargs.get("disabled") is True}
     preview_paths = {call.args[0] for call in auth_calls if call.kwargs.get("help")}
-    assert module._AUTH_REQUIRED_NAV_PATHS.isdisjoint(disabled_paths)
-    assert module._AUTH_REQUIRED_NAV_PATHS.issubset(preview_paths)
+    public_auth_paths = module._AUTH_REQUIRED_NAV_PATHS - hidden_until_login
+    assert public_auth_paths.isdisjoint(disabled_paths)
+    assert public_auth_paths.issubset(preview_paths)
+
+
+def test_public_navigation_hides_welcome_setup_until_login(sidebar_module):
+    module, fake_st = sidebar_module
+
+    module._render_custom_navigation()
+
+    public_paths = {call.args[0] for call in fake_st.page_link.call_args_list if call.args}
+    assert "pages/0_Welcome.py" not in public_paths
 
 
 def test_signed_in_navigation_unlocks_auth_required_tools(sidebar_module):
@@ -79,9 +92,11 @@ def test_signed_in_navigation_unlocks_auth_required_tools(sidebar_module):
 
     module._render_custom_navigation()
 
+    signed_in_paths = {call.args[0] for call in fake_st.page_link.call_args_list if call.args}
     disabled_paths = {
         call.args[0]
         for call in fake_st.page_link.call_args_list
         if call.kwargs.get("disabled") is True
     }
+    assert "pages/0_Welcome.py" in signed_in_paths
     assert module._AUTH_REQUIRED_NAV_PATHS.isdisjoint(disabled_paths)

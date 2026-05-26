@@ -74,6 +74,7 @@ _NAV_GROUPS = [
 ]
 
 _AUTH_REQUIRED_NAV_PATHS = {
+    "pages/0_Welcome.py",
     "pages/4_Portfolio.py",
     "pages/11_Portfolio_Copilot_Beta.py",
     "pages/7_Trading_Floor.py",
@@ -81,6 +82,13 @@ _AUTH_REQUIRED_NAV_PATHS = {
     "pages/9_Quant_Lab.py",
     "pages/10_Ticker_Research.py",
     "pages/12_Settings.py",
+}
+
+_SIGNED_IN_ONLY_NAV_PATHS = {
+    # The welcome wizard is an onboarding flow after auth, not a public
+    # marketing route. Showing it to visitors makes the first navigation
+    # feel like an internal setup checklist.
+    "pages/0_Welcome.py",
 }
 
 
@@ -121,6 +129,8 @@ def _render_custom_navigation() -> None:
         )
         for path, label in items:
             if "97_Owner_Admin_Status.py" in path and not show_owner:
+                continue
+            if path in _SIGNED_IN_ONLY_NAV_PATHS and not is_signed_in:
                 continue
             requires_auth = path in _AUTH_REQUIRED_NAV_PATHS
             st.page_link(
