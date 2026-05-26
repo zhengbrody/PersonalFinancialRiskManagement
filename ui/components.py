@@ -16,9 +16,29 @@ from ui.tokens import T
 
 
 def inject_global_css():
-    """Inject the enterprise design system CSS. Call once at app start."""
+    """Inject the design system CSS. Call once at app start (already
+    wired from ``app.py``).
+
+    Lays down:
+      * Google Fonts (Inter + JetBrains Mono) so the tokens that
+        reference these families actually render with them, not the
+        system fallback.
+      * Streamlit chrome hides + base background.
+      * ``@keyframes`` for the AI moat (breath / pulse / score-rise).
+      * Utility classes pages can opt into via ``unsafe_allow_html``::
+
+            .mm-ai-glow   → applies the breathing purple shadow
+            .mm-card      → fintech-dark card with subtle border + radius
+            .mm-pill      → status pill (use with inline color)
+            .mm-mono      → tabular monospaced numbers
+            .mm-display   → hero number style
+            .mm-glass     → glassmorphism panel (for modals only)
+    """
     st.markdown(
         f"""
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
     <style>
         /* ── Hide Streamlit chrome ─────────────────────── */
         #MainMenu {{visibility: hidden;}}
@@ -34,7 +54,14 @@ def inject_global_css():
             z-index: 999990;
         }}
 
-        /* ── App background ────────────────────────────── */
+        /* ── App background + font stack ───────────────── */
+        .stApp,
+        .stApp p, .stApp span, .stApp div,
+        .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp button,
+        .stApp [data-testid="stMarkdownContainer"] {{
+            font-family: "Inter", -apple-system, "SF Pro Display", system-ui, sans-serif;
+            font-variant-numeric: tabular-nums;
+        }}
         .stApp {{
             background-color: {T.bg};
             color: {T.text};
@@ -42,6 +69,93 @@ def inject_global_css():
         section[data-testid="stSidebar"] {{
             background-color: {T.surface};
             border-right: 1px solid {T.border_subtle};
+        }}
+
+        /* ── Fintech keyframes (AI moat + score-rise) ──── */
+        @keyframes mm-ai-breath {{
+            0%, 100% {{
+                box-shadow:
+                    0 0 24px rgba(139, 92, 246, 0.20),
+                    0 0 4px rgba(139, 92, 246, 0.12);
+            }}
+            50% {{
+                box-shadow:
+                    0 0 48px rgba(139, 92, 246, 0.45),
+                    0 0 12px rgba(139, 92, 246, 0.28);
+            }}
+        }}
+        @keyframes mm-pulse-dot {{
+            0%, 100% {{ transform: scale(1);   opacity: 1;   }}
+            50%      {{ transform: scale(1.4); opacity: 0.6; }}
+        }}
+        @keyframes mm-score-rise {{
+            0%   {{ transform: translateY(8px); opacity: 0; }}
+            100% {{ transform: translateY(0);   opacity: 1; }}
+        }}
+
+        /* ── Utility classes pages can opt into ────────── */
+        .mm-ai-glow {{
+            animation: mm-ai-breath 3.6s ease-in-out infinite;
+            border-radius: {T.radius_card};
+        }}
+        .mm-card {{
+            background: {T.surface};
+            border: 1px solid {T.border_default};
+            border-radius: {T.radius_card};
+            box-shadow: {T.shadow_sm};
+            padding: {T.sp_lg};
+        }}
+        .mm-card-hoverable {{
+            transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+        }}
+        .mm-card-hoverable:hover {{
+            border-color: {T.border_strong};
+            box-shadow: {T.shadow_md};
+            transform: translateY(-1px);
+        }}
+        .mm-pill {{
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: {T.radius_pill};
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }}
+        .mm-mono {{
+            font-family: "JetBrains Mono", "SF Mono", "Roboto Mono", Menlo, monospace;
+            font-variant-numeric: tabular-nums;
+        }}
+        .mm-display {{
+            font-size: 56px;
+            font-weight: 800;
+            line-height: 1;
+            letter-spacing: -1px;
+            font-variant-numeric: tabular-nums;
+        }}
+        .mm-glass {{
+            background: rgba(26, 29, 39, 0.7);
+            border: 1px solid {T.border_strong};
+            border-radius: {T.radius_modal};
+            backdrop-filter: blur(24px) saturate(160%);
+            -webkit-backdrop-filter: blur(24px) saturate(160%);
+        }}
+        .mm-pulse-dot {{
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: {T.ai};
+            animation: mm-pulse-dot 2s ease-in-out infinite;
+        }}
+
+        /* Buttons get the Robinhood-style press feedback for free */
+        .stApp .stButton > button {{
+            border-radius: {T.radius_button};
+            transition: transform 150ms ease, box-shadow 150ms ease;
+        }}
+        .stApp .stButton > button:active {{
+            transform: scale(0.985);
         }}
 
         /* ── Metric cards (clean, no left accent) ──────── */
