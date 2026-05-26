@@ -835,6 +835,28 @@ mode = st.selectbox(
 
 # Mode 1: Market Shock
 if mode == "Market Shock (Beta-implied)":
+    # Inline shock slider — was previously only in sidebar Advanced. Now
+    # that the sidebar Advanced expander is owner-only, surface the one
+    # knob a regular user might want to play with right next to the
+    # output it changes.
+    _existing_shock = float(st.session_state.get("market_shock", market_shock or -0.10))
+    market_shock_pct = st.slider(
+        "Market shock (%)",
+        min_value=-30,
+        max_value=0,
+        value=int(_existing_shock * 100),
+        step=1,
+        key="stress_market_shock_pct",
+        help=(
+            "Hypothetical S&P-500 move. Beta-implied losses are recomputed instantly; "
+            "rerun analysis to update the headline stress_loss in the AI digest above."
+        ),
+    )
+    market_shock = market_shock_pct / 100
+    # Keep session_state in sync so downstream readers (snapshot writer,
+    # cached_digest invalidation, etc.) see the user's choice.
+    st.session_state["market_shock"] = market_shock
+
     st.markdown(t("stress_scenario", shock=market_shock))
     betas = report.betas
     asset_losses = {

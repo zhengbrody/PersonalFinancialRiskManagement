@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mindmarket.app/sample-risk-report">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <title>Sample Portfolio Risk Report | MindMarket AI</title>
+  <meta name="description" content="View a sample MindMarket AI portfolio risk report with net equity, margin risk, VaR, CVaR, stress loss, concentration, and AI action cards.">
+  <meta property="og:site_name" content="MindMarket AI">
+  <meta property="og:title" content="Sample Portfolio Risk Report">
+  <meta property="og:description" content="A sample risk snapshot showing the type of output MindMarket AI creates for individual investors.">
+  <meta property="og:image" content="https://mindmarket.app/favicon-512.png">
+  <meta name="twitter:card" content="summary">
+  <style>
+    body { margin:0; background:#0B0E11; color:#E2E8F0; font-family:Inter,Arial,sans-serif; line-height:1.65; }
+    main { max-width:1040px; margin:0 auto; padding:72px 24px; }
+    a { color:#39A3B5; }
+    h1 { font-size:44px; line-height:1.12; margin:0 0 18px; color:#F8FAFC; }
+    h2 { margin-top:34px; color:#F8FAFC; }
+    p, li, td, th { color:#AAB4C2; font-size:17px; }
+    .eyebrow { color:#39A3B5; font-size:13px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; margin-top:22px; }
+    .metric { border:1px solid #1F2937; border-radius:8px; padding:14px; background:#111827; }
+    .metric span { display:block; color:#8B949E; font-size:12px; }
+    .metric strong { display:block; margin-top:6px; color:#F8FAFC; font-size:24px; }
+    table { width:100%; border-collapse:collapse; margin-top:12px; }
+    th, td { padding:12px; border-bottom:1px solid #1F2937; text-align:left; }
+    .panel { border:1px solid #1F2937; border-radius:8px; padding:18px; background:#0F1319; margin-top:22px; }
+    .cta { display:inline-block; margin-top:18px; padding:12px 16px; border:1px solid #39A3B5; border-radius:6px; text-decoration:none; color:#E2E8F0; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">Sample Report</div>
+    <h1>Portfolio risk snapshot example.</h1>
+    <p>
+      This sample shows the kind of decision-ready report MindMarket AI can
+      generate from a portfolio: capital base, buying power context, leverage,
+      VaR, stress loss, top positions, and practical risk actions.
+    </p>
+    <section class="grid" aria-label="Sample metrics">
+      <div class="metric"><span>Net equity</span><strong>$27,300</strong></div>
+      <div class="metric"><span>Total long</span><strong>$44,500</strong></div>
+      <div class="metric"><span>Margin loan</span><strong>$17,200</strong></div>
+      <div class="metric"><span>Leverage</span><strong>1.63x</strong></div>
+      <div class="metric"><span>VaR 95</span><strong>-4.5%</strong></div>
+      <div class="metric"><span>Stress loss</span><strong>-12.8%</strong></div>
+    </section>
+    <section class="panel">
+      <h2>Top risk drivers</h2>
+      <table>
+        <thead><tr><th>Driver</th><th>Why it matters</th></tr></thead>
+        <tbody>
+          <tr><td>Margin amplification</td><td>A market decline can reduce net equity faster than the gross portfolio moves.</td></tr>
+          <tr><td>Top-name concentration</td><td>Large weights in a few tickers can dominate VaR and drawdown.</td></tr>
+          <tr><td>Short inverse ETF exposure</td><td>Levered and inverse funds can behave differently across volatile sessions.</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="panel">
+      <h2>Sample action cards</h2>
+      <ul>
+        <li><strong>Check margin buffer first.</strong> Confirm whether buying power is unused margin capacity or real cash.</li>
+        <li><strong>Rank top VaR contributors.</strong> Focus review on holdings that drive portfolio loss, not only holdings with the largest gain.</li>
+        <li><strong>Stress test before adding exposure.</strong> Compare current leverage against a -10% market shock.</li>
+      </ul>
+    </section>
+    <p>
+      Educational and research use only. This sample is not investment advice.
+    </p>
+    <a class="cta" href="https://mindmarket.app/?utm_source=seo&amp;utm_medium=organic&amp;utm_campaign=sample_report">Create your own report</a>
+    <p><a href="/demo">Try the sample portfolio demo</a></p>
+  </main>
+</body>
+</html>
+

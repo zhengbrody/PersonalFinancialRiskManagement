@@ -1,6 +1,6 @@
 """
 app.py
-MindMarket AI — Institutional Portfolio Risk Dashboard v3.0 (Multipage)
+MindMarket AI — Portfolio Risk Analytics SaaS (multipage Streamlit)
 ────────────────────────────────────
 Run: streamlit run app.py
 """
@@ -1861,10 +1861,10 @@ def execute_analysis(force: bool = False) -> bool:
             _landing_portfolio_source = None
 
         # Hero
-        hero_title = "Institutional-grade portfolio risk, made accessible."
+        hero_title = "AI portfolio risk copilot for investors using margin."
         hero_sub = (
-            "Start with the question that matters: capital protection, risk drivers, "
-            "allocation changes, or new ideas."
+            "Upload holdings or try the sample portfolio to see leverage, concentration, "
+            "VaR, stress loss, and practical next actions before taking more risk."
         )
         cta_label = (
             "Create Portfolio" if _landing_portfolio_source == "empty" else "Run Demo Portfolio"
@@ -1898,12 +1898,12 @@ def execute_analysis(force: bool = False) -> bool:
         features = [
             (
                 "🛡️",
-                "Protect Capital",
-                ("Overview + Risk first. Focus on net equity, drawdown, VaR, and margin distance."),
+                "Protect Principal",
+                ("Track net equity, contributed capital, drawdown, VaR, and margin distance."),
             ),
             (
                 "🧭",
-                "Explain Drivers",
+                "Explain Risk Drivers",
                 (
                     "Use factor exposure, component VaR, sector concentration, and macro sensitivity."
                 ),
@@ -1994,21 +1994,25 @@ def execute_analysis(force: bool = False) -> bool:
         st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
 
         if not _signed_in:
-            # Anonymous visitor: lead with Sign in, then Pricing, with demo
-            # as a low-commitment third option.
+            st.markdown(
+                """
+                <div style="text-align:center;color:#8B949E;font-size:13px;margin-bottom:12px;">
+                  Free beta includes 2 analyses and 2 AI chats. No credit card required.
+                  API keys stay server-side.
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
             cta_col1, cta_col2, cta_col3 = st.columns([1, 1, 1])
             with cta_col1:
                 if st.button(
-                    "Sign in / Create account",
+                    "Create free account",
                     type="primary",
                     width="stretch",
                     key="landing_signin",
                 ):
                     st.switch_page("pages/0_Login.py")
             with cta_col2:
-                if st.button("View pricing", width="stretch", key="landing_pricing"):
-                    st.switch_page("pages/11_Pricing.py")
-            with cta_col3:
                 if st.button("Try sample portfolio", width="stretch", key="landing_demo"):
                     try:
                         from libs.auth.portfolio_runtime import build_live_portfolio_payload
@@ -2025,9 +2029,15 @@ def execute_analysis(force: bool = False) -> bool:
                         st.rerun()
                     except Exception as exc:
                         st.error(f"Could not prepare the portfolio: {exc}")
+            with cta_col3:
+                st.link_button(
+                    "View sample report",
+                    "/sample-risk-report",
+                    width="stretch",
+                )
             st.caption(
-                "Sample portfolio uses built-in holdings — no signup required. "
-                "Create an account to analyze your own."
+                "The sample portfolio is for product preview only. Sign in to import CSV holdings, "
+                "save portfolios, and run analysis on your own account."
             )
         else:
             cta_col1, cta_col2, cta_col3 = st.columns([1, 1, 2])
@@ -2068,7 +2078,7 @@ def execute_analysis(force: bool = False) -> bool:
                 border-top:1px solid rgba(139,148,158,0.1);
                 display:flex;justify-content:space-between;align-items:center;
                 font-size:12px;color:#484F58;">
-      <div>Streamlit · NumPy · SciPy · Plotly · AWS Lambda · DynamoDB</div>
+      <div>Streamlit · Supabase · Anthropic Claude · Plotly · AWS EC2 · Caddy</div>
       <div>
         <a href="https://github.com/zhengbrody/PersonalFinancialRiskManagement"
            style="color:#0B7285;text-decoration:none;">GitHub</a>

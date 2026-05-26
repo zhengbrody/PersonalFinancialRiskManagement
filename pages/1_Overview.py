@@ -19,6 +19,7 @@ from app import (
     get_sector_map,
 )
 from i18n import get_translator
+from libs.marketing.share_report import build_shareable_report_html
 from ui.components import (
     render_ai_digest,
     render_analysis_required,
@@ -1013,7 +1014,7 @@ with render_section("Relative Performance Detail", collapsed=True):
         st.caption("Relative performance detail is unavailable.")
 
 with render_section("Export Reports", collapsed=True):
-    exp_col1, exp_col2, _ = st.columns([1, 1, 4])
+    exp_col1, exp_col2, exp_col3, _ = st.columns([1, 1, 1, 3])
     with exp_col1:
         excel_buf = create_excel_report(report, weights, mc_horizon, market_shock, prices)
         st.download_button(
@@ -1047,6 +1048,20 @@ with render_section("Export Reports", collapsed=True):
             st.caption("Install `fpdf2` for PDF export: `pip install fpdf2`")
         except Exception as e:
             st.caption(f"PDF error: {e}")
+    with exp_col3:
+        share_html = build_shareable_report_html(
+            report=report,
+            weights=weights or {},
+            meta=meta_kpi or {},
+            action_cards=st.session_state.get("_recent_action_cards") or [],
+        )
+        st.download_button(
+            label="Shareable HTML",
+            data=share_html,
+            file_name="mindmarket_risk_snapshot.html",
+            mime="text/html",
+            help="Download a portable, no-login risk snapshot you can share manually.",
+        )
 
 
 # Drawdown Detail (Collapsed)

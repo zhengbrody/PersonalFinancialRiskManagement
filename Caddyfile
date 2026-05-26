@@ -35,49 +35,13 @@
 	}
 
 	handle /robots.txt {
-		header Content-Type "text/plain; charset=utf-8"
-		respond `User-agent: *
-Allow: /
-Sitemap: https://{$SITE_HOST}/sitemap.xml
-`
+		root * /srv/seo
+		file_server
 	}
 
 	handle /sitemap.xml {
-		header Content-Type "application/xml; charset=utf-8"
-		respond `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>https://{$SITE_HOST}/</loc>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>https://{$SITE_HOST}/about</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://{$SITE_HOST}/portfolio-risk-management</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://{$SITE_HOST}/ai-portfolio-analysis</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.85</priority>
-  </url>
-  <url>
-    <loc>https://{$SITE_HOST}/portfolio-var-stress-testing</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.85</priority>
-  </url>
-  <url>
-    <loc>https://{$SITE_HOST}/Legal</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.4</priority>
-  </url>
-</urlset>
-`
+		root * /srv/seo
+		file_server
 	}
 
 	handle /googlecpW5HG50AaWNMEfTxdGBF6JxeviA-0QFaHDYS0xw_N8.html {
@@ -88,6 +52,18 @@ Sitemap: https://{$SITE_HOST}/sitemap.xml
 	handle /about {
 		root * /srv/seo
 		rewrite * /about.html
+		file_server
+	}
+
+	handle /demo {
+		root * /srv/seo
+		rewrite * /demo.html
+		file_server
+	}
+
+	handle /sample-risk-report {
+		root * /srv/seo
+		rewrite * /sample-risk-report.html
 		file_server
 	}
 
@@ -106,6 +82,36 @@ Sitemap: https://{$SITE_HOST}/sitemap.xml
 	handle /portfolio-var-stress-testing {
 		root * /srv/seo
 		rewrite * /portfolio-var-stress-testing.html
+		file_server
+	}
+
+	handle /personal-portfolio-risk-analysis {
+		root * /srv/seo
+		rewrite * /personal-portfolio-risk-analysis.html
+		file_server
+	}
+
+	handle /margin-risk-calculator {
+		root * /srv/seo
+		rewrite * /margin-risk-calculator.html
+		file_server
+	}
+
+	handle /portfolio-stress-test {
+		root * /srv/seo
+		rewrite * /portfolio-stress-test.html
+		file_server
+	}
+
+	handle /stock-portfolio-concentration-risk {
+		root * /srv/seo
+		rewrite * /stock-portfolio-concentration-risk.html
+		file_server
+	}
+
+	handle /robinhood-margin-risk {
+		root * /srv/seo
+		rewrite * /robinhood-margin-risk.html
 		file_server
 	}
 

@@ -287,14 +287,10 @@ def render_shared_sidebar():
             except Exception as e:
                 st.error(f"Failed: {str(e)}")
 
-        # Secondary "Run with current weights" — for when user edits JSON manually
-        _run_label_current = "Run with Current Weights"
-        if st.button(_run_label_current, width="stretch", key="run_current_only"):
-            _queue_analysis_and_route(force_refresh=False)
-
-        # Force Refresh — bypasses cache regardless of whether any param changed.
-        # Useful when prices may have moved but analysis params haven't, or when
-        # user explicitly wants a fresh Monte Carlo roll.
+        # Force Refresh — bypasses cache. The "Run with current weights"
+        # power-user button was removed (it depended on the manual
+        # Weights JSON which no longer ships in the sidebar; users now
+        # edit holdings on the Portfolios page).
         _force_label = "🔄 Force Refresh"
         if st.button(
             _force_label,
@@ -400,22 +396,31 @@ def render_shared_sidebar():
         market_shock = st.session_state.get("market_shock", -0.10)
         risk_free_rate = st.session_state.get("risk_free_fallback", 0.045)
 
-        if _active_source != "empty":
-            # Most users never touch these directly — collapsing into an
-            # "Advanced" expander declutters the sidebar without removing
-            # control. The Refresh & Run button above is the primary action.
-            with st.expander("⚙️ Advanced parameters", expanded=False):
-                st.caption("Tune the analysis engine. Most users can leave these at default.")
-                st.caption("Weights (JSON)")
-                weights_json = st.text_area(
-                    "Portfolio Weights",
-                    value=st.session_state.weights_json,
-                    height=120,
-                    label_visibility="collapsed",
-                    help=(
-                        "Manually override the active portfolio's weights. "
-                        "Use 'Run with Current Weights' to apply."
-                    ),
+        # Resolve owner status for gating the engine-tuning controls.
+        # Reasons:
+        #   - Weights JSON is gone entirely: users edit holdings on the
+        #     Portfolios page; an inline editor here used to surface the
+        #     active portfolio's positions in the sidebar, which felt
+        #     like data leakage during screen-share.
+        #   - MC sims / horizon / shock / Rf are tuning knobs, not user
+        #     data. Showing them to every user invites silent quality
+        #     degradation ("oh I'll bump sims to 1k for speed" → worse
+        #     VaR). Sandwich them behind an Advanced expander that only
+        #     opens for the owner; everyone else gets the engine
+        #     defaults documented above.
+        try:
+            from libs.admin.status import is_owner_email as _is_owner_email
+            from libs.auth.session import current_user as _current_user
+
+            _sidebar_is_owner = bool(_is_owner_email((_current_user() or {}).get("email")))
+        except Exception:
+            _sidebar_is_owner = False
+
+        if _sidebar_is_owner and _active_source != "empty":
+            with st.expander("⚙️ Engine parameters (owner)", expanded=False):
+                st.caption(
+                    "Tuning knobs for the risk engine. Defaults are calibrated; "
+                    "lowering MC sims or history degrades VaR accuracy."
                 )
 
                 col1, col2 = st.columns(2)
@@ -465,10 +470,13 @@ def render_shared_sidebar():
                         value=float(risk_free_rate) * 100,
                         step=0.1,
                         key="risk_free_rate_sidebar",
-                        help="Treasury proxy for Sharpe ratio. Updated automatically when available.",
+                        help="Treasury proxy for Sharpe ratio. Updated when available.",
                     )
                     / 100
                 )
+        # End-user sidebar: no Advanced expander at all. The standard
+        # defaults (10k sims, 21d horizon, -10% shock, 4.5% Rf) live in
+        # the session_state init at the top of this function.
 
         st.markdown("---")
 
@@ -752,9 +760,16 @@ def render_shared_sidebar():
                 st.success("Cache cleared!")
 
         # ── Footer ────────────────────────────────────────────────
+        # Year resolved at render time so the copyright line never goes
+        # stale across calendar boundaries. Version label kept short on
+        # purpose — we don't want to lie about the actual deploy version,
+        # and "v3" matches our current public docs.
+        from datetime import datetime as _dt_footer
+
+        _footer_year = _dt_footer.now().year
         st.markdown("---")
-        st.caption("MindMarket AI v3.0")
-        st.caption("© 2024 Risk Analytics Platform")
+        st.caption("MindMarket AI")
+        st.caption(f"© {_footer_year} MindMarket AI · Portfolio risk analytics")
 
     # Return language and translator for pages to use
     lang = current_lang
