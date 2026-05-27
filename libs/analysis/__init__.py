@@ -19,11 +19,23 @@ from .equity_research import (
     analyze_equity,
     build_company_dossier,
 )
+from .portfolio_research import (
+    PORTFOLIO_ANALYST_PROMPT,
+    PortfolioDeepAnalysis,
+    PortfolioVerdict,
+    analyze_portfolio,
+    build_portfolio_dossier,
+)
 
 __all__ = [
     "ANALYST_SYSTEM_PROMPT",
     "DeepAnalysis",
     "DimensionAssessment",
+    "PORTFOLIO_ANALYST_PROMPT",
+    "PortfolioDeepAnalysis",
+    "PortfolioVerdict",
     "analyze_equity",
+    "analyze_portfolio",
     "build_company_dossier",
+    "build_portfolio_dossier",
 ]

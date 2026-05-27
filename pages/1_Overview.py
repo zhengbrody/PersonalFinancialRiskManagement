@@ -422,18 +422,38 @@ def _render_health_hero(report_obj, weight_map, current_prices) -> bool:
         score_color = T.negative
         score_status = "Poor"
 
+    # Verdict pill tone — picked once so the hero + dimension cards
+    # share the same accent and the page reads as one composition.
+    verdict_pill_bg = (
+        T.positive_bg
+        if score_value >= 600
+        else (T.warning_bg if score_value >= 400 else T.negative_bg)
+    )
+
     hero_cols = st.columns([1, 2])
     with hero_cols[0]:
+        # The hero card uses .mm-card + .mm-ai-glow so it breathes
+        # AI-purple all the time — that's the product moat made visible.
+        # The score number uses .mm-display (56px, tabular-nums, -1px
+        # tracking) so the count-up animation doesn't shift width.
         st.markdown(
             f"""
-<div style="background:{T.surface};border:1px solid {T.border_subtle};
-            border-radius:{T.radius_lg};padding:{T.sp_lg};text-align:center;">
-  <div style="{T.font_overline};color:{T.text_secondary};">Portfolio Health Score</div>
-  <div style="font-size:84px;line-height:1;font-weight:800;color:{score_color};margin:{T.sp_md} 0 0 0;">
+<div class="mm-card mm-ai-glow" style="background:{T.surface};border:1px solid {T.border_default};
+            text-align:center;padding:{T.sp_xl} {T.sp_lg};">
+  <div style="{T.font_overline};color:{T.text_tertiary};margin-bottom:{T.sp_sm}">
+    ACCOUNT HEALTH
+  </div>
+  <div class="mm-display" style="color:{score_color};margin:{T.sp_xs} 0;">
     {score_value}
   </div>
-  <div style="{T.font_caption};color:{T.text_secondary};margin-top:{T.sp_xs};">
-    out of 1000 · {score_status}
+  <div style="{T.font_caption};color:{T.text_tertiary};margin-top:{T.sp_xs};">
+    / 1000
+  </div>
+  <div style="display:inline-block;margin-top:{T.sp_md};padding:4px 12px;
+              border-radius:{T.radius_pill};background:{verdict_pill_bg};
+              color:{score_color};{T.font_caption};font-weight:600;
+              text-transform:uppercase;letter-spacing:0.08em;">
+    {score_status}
   </div>
 </div>
 """,
@@ -446,22 +466,27 @@ def _render_health_hero(report_obj, weight_map, current_prices) -> bool:
             if dim.status == "Excellent":
                 accent = T.positive
             elif dim.status == "Good":
-                accent = T.accent
+                accent = T.ai  # AI purple for "good" — reads as "AI verified"
             elif dim.status == "Needs Work":
                 accent = T.warning
             else:
                 accent = T.negative
             with col:
+                # Dimension cards use .mm-card-hoverable so mousing over
+                # them lifts the card and tints the border. Subtle but
+                # makes the dashboard feel "alive" instead of static.
                 st.markdown(
                     f"""
-<div style="background:{T.surface};border:1px solid {T.border_subtle};
-            border-radius:{T.radius_lg};padding:{T.sp_md};min-height:148px;">
-  <div style="{T.font_overline};color:{accent};">{dim.name}</div>
-  <div style="font-size:32px;font-weight:700;color:{T.text};margin-top:{T.sp_xs};">
-    {int(dim.score)}
-    <span style="{T.font_caption};color:{T.text_secondary};font-weight:500;"> / 1000</span>
+<div class="mm-card mm-card-hoverable" style="min-height:148px;padding:{T.sp_md} {T.sp_lg};">
+  <div style="{T.font_overline};color:{accent};letter-spacing:0.15em;">
+    {dim.name.upper()}
   </div>
-  <div style="{T.font_caption};color:{T.text_secondary};margin-top:{T.sp_sm};line-height:1.45;">
+  <div style="font-size:32px;font-weight:700;color:{T.text};margin-top:6px;
+              font-variant-numeric:tabular-nums;line-height:1;">
+    {int(dim.score)}
+    <span style="font-size:13px;color:{T.text_tertiary};font-weight:500;"> / 1000</span>
+  </div>
+  <div style="{T.font_caption};color:{T.text_secondary};margin-top:{T.sp_sm};line-height:1.5;">
     {dim.detail}
   </div>
 </div>
@@ -498,12 +523,18 @@ def _render_health_hero(report_obj, weight_map, current_prices) -> bool:
             f"being {weakest.name.lower()} — focus on that first."
         )
 
+    # AI one-liner band — AI-purple left border + a pulsing dot makes
+    # this read as "the AI just spoke" instead of a static caption.
     st.markdown(
         f"""
-<div style="background:{T.surface};border-left:3px solid {score_color};
-            padding:{T.sp_md} {T.sp_lg};margin-top:{T.sp_md};border-radius:{T.radius};
-            color:{T.text};{T.font_body};line-height:1.55;">
-  {one_liner}
+<div style="background:{T.surface};border:1px solid {T.border_default};
+            border-left:3px solid {T.ai};
+            padding:{T.sp_md} {T.sp_lg};margin-top:{T.sp_md};
+            border-radius:{T.radius_card};
+            color:{T.text};{T.font_body};line-height:1.55;
+            display:flex;align-items:flex-start;gap:{T.sp_md};">
+  <span class="mm-pulse-dot" style="background:{T.ai};margin-top:7px;flex-shrink:0;"></span>
+  <span>{one_liner}</span>
 </div>
 """,
         unsafe_allow_html=True,

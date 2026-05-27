@@ -63,26 +63,64 @@ st.caption(f"👤 {user['email']}  ·  user_id={user['id'][:8]}…")
 
 
 def _invalidate_analysis_cache(reason: str = "portfolio edited") -> None:
-    """Force the next Run Analysis to recompute from scratch.
+    """Force EVERY downstream feature to recompute against the new
+    portfolio state.
 
-    Called after every successful portfolio mutation (create / update /
-    delete / holding upsert / capital edit). Without this, the analysis
-    cache hits on weights+params alone and serves an outdated leverage
-    / net-equity figure to the user — visible bug: "I added cash but my
-    leverage didn't update".
+    Product invariant (per user directive 2026-05-26):
+        "Every time the user edits any portfolio, every subsequent
+         feature including the AI chat must immediately match the new
+         state."
 
-    We set ``_force_refresh`` so the dashboard's cache-check branch
-    treats this as a fresh recompute, and clear the snapshot dedup key
-    so the next analysis records a fresh snapshot row too.
+    Six families of cached state to drop (all session-state only,
+    rebuilt on the next user click for free):
+
+    1. Analysis cache key + force-refresh flag → next Run Analysis
+       recomputes the RiskReport from scratch.
+    2. Snapshot dedup key → next analysis records a fresh snapshot
+       row even when other params didn't change.
+    3. LLM digest cache slots (registered in ``_llm_cache_keys`` by
+       ``app.cached_digest``) → every page-level AI summary reruns
+       against the new context instead of serving a stale answer.
+    4. Risk Memory derived state (recent_action_cards,
+       recent_snapshot_delta) → the action card grid + chat context
+       won't quote stale figures.
+    5. Deep Equity Analysis caches (``_deep_equity_<TICKER>``) → a
+       saved deep analysis won't outlive the portfolio it was
+       computed against.
+    6. Floating chat context cache (the user's message history is
+       kept; only the derived "context built last turn" state drops,
+       so the next chat turn rebuilds against the new portfolio).
     """
-    st.session_state["_force_refresh"] = True
-    st.session_state.pop("_last_cache_key", None)
-    st.session_state.pop("_last_snapshot_cache_key", None)
-    # Log to journalctl so we can audit later if needed.
+    state = st.session_state
+
+    state["_force_refresh"] = True
+    state.pop("_last_cache_key", None)
+    state.pop("_last_analysis_ts", None)
+    state.pop("_last_snapshot_cache_key", None)
+
+    llm_keys = state.pop("_llm_cache_keys", set())
+    if isinstance(llm_keys, set):
+        for slot in llm_keys:
+            state.pop(slot, None)
+
+    state.pop("_recent_action_cards", None)
+    state.pop("_recent_snapshot_delta", None)
+
+    for k in list(state.keys()):
+        if isinstance(k, str) and k.startswith("_deep_equity_"):
+            state.pop(k, None)
+
+    for k in ("_chat_context_cache", "_chat_last_portfolio_signature"):
+        state.pop(k, None)
+
     try:
         from logging_config import get_logger
 
-        get_logger(__name__).info("portfolios.cache_invalidated", reason=reason)
+        get_logger(__name__).info(
+            "portfolios.cache_invalidated",
+            reason=reason,
+            cleared_llm_slots=len(llm_keys) if isinstance(llm_keys, set) else 0,
+        )
     except Exception:
         pass
 
