@@ -2162,10 +2162,15 @@ def execute_analysis(force: bool = False) -> bool:
         # Convert weights to JSON for cache key (hashable)
         weights_json = json.dumps(weights, sort_keys=True)
 
-        # Comprehensive cache-hit detection: any risk-analysis parameter change
-        # must invalidate the cache. Previously only weights were checked, which
-        # gave a misleading "using cache" banner when mc_sims / mc_horizon /
-        # market_shock / period_years / risk_free actually changed.
+        # Comprehensive cache-hit detection: any risk-analysis parameter
+        # change must invalidate the cache. Previously only weights +
+        # analysis params were keyed — but the user can also change
+        # capital fields (cash_balance / margin_loan / contributed_capital)
+        # on the Portfolios page. Those flow into _portfolio_meta and
+        # change net_equity + leverage, but the OLD report.margin_call_info
+        # would still be served from cache, producing the visible bug
+        # "I added cash but my leverage didn't update". Include them.
+        _meta_for_cache = st.session_state.get("_portfolio_meta") or {}
         _cache_key = (
             weights_json,
             period_years,
@@ -2173,6 +2178,9 @@ def execute_analysis(force: bool = False) -> bool:
             mc_horizon,
             round(float(risk_free_fallback), 6),
             round(float(market_shock), 6),
+            round(float(_meta_for_cache.get("cash_balance") or 0.0), 2),
+            round(float(_meta_for_cache.get("margin_loan") or 0.0), 2),
+            round(float(_meta_for_cache.get("contributed_capital") or 0.0), 2),
         )
         last_cache_key = st.session_state.get("_last_cache_key")
         force_refresh_requested = bool(st.session_state.pop("_force_refresh", False))

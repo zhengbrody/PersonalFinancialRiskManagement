@@ -61,6 +61,32 @@ if not is_authenticated():
 user = current_user()
 st.caption(f"👤 {user['email']}  ·  user_id={user['id'][:8]}…")
 
+
+def _invalidate_analysis_cache(reason: str = "portfolio edited") -> None:
+    """Force the next Run Analysis to recompute from scratch.
+
+    Called after every successful portfolio mutation (create / update /
+    delete / holding upsert / capital edit). Without this, the analysis
+    cache hits on weights+params alone and serves an outdated leverage
+    / net-equity figure to the user — visible bug: "I added cash but my
+    leverage didn't update".
+
+    We set ``_force_refresh`` so the dashboard's cache-check branch
+    treats this as a fresh recompute, and clear the snapshot dedup key
+    so the next analysis records a fresh snapshot row too.
+    """
+    st.session_state["_force_refresh"] = True
+    st.session_state.pop("_last_cache_key", None)
+    st.session_state.pop("_last_snapshot_cache_key", None)
+    # Log to journalctl so we can audit later if needed.
+    try:
+        from logging_config import get_logger
+
+        get_logger(__name__).info("portfolios.cache_invalidated", reason=reason)
+    except Exception:
+        pass
+
+
 # Nudge users mid-onboarding back into the wizard. Cheap call —
 # needs_onboarding() short-circuits when not signed in or already
 # skipped this session.
@@ -359,6 +385,7 @@ if portfolios:
                             cash_balance=float(edited_cash),
                         )
                         st.success("Saved.")
+                        _invalidate_analysis_cache("portfolio updated")
                         st.rerun()
                     except (ValueError, AuthError) as e:
                         st.error(str(e))
@@ -372,6 +399,7 @@ if portfolios:
                         try:
                             update_portfolio(p["id"], is_default=True)
                             st.success("Default updated.")
+                            _invalidate_analysis_cache("default switched")
                             st.rerun()
                         except AuthError as e:
                             st.error(str(e))
@@ -387,6 +415,7 @@ if portfolios:
                         try:
                             delete_portfolio(p["id"])
                             st.success("Deleted.")
+                            _invalidate_analysis_cache("portfolio deleted")
                             st.session_state.pop(confirm_key, None)
                             st.rerun()
                         except AuthError as e:
@@ -426,6 +455,7 @@ if is_owner_email(user.get("email")):
                     server_cash,
                 )
                 st.success(f"Default portfolio updated: {updated['name']}")
+                _invalidate_analysis_cache("inline edits saved")
                 st.rerun()
         except Exception as e:
             st.error(f"Owner sync failed: {e}")
@@ -568,6 +598,7 @@ if csv_holdings:
                     is_default=csv_is_default,
                 )
                 st.success(f"Imported portfolio: {created['name']}")
+                _invalidate_analysis_cache("csv import")
                 st.rerun()
             except AuthError as e:
                 st.error(str(e))
@@ -640,6 +671,7 @@ if submitted:
                 is_default=new_is_default,
             )
             st.success(f"Created portfolio: {created['name']}")
+            _invalidate_analysis_cache("new portfolio")
             st.rerun()
         except (ValueError, AuthError) as e:
             st.error(str(e))
