@@ -1,0 +1,26 @@
+# MindMarket backend (FastAPI) — Phase 1 dependencies.
+#
+# These are ADDITIONAL packages the backend needs on top of the
+# existing root-level ``requirements.txt`` (numpy, pandas, pydantic,
+# supabase, anthropic, etc.). Pip-install both in CI / Docker:
+#
+#     pip install -r requirements.txt
+#     pip install -r backend/requirements-backend.txt
+#
+# Kept deliberately small: every line is justified below.
+
+# FastAPI + the recommended Starlette / pydantic toolchain.
+# Pinned to a minor range so a major bump can't silently break us.
+fastapi>=0.115,<0.120
+uvicorn[standard]>=0.30,<0.35
+
+# Supabase JWT verification (HS256 against project secret). PyJWT is
+# tiny and already a transitive dep of supabase-py; pinning here
+# documents the contract.
+PyJWT>=2.8,<3
+
+# httpx is FastAPI's recommended async HTTP client AND drives the
+# TestClient used in backend/tests/. Already pulled in transitively by
+# fastapi[all], but we list it so the explicit ``pip install -r`` works
+# even if upstream extras change.
+httpx>=0.27,<1
