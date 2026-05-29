@@ -32,11 +32,17 @@ from fastapi import APIRouter, Depends, Request
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import APIError, ok, server_error, unprocessable
 from ...schemas.risk import (
+    ComponentVarRow,
     DimensionScoreOut,
+    FactorBetaRow,
+    LiquidityRow,
     PortfolioMetricsOut,
+    ReportFromActiveRequest,
+    RiskReportOut,
     ScoreFromActiveRequest,
     ScoreRequest,
     ScoreResponse,
+    StressAssetLoss,
 )
 
 router = APIRouter(prefix="/api/v1/risk", tags=["risk"])
@@ -367,3 +373,253 @@ def score_from_active_endpoint(
 
     response = _serialize_score(score)
     return ok(response.model_dump(), request=request, started_at=started)
+
+
+# ── /score_from_active continues above. Below: /report_from_active. ──
+
+
+def _resolve_active_or_raise(user: AuthedUser) -> dict:
+    """Shared helper: resolve the active portfolio + raise the proper
+    422 envelope codes when it's empty. Pulled out of /score_from_active
+    so /report_from_active reuses the exact same gates."""
+    try:
+        from libs.auth.active_portfolio import get_active_holdings
+    except Exception as exc:  # pragma: no cover - import guard
+        raise server_error("active_portfolio module unavailable.", reason=str(exc)) from exc
+
+    try:
+        holdings = get_active_holdings(access_token=user.access_token)
+    except TypeError:
+        raise server_error(
+            "active_portfolio.get_active_holdings does not accept "
+            "access_token yet. Update libs/auth/active_portfolio.py."
+        ) from None
+    except Exception as exc:
+        raise server_error("Could not load active portfolio.", reason=type(exc).__name__) from exc
+
+    holdings = holdings or {}
+    if not holdings:
+        raise APIError(
+            status=422,
+            code="no_active_portfolio",
+            message="No active portfolio. Create one before scoring.",
+        )
+    return holdings
+
+
+def _compute_weights(
+    holdings: dict, price_frame, *, tickers: list[str]
+) -> tuple[dict[str, float], dict[str, float]]:
+    """From ``{ticker: {shares, ...}}`` + a price frame, derive the
+    ``weights`` (normalised to sum=1) the DataProvider expects AND the
+    raw market_value per ticker for downstream UI use.
+
+    Tickers the market_data layer couldn't resolve are dropped — the
+    caller decides whether the survivors are enough to score."""
+    mvs: dict[str, float] = {}
+    for tk in tickers:
+        if tk not in price_frame.columns:
+            continue
+        last_close = float(price_frame[tk].dropna().iloc[-1])
+        h = holdings.get(tk, {}) or {}
+        shares = float(h.get("shares") or 0.0)
+        if shares <= 0 or last_close <= 0:
+            continue
+        mvs[tk] = shares * last_close
+
+    total = sum(mvs.values())
+    if total <= 0:
+        return {}, {}
+    weights = {tk: v / total for tk, v in mvs.items()}
+    return weights, mvs
+
+
+def _df_or_none_to_rows(df, *, value_col: str = None) -> list[dict]:
+    """Best-effort conversion of a small pandas Series/DataFrame into a
+    list of plain dicts. NaN/Inf are dropped; the envelope layer also
+    scrubs them but doing it here keeps the wire payload smaller."""
+    import math
+
+    import pandas as pd
+
+    if df is None:
+        return []
+    if isinstance(df, pd.Series):
+        out = []
+        for idx, val in df.items():
+            try:
+                v = float(val)
+            except Exception:
+                continue
+            if not math.isfinite(v):
+                continue
+            out.append({"index": str(idx), "value": v})
+        return out
+    if isinstance(df, pd.DataFrame):
+        out = []
+        for idx, row in df.iterrows():
+            r = {"index": str(idx)}
+            for col, val in row.items():
+                try:
+                    v = float(val)
+                except Exception:
+                    continue
+                if math.isfinite(v):
+                    r[str(col)] = v
+            out.append(r)
+        return out
+    return []
+
+
+def _serialize_report(report, market_values: dict[str, float]) -> RiskReportOut:
+    """Project the engine's ``RiskReport`` dataclass into the
+    JSON-safe response model. The heavy matrices (cov, corr, MC sim
+    paths) are dropped — see the schema docstring."""
+    import math
+
+    def _finite(v):
+        try:
+            f = float(v)
+        except Exception:
+            return None
+        return f if math.isfinite(f) else None
+
+    factor_betas: list[FactorBetaRow] = []
+    fb = getattr(report, "factor_betas", None)
+    if fb is not None:
+        # `factor_betas` is a DataFrame; rows indexed by factor name.
+        for row in _df_or_none_to_rows(fb):
+            factor_betas.append(
+                FactorBetaRow(
+                    factor=row.get("index", ""),
+                    beta=_finite(row.get("beta")),
+                    r_squared=_finite(row.get("r_squared")),
+                    t_stat=_finite(row.get("t_stat")),
+                    p_value=_finite(row.get("p_value")),
+                )
+            )
+
+    component_var: list[ComponentVarRow] = []
+    cv = getattr(report, "component_var_pct", None)
+    if cv is not None:
+        for entry in _df_or_none_to_rows(cv):
+            tk = entry.get("index", "")
+            val = entry.get("value")
+            if val is None:
+                continue
+            component_var.append(ComponentVarRow(ticker=tk, pct=val))
+
+    stress_losses = [
+        StressAssetLoss(ticker=str(tk), loss_pct=_finite(v) or 0.0)
+        for tk, v in (getattr(report, "stress_asset_losses", None) or {}).items()
+    ]
+
+    liquidity_rows: list[LiquidityRow] = []
+    liq = getattr(report, "liquidity_risk", None)
+    if liq is not None:
+        for row in _df_or_none_to_rows(liq):
+            tk = row.get("index", "")
+            liquidity_rows.append(
+                LiquidityRow(
+                    ticker=tk,
+                    days_to_liquidate=_finite(row.get("days_to_liquidate")),
+                    adv_30d=_finite(row.get("adv_30d")),
+                    market_value=_finite(market_values.get(tk)),
+                )
+            )
+
+    return RiskReportOut(
+        annual_return=_finite(report.annual_return),
+        annual_volatility=_finite(report.annual_volatility),
+        sharpe_ratio=_finite(report.sharpe_ratio),
+        max_drawdown=_finite(report.max_drawdown),
+        var_95=_finite(report.var_95),
+        var_99=_finite(report.var_99),
+        cvar_95=_finite(report.cvar_95),
+        risk_free_rate=_finite(report.risk_free_rate),
+        betas={k: float(v) for k, v in (report.betas or {}).items() if _finite(v) is not None},
+        factor_betas=factor_betas,
+        component_var_pct=component_var,
+        stress_loss=_finite(report.stress_loss),
+        stress_market_shock=_finite(report.stress_market_shock),
+        stress_asset_losses=stress_losses,
+        macro_betas={
+            k: float(v)
+            for k, v in (getattr(report, "macro_betas", None) or {}).items()
+            if _finite(v) is not None
+        },
+        liquidity=liquidity_rows,
+        drawdown_stats=getattr(report, "drawdown_stats", None),
+    )
+
+
+@router.post(
+    "/report_from_active",
+    summary="Full risk report for the authed user's active portfolio",
+    response_model=None,
+)
+def report_from_active_endpoint(
+    body: ReportFromActiveRequest,
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    """Build the full ``RiskReport`` (VaR/CVaR, factor betas, stress
+    test, component VaR, liquidity) using real adjusted-close prices
+    via the same cached service ``/risk/score_from_active`` uses.
+
+    Heavier than /score_from_active (Monte Carlo + factor regressions
+    against SPY/QQQ/GLD/TLT/IWM/VTV — fetches their history too). The
+    file-cached market_data layer absorbs the cold-cache latency."""
+    started = time.perf_counter()
+
+    holdings = _resolve_active_or_raise(user)
+    tickers = sorted(holdings.keys())
+
+    from ...services import market_data
+
+    try:
+        price_frame = market_data.get_price_history(tickers, days=body.history_days)
+    except Exception as exc:
+        raise server_error("Market data fetch failed.", reason=type(exc).__name__) from exc
+
+    if price_frame.empty:
+        raise APIError(
+            status=422,
+            code="no_market_data",
+            message="Could not fetch prices for any holding.",
+            details={"tickers": tickers},
+        )
+
+    weights, market_values = _compute_weights(holdings, price_frame, tickers=tickers)
+    if not weights:
+        raise APIError(
+            status=422,
+            code="no_priced_holdings",
+            message="Could not price any holding (shares=0 or no quote).",
+        )
+
+    # DataProvider expects the original holdings dict (with shares etc.)
+    # for liquidity calculations. Engine takes the DP, does its own
+    # internal fetches via the same CachedDataProvider file cache.
+    try:
+        from data_provider import DataProvider
+        from risk_engine import RiskEngine
+    except Exception as exc:  # pragma: no cover - import guard
+        raise server_error("Risk engine modules unavailable.", reason=str(exc)) from exc
+
+    try:
+        dp = DataProvider(weights=weights, holdings=holdings)
+        engine = RiskEngine(
+            dp,
+            risk_free_rate_fallback=body.risk_free_rate,
+            market_shock=body.market_shock,
+        )
+        report = engine.run()
+    except Exception as exc:
+        # Anything inside the engine (MC failure, factor regression
+        # convergence, etc.) becomes a 500 — but we don't leak the
+        # raw exception text to the client.
+        raise server_error("Risk report computation failed.", reason=type(exc).__name__) from exc
+
+    out = _serialize_report(report, market_values)
+    return ok(out.model_dump(), request=request, started_at=started)

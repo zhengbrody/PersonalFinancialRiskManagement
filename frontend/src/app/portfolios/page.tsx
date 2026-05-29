@@ -197,6 +197,14 @@ function CardActions({ portfolio }: { portfolio: PortfolioRow }) {
         type="button"
         size="sm"
         variant="outline"
+        onClick={() => router.push(`/portfolios/${portfolio.id}/risk`)}
+      >
+        Risk report
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
         onClick={() => router.push(`/portfolios/${portfolio.id}/edit`)}
       >
         Edit

@@ -88,6 +88,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/risk/report_from_active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Full risk report for the authed user's active portfolio
+         * @description Build the full ``RiskReport`` (VaR/CVaR, factor betas, stress
+         *     test, component VaR, liquidity) using real adjusted-close prices
+         *     via the same cached service ``/risk/score_from_active`` uses.
+         *
+         *     Heavier than /score_from_active (Monte Carlo + factor regressions
+         *     against SPY/QQQ/GLD/TLT/IWM/VTV — fetches their history too). The
+         *     file-cached market_data layer absorbs the cold-cache latency.
+         */
+        post: operations["report_from_active_endpoint_api_v1_risk_report_from_active_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/equity/deep_analysis": {
         parameters: {
             query?: never;
@@ -397,6 +423,39 @@ export interface components {
             is_default?: boolean | null;
         };
         /**
+         * ReportFromActiveRequest
+         * @description Body for ``POST /api/v1/risk/report_from_active``.
+         *
+         *     Matches ScoreFromActiveRequest — both endpoints resolve the active
+         *     portfolio from JWT. We keep them as separate routes (rather than a
+         *     single 'report' that also returns the score) because the score
+         *     endpoint is fast and the report endpoint is slow; users can poll
+         *     the score frequently while the report takes seconds.
+         */
+        ReportFromActiveRequest: {
+            /**
+             * Risk Preference
+             * @default 3
+             */
+            risk_preference?: number;
+            /**
+             * Risk Free Rate
+             * @default 0.045
+             */
+            risk_free_rate?: number;
+            /**
+             * History Days
+             * @default 730
+             */
+            history_days?: number;
+            /**
+             * Market Shock
+             * @description Stress-test market move applied to the portfolio.
+             * @default -0.1
+             */
+            market_shock?: number;
+        };
+        /**
          * ScoreFromActiveRequest
          * @description Body for ``POST /api/v1/risk/score_from_active``.
          *
@@ -537,6 +596,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ScoreFromActiveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_from_active_endpoint_api_v1_risk_report_from_active_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportFromActiveRequest"];
             };
         };
         responses: {

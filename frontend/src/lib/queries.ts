@@ -171,6 +171,76 @@ export function useDeletePortfolio() {
   });
 }
 
+// ── risk report ──────────────────────────────────────────────────
+
+export type FactorBetaRow = {
+  factor: string;
+  beta: number | null;
+  r_squared: number | null;
+  t_stat: number | null;
+  p_value: number | null;
+};
+
+export type ComponentVarRow = { ticker: string; pct: number };
+
+export type StressAssetLoss = { ticker: string; loss_pct: number };
+
+export type LiquidityRow = {
+  ticker: string;
+  days_to_liquidate: number | null;
+  adv_30d: number | null;
+  market_value: number | null;
+};
+
+export type RiskReport = {
+  annual_return: number | null;
+  annual_volatility: number | null;
+  sharpe_ratio: number | null;
+  max_drawdown: number | null;
+  var_95: number | null;
+  var_99: number | null;
+  cvar_95: number | null;
+  risk_free_rate: number | null;
+  betas: Record<string, number>;
+  factor_betas: FactorBetaRow[];
+  component_var_pct: ComponentVarRow[];
+  stress_loss: number | null;
+  stress_market_shock: number | null;
+  stress_asset_losses: StressAssetLoss[];
+  macro_betas: Record<string, number>;
+  liquidity: LiquidityRow[];
+  drawdown_stats: Record<string, unknown> | null;
+};
+
+export type ReportFromActiveBody = {
+  risk_preference?: number;
+  risk_free_rate?: number;
+  history_days?: number;
+  market_shock?: number;
+};
+
+/**
+ * Fetch the full risk report for the user's active portfolio. The
+ * backend pulls real prices, runs Monte Carlo VaR, factor regressions,
+ * and stress tests. Heavier than the score endpoint — expect a few
+ * seconds on cold cache.
+ *
+ * Mutation rather than query so the user explicitly triggers it
+ * (avoid auto-fetching on page mount when the heavy compute hasn't
+ * been requested).
+ */
+export function useRiskReport() {
+  const { accessToken } = useAuth();
+  return useMutation<RiskReport, Error, ReportFromActiveBody | void>({
+    mutationFn: (body) =>
+      apiFetch<RiskReport>("/api/v1/risk/report_from_active", {
+        method: "POST",
+        body: body ?? {},
+        authToken: accessToken ?? undefined,
+      }),
+  });
+}
+
 /**
  * Score the user's active portfolio using real market data.
  *
