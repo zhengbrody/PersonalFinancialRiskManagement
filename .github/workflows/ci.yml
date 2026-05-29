@@ -58,8 +58,8 @@ jobs:
       continue-on-error: true
 
   # ── FastAPI backend (backend/) — separate from the root pytest job
-  # because pytest.ini's testpaths skips backend/tests and addopts
-  # forces --cov-fail-under=60 against the wrong codebase.
+  # because pytest.ini's testpaths skips backend/tests and its addopts
+  # apply Streamlit-suite coverage gates against the wrong codebase.
   backend-tests:
     runs-on: ubuntu-latest
 
@@ -79,7 +79,11 @@ jobs:
         pip install pytest
 
     - name: Run backend tests
-      run: pytest backend/tests -q --no-cov
+      # `-o "addopts="` wipes the inherited Streamlit `--cov=. --cov-fail-under=60`
+      # so this job stays self-contained: no pytest-cov dep, no false
+      # coverage gate against unrelated code. Backend coverage gets its
+      # own measurement separately when we wire it up.
+      run: pytest backend/tests -q -o "addopts="
 
   # ── Next.js frontend (frontend/) — lint + typecheck (via build) +
   # vitest suite. Mirrors `npm run lint && npm run build && npm test`.

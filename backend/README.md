@@ -1,4 +1,7 @@
-# MindMarket Backend (FastAPI) — Phase 1
+# MindMarket Backend (FastAPI)
+
+> Last updated: Phase 3 (2026-05-29). Phase 1 = scaffold, Phase 2 = OpenAPI
+> + CI, Phase 3 = explicit-token auth + RLS-filtered `/portfolios/me`.
 
 This is the new FastAPI service that wraps MindMarket's existing
 quant / AI / portfolio logic as typed JSON APIs. It is the **first
@@ -39,14 +42,14 @@ LLM / Stripe / FMP keys are inherited from the existing process
 environment when the backend runs on the same host as the Streamlit
 container. No changes needed.
 
-## Endpoint inventory (Phase 1)
+## Endpoint inventory
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
 | `GET` | `/api/v1/health` | Public | Liveness + import sanity check |
 | `POST` | `/api/v1/risk/score` | Public | Score an explicit-holdings portfolio. Stateless; no Supabase, no LLM. |
-| `POST` | `/api/v1/equity/deep_analysis` | Public | Single-name research view. Phase 1 returns the deterministic placeholder analysis; Phase 4 will add billed LLM routing. |
-| `GET` | `/api/v1/portfolios/me` | JWT (Supabase) | Returns the authed user's identity. Listing is wired in Phase 2 once `libs.auth.client.get_supabase` accepts an explicit token. |
+| `POST` | `/api/v1/equity/deep_analysis` | Public | Single-name research view. Returns the deterministic placeholder analysis; Phase 4 will add billed LLM routing. |
+| `GET` | `/api/v1/portfolios/me` | JWT (Supabase) | Returns `{user_id, email, portfolios: PortfolioOut[]}`. The list is fetched via `libs.auth.portfolios.list_portfolios(access_token=user.access_token)` so Supabase RLS filters every row to the JWT holder. |
 
 ## Response envelope
 
@@ -101,25 +104,52 @@ Without a valid JWT this returns 401:
 }
 ```
 
+### The access-token plumbing (Phase 3)
+
+The dependency `require_user` returns an `AuthedUser` dataclass that
+carries the **raw verified JWT** as `access_token`. Routes that hit
+Supabase forward it verbatim:
+
+```python
+@router.get("/me")
+def list_my_portfolios(user: AuthedUser = Depends(require_user)):
+    rows = list_portfolios(access_token=user.access_token)
+    ...
+```
+
+Why this matters: Supabase's Row-Level Security policies key off the
+JWT's `sub` claim. If the route uses the server's anon key (or a
+service-role key), RLS does NOT apply and every caller sees every
+row. The contract test `test_forwards_caller_jwt_so_rls_filters_apply`
+in `test_portfolios_me.py` asserts byte-for-byte that the same token
+the client sent reaches `list_portfolios` — any refactor that breaks
+this fails the build.
+
+Never log `user.access_token`. It's a bearer credential.
+
 ## Running the tests
 
 ```bash
-pytest backend/tests -q
+# Local — fast, offline, ~1.2s
+pytest backend/tests -q -o "addopts="
 ```
 
+The `-o "addopts="` wipes the inherited root `pytest.ini` options
+(`--cov=. --cov-fail-under=60`) which target the Streamlit test suite,
+not this one. The CI job uses the same flag.
+
 Tests run offline (no Supabase / no LLM / no yfinance). The JWT
-fixture mints a test-signed HS256 token; CORS tests assert the
-production allow-list path stays strict.
+fixture mints a test-signed HS256 token; the `fake_portfolios` fixture
+in `conftest.py` monkeypatches `libs.auth.portfolios.list_portfolios`
+so the `/portfolios/me` tests never reach the real database.
 
-## What's intentionally NOT in Phase 1
+## What's intentionally still deferred
 
-- No frontend code. The Next.js shell lands in Phase 2.
 - No LLM invocation. `/equity/deep_analysis` returns the deterministic
   placeholder analysis; Phase 4 plumbs billed LLM routing.
-- `libs.auth.client.get_supabase` is not yet refactored to accept an
-  explicit per-request token. Phase 2 wires this so `list_portfolios`
-  can return RLS-filtered data for the JWT holder; today
-  `/portfolios/me` returns only the verified identity.
+- No active-portfolio scoring endpoint (`POST /api/v1/risk/score_from_active`).
+  Needs the market-data layer (yfinance / FMP) wrapped server-side so
+  the endpoint can compute `market_value = shares × price`. Phase 4.
 - No new deployment surface. Phase 5 (Caddy reroute) ships the
   backend in front of users.
 

@@ -157,3 +157,27 @@ store and the schema doesn't change in any phase.
 * ADR-0005 (Phase 2): Next.js auth bootstrap + Supabase SSR.
 * ADR-0006 (Phase 4): SSE / WebSocket strategy for the chat.
 * ADR-0007 (Phase 5): Caddy routing + final domain layout.
+
+## Implementation status (live)
+
+| Phase | Status | Shipped commit(s) | Notes |
+|-------|--------|-------------------|-------|
+| 1 — FastAPI backend scaffold | Done | `8e71b84` | 4 endpoints, envelope, JWT dep, CORS, 26 tests |
+| 2 — Next.js frontend shell | Done | `886fe30` | App Router, Tailwind, shadcn-style primitives, `/score` demo |
+| 2-hardening — OpenAPI gen + Vitest + CI | Done | `ab2ccf4` | `npm run gen:api`, env validation, error boundary, dual-job CI |
+| 3 — Auth + `/portfolios/me` wiring | Done | `8a9f526` | Explicit-token Supabase, RLS-filtered list, `/login` + `/portfolios` |
+| 4 — Market-data layer + scoring active portfolio | Deferred | — | Needs `data_provider` exposure + `/api/v1/risk/score_from_active` + Overview port |
+| 5 — Caddy reroute + production deploy | Deferred | — | New stack stays local until Phase 4 lands |
+
+**Production state (2026-05-29):** `mindmarket.app` still serves the
+Streamlit container. The new stack runs only at `localhost`. All
+changes from Phases 1–3 are merged on `origin/main` and pass CI but
+are not exposed to users.
+
+**Non-breaking guarantees verified after Phase 3:**
+* `pytest tests/unit -k "auth or portfolio"` — 181 passed. The
+  `libs.auth.client.get_supabase(access_token=...)` and
+  `libs.auth.portfolios.list_portfolios(access_token=...)` refactors
+  are signature-compatible with every Streamlit call-site.
+* No changes to `Dockerfile`, `docker-compose.yml`, `Caddyfile`,
+  systemd unit, Supabase migrations, or `.streamlit/secrets.toml`.
