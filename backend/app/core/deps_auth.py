@@ -56,11 +56,16 @@ class AuthedUser:
     ``raw_claims`` is kept for forward compatibility — future routes
     that need ``app_metadata.roles`` etc. can read it without us
     bumping the dataclass shape every time.
+
+    ``access_token`` is the raw JWT the caller presented. Routes that
+    hit Supabase (RLS-filtered reads) pass it through so the database
+    sees the caller's identity, not the server's. Never log this value.
     """
 
     id: str
     email: Optional[str]
     raw_claims: dict[str, Any]
+    access_token: str
 
 
 # ── token extraction ───────────────────────────────────────────────
@@ -131,7 +136,7 @@ class _MissingSecret(Exception):
     """
 
 
-def _claims_to_user(claims: dict[str, Any]) -> AuthedUser:
+def _claims_to_user(claims: dict[str, Any], token: str) -> AuthedUser:
     """Build the frozen user dataclass from raw JWT claims."""
     user_id = str(claims.get("sub") or "").strip()
     if not user_id:
@@ -140,6 +145,7 @@ def _claims_to_user(claims: dict[str, Any]) -> AuthedUser:
         id=user_id,
         email=(claims.get("email") or claims.get("user_metadata", {}).get("email")),
         raw_claims=claims,
+        access_token=token,
     )
 
 
@@ -169,7 +175,7 @@ def require_user(
         _logger.error("auth.jwt.no_secret_configured")
         raise unauthorized("Server is not configured to verify tokens.")
 
-    return _claims_to_user(claims)
+    return _claims_to_user(claims, token)
 
 
 def optional_user(
@@ -191,4 +197,4 @@ def optional_user(
     except Exception:
         # Treat unverifiable tokens as anon; don't leak why.
         return None
-    return _claims_to_user(claims)
+    return _claims_to_user(claims, token)

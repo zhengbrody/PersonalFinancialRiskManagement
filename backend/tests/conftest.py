@@ -89,3 +89,40 @@ def _isolate_settings(monkeypatch):
     from backend.app.core import config as _cfg
 
     _cfg.reset_settings_cache()
+
+
+@pytest.fixture
+def fake_portfolios(monkeypatch):
+    """Patch ``libs.auth.portfolios.list_portfolios`` so route tests
+    don't reach the real Supabase project.
+
+    Usage::
+
+        def test_x(test_client, mint_token, fake_portfolios):
+            fake_portfolios.set([{"id": "p1", ...}])
+            resp = test_client.get(...)
+    """
+
+    class _Stub:
+        def __init__(self) -> None:
+            self.rows: list[dict] = []
+            self.calls: list[str | None] = []
+            self.raise_on_call: Exception | None = None
+
+        def set(self, rows: list[dict]) -> None:
+            self.rows = rows
+
+        def raise_with(self, exc: Exception) -> None:
+            self.raise_on_call = exc
+
+        def __call__(self, access_token=None):
+            self.calls.append(access_token)
+            if self.raise_on_call is not None:
+                raise self.raise_on_call
+            return list(self.rows)
+
+    stub = _Stub()
+    import libs.auth.portfolios as _portfolios_mod
+
+    monkeypatch.setattr(_portfolios_mod, "list_portfolios", stub)
+    return stub

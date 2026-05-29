@@ -105,11 +105,21 @@ def _strip_capital_fields(payload: dict) -> dict:
     return {k: v for k, v in payload.items() if k not in _CAPITAL_FIELDS}
 
 
-def _authed_client():
-    """Return a Supabase client that has the current user's JWT attached.
+def _authed_client(access_token_override: Optional[str] = None):
+    """Return a Supabase client that has the caller's JWT attached.
 
-    Anon-key client + user JWT = RLS-filtered queries.
+    Two modes:
+
+    * **Streamlit (no override):** reads the current user's JWT from
+      ``session.access_token()`` and attaches it to the module-cached
+      singleton.
+
+    * **FastAPI (explicit override):** builds a fresh per-call client
+      bound to the supplied token. Avoids cross-request JWT pollution
+      when the backend serves multiple users in one process.
     """
+    if access_token_override:
+        return get_supabase(access_token=access_token_override)
     user = current_user()
     if user is None:
         raise AuthError("Not authenticated.")
@@ -123,9 +133,13 @@ def _authed_client():
     return sb
 
 
-def list_portfolios() -> list[dict]:
-    """Return all portfolios owned by the current user, default first."""
-    sb = _authed_client()
+def list_portfolios(access_token: Optional[str] = None) -> list[dict]:
+    """Return all portfolios owned by the caller, default first.
+
+    Pass ``access_token`` from a FastAPI route so the query is RLS-
+    filtered to the JWT holder. Streamlit callers omit it.
+    """
+    sb = _authed_client(access_token_override=access_token)
     resp = (
         sb.table("portfolios")
         .select("*")
@@ -136,9 +150,12 @@ def list_portfolios() -> list[dict]:
     return resp.data or []
 
 
-def get_default_portfolio() -> Optional[dict]:
-    """Return the user's default portfolio, or None if they haven't created one."""
-    sb = _authed_client()
+def get_default_portfolio(access_token: Optional[str] = None) -> Optional[dict]:
+    """Return the caller's default portfolio, or None if unset.
+
+    See ``list_portfolios`` for the access-token contract.
+    """
+    sb = _authed_client(access_token_override=access_token)
     resp = sb.table("portfolios").select("*").eq("is_default", True).limit(1).execute()
     rows = resp.data or []
     return rows[0] if rows else None

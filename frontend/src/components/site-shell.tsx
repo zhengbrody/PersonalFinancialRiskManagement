@@ -1,9 +1,13 @@
+"use client";
+
 import Link from "next/link";
+import { useAuth } from "@/lib/auth-context";
 
 /**
- * Top-level page shell.
- * Sticky header + max-w container. Lives outside the layout so we can
- * tweak the chrome without re-templating every page.
+ * Top-level page shell with sticky header + max-w container.
+ * Header renders the auth pill on the right: signed-in users see
+ * `email · Sign out`, anon users see `Sign in`. The pill is hidden
+ * during the initial Supabase session load to avoid a flicker.
  */
 export function SiteShell({ children }: { children: React.ReactNode }) {
   return (
@@ -27,6 +31,12 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
             >
               Score
             </Link>
+            <Link
+              href="/portfolios"
+              className="rounded px-3 py-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            >
+              Portfolios
+            </Link>
             <a
               href="http://localhost:8000/docs"
               target="_blank"
@@ -35,10 +45,51 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
             >
               API
             </a>
+            <AuthPill />
           </nav>
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-10">{children}</main>
+    </div>
+  );
+}
+
+function AuthPill() {
+  const { user, loading, configured, signOut } = useAuth();
+
+  if (loading) {
+    return <span className="ml-2 h-5 w-16 animate-pulse rounded bg-muted" />;
+  }
+  if (!configured) {
+    // Supabase env not set. Hide the pill rather than offer a broken
+    // sign-in link — the /score public flow still works.
+    return null;
+  }
+  if (!user) {
+    return (
+      <Link
+        href="/login"
+        className="ml-2 rounded-md border border-border bg-transparent px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+      >
+        Sign in
+      </Link>
+    );
+  }
+  return (
+    <div className="ml-2 flex items-center gap-2">
+      <span
+        className="hidden font-mono text-xs text-muted-foreground sm:inline"
+        title={user.email ?? user.id}
+      >
+        {user.email ?? user.id}
+      </span>
+      <button
+        type="button"
+        onClick={() => signOut()}
+        className="rounded-md border border-border bg-transparent px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+      >
+        Sign out
+      </button>
     </div>
   );
 }

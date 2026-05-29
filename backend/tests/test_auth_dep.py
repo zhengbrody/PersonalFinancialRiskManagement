@@ -108,7 +108,10 @@ def test_portfolios_me_rejects_wrong_audience(test_client, jwt_secret):
     assert resp.status_code == 401
 
 
-def test_portfolios_me_accepts_valid_token(test_client, jwt_secret, mint_token):
+def test_portfolios_me_accepts_valid_token(test_client, jwt_secret, mint_token, fake_portfolios):
+    """Happy path: valid JWT + Supabase returns rows → envelope carries
+    both the verified identity and the RLS-filtered list."""
+    fake_portfolios.set([])  # signed-in user with no portfolios yet
     token = mint_token(sub="user-abc-123", email="owner@mindmarket.test")
     resp = test_client.get(
         "/api/v1/portfolios/me",
@@ -119,6 +122,10 @@ def test_portfolios_me_accepts_valid_token(test_client, jwt_secret, mint_token):
     assert body["error"] is None
     assert body["data"]["user_id"] == "user-abc-123"
     assert body["data"]["email"] == "owner@mindmarket.test"
+    assert body["data"]["portfolios"] == []
+    # The raw JWT was forwarded to Supabase for RLS, not replayed
+    # from the server's own credentials.
+    assert fake_portfolios.calls == [token]
 
 
 def test_portfolios_me_fails_closed_when_secret_unset(test_client, monkeypatch):

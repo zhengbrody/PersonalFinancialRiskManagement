@@ -51,18 +51,15 @@ def _read_secret(key: str) -> str:
         return ""
 
 
-def get_supabase():
-    """Return a singleton Supabase client. Raise AuthError if unconfigured.
+def _build_client(access_token: Optional[str] = None):
+    """Construct a Supabase client. Lazy imports keep this module
+    importable on hosts that don't have supabase-py installed.
 
-    Streamlit reruns the whole script on every widget interaction; without
-    caching, we'd build a new HTTP session per click. The module-level
-    `_client_cache` survives those reruns because Streamlit only re-imports
-    the module when its source changes.
+    When ``access_token`` is supplied, the returned client has the
+    user's JWT pre-attached on its PostgREST connection so all reads
+    are RLS-filtered to that caller. The FastAPI backend uses this
+    path — Streamlit uses the cached no-arg form.
     """
-    global _client_cache
-    if _client_cache is not None:
-        return _client_cache
-
     url = _read_secret("SUPABASE_URL")
     key = _read_secret("SUPABASE_ANON_KEY")
     if not url or not key:
@@ -87,7 +84,36 @@ def get_supabase():
     # as long as the Streamlit process is the same (it always is for a
     # single-instance EC2 deploy).
     options = ClientOptions(flow_type="pkce")
-    _client_cache = create_client(url, key, options=options)
+    client = create_client(url, key, options=options)
+    if access_token:
+        client.postgrest.auth(access_token)
+    return client
+
+
+def get_supabase(access_token: Optional[str] = None):
+    """Return a Supabase client.
+
+    Two modes:
+
+    * **No argument (Streamlit):** returns a module-cached singleton
+      bound to the current Streamlit session. The cache survives
+      script reruns so widget interactions don't rebuild the HTTP
+      session every click.
+
+    * **With ``access_token`` (FastAPI):** returns a fresh per-call
+      client with the given JWT pre-attached. NOT cached, because the
+      backend serves multiple users in one process — caching would
+      cross-pollinate JWTs.
+
+    Raises ``AuthError`` if env config is missing.
+    """
+    if access_token:
+        return _build_client(access_token=access_token)
+
+    global _client_cache
+    if _client_cache is not None:
+        return _client_cache
+    _client_cache = _build_client()
     return _client_cache
 
 
