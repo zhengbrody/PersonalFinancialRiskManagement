@@ -1,14 +1,24 @@
 /**
- * Mirror types for the backend's `/api/v1/risk/score` payload.
+ * Frontend ↔ backend schema bridge.
  *
- * Kept as plain TypeScript shapes (no runtime validation) — the
- * backend is the source of truth, the envelope is contract-tested
- * server-side, and we don't want a Zod round-trip on the hot path.
+ * **Request types** are sourced from the OpenAPI-generated
+ * `api-types.ts` so the contract can never drift. Re-run
+ * `npm run gen:api` (backend must be reachable) to refresh.
  *
- * If a field is added server-side, add it here and the typed `apiFetch`
- * call will pick it up at the next build.
+ * **Response types** are hand-mirrored below because the Phase-1 risk
+ * router uses `response_model=None` (it returns a manually-wrapped
+ * envelope, not a typed Pydantic model). When the backend declares
+ * `response_model=ScoreResponse` in a later pass, this hand mirror
+ * disappears and we re-export from `api-types.ts` like the requests.
  */
 
+import type { components } from "./api-types";
+
+// ── request types (single source of truth: generated) ─────────────
+export type Holding = components["schemas"]["HoldingIn"];
+export type ScoreRequest = components["schemas"]["ScoreRequest"];
+
+// ── response types (hand-mirrored — see file header) ──────────────
 export type DimensionScore = {
   name: string;
   score: number;
@@ -37,16 +47,4 @@ export type ScoreResponse = {
   risk_target: Record<string, unknown>;
   metrics: PortfolioMetrics;
   dimensions: Record<string, DimensionScore>;
-};
-
-export type Holding = {
-  ticker: string;
-  market_value: number;
-  asset_type?: "public_security" | "cash" | "crypto" | "real_estate";
-};
-
-export type ScoreRequest = {
-  holdings: Holding[];
-  risk_preference?: number;
-  risk_free_rate?: number;
 };

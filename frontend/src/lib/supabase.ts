@@ -6,28 +6,21 @@
  * No login UI is wired in this phase — that lands when /portfolios is
  * ported (Phase 3). Anon access still works for /api/v1/risk/score.
  *
- * The client is lazy: if the public env vars are missing we return a
- * stub that throws when used, instead of crashing at module load.
- * That way the public /score page renders cleanly when a contributor
- * forgets `.env.local`.
+ * The client is lazy: when the Supabase env vars are missing,
+ * `getSupabase()` returns null and `getAccessToken()` returns null
+ * instead of crashing at module load. That keeps the public /score
+ * page renderable on a contributor's machine that has no `.env.local`.
  */
 
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { env } from "./env";
 
 let cached: SupabaseClient | null = null;
 
-function readEnv(): { url: string; anonKey: string } | null {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) return null;
-  return { url, anonKey };
-}
-
 export function getSupabase(): SupabaseClient | null {
   if (cached) return cached;
-  const env = readEnv();
-  if (!env) return null;
-  cached = createClient(env.url, env.anonKey, {
+  if (!env.supabaseConfigured) return null;
+  cached = createClient(env.supabaseUrl!, env.supabaseAnonKey!, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
@@ -39,8 +32,8 @@ export function getSupabase(): SupabaseClient | null {
 
 /**
  * Convenience: pull the current access token, if any. Returns null when
- * the user is signed out OR when Supabase env vars are missing.
- * Use this to seed `apiFetch({ authToken })` on protected calls.
+ * the user is signed out OR when Supabase env vars are missing. Use to
+ * seed `apiFetch({ authToken })` on protected calls.
  */
 export async function getAccessToken(): Promise<string | null> {
   const client = getSupabase();

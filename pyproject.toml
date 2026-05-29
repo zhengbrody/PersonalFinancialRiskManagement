@@ -12,12 +12,24 @@ exclude = '''
   | cdk\.out
   | htmlcov
   | \.cache
+  | node_modules
+  | \.next
 )/
 '''
 
 [tool.ruff]
 line-length = 100
-exclude = [".git", ".venv", "__pycache__", "build", "dist", "cdk.out", "htmlcov"]
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "cdk.out",
+    "htmlcov",
+    "node_modules",
+    ".next",
+]
 
 [tool.ruff.lint]
 select = [

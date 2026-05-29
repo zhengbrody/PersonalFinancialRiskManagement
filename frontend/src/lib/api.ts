@@ -16,6 +16,8 @@
  * how envelope-shape drift starts.
  */
 
+import { env } from "./env";
+
 export type ApiErrorBody = {
   code: string;
   message: string;
@@ -55,17 +57,6 @@ export class ApiError extends Error {
   }
 }
 
-const DEFAULT_BASE = "http://localhost:8000";
-
-function getBaseUrl(): string {
-  // Browser bundles read NEXT_PUBLIC_* at build time; server reads at
-  // runtime. Both code paths fall back to the dev default.
-  if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_BASE_URL) {
-    return process.env.NEXT_PUBLIC_API_BASE_URL.replace(/\/+$/, "");
-  }
-  return DEFAULT_BASE;
-}
-
 function mintRequestId(): string {
   // Lightweight UUID-ish for log correlation; the backend echoes it
   // through `meta.request_id` so devtools→server logs are joinable.
@@ -88,7 +79,7 @@ export async function apiFetch<T>(
   opts: ApiFetchOptions = {},
 ): Promise<T> {
   const { body, authToken, requestId, headers, ...rest } = opts;
-  const url = path.startsWith("http") ? path : `${getBaseUrl()}${path}`;
+  const url = path.startsWith("http") ? path : `${env.apiBaseUrl}${path}`;
   const id = requestId ?? mintRequestId();
 
   const finalHeaders: Record<string, string> = {
