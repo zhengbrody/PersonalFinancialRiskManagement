@@ -39,6 +39,24 @@ export type PortfoliosMe = {
   portfolios: PortfolioRow[];
 };
 
+// ── macro ────────────────────────────────────────────────────────
+
+export type MacroSeriesPoint = { date: string; value: number };
+
+export type MacroSeries = {
+  series_id: string;
+  label: string;
+  latest_value: number | null;
+  latest_date: string | null;
+  points: MacroSeriesPoint[];
+};
+
+export type MacroSeriesBatch = { series: MacroSeries[] };
+
+export type YieldCurvePoint = { tenor: string; yield_pct: number };
+
+export type YieldCurve = { as_of: string; points: YieldCurvePoint[] };
+
 // ── hooks ─────────────────────────────────────────────────────────
 
 export function useMyPortfolios() {
@@ -50,6 +68,35 @@ export function useMyPortfolios() {
       apiFetch<PortfoliosMe>("/api/v1/portfolios/me", {
         authToken: accessToken!,
       }),
+  });
+}
+
+/**
+ * Latest values for a small set of public macro series. Public
+ * endpoint, no auth — cached server-side for an hour, so the home-
+ * page widget can hammer this without burning rate budget.
+ */
+export function useMacroSnapshot(seriesIds: string[]) {
+  const key = seriesIds.join(",");
+  return useQuery<MacroSeriesBatch>({
+    queryKey: ["macro", "series", key],
+    queryFn: () =>
+      apiFetch<MacroSeriesBatch>(
+        `/api/v1/macro/series?series=${encodeURIComponent(key)}&days=180`,
+      ),
+    // Macro updates daily — 10 minutes of client-side staleness is fine.
+    staleTime: 10 * 60 * 1000,
+  });
+}
+
+/**
+ * Latest US Treasury yield curve. Public, server-cached 1h.
+ */
+export function useYieldCurve() {
+  return useQuery<YieldCurve>({
+    queryKey: ["macro", "yield_curve"],
+    queryFn: () => apiFetch<YieldCurve>("/api/v1/macro/yield_curve"),
+    staleTime: 10 * 60 * 1000,
   });
 }
 

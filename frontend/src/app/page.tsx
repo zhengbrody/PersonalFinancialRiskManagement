@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { MacroSnapshot } from "@/components/macro-snapshot";
 
 export default function Home() {
   return (
@@ -38,6 +39,8 @@ export default function Home() {
           </a>
         </div>
       </section>
+
+      <MacroSnapshot />
 
       <section className="grid gap-4 md:grid-cols-3">
         <Card>

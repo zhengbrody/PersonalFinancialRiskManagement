@@ -14,7 +14,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api.v1 import equity, health, market, portfolios, risk
+from .api.v1 import equity, health, macro, market, portfolios, risk
 from .core.config import get_settings
 from .core.cors import cors_kwargs
 from .core.responses import (
@@ -53,6 +53,7 @@ def create_app() -> FastAPI:
     app.include_router(equity.router)
     app.include_router(portfolios.router)
     app.include_router(market.router)
+    app.include_router(macro.router)
 
     # Envelope-aware exception handlers. Order matters: register the
     # narrower types first so FastAPI's resolver picks them over the
