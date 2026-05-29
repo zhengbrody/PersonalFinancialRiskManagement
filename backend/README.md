@@ -127,6 +127,50 @@ this fails the build.
 
 Never log `user.access_token`. It's a bearer credential.
 
+## MCP server (Phase 4c)
+
+A standalone Model Context Protocol server lives in
+`backend/mcp_server/`. It exposes MindMarket's data + scoring as
+typed tools any Claude-compatible client (Claude Desktop, Claude
+Code, custom agents) can call.
+
+Tools registered today:
+
+| Tool | Backed by | Purpose |
+|------|-----------|---------|
+| `mindmarket_score_portfolio` | `engine.quant` + `services.market_data` | Score a hypothetical portfolio with real prices |
+| `mindmarket_get_market_prices` | `services.market_data` | Latest adjusted close per ticker |
+| `mindmarket_get_macro_series` | `services.macro_data` | FRED series (Fed Funds, CPI, unemployment, …) |
+| `mindmarket_get_yield_curve` | `services.macro_data` | Latest US Treasury daily curve |
+
+Every tool reuses the **same** service module the HTTP route uses —
+an LLM agent and a browser user can never see different numbers.
+
+Run from the repo root:
+
+```bash
+python -m backend.mcp_server
+```
+
+Add to Claude Desktop's `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "mindmarket": {
+      "command": "python",
+      "args": ["-m", "backend.mcp_server"],
+      "cwd": "/path/to/RiskManagement"
+    }
+  }
+}
+```
+
+Tool implementations are in `backend/mcp_server/tools.py`; the MCP
+protocol wiring is in `backend/mcp_server/server.py`. Tests in
+`backend/tests/test_mcp_server.py` cover the registry shape + each
+handler's behaviour with the underlying services mocked.
+
 ## Running the tests
 
 ```bash

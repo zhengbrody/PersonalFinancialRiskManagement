@@ -24,3 +24,11 @@ PyJWT>=2.8,<3
 # fastapi[all], but we list it so the explicit ``pip install -r`` works
 # even if upstream extras change.
 httpx>=0.27,<1
+
+# MCP — Anthropic's Model Context Protocol SDK. Powers the standalone
+# tool server in backend/mcp_server/ that any Claude-compatible client
+# (Claude Desktop, Claude Code) can connect to via stdio. Optional at
+# runtime (only the ``python -m backend.mcp_server`` entry point
+# imports it), but pinned here so a fresh contributor install gets a
+# working MCP environment without an extra step.
+mcp>=1.0,<2
