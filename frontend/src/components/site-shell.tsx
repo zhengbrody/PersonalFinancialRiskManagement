@@ -67,12 +67,20 @@ function AuthPill() {
   }
   if (!user) {
     return (
-      <Link
-        href="/login"
-        className="ml-2 rounded-md border border-border bg-transparent px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
-      >
-        Sign in
-      </Link>
+      <div className="ml-2 flex items-center gap-1">
+        <Link
+          href="/login"
+          className="rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+        >
+          Sign in
+        </Link>
+        <Link
+          href="/signup"
+          className="rounded-md border border-primary/50 bg-primary/10 px-3 py-1.5 text-sm text-primary hover:bg-primary/20"
+        >
+          Sign up
+        </Link>
+      </div>
     );
   }
   return (

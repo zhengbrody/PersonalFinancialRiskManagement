@@ -161,9 +161,9 @@ def get_default_portfolio(access_token: Optional[str] = None) -> Optional[dict]:
     return rows[0] if rows else None
 
 
-def get_portfolio(portfolio_id: str) -> Optional[dict]:
+def get_portfolio(portfolio_id: str, access_token: Optional[str] = None) -> Optional[dict]:
     """Return one owned portfolio by id, or None when RLS hides it."""
-    sb = _authed_client()
+    sb = _authed_client(access_token_override=access_token)
     resp = sb.table("portfolios").select("*").eq("id", portfolio_id).limit(1).execute()
     rows = resp.data or []
     return rows[0] if rows else None
@@ -176,10 +176,14 @@ def create_portfolio(
     contributed_capital: float = 0.0,
     cash_balance: float = 0.0,
     is_default: bool = False,
+    access_token: Optional[str] = None,
 ) -> dict:
     """Insert a new portfolio. user_id is set server-side via DEFAULT auth.uid()
-    (configured in the migration), so we don't pass it from the client."""
-    sb = _authed_client()
+    (configured in the migration), so we don't pass it from the client.
+
+    Pass ``access_token`` from a FastAPI route so Supabase RLS sees
+    the caller's identity. Streamlit callers omit it (session-bound)."""
+    sb = _authed_client(access_token_override=access_token)
 
     if is_default:
         # Demote any existing default first — Postgres trigger could do this
@@ -207,8 +211,11 @@ def create_portfolio(
     return rows[0]
 
 
-def update_portfolio(portfolio_id: str, **fields) -> dict:
-    """Patch fields on a single portfolio. RLS prevents touching others' rows."""
+def update_portfolio(portfolio_id: str, *, access_token: Optional[str] = None, **fields) -> dict:
+    """Patch fields on a single portfolio. RLS prevents touching others' rows.
+
+    Keyword-only ``access_token`` is the FastAPI passthrough; Streamlit
+    callers continue to omit it and use the session-bound singleton."""
     allowed = {
         "name",
         "holdings",
@@ -231,7 +238,7 @@ def update_portfolio(portfolio_id: str, **fields) -> dict:
     if "cash_balance" in fields and fields["cash_balance"] is not None:
         fields["cash_balance"] = _finite_or_zero(fields["cash_balance"])
 
-    sb = _authed_client()
+    sb = _authed_client(access_token_override=access_token)
     if fields.get("is_default"):
         sb.table("portfolios").update({"is_default": False}).eq("is_default", True).neq(
             "id", portfolio_id
@@ -255,9 +262,9 @@ def update_portfolio(portfolio_id: str, **fields) -> dict:
     return rows[0]
 
 
-def delete_portfolio(portfolio_id: str) -> None:
+def delete_portfolio(portfolio_id: str, access_token: Optional[str] = None) -> None:
     """Delete a single portfolio. RLS prevents deleting others' rows."""
-    sb = _authed_client()
+    sb = _authed_client(access_token_override=access_token)
     sb.table("portfolios").delete().eq("id", portfolio_id).execute()
 
 

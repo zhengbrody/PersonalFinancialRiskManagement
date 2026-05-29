@@ -14,7 +14,7 @@
  * route-level RSC fetching in Phase 4, the redirect moves up.
  */
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,7 @@ import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import {
   type PortfolioRow,
+  useDeletePortfolio,
   useMyPortfolios,
   useScoreActivePortfolio,
 } from "@/lib/queries";
@@ -57,18 +58,23 @@ export default function PortfoliosPage() {
 
   return (
     <div className="space-y-6">
-      <header className="space-y-1">
-        <p className="text-xs font-medium uppercase tracking-widest text-primary">
-          GET /api/v1/portfolios/me
-        </p>
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Your portfolios
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Signed in as{" "}
-          <span className="font-mono">{user.email ?? user.id}</span>. Rows
-          here are filtered by Supabase Row-Level Security.
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <p className="text-xs font-medium uppercase tracking-widest text-primary">
+            GET /api/v1/portfolios/me
+          </p>
+          <h1 className="text-3xl font-semibold tracking-tight">
+            Your portfolios
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Signed in as{" "}
+            <span className="font-mono">{user.email ?? user.id}</span>. Rows
+            here are filtered by Supabase Row-Level Security.
+          </p>
+        </div>
+        <Link href="/portfolios/new">
+          <Button>+ New portfolio</Button>
+        </Link>
       </header>
 
       {portfoliosQuery.isLoading && <ListSkeleton />}
@@ -134,8 +140,77 @@ function PortfolioCard({ portfolio }: { portfolio: PortfolioRow }) {
             the backend resolves the active row from RLS. Non-default
             cards show no button to avoid a wrong-portfolio result. */}
         {portfolio.is_default && tickers.length > 0 && <ScoreSection />}
+        <CardActions portfolio={portfolio} />
       </CardContent>
     </Card>
+  );
+}
+
+function CardActions({ portfolio }: { portfolio: PortfolioRow }) {
+  const router = useRouter();
+  const deletion = useDeletePortfolio();
+  const [confirming, setConfirming] = useState(false);
+
+  if (confirming) {
+    return (
+      <div className="space-y-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs">
+        <p className="text-destructive">
+          Delete <span className="font-mono">{portfolio.name}</span>?
+          Holdings will be lost.
+        </p>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="destructive"
+            onClick={() =>
+              deletion.mutate(portfolio.id, {
+                onSuccess: () => setConfirming(false),
+              })
+            }
+            disabled={deletion.isPending}
+          >
+            {deletion.isPending ? "Deleting…" : "Delete forever"}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setConfirming(false)}
+            disabled={deletion.isPending}
+          >
+            Cancel
+          </Button>
+        </div>
+        {deletion.isError && (
+          <p className="text-destructive">
+            {(deletion.error as Error)?.message ?? "Delete failed."}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex gap-2 pt-1">
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        onClick={() => router.push(`/portfolios/${portfolio.id}/edit`)}
+      >
+        Edit
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        onClick={() => setConfirming(true)}
+        aria-label={`Delete ${portfolio.name}`}
+      >
+        Delete
+      </Button>
+    </div>
   );
 }
 

@@ -39,6 +39,19 @@ export type AuthState = {
   configured: boolean;
   /** Sign in with email + password. Resolves on success; throws on failure. */
   signIn: (email: string, password: string) => Promise<void>;
+  /**
+   * Sign up with email + password.
+   *
+   * Resolves to ``{ needsConfirmation: true }`` when the Supabase
+   * project has email confirmation enabled — the UI should show
+   * "check your email" copy. Resolves to ``{ needsConfirmation: false }``
+   * when the session is immediately active (auto-confirm).
+   * Throws on failure (e.g. weak password, email already registered).
+   */
+  signUp: (
+    email: string,
+    password: string,
+  ) => Promise<{ needsConfirmation: boolean }>;
   /** Sign the current user out. No-op when already signed out. */
   signOut: () => Promise<void>;
 };
@@ -98,6 +111,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [supabase],
   );
 
+  const signUp = useCallback(
+    async (email: string, password: string) => {
+      if (!supabase) {
+        throw new Error("Sign-up is not configured on this build.");
+      }
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) {
+        throw new Error(error.message);
+      }
+      // When confirmation is required Supabase returns a user but no
+      // session — the user must click an email link before they can
+      // sign in. When auto-confirm is on (or already confirmed), the
+      // session is attached and we're effectively signed in.
+      const needsConfirmation = !data.session;
+      return { needsConfirmation };
+    },
+    [supabase],
+  );
+
   const signOut = useCallback(async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
@@ -110,9 +142,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       configured,
       signIn,
+      signUp,
       signOut,
     }),
-    [session, loading, configured, signIn, signOut],
+    [session, loading, configured, signIn, signUp, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

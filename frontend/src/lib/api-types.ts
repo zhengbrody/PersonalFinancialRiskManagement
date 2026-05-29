@@ -135,6 +135,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/portfolios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a new portfolio owned by the caller
+         * @description Insert a new row. Supabase RLS pins `user_id` to the caller via
+         *     the `DEFAULT auth.uid()` clause on the column — we never send it
+         *     explicitly, so a buggy client can't impersonate.
+         */
+        post: operations["create_portfolio_endpoint_api_v1_portfolios_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolios/{portfolio_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete one portfolio owned by the caller
+         * @description Hard delete. RLS prevents touching rows the caller doesn't own.
+         */
+        delete: operations["delete_portfolio_endpoint_api_v1_portfolios__portfolio_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update one or more fields on a portfolio
+         * @description Patch fields. Only fields explicitly set in the request body are
+         *     applied; omitted fields keep their existing DB values.
+         */
+        patch: operations["update_portfolio_endpoint_api_v1_portfolios__portfolio_id__patch"];
+        trace?: never;
+    };
     "/api/v1/market/prices": {
         parameters: {
             query?: never;
@@ -270,6 +317,84 @@ export interface components {
              * @default true
              */
             enabled?: boolean;
+        };
+        /**
+         * HoldingValue
+         * @description One ticker's persisted record on a portfolio row.
+         */
+        HoldingValue: {
+            /** Shares */
+            shares: number;
+            /** Avg Cost */
+            avg_cost?: number | null;
+            /** Sector */
+            sector?: string | null;
+            /** Asset Type */
+            asset_type?: string | null;
+            /** Account */
+            account?: string | null;
+            /** Currency */
+            currency?: string | null;
+            /** Margin Eligible */
+            margin_eligible?: boolean | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * PortfolioCreateRequest
+         * @description Body for ``POST /api/v1/portfolios``.
+         */
+        PortfolioCreateRequest: {
+            /** Name */
+            name: string;
+            /** Holdings */
+            holdings?: {
+                [key: string]: components["schemas"]["HoldingValue"];
+            };
+            /**
+             * Margin Loan
+             * @default 0
+             */
+            margin_loan?: number;
+            /**
+             * Contributed Capital
+             * @default 0
+             */
+            contributed_capital?: number;
+            /**
+             * Cash Balance
+             * @default 0
+             */
+            cash_balance?: number;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default?: boolean;
+        };
+        /**
+         * PortfolioPatchRequest
+         * @description Body for ``PATCH /api/v1/portfolios/{id}``.
+         *
+         *     Every field is optional — the route only applies fields the caller
+         *     explicitly set so a small UI edit doesn't accidentally null other
+         *     columns.
+         */
+        PortfolioPatchRequest: {
+            /** Name */
+            name?: string | null;
+            /** Holdings */
+            holdings?: {
+                [key: string]: components["schemas"]["HoldingValue"];
+            } | null;
+            /** Margin Loan */
+            margin_loan?: number | null;
+            /** Contributed Capital */
+            contributed_capital?: number | null;
+            /** Cash Balance */
+            cash_balance?: number | null;
+            /** Is Default */
+            is_default?: boolean | null;
         };
         /**
          * ScoreFromActiveRequest
@@ -484,6 +609,105 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    create_portfolio_endpoint_api_v1_portfolios_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortfolioCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_portfolio_endpoint_api_v1_portfolios__portfolio_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_portfolio_endpoint_api_v1_portfolios__portfolio_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortfolioPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

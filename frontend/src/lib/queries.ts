@@ -9,7 +9,7 @@
  * (see `useAuth().signOut` → `queryClient.clear()` later).
  */
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "./api";
 import { useAuth } from "./auth-context";
 import type {
@@ -59,6 +59,28 @@ export type YieldCurve = { as_of: string; points: YieldCurvePoint[] };
 
 // ── hooks ─────────────────────────────────────────────────────────
 
+// ── portfolio CRUD payload types ──────────────────────────────────
+
+export type PortfolioHoldingInput = {
+  shares: number;
+  avg_cost?: number;
+  sector?: string;
+  asset_type?: string;
+};
+
+export type PortfolioCreateInput = {
+  name: string;
+  holdings: Record<string, PortfolioHoldingInput>;
+  margin_loan?: number;
+  contributed_capital?: number;
+  cash_balance?: number;
+  is_default?: boolean;
+};
+
+export type PortfolioPatchInput = Partial<PortfolioCreateInput>;
+
+// ── hooks ────────────────────────────────────────────────────────
+
 export function useMyPortfolios() {
   const { accessToken, user } = useAuth();
   return useQuery<PortfoliosMe>({
@@ -97,6 +119,55 @@ export function useYieldCurve() {
     queryKey: ["macro", "yield_curve"],
     queryFn: () => apiFetch<YieldCurve>("/api/v1/macro/yield_curve"),
     staleTime: 10 * 60 * 1000,
+  });
+}
+
+/** Invalidate the portfolios list so the next render refetches. */
+function invalidatePortfoliosKey(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ["portfolios"] });
+}
+
+export function useCreatePortfolio() {
+  const { accessToken } = useAuth();
+  const qc = useQueryClient();
+  return useMutation<PortfolioRow, Error, PortfolioCreateInput>({
+    mutationFn: (body) =>
+      apiFetch<PortfolioRow>("/api/v1/portfolios", {
+        method: "POST",
+        body,
+        authToken: accessToken ?? undefined,
+      }),
+    onSuccess: () => invalidatePortfoliosKey(qc),
+  });
+}
+
+export function useUpdatePortfolio(portfolioId: string) {
+  const { accessToken } = useAuth();
+  const qc = useQueryClient();
+  return useMutation<PortfolioRow, Error, PortfolioPatchInput>({
+    mutationFn: (body) =>
+      apiFetch<PortfolioRow>(`/api/v1/portfolios/${portfolioId}`, {
+        method: "PATCH",
+        body,
+        authToken: accessToken ?? undefined,
+      }),
+    onSuccess: () => invalidatePortfoliosKey(qc),
+  });
+}
+
+export function useDeletePortfolio() {
+  const { accessToken } = useAuth();
+  const qc = useQueryClient();
+  return useMutation<{ deleted: boolean; id: string }, Error, string>({
+    mutationFn: (portfolioId) =>
+      apiFetch<{ deleted: boolean; id: string }>(
+        `/api/v1/portfolios/${portfolioId}`,
+        {
+          method: "DELETE",
+          authToken: accessToken ?? undefined,
+        },
+      ),
+    onSuccess: () => invalidatePortfoliosKey(qc),
   });
 }
 

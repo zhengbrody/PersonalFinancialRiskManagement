@@ -92,6 +92,57 @@ def _isolate_settings(monkeypatch):
 
 
 @pytest.fixture
+def fake_portfolio_mutations(monkeypatch):
+    """Patch the three mutation helpers in ``libs.auth.portfolios``
+    used by /api/v1/portfolios POST/PATCH/DELETE.
+
+    Tracks ``calls`` per function so tests can assert exact arguments
+    (especially that ``access_token`` is forwarded verbatim — the RLS
+    contract). Each stub returns the row passed via ``set_return``."""
+
+    class _MutStub:
+        def __init__(self) -> None:
+            self.returns: dict | None = None
+            self.calls: list[dict] = []
+            self.raise_on_call: Exception | None = None
+
+        def set_return(self, row: dict) -> None:
+            self.returns = row
+
+        def raise_with(self, exc: Exception) -> None:
+            self.raise_on_call = exc
+
+    create = _MutStub()
+    update = _MutStub()
+    delete = _MutStub()
+
+    def _create(**kwargs):
+        create.calls.append(kwargs)
+        if create.raise_on_call is not None:
+            raise create.raise_on_call
+        return dict(create.returns or {})
+
+    def _update(portfolio_id, **kwargs):
+        update.calls.append({"portfolio_id": portfolio_id, **kwargs})
+        if update.raise_on_call is not None:
+            raise update.raise_on_call
+        return dict(update.returns or {})
+
+    def _delete(portfolio_id, access_token=None):
+        delete.calls.append({"portfolio_id": portfolio_id, "access_token": access_token})
+        if delete.raise_on_call is not None:
+            raise delete.raise_on_call
+        return None
+
+    import libs.auth.portfolios as _portfolios_mod
+
+    monkeypatch.setattr(_portfolios_mod, "create_portfolio", _create)
+    monkeypatch.setattr(_portfolios_mod, "update_portfolio", _update)
+    monkeypatch.setattr(_portfolios_mod, "delete_portfolio", _delete)
+    return {"create": create, "update": update, "delete": delete}
+
+
+@pytest.fixture
 def fake_portfolios(monkeypatch):
     """Patch ``libs.auth.portfolios.list_portfolios`` so route tests
     don't reach the real Supabase project.
