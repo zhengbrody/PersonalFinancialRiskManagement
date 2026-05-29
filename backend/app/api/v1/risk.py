@@ -162,7 +162,7 @@ def score_portfolio_endpoint(body: ScoreRequest, request: Request):
     try:
         from domain.models import AssetPositionInput, PortfolioInput
     except Exception as exc:  # pragma: no cover - import guard
-        raise unprocessable("Domain model unavailable.", reason=str(exc))
+        raise unprocessable("Domain model unavailable.", reason=str(exc)) from exc
 
     try:
         positions_input = [
@@ -200,7 +200,7 @@ def score_portfolio_endpoint(body: ScoreRequest, request: Request):
                 }
             except Exception:
                 pass
-        raise unprocessable(f"Invalid holdings: {exc}", **details)
+        raise unprocessable(f"Invalid holdings: {exc}", **details) from exc
 
     tickers = [p.ticker for p in positions_input if p.enabled]
     if not tickers:
@@ -218,7 +218,7 @@ def score_portfolio_endpoint(body: ScoreRequest, request: Request):
             benchmark_returns=bench_series,
         )
     except Exception as exc:
-        raise unprocessable(f"Score computation failed: {exc}")
+        raise unprocessable(f"Score computation failed: {exc}") from exc
 
     response = _serialize_score(score)
     if not body.returns:
@@ -264,19 +264,21 @@ def score_from_active_endpoint(
     try:
         from libs.auth.active_portfolio import get_active_holdings
     except Exception as exc:  # pragma: no cover - import guard
-        raise server_error("active_portfolio module unavailable.", reason=str(exc))
+        raise server_error("active_portfolio module unavailable.", reason=str(exc)) from exc
 
     try:
         holdings = get_active_holdings(access_token=user.access_token)
     except TypeError:
         # Legacy callers still pass no args — surfaces during Streamlit ↔
         # backend refactor windows; map to 500 with a clear hint.
+        # `from None` because the TypeError is a contract mismatch we
+        # surface in plain language; chaining the raw stack adds noise.
         raise server_error(
             "active_portfolio.get_active_holdings does not accept "
             "access_token yet. Update libs/auth/active_portfolio.py."
-        )
+        ) from None
     except Exception as exc:
-        raise server_error("Could not load active portfolio.", reason=type(exc).__name__)
+        raise server_error("Could not load active portfolio.", reason=type(exc).__name__) from exc
 
     holdings = holdings or {}
     if not holdings:
@@ -297,7 +299,7 @@ def score_from_active_endpoint(
     try:
         price_frame = market_data.get_price_history(tickers, days=body.history_days)
     except Exception as exc:
-        raise server_error("Market data fetch failed.", reason=type(exc).__name__)
+        raise server_error("Market data fetch failed.", reason=type(exc).__name__) from exc
 
     if price_frame.empty:
         raise APIError(
@@ -314,7 +316,7 @@ def score_from_active_endpoint(
     try:
         from domain.models import AssetPositionInput, PortfolioInput
     except Exception as exc:  # pragma: no cover - import guard
-        raise server_error("Domain model unavailable.", reason=str(exc))
+        raise server_error("Domain model unavailable.", reason=str(exc)) from exc
 
     for tk in tickers:
         if tk not in price_frame.columns:
@@ -349,7 +351,7 @@ def score_from_active_endpoint(
             risk_free_rate=body.risk_free_rate,
         )
     except Exception as exc:
-        raise unprocessable(f"Invalid active portfolio: {exc}")
+        raise unprocessable(f"Invalid active portfolio: {exc}") from exc
 
     # Returns matrix from the same history. pct_change drops the first
     # NaN row; dropna removes any column with full-NaN history (already
@@ -361,7 +363,7 @@ def score_from_active_endpoint(
     try:
         score = score_portfolio_from_input(portfolio_input, returns_frame)
     except Exception as exc:
-        raise unprocessable(f"Score computation failed: {exc}")
+        raise unprocessable(f"Score computation failed: {exc}") from exc
 
     response = _serialize_score(score)
     return ok(response.model_dump(), request=request, started_at=started)

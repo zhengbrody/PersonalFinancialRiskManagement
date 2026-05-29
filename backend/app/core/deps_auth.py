@@ -124,7 +124,7 @@ def _decode(token: str, settings: Settings) -> dict[str, Any]:
         raise unauthorized(
             "Token is invalid or expired.",
             reason=type(exc).__name__,
-        )
+        ) from exc
 
 
 class _MissingSecret(Exception):
@@ -173,7 +173,9 @@ def require_user(
         # a test JWT (see backend/README.md) rather than weakening
         # this dependency.
         _logger.error("auth.jwt.no_secret_configured")
-        raise unauthorized("Server is not configured to verify tokens.")
+        # `from None` — the _MissingSecret marker is internal noise.
+        # Don't surface it in tracebacks served to clients.
+        raise unauthorized("Server is not configured to verify tokens.") from None
 
     return _claims_to_user(claims, token)
 

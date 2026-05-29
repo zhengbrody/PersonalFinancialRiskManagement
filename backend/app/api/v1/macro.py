@@ -58,13 +58,13 @@ def get_series(
         for s in raw:
             macro_data._validate_series_id(s)
     except ValueError as exc:
-        raise unprocessable(str(exc))
+        raise unprocessable(str(exc)) from exc
 
     try:
         results = macro_data.get_fred_series_batch(raw, days=days)
     except Exception as exc:
         _logger.warning("macro.series.fetch_failed err=%s", exc)
-        raise server_error("FRED fetch failed.", reason=type(exc).__name__)
+        raise server_error("FRED fetch failed.", reason=type(exc).__name__) from exc
 
     # Batch tolerates per-series failure (one delisted-or-broken series
     # shouldn't kill the dashboard). But when every requested series
@@ -96,7 +96,7 @@ def get_yield_curve(request: Request):
         result = macro_data.get_yield_curve()
     except Exception as exc:
         _logger.warning("macro.yield_curve.fetch_failed err=%s", exc)
-        raise server_error("Treasury fetch failed.", reason=type(exc).__name__)
+        raise server_error("Treasury fetch failed.", reason=type(exc).__name__) from exc
 
     payload = YieldCurveResponse(
         as_of=result.as_of,

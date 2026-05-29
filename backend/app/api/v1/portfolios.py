@@ -49,7 +49,7 @@ def list_my_portfolios(
         from libs.auth.portfolios import list_portfolios
     except Exception as exc:  # pragma: no cover - import guard
         _logger.error("portfolios.import_failed err=%s", exc)
-        raise server_error("Portfolios module unavailable.")
+        raise server_error("Portfolios module unavailable.") from exc
 
     try:
         rows = list_portfolios(access_token=user.access_token)
@@ -57,7 +57,7 @@ def list_my_portfolios(
         # Supabase down or auth misconfig — surface a clean 500 instead
         # of leaking the upstream stack trace.
         _logger.warning("portfolios.list_failed user=%s err=%s", user.id, exc)
-        raise server_error("Could not load portfolios.", reason=type(exc).__name__)
+        raise server_error("Could not load portfolios.", reason=type(exc).__name__) from exc
 
     payload = PortfoliosMeResponse(
         user_id=user.id,

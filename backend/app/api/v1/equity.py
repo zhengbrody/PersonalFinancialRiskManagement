@@ -69,7 +69,7 @@ def deep_analysis(body: DeepAnalysisRequest, request: Request):
         try:
             dossier = build_company_dossier(str(body.ticker), fmp_key=body.fmp_key or "")
         except Exception as exc:
-            raise unprocessable(f"Dossier fetch failed: {exc}")
+            raise unprocessable(f"Dossier fetch failed: {exc}") from exc
 
     # llm_callable=None → DeepAnalysis returns the data-only placeholder.
     analysis = analyze_equity(dossier, llm_callable=None)

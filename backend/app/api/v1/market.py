@@ -50,13 +50,13 @@ def get_prices(
     try:
         normalised = market_data._normalise_tickers(raw)
     except ValueError as exc:
-        raise unprocessable(str(exc))
+        raise unprocessable(str(exc)) from exc
 
     try:
         latest = market_data.get_latest_prices(normalised)
     except Exception as exc:
         _logger.warning("market.prices.fetch_failed err=%s", exc)
-        raise server_error("Market data fetch failed.", reason=type(exc).__name__)
+        raise server_error("Market data fetch failed.", reason=type(exc).__name__) from exc
 
     payload = PricesResponse(
         prices=[PriceRow(ticker=p.ticker, price=p.price, as_of=p.as_of) for p in latest],
