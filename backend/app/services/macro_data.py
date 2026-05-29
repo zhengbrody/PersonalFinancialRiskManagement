@@ -38,9 +38,13 @@ _logger = logging.getLogger(__name__)
 
 # ── tunables ───────────────────────────────────────────────────────
 
-# Conservative HTTP timeout — the FRED/Treasury CDNs are fast; if a
-# request blows past this we'd rather show stale data than block a route.
-_HTTP_TIMEOUT = 8
+# HTTP timeout — FRED is consistently <1s. Treasury.gov measured at
+# 8-9s from EC2 us-east-1 during Phase 5 staging (the upstream itself
+# is slow, not the network path). 20s gives a comfortable margin while
+# still failing fast if the upstream is truly down. Per the cache
+# layer above, a successful response stays warm for 1h, so this
+# timeout only bites on cache misses.
+_HTTP_TIMEOUT = 20
 
 # 1h is a sweet spot: FRED publishes once per business day, the Treasury
 # curve updates once per day. Within an hour we're guaranteed identical
