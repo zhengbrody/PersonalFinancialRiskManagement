@@ -66,6 +66,11 @@ omit = [
     "tests/*",
     "app.py",
     "market_intelligence.py",
+    # The FastAPI backend has its OWN coverage gate via
+    # `pytest backend/tests`. Measuring it under the root pytest
+    # (which doesn't even run backend/tests) would drag the total
+    # down with code the root suite intentionally doesn't exercise.
+    "backend/*",
 ]
 
 [tool.coverage.report]
