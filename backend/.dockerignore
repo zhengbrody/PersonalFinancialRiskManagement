@@ -1,0 +1,61 @@
+# Build context for the backend image is the repo root. Keep that
+# small + free of host-only or secret files. Everything the FastAPI
+# app might import at runtime must NOT be ignored here.
+
+# VCS + tooling
+.git
+.gitignore
+.gitattributes
+.github
+
+# Python
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.venv
+venv
+env
+
+# Test + dev artifacts
+.pytest_cache
+.mypy_cache
+.ruff_cache
+htmlcov
+.coverage
+.coverage.*
+coverage.xml
+.cache
+
+# Frontend (the backend image must never touch frontend code)
+frontend
+node_modules
+
+# Streamlit-only artifacts
+.streamlit/secrets.toml
+.streamlit/secrets.toml.bak
+
+# Local-only secrets (never in image)
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Docker / compose artifacts
+Dockerfile
+docker-compose.yml
+compose.aws.yml
+compose.split.yml
+
+# Editor / OS
+.idea
+.vscode
+.DS_Store
+
+# Big data we don't want baked in
+.cache/market_data
+data/raw
+data/cache
+docs/screenshots
+docs/marketing

@@ -1,0 +1,138 @@
+# compose.split.yml
+#
+# Split-stack compose used to deploy the Next.js frontend + FastAPI
+# backend ALONGSIDE the existing Streamlit container on EC2.
+#
+# This file lives next to `compose.aws.yml`; the legacy compose stays
+# untouched as the rollback target. Cutover swaps which Caddyfile is
+# mounted, NOT which compose file Docker uses — that way `caddy reload`
+# is the only step that flips traffic, and rolling back is exactly the
+# reverse Caddyfile copy + reload.
+#
+# Services (all on the same default network — Caddy reaches each by
+# service name on the internal DNS):
+#   * streamlit — legacy app, identical to compose.aws.yml's `app`,
+#     renamed for clarity. Same image, same env, same healthcheck.
+#   * backend   — FastAPI from backend/Dockerfile.
+#   * frontend  — Next.js standalone from frontend/Dockerfile.
+#   * caddy     — terminates TLS, reverse-proxies to the three apps.
+#
+# MCP server is NOT a service here. It is stdio-only; operators run it
+# manually when wiring up Claude Desktop / Code. See backend/README.md.
+
+services:
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    expose:
+      - "8501"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-}
+      - FMP_API_KEY=${FMP_API_KEY:-}
+      - MINDMARKET_OWNER_EMAIL=${MINDMARKET_OWNER_EMAIL:-}
+      - MINDMARKET_OWNER_EMAILS=${MINDMARKET_OWNER_EMAILS:-}
+      - MINDMARKET_APP_URL=${MINDMARKET_APP_URL:-}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_BASIC_PRICE_ID=${STRIPE_BASIC_PRICE_ID:-}
+      - STRIPE_PRO_PRICE_ID=${STRIPE_PRO_PRICE_ID:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
+    # python:3.10-slim doesn't include curl; use urllib (always present).
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    expose:
+      - "8000"
+    environment:
+      # Server-side secrets only. NEVER overlap with NEXT_PUBLIC_*.
+      # SUPABASE_JWT_SECRET is required for protected routes; with it
+      # missing, the backend fails closed (401 on /portfolios/me etc.).
+      - MINDMARKET_ENV=${MINDMARKET_ENV:-production}
+      - MINDMARKET_ALLOWED_ORIGINS=${MINDMARKET_ALLOWED_ORIGINS:-}
+      - SUPABASE_URL=${SUPABASE_URL:-}
+      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
+      # Anthropic key used later by the LLM-backed equity tool; safe
+      # to ship now even though Phase-1 /deep_analysis returns the
+      # placeholder.
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health').read()"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_* values are baked into the JS bundle at build
+        # time — see frontend/Dockerfile. To rebuild for a new public
+        # API origin, change these and `docker compose build frontend`.
+        # In production we want the same-origin path so the browser
+        # talks to the backend through Caddy.
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+    expose:
+      - "3000"
+    # No environment block — the frontend image carries everything
+    # public it needs from build args, and no server-side secret should
+    # ever land here. Resist the urge to add server secrets later.
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - SITE_HOST=${SITE_HOST}
+    volumes:
+      # `Caddyfile` (the live one) is preserved at deploy time as the
+      # rollback target. During staging this can be `Caddyfile.split`
+      # via a `cp`/symlink before `docker compose up`. See
+      # docs/aws/split-stack-deployment.md §C for the exact swap.
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./assets/brand:/srv/brand:ro
+      - ./assets/seo:/srv/seo:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      streamlit:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
