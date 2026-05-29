@@ -21,6 +21,7 @@ breaks. Pinning the shape now saves us that mess later.
 
 from __future__ import annotations
 
+import math
 import time
 import uuid
 from dataclasses import dataclass
@@ -28,6 +29,30 @@ from typing import Any
 
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
+
+
+def _scrub_nans(value: Any) -> Any:
+    """Replace ``NaN`` / ``Inf`` floats with ``None`` recursively.
+
+    Starlette's ``JSONResponse`` calls ``json.dumps`` with
+    ``allow_nan=False`` (per RFC 8259, NaN is not valid JSON). When a
+    quant endpoint emits NaN — e.g. a beta that's undefined because no
+    benchmark was supplied — we'd otherwise crash with a 500 *inside*
+    the response renderer, which is too late for the envelope wrapper
+    to catch.
+
+    Walk the payload once at ``ok()`` time so every endpoint is safe.
+    """
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {k: _scrub_nans(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_scrub_nans(v) for v in value]
+    if isinstance(value, tuple):
+        return [_scrub_nans(v) for v in value]
+    return value
+
 
 # ── error model ────────────────────────────────────────────────────
 
@@ -112,7 +137,11 @@ def ok(
 ) -> JSONResponse:
     """Return a successful envelope. Pass ``started_at = time.perf_counter()``
     captured at the top of the route to get ``meta.elapsed_ms`` for free."""
-    body = {"data": data, "error": None, "meta": _meta(request, started_at=started_at)}
+    body = {
+        "data": _scrub_nans(data),
+        "error": None,
+        "meta": _meta(request, started_at=started_at),
+    }
     return JSONResponse(content=body, status_code=status_code)
 
 

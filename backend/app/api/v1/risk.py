@@ -27,17 +27,55 @@ import time
 
 import numpy as np
 import pandas as pd
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
-from ...core.responses import ok, unprocessable
+from ...core.deps_auth import AuthedUser, require_user
+from ...core.responses import APIError, ok, server_error, unprocessable
 from ...schemas.risk import (
     DimensionScoreOut,
     PortfolioMetricsOut,
+    ScoreFromActiveRequest,
     ScoreRequest,
     ScoreResponse,
 )
 
 router = APIRouter(prefix="/api/v1/risk", tags=["risk"])
+
+
+def _serialize_score(score) -> ScoreResponse:
+    """Convert the engine's frozen dataclass into the API response
+    model. Centralised so /score and /score_from_active stay in lock-
+    step on field shape."""
+    metrics_dict = score.metrics.as_dict() if hasattr(score.metrics, "as_dict") else {}
+    metrics = PortfolioMetricsOut(
+        annual_return=metrics_dict.get("annual_return"),
+        annual_volatility=metrics_dict.get("annual_volatility"),
+        sharpe_ratio=metrics_dict.get("sharpe_ratio"),
+        max_drawdown=metrics_dict.get("max_drawdown"),
+        var_95_daily=metrics_dict.get("var_95_daily"),
+        cvar_95_daily=metrics_dict.get("cvar_95_daily"),
+        beta_to_benchmark=metrics_dict.get("beta_to_benchmark"),
+        total_value=metrics_dict.get("total_value"),
+        cash_weight=metrics_dict.get("cash_weight"),
+        data_coverage=metrics_dict.get("data_coverage"),
+        observations=metrics_dict.get("observations"),
+        data_quality_notes=list(metrics_dict.get("data_quality_notes") or []),
+    )
+    return ScoreResponse(
+        overall_score=int(score.overall_score),
+        risk_preference=int(score.risk_preference),
+        risk_target=dict(score.risk_target or {}),
+        metrics=metrics,
+        dimensions={
+            k: DimensionScoreOut(
+                name=d.name,
+                score=float(d.score),
+                status=d.status,
+                detail=d.detail,
+            )
+            for k, d in score.dimensions.items()
+        },
+    )
 
 
 def _build_returns_frame(
@@ -182,42 +220,148 @@ def score_portfolio_endpoint(body: ScoreRequest, request: Request):
     except Exception as exc:
         raise unprocessable(f"Score computation failed: {exc}")
 
-    # Serialise the frozen dataclass into the response model so we
-    # never lie about the schema in OpenAPI.
-    metrics_dict = score.metrics.as_dict() if hasattr(score.metrics, "as_dict") else {}
-    metrics = PortfolioMetricsOut(
-        annual_return=metrics_dict.get("annual_return"),
-        annual_volatility=metrics_dict.get("annual_volatility"),
-        sharpe_ratio=metrics_dict.get("sharpe_ratio"),
-        max_drawdown=metrics_dict.get("max_drawdown"),
-        var_95_daily=metrics_dict.get("var_95_daily"),
-        cvar_95_daily=metrics_dict.get("cvar_95_daily"),
-        beta_to_benchmark=metrics_dict.get("beta_to_benchmark"),
-        total_value=metrics_dict.get("total_value"),
-        cash_weight=metrics_dict.get("cash_weight"),
-        data_coverage=metrics_dict.get("data_coverage"),
-        observations=metrics_dict.get("observations"),
-        data_quality_notes=list(metrics_dict.get("data_quality_notes") or []),
-    )
+    response = _serialize_score(score)
     if not body.returns:
         # Stamp the synthetic-data caveat so the frontend can warn the user.
-        notes = list(metrics.data_quality_notes)
+        notes = list(response.metrics.data_quality_notes)
         notes.append("returns matrix synthesised for testing; not real market data")
-        metrics = metrics.model_copy(update={"data_quality_notes": notes})
+        response = response.model_copy(
+            update={"metrics": response.metrics.model_copy(update={"data_quality_notes": notes})}
+        )
+    return ok(response.model_dump(), request=request, started_at=started)
 
-    response = ScoreResponse(
-        overall_score=int(score.overall_score),
-        risk_preference=int(score.risk_preference),
-        risk_target=dict(score.risk_target or {}),
-        metrics=metrics,
-        dimensions={
-            k: DimensionScoreOut(
-                name=d.name,
-                score=float(d.score),
-                status=d.status,
-                detail=d.detail,
+
+# ── /score_from_active ─────────────────────────────────────────────
+
+
+@router.post(
+    "/score_from_active",
+    summary="Score the authed user's active portfolio using real market data",
+    response_model=None,
+)
+def score_from_active_endpoint(
+    body: ScoreFromActiveRequest,
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    """Compute the deterministic 0..1000 score for the caller's active
+    portfolio, using real adjusted-close prices pulled (and cached)
+    via the backend market-data service.
+
+    Resolution order for "active portfolio":
+      1. The default portfolio flagged in Supabase (``is_default=true``).
+      2. The most-recent portfolio if no default is set.
+      3. Empty → 422 ``no_active_portfolio``.
+
+    Why not also let the caller pass a ``portfolio_id``? Phase 4 keeps
+    the contract minimal — the UI shows one card per portfolio with a
+    "Set as default" toggle. When a richer UI lands, we add an
+    explicit ``portfolio_id`` field.
+    """
+    started = time.perf_counter()
+
+    # Resolve the active portfolio (RLS-filtered).
+    try:
+        from libs.auth.active_portfolio import get_active_holdings
+    except Exception as exc:  # pragma: no cover - import guard
+        raise server_error("active_portfolio module unavailable.", reason=str(exc))
+
+    try:
+        holdings = get_active_holdings(access_token=user.access_token)
+    except TypeError:
+        # Legacy callers still pass no args — surfaces during Streamlit ↔
+        # backend refactor windows; map to 500 with a clear hint.
+        raise server_error(
+            "active_portfolio.get_active_holdings does not accept "
+            "access_token yet. Update libs/auth/active_portfolio.py."
+        )
+    except Exception as exc:
+        raise server_error("Could not load active portfolio.", reason=type(exc).__name__)
+
+    holdings = holdings or {}
+    if not holdings:
+        # Explicit code so the frontend can render an onboarding CTA
+        # ("you have no portfolio — create one") instead of a generic
+        # "unprocessable" toast.
+        raise APIError(
+            status=422,
+            code="no_active_portfolio",
+            message="No active portfolio. Create one before scoring.",
+        )
+
+    tickers = sorted(holdings.keys())
+
+    # Pull real price history. The same cache underpins /market/prices.
+    from ...services import market_data
+
+    try:
+        price_frame = market_data.get_price_history(tickers, days=body.history_days)
+    except Exception as exc:
+        raise server_error("Market data fetch failed.", reason=type(exc).__name__)
+
+    if price_frame.empty:
+        raise APIError(
+            status=422,
+            code="no_market_data",
+            message="Could not fetch prices for any holding.",
+            details={"tickers": tickers},
+        )
+
+    # Build market_value per holding from the most-recent close. Any
+    # ticker the fetcher couldn't resolve is dropped silently — the
+    # data_quality_notes from the engine will flag low coverage.
+    positions_input = []
+    try:
+        from domain.models import AssetPositionInput, PortfolioInput
+    except Exception as exc:  # pragma: no cover - import guard
+        raise server_error("Domain model unavailable.", reason=str(exc))
+
+    for tk in tickers:
+        if tk not in price_frame.columns:
+            continue
+        last_close = float(price_frame[tk].dropna().iloc[-1])
+        h = holdings.get(tk, {}) or {}
+        shares = float(h.get("shares") or 0.0)
+        if shares <= 0 or last_close <= 0:
+            continue
+        positions_input.append(
+            AssetPositionInput(
+                ticker=tk,
+                name=tk,
+                asset_type=str(h.get("asset_type") or "public_security"),
+                market_value=shares * last_close,
+                cost_basis=float(h.get("avg_cost") or 0.0) * shares,
+                enabled=True,
             )
-            for k, d in score.dimensions.items()
-        },
-    )
+        )
+
+    if not positions_input:
+        raise APIError(
+            status=422,
+            code="no_priced_holdings",
+            message="Could not price any holding (shares=0 or no quote).",
+        )
+
+    try:
+        portfolio_input = PortfolioInput(
+            positions=positions_input,
+            risk_preference=body.risk_preference,
+            risk_free_rate=body.risk_free_rate,
+        )
+    except Exception as exc:
+        raise unprocessable(f"Invalid active portfolio: {exc}")
+
+    # Returns matrix from the same history. pct_change drops the first
+    # NaN row; dropna removes any column with full-NaN history (already
+    # filtered above but keeps the math layer safe).
+    returns_frame = price_frame.pct_change().dropna(how="all")
+
+    from engine.quant import score_portfolio_from_input
+
+    try:
+        score = score_portfolio_from_input(portfolio_input, returns_frame)
+    except Exception as exc:
+        raise unprocessable(f"Score computation failed: {exc}")
+
+    response = _serialize_score(score)
     return ok(response.model_dump(), request=request, started_at=started)

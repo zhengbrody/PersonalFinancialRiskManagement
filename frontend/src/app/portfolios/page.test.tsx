@@ -10,6 +10,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { renderWithQuery } from "@/test-utils";
 
 const replaceMock = vi.fn();
@@ -110,6 +111,178 @@ describe("PortfoliosPage", () => {
     expect(screen.getByText(/SPY, BND/)).toBeInTheDocument();
     // Two matches expected: card title + badge. Specifically assert both.
     expect(screen.getAllByText(/default/i)).toHaveLength(2);
+  });
+
+  // ── Score flow (Phase 4) ──────────────────────────────────────────
+
+  it("renders a Score button only on the default portfolio card", async () => {
+    authed();
+    mockEnvelope({
+      data: {
+        user_id: "u-1",
+        email: "owner@mindmarket.test",
+        portfolios: [
+          {
+            id: "p-default",
+            user_id: "u-1",
+            name: "Default",
+            holdings: { SPY: { shares: 100 } },
+            margin_loan: 0,
+            contributed_capital: 40000,
+            cash_balance: 0,
+            is_default: true,
+            created_at: null,
+            updated_at: null,
+          },
+          {
+            id: "p-spec",
+            user_id: "u-1",
+            name: "Speculative",
+            holdings: { TQQQ: { shares: 10 } },
+            margin_loan: 0,
+            contributed_capital: 5000,
+            cash_balance: 0,
+            is_default: false,
+            created_at: null,
+            updated_at: null,
+          },
+        ],
+      },
+      error: null,
+      meta: { request_id: "r-score-1" },
+    });
+
+    renderWithQuery(<PortfoliosPage />);
+    await screen.findByText("Default");
+    // Exactly one Score button — the non-default card omits it so the
+    // user can't accidentally score the wrong portfolio.
+    expect(screen.getAllByRole("button", { name: /^score$/i })).toHaveLength(1);
+  });
+
+  it("calls /score_from_active and renders the inline result", async () => {
+    authed();
+    // First fetch: portfolios list. Second fetch: score response.
+    mockEnvelope({
+      data: {
+        user_id: "u-1",
+        email: "owner@mindmarket.test",
+        portfolios: [
+          {
+            id: "p-default",
+            user_id: "u-1",
+            name: "Default",
+            holdings: { SPY: { shares: 100 } },
+            margin_loan: 0,
+            contributed_capital: 40000,
+            cash_balance: 0,
+            is_default: true,
+            created_at: null,
+            updated_at: null,
+          },
+        ],
+      },
+      error: null,
+      meta: { request_id: "r-list" },
+    });
+    mockEnvelope({
+      data: {
+        overall_score: 612,
+        risk_preference: 3,
+        risk_target: {},
+        metrics: {
+          annual_return: 0.08,
+          annual_volatility: 0.12,
+          sharpe_ratio: 0.5,
+          max_drawdown: -0.07,
+          var_95_daily: -0.012,
+          cvar_95_daily: -0.017,
+          beta_to_benchmark: null,
+          total_value: 52000,
+          cash_weight: 0,
+          data_coverage: 1,
+          observations: 252,
+          data_quality_notes: [],
+        },
+        dimensions: {
+          risk_match: { name: "Risk Match", score: 700, status: "good", detail: "" },
+          risk_adjusted_return: {
+            name: "Risk-Adjusted Return",
+            score: 540,
+            status: "fair",
+            detail: "",
+          },
+          downside_protection: {
+            name: "Downside Protection",
+            score: 600,
+            status: "fair",
+            detail: "",
+          },
+        },
+      },
+      error: null,
+      meta: { request_id: "r-score" },
+    });
+
+    const user = userEvent.setup();
+    renderWithQuery(<PortfoliosPage />);
+    const btn = await screen.findByRole("button", { name: /^score$/i });
+    await user.click(btn);
+
+    expect(await screen.findByText("612")).toBeInTheDocument();
+    expect(screen.getByText("Risk Match")).toBeInTheDocument();
+    expect(screen.getByText("Downside Protection")).toBeInTheDocument();
+    // After a successful score the button label becomes Re-score.
+    expect(
+      screen.getByRole("button", { name: /re-?score/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the 'No active portfolio' error copy on the specific code", async () => {
+    authed();
+    mockEnvelope({
+      data: {
+        user_id: "u-1",
+        email: "owner@mindmarket.test",
+        portfolios: [
+          {
+            id: "p-default",
+            user_id: "u-1",
+            name: "Default",
+            holdings: { SPY: { shares: 100 } },
+            margin_loan: 0,
+            contributed_capital: 40000,
+            cash_balance: 0,
+            is_default: true,
+            created_at: null,
+            updated_at: null,
+          },
+        ],
+      },
+      error: null,
+      meta: { request_id: "r-list-2" },
+    });
+    mockEnvelope(
+      {
+        data: null,
+        error: {
+          code: "no_active_portfolio",
+          message: "No active portfolio. Create one before scoring.",
+        },
+        meta: { request_id: "r-score-err" },
+      },
+      { status: 422 },
+    );
+
+    const user = userEvent.setup();
+    renderWithQuery(<PortfoliosPage />);
+    const btn = await screen.findByRole("button", { name: /^score$/i });
+    await user.click(btn);
+
+    // Specific copy for the structured error code, not the raw message.
+    expect(
+      await screen.findByText(/no active portfolio/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/no_active_portfolio/i)).toBeInTheDocument();
   });
 
   it("renders the error panel when the envelope returns an error", async () => {

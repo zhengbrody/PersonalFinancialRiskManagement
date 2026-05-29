@@ -17,6 +17,7 @@ import type { components } from "./api-types";
 // ── request types (single source of truth: generated) ─────────────
 export type Holding = components["schemas"]["HoldingIn"];
 export type ScoreRequest = components["schemas"]["ScoreRequest"];
+export type ScoreFromActiveRequest = components["schemas"]["ScoreFromActiveRequest"];
 
 // ── response types (hand-mirrored — see file header) ──────────────
 export type DimensionScore = {

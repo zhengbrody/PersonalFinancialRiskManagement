@@ -30,7 +30,7 @@ Caller pattern (in app.py / pages):
 
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import portfolio_config as _pc
 
@@ -58,15 +58,23 @@ def _hardcoded_capital() -> Dict[str, float]:
     }
 
 
-def get_active_holdings() -> Dict[str, Dict[str, Any]]:
-    """Return holdings dict for current user (DB) or hardcoded fallback."""
-    holdings, _ = _resolve()
+def get_active_holdings(
+    access_token: Optional[str] = None,
+) -> Dict[str, Dict[str, Any]]:
+    """Return holdings dict for the active portfolio.
+
+    Streamlit callers omit ``access_token`` and the resolver reads the
+    session via ``is_authenticated()`` / ``current_user()``. FastAPI
+    callers pass the verified JWT and the resolver skips the session
+    check — the token IS the proof of identity.
+    """
+    holdings, _ = _resolve(access_token=access_token)
     return holdings
 
 
-def get_active_margin_loan() -> float:
-    """Return margin loan dollar amount for current user (DB) or fallback."""
-    _, margin = _resolve()
+def get_active_margin_loan(access_token: Optional[str] = None) -> float:
+    """Return margin loan dollar amount for the active portfolio."""
+    _, margin = _resolve(access_token=access_token)
     return margin
 
 
@@ -162,7 +170,9 @@ def is_active_portfolio_empty() -> bool:
 # ── Private resolver ────────────────────────────────────────────
 
 
-def _resolve() -> tuple[Dict[str, Dict[str, Any]], float]:
+def _resolve(
+    access_token: Optional[str] = None,
+) -> tuple[Dict[str, Dict[str, Any]], float]:
     """Single source of truth for "what portfolio + margin do we use?".
 
     Branches:
@@ -171,11 +181,26 @@ def _resolve() -> tuple[Dict[str, Dict[str, Any]], float]:
       authed + no DB:
         owner email      → hardcoded fallback (owner's default portfolio)
         any other email  → empty (NEVER leak owner's data)
-    """
-    if not is_authenticated():
-        return _hardcoded_fallback()
 
-    portfolio = _fetch_db_portfolio()
+    When ``access_token`` is supplied the resolver treats the caller
+    as authed without consulting ``is_authenticated()`` (which only
+    works inside Streamlit). The owner-fallback branch is never taken
+    in that path — backend callers can't be the "Streamlit owner"
+    session because there isn't one to compare against.
+    """
+    if access_token is None:
+        if not is_authenticated():
+            return _hardcoded_fallback()
+        portfolio = _fetch_db_portfolio()
+    else:
+        portfolio = _fetch_db_portfolio(access_token=access_token)
+        # Empty DB → backend caller gets an empty portfolio (the route
+        # converts that into a 422 ``no_active_portfolio``). NEVER
+        # owner-fallback here.
+        if portfolio is None or not (portfolio.get("holdings") or {}):
+            return ({}, 0.0)
+        # Skip the rest of the legacy branching — we have a real row.
+        return _normalise_portfolio_row(portfolio)
     if portfolio is None:
         # Owner with no DB portfolio yet → see the dev portfolio_config
         # holdings (their own data). Any other authed user → empty.
@@ -189,10 +214,22 @@ def _resolve() -> tuple[Dict[str, Dict[str, Any]], float]:
             return _hardcoded_fallback()
         return ({}, 0.0)
 
-    # Normalize DB shape → portfolio_config-compatible shape.
-    # The Portfolios UI accepts {ticker: {shares, avg_cost?}}; downstream
-    # code expects extra keys (account, asset_type, currency, margin_eligible).
-    # Fill them in with defaults — same heuristics as portfolio_config.get_holding().
+    return _normalise_portfolio_row(portfolio)
+
+
+def _normalise_portfolio_row(
+    portfolio: dict,
+) -> tuple[Dict[str, Dict[str, Any]], float]:
+    """Convert a Supabase ``portfolios`` row into the
+    ``portfolio_config``-compatible shape used by every downstream
+    consumer (risk engine, data provider, UI helpers).
+
+    The Portfolios UI stores only ``{ticker: {shares, avg_cost?}}``,
+    but downstream code expects ``account / asset_type / currency /
+    margin_eligible`` too. Fill them in with the same heuristics as
+    ``portfolio_config.get_holding()``.
+    """
+    raw_holdings = portfolio.get("holdings") or {}
     normalized: Dict[str, Dict[str, Any]] = {}
     for tk, v in raw_holdings.items():
         if not isinstance(v, dict):
@@ -214,20 +251,24 @@ def _resolve() -> tuple[Dict[str, Dict[str, Any]], float]:
     return normalized, margin
 
 
-def _fetch_db_portfolio():
+def _fetch_db_portfolio(access_token: Optional[str] = None):
     """Return the user's default portfolio dict, or None on any error.
 
     Errors are swallowed to "fail open" — if Supabase is down the user
     still gets the hardcoded fallback rather than a broken dashboard.
+
+    Passing ``access_token`` routes the underlying Supabase reads
+    through the FastAPI per-call client; omitting it uses the
+    Streamlit session-bound singleton.
     """
     try:
         from .portfolios import get_default_portfolio, list_portfolios
 
-        portfolio = get_default_portfolio()
+        portfolio = get_default_portfolio(access_token=access_token)
         if portfolio is not None:
             return portfolio
         # No default flagged → use most-recent (list_portfolios sorts is_default DESC, created_at DESC)
-        all_pf = list_portfolios()
+        all_pf = list_portfolios(access_token=access_token)
         return all_pf[0] if all_pf else None
     except Exception:
         return None

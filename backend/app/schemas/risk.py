@@ -38,6 +38,28 @@ class HoldingIn(BaseModel):
     enabled: bool = True
 
 
+class ScoreFromActiveRequest(BaseModel):
+    """Body for ``POST /api/v1/risk/score_from_active``.
+
+    All fields optional — the endpoint resolves the active portfolio
+    from the caller's JWT. ``risk_preference`` and ``risk_free_rate``
+    override the defaults baked into the score for that one call.
+    """
+
+    risk_preference: int = Field(default=3, ge=1, le=5)
+    risk_free_rate: float = Field(default=0.045, ge=0.0, le=0.20)
+    history_days: int = Field(
+        default=365,
+        ge=60,
+        le=2520,
+        description=(
+            "Trailing window of daily history used to build the returns "
+            "matrix. 365 ≈ 252 trading days, the engine's preferred "
+            "minimum. Cap at 10 years."
+        ),
+    )
+
+
 class ScoreRequest(BaseModel):
     """Body for ``POST /api/v1/risk/score``.
 

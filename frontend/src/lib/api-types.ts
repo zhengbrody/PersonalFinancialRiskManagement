@@ -56,6 +56,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/risk/score_from_active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Score the authed user's active portfolio using real market data
+         * @description Compute the deterministic 0..1000 score for the caller's active
+         *     portfolio, using real adjusted-close prices pulled (and cached)
+         *     via the backend market-data service.
+         *
+         *     Resolution order for "active portfolio":
+         *       1. The default portfolio flagged in Supabase (``is_default=true``).
+         *       2. The most-recent portfolio if no default is set.
+         *       3. Empty → 422 ``no_active_portfolio``.
+         *
+         *     Why not also let the caller pass a ``portfolio_id``? Phase 4 keeps
+         *     the contract minimal — the UI shows one card per portfolio with a
+         *     "Set as default" toggle. When a richer UI lands, we add an
+         *     explicit ``portfolio_id`` field.
+         */
+        post: operations["score_from_active_endpoint_api_v1_risk_score_from_active_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/equity/deep_analysis": {
         parameters: {
             query?: never;
@@ -92,17 +124,32 @@ export interface paths {
         };
         /**
          * Return the authed user's portfolios
-         * @description Authed-only.
-         *
-         *     Phase 1 returns ``{ user_id, email, portfolios: [] }``. The
-         *     actual ``portfolios`` array is fed by the existing
-         *     ``libs.auth.portfolios.list_portfolios`` once we wire the
-         *     incoming JWT into ``libs.auth.client.get_supabase`` (Phase 2 —
-         *     needs a small refactor to accept an explicit token). Today we
-         *     return ``[]`` plus the verified identity so the frontend can
-         *     confirm the auth path end-to-end without a Supabase round-trip.
+         * @description Authed-only. Returns the JWT holder's RLS-filtered portfolios.
          */
         get: operations["list_my_portfolios_api_v1_portfolios_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/market/prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Latest adjusted close per ticker
+         * @description Return the most recent adjusted close + bar date per ticker.
+         *
+         *     Tickers yfinance can't price (delisted, typo) are silently
+         *     omitted from `prices`; compare against `requested` to find them.
+         */
+        get: operations["get_prices_api_v1_market_prices_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -183,6 +230,32 @@ export interface components {
              * @default true
              */
             enabled?: boolean;
+        };
+        /**
+         * ScoreFromActiveRequest
+         * @description Body for ``POST /api/v1/risk/score_from_active``.
+         *
+         *     All fields optional — the endpoint resolves the active portfolio
+         *     from the caller's JWT. ``risk_preference`` and ``risk_free_rate``
+         *     override the defaults baked into the score for that one call.
+         */
+        ScoreFromActiveRequest: {
+            /**
+             * Risk Preference
+             * @default 3
+             */
+            risk_preference?: number;
+            /**
+             * Risk Free Rate
+             * @default 0.045
+             */
+            risk_free_rate?: number;
+            /**
+             * History Days
+             * @description Trailing window of daily history used to build the returns matrix. 365 ≈ 252 trading days, the engine's preferred minimum. Cap at 10 years.
+             * @default 365
+             */
+            history_days?: number;
         };
         /**
          * ScoreRequest
@@ -289,6 +362,39 @@ export interface operations {
             };
         };
     };
+    score_from_active_endpoint_api_v1_risk_score_from_active_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScoreFromActiveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     deep_analysis_api_v1_equity_deep_analysis_post: {
         parameters: {
             query?: never;
@@ -338,6 +444,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_prices_api_v1_market_prices_get: {
+        parameters: {
+            query: {
+                /** @description Comma-separated ticker list. Case-insensitive, deduped server-side. Example: `?tickers=SPY,BND,AAPL`. */
+                tickers: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

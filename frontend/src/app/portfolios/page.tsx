@@ -28,7 +28,12 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { type PortfolioRow, useMyPortfolios } from "@/lib/queries";
+import {
+  type PortfolioRow,
+  useMyPortfolios,
+  useScoreActivePortfolio,
+} from "@/lib/queries";
+import type { ScoreResponse } from "@/lib/schemas";
 
 export default function PortfoliosPage() {
   const router = useRouter();
@@ -125,8 +130,139 @@ function PortfolioCard({ portfolio }: { portfolio: PortfolioRow }) {
           <Stat label="Cash" value={fmtUSD(portfolio.cash_balance)} />
           <Stat label="Margin" value={fmtUSD(portfolio.margin_loan)} />
         </div>
+        {/* Only the default portfolio is scoreable from the API today —
+            the backend resolves the active row from RLS. Non-default
+            cards show no button to avoid a wrong-portfolio result. */}
+        {portfolio.is_default && tickers.length > 0 && <ScoreSection />}
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Score the active portfolio in-line. Lives inside the default
+ * portfolio's card. Idle → Loading → Result | Error.
+ */
+function ScoreSection() {
+  const mutation = useScoreActivePortfolio();
+
+  return (
+    <div className="space-y-3 border-t border-border pt-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-widest text-primary">
+            Real-data score
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Uses cached adjusted-close prices via the backend.
+          </p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => mutation.mutate()}
+          disabled={mutation.isPending}
+        >
+          {mutation.isPending
+            ? "Scoring…"
+            : mutation.data
+              ? "Re-score"
+              : "Score"}
+        </Button>
+      </div>
+
+      {mutation.isPending && <ScoreLoadingSkeleton />}
+
+      {mutation.isError && (
+        <ScoreErrorPanel error={mutation.error as Error} />
+      )}
+
+      {mutation.data && !mutation.isPending && (
+        <ScoreResult result={mutation.data} />
+      )}
+    </div>
+  );
+}
+
+function ScoreResult({ result }: { result: ScoreResponse }) {
+  const dims = Object.values(result.dimensions);
+  return (
+    <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
+      <div className="flex items-baseline gap-3">
+        <span className="font-mono text-4xl font-semibold tracking-tight text-primary">
+          {result.overall_score}
+        </span>
+        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          / 1000 · pref {result.risk_preference}
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-2 text-xs">
+        {dims.map((d) => (
+          <div
+            key={d.name}
+            className="rounded-md border border-border bg-card p-2"
+          >
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              {d.name}
+            </div>
+            <div className="font-mono text-lg">{Math.round(d.score)}</div>
+            <div className="text-[10px] text-muted-foreground">{d.status}</div>
+          </div>
+        ))}
+      </div>
+      {result.metrics.data_quality_notes.length > 0 && (
+        <ul className="list-disc space-y-0.5 pl-4 text-[11px] text-muted-foreground">
+          {result.metrics.data_quality_notes.map((n, i) => (
+            <li key={i}>{n}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function ScoreLoadingSkeleton() {
+  return (
+    <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
+      <Skeleton className="h-10 w-32" />
+      <div className="grid grid-cols-3 gap-2">
+        <Skeleton className="h-14" />
+        <Skeleton className="h-14" />
+        <Skeleton className="h-14" />
+      </div>
+    </div>
+  );
+}
+
+function ScoreErrorPanel({ error }: { error: Error }) {
+  const isApi = error instanceof ApiError;
+  const code = isApi ? error.code : "unknown";
+
+  // Specific copy for the two structural failures the backend can emit.
+  let headline = "Could not score";
+  let body = error.message;
+  if (code === "no_active_portfolio") {
+    headline = "No active portfolio";
+    body =
+      "Create or activate a portfolio in the Streamlit app before scoring.";
+  } else if (code === "no_market_data") {
+    headline = "Market data unavailable";
+    body = "Could not fetch prices for any holding. Try again in a minute.";
+  } else if (code === "no_priced_holdings") {
+    headline = "Nothing to score";
+    body = "Every holding has zero shares or no quote.";
+  }
+
+  return (
+    <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs">
+      <p className="font-medium text-destructive">{headline}</p>
+      <p className="mt-1 text-muted-foreground">{body}</p>
+      {isApi && (
+        <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+          {error.status} · {code}
+        </p>
+      )}
+    </div>
   );
 }
 

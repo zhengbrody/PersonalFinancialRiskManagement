@@ -9,9 +9,13 @@
  * (see `useAuth().signOut` → `queryClient.clear()` later).
  */
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiFetch } from "./api";
 import { useAuth } from "./auth-context";
+import type {
+  ScoreFromActiveRequest,
+  ScoreResponse,
+} from "./schemas";
 
 // ── shapes (manual mirror — Phase 4 will pull from api-types once
 // the portfolios route declares response_model) ───────────────────
@@ -45,6 +49,26 @@ export function useMyPortfolios() {
     queryFn: () =>
       apiFetch<PortfoliosMe>("/api/v1/portfolios/me", {
         authToken: accessToken!,
+      }),
+  });
+}
+
+/**
+ * Score the user's active portfolio using real market data.
+ *
+ * Mutation rather than query because it's an explicit user action
+ * (a button click) and we want each click to fire — not be cached
+ * by a query key. Each click pulls fresh data through the backend's
+ * 24h-cached market_data layer.
+ */
+export function useScoreActivePortfolio() {
+  const { accessToken } = useAuth();
+  return useMutation<ScoreResponse, Error, ScoreFromActiveRequest | void>({
+    mutationFn: (body) =>
+      apiFetch<ScoreResponse>("/api/v1/risk/score_from_active", {
+        method: "POST",
+        body: body ?? {},
+        authToken: accessToken ?? undefined,
       }),
   });
 }
