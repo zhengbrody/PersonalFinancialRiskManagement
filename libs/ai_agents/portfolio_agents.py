@@ -58,9 +58,7 @@ def build_agent_context(score: PortfolioScore, positions: Iterable[AssetPosition
                     None if p.unrealized_pnl is None else round(float(p.unrealized_pnl), 2)
                 ),
                 "unrealized_pnl_pct": (
-                    None
-                    if p.unrealized_pnl_pct is None
-                    else round(float(p.unrealized_pnl_pct), 6)
+                    None if p.unrealized_pnl_pct is None else round(float(p.unrealized_pnl_pct), 6)
                 ),
                 "expense_ratio": round(float(p.expense_ratio), 6),
                 "proxy_ticker": p.proxy_ticker,

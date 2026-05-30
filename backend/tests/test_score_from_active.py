@@ -228,9 +228,7 @@ def test_margin_amplifies_risk_in_score(
 
     # ~50% loan against the equity → leverage ≈ 2× (gross/net).
     fake_capital["margin_loan"] = 0.5 * 100 * 100.0  # shares×~price (history ~100)
-    levered = _run_score(
-        test_client, token, fake_active_portfolio, fake_price_history, holdings
-    )
+    levered = _run_score(test_client, token, fake_active_portfolio, fake_price_history, holdings)
 
     base_var = base["metrics"]["var_95_daily"]
     lev_var = levered["metrics"]["var_95_daily"]
@@ -253,9 +251,7 @@ def test_cash_drag_lowers_risk_in_score(
 
     # Add cash roughly equal to the equity → ~half the book is risk-free.
     fake_capital["cash_balance"] = 100 * 100.0
-    with_cash = _run_score(
-        test_client, token, fake_active_portfolio, fake_price_history, holdings
-    )
+    with_cash = _run_score(test_client, token, fake_active_portfolio, fake_price_history, holdings)
 
     assert with_cash["metrics"]["var_95_daily"] < base["metrics"]["var_95_daily"]
     # cash_weight should now be a meaningful fraction of the book.

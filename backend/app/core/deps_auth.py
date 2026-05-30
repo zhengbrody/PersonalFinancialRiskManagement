@@ -253,9 +253,7 @@ def require_user(
         # the token is valid. That's a transient 503, not a 401: clients
         # should retry, and a real auth rejection shouldn't be masked by
         # an outage (or vice-versa).
-        raise service_unavailable(
-            "Unable to verify credentials right now; please retry."
-        ) from None
+        raise service_unavailable("Unable to verify credentials right now; please retry.") from None
 
     return _claims_to_user(claims, token)
 
@@ -280,9 +278,7 @@ def optional_user(
         # A JWKS outage is NOT "anon" — silently downgrading a signed-in
         # caller to anonymous would serve them the wrong (generic) data.
         # Surface the transient failure so they retry.
-        raise service_unavailable(
-            "Unable to verify credentials right now; please retry."
-        ) from None
+        raise service_unavailable("Unable to verify credentials right now; please retry.") from None
     except Exception:
         # A genuinely bad/expired token on an optional route → treat as
         # anon; don't leak why.

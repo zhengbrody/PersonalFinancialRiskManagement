@@ -61,9 +61,7 @@ def test_leverage_amplifies_volatility_and_var():
     returns = _sample_returns()
 
     base = compute_portfolio_metrics(positions, returns, risk_free_rate=0.04)
-    levered = compute_portfolio_metrics(
-        positions, returns, risk_free_rate=0.04, leverage=2.0
-    )
+    levered = compute_portfolio_metrics(positions, returns, risk_free_rate=0.04, leverage=2.0)
 
     # Vol scales exactly by L (scaling a series scales its std exactly).
     assert levered.annual_volatility == pytest.approx(2.0 * base.annual_volatility, rel=1e-6)
@@ -82,9 +80,7 @@ def test_leverage_is_clamped_and_defaults_noop():
 
     base = compute_portfolio_metrics(positions, returns, risk_free_rate=0.04)
     # leverage=1.0 (and non-finite) must be a no-op.
-    same = compute_portfolio_metrics(
-        positions, returns, risk_free_rate=0.04, leverage=1.0
-    )
+    same = compute_portfolio_metrics(positions, returns, risk_free_rate=0.04, leverage=1.0)
     assert same.annual_volatility == pytest.approx(base.annual_volatility, rel=1e-9)
 
 

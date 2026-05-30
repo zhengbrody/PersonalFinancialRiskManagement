@@ -269,13 +269,10 @@ def score_from_active_endpoint(
     """
     started = time.perf_counter()
 
-    # Resolve the active portfolio (RLS-filtered).
+    # Resolve the active portfolio (RLS-filtered). Cash + margin are
+    # fetched separately via _resolve_cash_and_margin (its own import).
     try:
-        from libs.auth.active_portfolio import (
-            get_active_capital_inputs,
-            get_active_holdings,
-            get_active_margin_loan,
-        )
+        from libs.auth.active_portfolio import get_active_holdings
     except Exception as exc:  # pragma: no cover - import guard
         raise server_error("active_portfolio module unavailable.", reason=str(exc)) from exc
 
@@ -487,9 +484,7 @@ def _leverage_factor(*, gross_assets: float, margin_loan: float) -> float:
     return min(_MAX_LEVERAGE, gross / net_equity)
 
 
-def _equity_risk_scale(
-    *, equity_value: float, cash_balance: float, margin_loan: float
-) -> float:
+def _equity_risk_scale(*, equity_value: float, cash_balance: float, margin_loan: float) -> float:
     """Scalar that converts the equity sub-portfolio's risk into risk on
     the investor's NET equity::
 
