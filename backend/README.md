@@ -34,8 +34,8 @@ open http://localhost:8000/docs
 |----------|---------|----------|
 | `MINDMARKET_ENV` | `dev` (default), `staging`, or `production`. Controls CORS defaults. | No |
 | `MINDMARKET_ALLOWED_ORIGINS` | Comma-separated CORS allow-list. Required in production; optional in dev. | Prod only |
-| `SUPABASE_URL` | Public Supabase project URL. | Phase 2+ |
-| `SUPABASE_JWT_SECRET` | HS256 secret used to verify JWTs on protected routes. | For protected routes |
+| `SUPABASE_URL` | Public Supabase project URL. Also used to fetch JWKS for ES256/RS256 JWT verification. | Phase 2+ |
+| `SUPABASE_JWT_SECRET` | Legacy HS256 secret used only when the token header says `alg=HS256`. Modern Supabase projects can verify via JWKS with `SUPABASE_URL`. | HS256 projects only |
 | `SUPABASE_ANON_KEY` | Public anon key (used by the frontend; surfaced for parity). | Phase 2+ |
 
 LLM / Stripe / FMP keys are inherited from the existing process
@@ -183,9 +183,11 @@ The `-o "addopts="` wipes the inherited root `pytest.ini` options
 not this one. The CI job uses the same flag.
 
 Tests run offline (no Supabase / no LLM / no yfinance). The JWT
-fixture mints a test-signed HS256 token; the `fake_portfolios` fixture
-in `conftest.py` monkeypatches `libs.auth.portfolios.list_portfolios`
-so the `/portfolios/me` tests never reach the real database.
+fixture mints test-signed HS256 tokens, and auth tests also generate
+local RS256/ES256 keys to prove the JWKS path without reaching the
+network. The `fake_portfolios` fixture in `conftest.py` monkeypatches
+`libs.auth.portfolios.list_portfolios` so the `/portfolios/me` tests
+never reach the real database.
 
 ## What's intentionally still deferred
 

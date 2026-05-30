@@ -44,12 +44,10 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
               Pricing
             </Link>
             <a
-              href="http://localhost:8000/docs"
-              target="_blank"
-              rel="noreferrer"
+              href="/legacy/"
               className="rounded px-3 py-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             >
-              API
+              Legacy
             </a>
             <AuthPill />
           </nav>

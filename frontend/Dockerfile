@@ -34,8 +34,10 @@ WORKDIR /app
 
 # Build args declared up front so they can be set via
 # `docker compose build --build-arg ...` or `--build-arg X=$Y` in a
-# CI runner. Empty defaults so a bare `docker build .` doesn't fail —
-# the runtime will fall back to localhost:8000 (see frontend/src/lib/env.ts).
+# CI runner. Empty defaults so a bare `docker build .` doesn't fail;
+# explicit empty means same-origin API calls behind Caddy (see
+# frontend/src/lib/env.ts). Local `npm run dev` still defaults to
+# localhost:8000 when the variable is unset.
 ARG NEXT_PUBLIC_API_BASE_URL=
 ARG NEXT_PUBLIC_SUPABASE_URL=
 ARG NEXT_PUBLIC_SUPABASE_ANON_KEY=

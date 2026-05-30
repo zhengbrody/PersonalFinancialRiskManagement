@@ -10,6 +10,8 @@ from __future__ import annotations
 import time
 
 import jwt as pyjwt
+import pytest
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 
 
 def test_health_does_not_require_auth(test_client):
@@ -126,6 +128,135 @@ def test_portfolios_me_accepts_valid_token(test_client, jwt_secret, mint_token, 
     # The raw JWT was forwarded to Supabase for RLS, not replayed
     # from the server's own credentials.
     assert fake_portfolios.calls == [token]
+
+
+def test_portfolios_me_accepts_rs256_jwks_token(
+    test_client,
+    monkeypatch,
+    fake_portfolios,
+):
+    """Supabase projects can use asymmetric JWT signing keys. We must
+    verify those through JWKS, not force every deploy onto legacy HS256."""
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_key = private_key.public_key()
+
+    claims = {
+        "sub": "user-rs256",
+        "email": "rs256@mindmarket.test",
+        "aud": "authenticated",
+        "exp": int(time.time()) + 600,
+        "iat": int(time.time()),
+    }
+    token = pyjwt.encode(
+        claims,
+        private_key,
+        algorithm="RS256",
+        headers={"kid": "test-key"},
+    )
+
+    class _FakeSigningKey:
+        key = public_key
+
+    class _FakeJwkClient:
+        def get_signing_key_from_jwt(self, jwt_token):
+            assert jwt_token == token
+            return _FakeSigningKey()
+
+    monkeypatch.delenv("SUPABASE_JWT_SECRET", raising=False)
+    monkeypatch.setenv("SUPABASE_URL", "https://project.supabase.co")
+    monkeypatch.setattr(
+        "backend.app.core.deps_auth._jwk_client",
+        lambda url: _FakeJwkClient(),
+    )
+    from backend.app.core.config import reset_settings_cache
+
+    reset_settings_cache()
+    fake_portfolios.set([])
+
+    resp = test_client.get(
+        "/api/v1/portfolios/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["data"]["user_id"] == "user-rs256"
+    assert body["data"]["email"] == "rs256@mindmarket.test"
+    assert fake_portfolios.calls == [token]
+
+
+def test_portfolios_me_accepts_es256_jwks_token(
+    test_client,
+    monkeypatch,
+    fake_portfolios,
+):
+    """Current Supabase projects commonly expose ES256 signing keys
+    through JWKS. Production login must work with that mode."""
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    public_key = private_key.public_key()
+    token = pyjwt.encode(
+        {
+            "sub": "user-es256",
+            "email": "es256@mindmarket.test",
+            "aud": "authenticated",
+            "exp": int(time.time()) + 600,
+            "iat": int(time.time()),
+        },
+        private_key,
+        algorithm="ES256",
+        headers={"kid": "test-es-key"},
+    )
+
+    class _FakeSigningKey:
+        key = public_key
+
+    class _FakeJwkClient:
+        def get_signing_key_from_jwt(self, jwt_token):
+            assert jwt_token == token
+            return _FakeSigningKey()
+
+    monkeypatch.delenv("SUPABASE_JWT_SECRET", raising=False)
+    monkeypatch.setenv("SUPABASE_URL", "https://project.supabase.co")
+    monkeypatch.setattr(
+        "backend.app.core.deps_auth._jwk_client",
+        lambda url: _FakeJwkClient(),
+    )
+    from backend.app.core.config import reset_settings_cache
+
+    reset_settings_cache()
+    fake_portfolios.set([])
+
+    resp = test_client.get(
+        "/api/v1/portfolios/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["data"]["user_id"] == "user-es256"
+    assert body["data"]["email"] == "es256@mindmarket.test"
+    assert fake_portfolios.calls == [token]
+
+
+@pytest.mark.parametrize("alg", ["none", "HS384"])
+def test_portfolios_me_rejects_unsupported_alg(test_client, jwt_secret, alg):
+    if alg == "none":
+        token = pyjwt.encode(
+            {"sub": "user-x", "aud": "authenticated", "exp": int(time.time()) + 600},
+            key="",
+            algorithm="none",
+        )
+    else:
+        token = pyjwt.encode(
+            {"sub": "user-x", "aud": "authenticated", "exp": int(time.time()) + 600},
+            jwt_secret,
+            algorithm=alg,
+        )
+    resp = test_client.get(
+        "/api/v1/portfolios/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 401
 
 
 def test_portfolios_me_fails_closed_when_secret_unset(test_client, monkeypatch):

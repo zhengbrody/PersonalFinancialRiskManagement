@@ -327,7 +327,7 @@ function ScoreErrorPanel({ error }: { error: Error }) {
   if (code === "no_active_portfolio") {
     headline = "No active portfolio";
     body =
-      "Create or activate a portfolio in the Streamlit app before scoring.";
+      "Create a portfolio here, or mark one as the default portfolio before scoring.";
   } else if (code === "no_market_data") {
     headline = "Market data unavailable";
     body = "Could not fetch prices for any holding. Try again in a minute.";
@@ -366,14 +366,14 @@ function EmptyState() {
       <CardHeader>
         <CardTitle>No portfolios yet</CardTitle>
         <CardDescription>
-          Create one in the Streamlit app — the new shell pulls from the
-          same Supabase backend.
+          Create your first portfolio here. It will be stored in Supabase
+          and scored by the same backend risk engine used by the API.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <a href="https://mindmarket.app" target="_blank" rel="noreferrer">
-          <Button variant="outline">Open mindmarket.app →</Button>
-        </a>
+        <Link href="/portfolios/new">
+          <Button variant="outline">Create portfolio</Button>
+        </Link>
       </CardContent>
     </Card>
   );

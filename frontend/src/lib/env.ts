@@ -22,13 +22,14 @@ import { z } from "zod";
 
 const publicSchema = z.object({
   /**
-   * Backend base URL the browser bundle calls. Empty / missing →
-   * fall back to the local dev port so contributors see a working
-   * `/score` page without copying `.env.example`.
+   * Backend base URL the browser bundle calls. Undefined in local dev
+   * falls back to `http://localhost:8000`. Explicit empty string means
+   * same-origin `/api/v1/*`, which is the safest production default
+   * behind Caddy.
    */
   NEXT_PUBLIC_API_BASE_URL: z
-    .string()
-    .url()
+    .union([z.string().url(), z.literal("")])
+    .optional()
     .default("http://localhost:8000"),
 
   /** Supabase project URL — required once protected routes ship. */
@@ -68,7 +69,10 @@ const raw = parsed.data;
  * `process.env` directly elsewhere.
  */
 export const env = {
-  apiBaseUrl: raw.NEXT_PUBLIC_API_BASE_URL.replace(/\/+$/, ""),
+  apiBaseUrl:
+    raw.NEXT_PUBLIC_API_BASE_URL === ""
+      ? ""
+      : raw.NEXT_PUBLIC_API_BASE_URL.replace(/\/+$/, ""),
   supabaseUrl: raw.NEXT_PUBLIC_SUPABASE_URL,
   supabaseAnonKey: raw.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   /** True iff both Supabase vars are configured. */

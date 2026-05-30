@@ -3,11 +3,6 @@
 /**
  * Email + password sign-in against Supabase.
  *
- * Scope (Phase 3): no sign-up here — users register via the existing
- * Streamlit flow at mindmarket.app/Login; the Supabase user is shared.
- * Google OAuth lands in Phase 4 once we wire the redirect URL on the
- * Supabase project.
- *
  * Behaviour on success: redirect to `/portfolios`. The auth context
  * subscription will see the new session and surface the email in the
  * shell pill automatically.
@@ -66,13 +61,8 @@ export default function LoginPage() {
           <CardTitle>Sign in</CardTitle>
           <CardDescription>
             Use your MindMarket account. New here?{" "}
-            <a
-              href="https://mindmarket.app"
-              className="text-primary hover:underline"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Sign up on mindmarket.app
+            <a href="/signup" className="text-primary hover:underline">
+              Create an account
             </a>
             .
           </CardDescription>

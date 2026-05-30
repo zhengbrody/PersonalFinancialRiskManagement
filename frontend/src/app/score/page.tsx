@@ -172,8 +172,8 @@ export default function ScorePage() {
                 <CardTitle>No score yet</CardTitle>
                 <CardDescription>
                   Hit <span className="font-mono">Run score</span> on the left.
-                  The backend at <span className="font-mono">localhost:8000</span>{" "}
-                  must be running.
+                  This public sandbox uses the same FastAPI scoring contract
+                  as the authenticated portfolio workflow.
                 </CardDescription>
               </CardHeader>
             </Card>

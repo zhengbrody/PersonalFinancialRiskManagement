@@ -61,8 +61,9 @@ services:
       - "8000"
     environment:
       # Server-side secrets only. NEVER overlap with NEXT_PUBLIC_*.
-      # SUPABASE_JWT_SECRET is required for protected routes; with it
-      # missing, the backend fails closed (401 on /portfolios/me etc.).
+      # Modern Supabase projects verify JWTs through JWKS from
+      # SUPABASE_URL. SUPABASE_JWT_SECRET is only required for legacy
+      # HS256 projects; missing verification config fails closed.
       - MINDMARKET_ENV=${MINDMARKET_ENV:-production}
       - MINDMARKET_ALLOWED_ORIGINS=${MINDMARKET_ALLOWED_ORIGINS:-}
       - SUPABASE_URL=${SUPABASE_URL:-}

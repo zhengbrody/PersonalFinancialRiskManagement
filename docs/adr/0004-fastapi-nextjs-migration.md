@@ -92,8 +92,10 @@ the same EC2 instance with no code change.
   global middleware. `/health`, `/openapi.json`, `/docs`, and the
   testable `/api/v1/risk/score` endpoint stay public; anything that
   reads or mutates user data requires a valid Supabase JWT.
-* JWT verification is symmetric-HS256 against `SUPABASE_JWT_SECRET`.
-  Audience and issuer are pinned to Supabase's expected values.
+* JWT verification accepts Supabase HS256 legacy tokens via
+  `SUPABASE_JWT_SECRET` and asymmetric RS256/ES256 tokens through
+  the project's JWKS endpoint. Audience is pinned to Supabase's
+  `authenticated` value.
 * Production deploy gets a new Caddy `route` for `/api/v1/*` — the
   FastAPI container is reachable from Caddy only, never from the
   public network directly.

@@ -1,15 +1,14 @@
 /**
  * Browser-side Supabase client singleton.
  *
- * Phase 2 scope: we set up the client and expose a `getSession()` helper
- * so a later phase can call protected backend routes with a real JWT.
- * No login UI is wired in this phase — that lands when /portfolios is
- * ported (Phase 3). Anon access still works for /api/v1/risk/score.
+ * This is the browser auth client for the SaaS frontend. It owns the
+ * persisted Supabase session, auto-refreshes access tokens, and exposes
+ * the current JWT to FastAPI calls that need Row-Level Security.
  *
  * The client is lazy: when the Supabase env vars are missing,
  * `getSupabase()` returns null and `getAccessToken()` returns null
- * instead of crashing at module load. That keeps the public /score
- * page renderable on a contributor's machine that has no `.env.local`.
+ * instead of crashing at module load. That keeps public pages renderable
+ * on a contributor's machine that has no `.env.local`.
  */
 
 import { createClient, SupabaseClient } from "@supabase/supabase-js";

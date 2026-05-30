@@ -133,7 +133,7 @@ direction.
 
 | Variable | Lives in | Visible to |
 |----------|----------|------------|
-| `SUPABASE_JWT_SECRET` | `backend` env | backend container only |
+| `SUPABASE_JWT_SECRET` | `backend` env | backend container only; required only for legacy HS256 Supabase JWTs |
 | `SUPABASE_SERVICE_KEY` | `streamlit` env (existing) | streamlit only |
 | `STRIPE_SECRET_KEY` | `streamlit` env (existing) | streamlit only |
 | `ANTHROPIC_API_KEY` | `streamlit` + (later) `backend` env | server only |

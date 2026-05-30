@@ -17,28 +17,27 @@ Both return a frozen ``AuthedUser`` so route handlers can pull
 
 Verification details
 --------------------
-Supabase signs project JWTs with HS256 using the ``SUPABASE_JWT_SECRET``
-from the project's API settings. We verify locally; no network call.
-PyJWT is the only new runtime dep — listed in
-``requirements-backend.txt``.
+Supabase projects can use either the legacy HS256 shared JWT secret or
+newer asymmetric signing keys exposed through the project's JWKS URL.
+We support both:
+
+  * HS256  -> verify with ``SUPABASE_JWT_SECRET``.
+  * RS/ES  -> verify with ``SUPABASE_URL/auth/v1/.well-known/jwks.json``.
 
 We pin:
-  * algorithm: HS256 (Supabase's only supported)
+  * algorithm: only HS256, RS256, ES256
   * exp:       enforced (PyJWT default)
   * audience:  ``"authenticated"`` (Supabase convention)
-  * iss:       optional — the Supabase project URL when configured
 
-When ``SUPABASE_JWT_SECRET`` is unset we fail closed in production
-(401 on every protected route, with a clear log line) and short-
-circuit in dev to make local backend work without a Supabase token.
-This is documented behaviour, not a bug; it lets contributors run
-the backend without a Supabase project.
+If verification config is missing we fail closed: protected routes
+return 401 rather than accepting unverified tokens.
 """
 
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any, Optional
 
 from fastapi import Depends, Request
@@ -47,6 +46,10 @@ from .config import Settings, get_settings
 from .responses import unauthorized
 
 _logger = logging.getLogger(__name__)
+
+_HMAC_ALGS = {"HS256"}
+_JWKS_ALGS = {"RS256", "ES256"}
+_ALLOWED_ALGS = _HMAC_ALGS | _JWKS_ALGS
 
 
 @dataclass(frozen=True)
@@ -88,20 +91,28 @@ def _extract_bearer(request: Request) -> Optional[str]:
     return token or None
 
 
+def _jwks_url(settings: Settings) -> str:
+    """Return the Supabase JWKS URL for asymmetric JWT verification."""
+    base = (settings.supabase_url or "").rstrip("/")
+    if not base:
+        raise _MissingSecret("SUPABASE_URL is required for JWKS JWT verification.")
+    return f"{base}/auth/v1/.well-known/jwks.json"
+
+
+@lru_cache(maxsize=8)
+def _jwk_client(jwks_url: str):
+    """Cached PyJWT JWKS client. The client itself caches fetched keys."""
+    import jwt
+
+    return jwt.PyJWKClient(jwks_url)
+
+
 def _decode(token: str, settings: Settings) -> dict[str, Any]:
     """Verify + decode a Supabase JWT. Raises ``APIError`` on failure.
 
     PyJWT is imported lazily so a notebook can import this module
     without the runtime dep installed.
     """
-    secret = settings.supabase_jwt_secret
-    if not secret:
-        # In dev, this is a "Supabase not configured" → leave the
-        # decision to the caller. In production, the protected
-        # dependency wraps this in a 401 so we never accidentally
-        # accept unverified tokens.
-        raise _MissingSecret()
-
     try:
         import jwt
     except ImportError as exc:  # pragma: no cover - dep installed in CI
@@ -111,14 +122,39 @@ def _decode(token: str, settings: Settings) -> dict[str, Any]:
         ) from exc
 
     try:
+        header = jwt.get_unverified_header(token)
+    except Exception as exc:
+        _logger.info("auth.jwt.bad_header err=%s", exc)
+        raise unauthorized(
+            "Token is invalid or expired.",
+            reason=type(exc).__name__,
+        ) from exc
+
+    alg = str(header.get("alg") or "")
+    if alg not in _ALLOWED_ALGS:
+        _logger.info("auth.jwt.unsupported_alg alg=%s", alg)
+        raise unauthorized("Token is invalid or expired.", reason="UnsupportedAlgorithm")
+
+    try:
+        if alg in _HMAC_ALGS:
+            secret = settings.supabase_jwt_secret
+            if not secret:
+                raise _MissingSecret("SUPABASE_JWT_SECRET is required for HS256 tokens.")
+            key = secret
+        else:
+            signing_key = _jwk_client(_jwks_url(settings)).get_signing_key_from_jwt(token)
+            key = signing_key.key
+
         return jwt.decode(
             token,
-            secret,
-            algorithms=["HS256"],
+            key,
+            algorithms=[alg],
             # Supabase always stamps "authenticated" for end-user tokens.
             audience="authenticated",
             options={"require": ["exp", "sub"]},
         )
+    except _MissingSecret:
+        raise
     except Exception as exc:
         _logger.info("auth.jwt.decode_failed err=%s", exc)
         raise unauthorized(
@@ -128,7 +164,7 @@ def _decode(token: str, settings: Settings) -> dict[str, Any]:
 
 
 class _MissingSecret(Exception):
-    """Marker for 'SUPABASE_JWT_SECRET not configured'.
+    """Marker for auth verification config missing.
 
     Used to choose between dev-fallback and production-hard-fail in
     the dependency, without leaking that flow into ``_decode``'s
