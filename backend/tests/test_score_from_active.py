@@ -42,6 +42,29 @@ def fake_active_portfolio(monkeypatch):
 
 
 @pytest.fixture
+def fake_capital(monkeypatch):
+    """Patch the token-scoped cash + margin getters so we can drive the
+    leverage/cash math without a real Supabase row. Defaults to a
+    no-margin, no-cash account (scale = 1.0)."""
+
+    state = {"cash_balance": 0.0, "margin_loan": 0.0}
+    import libs.auth.active_portfolio as ap
+
+    monkeypatch.setattr(
+        ap,
+        "get_active_capital_inputs",
+        lambda access_token=None: {
+            "cash_balance": state["cash_balance"],
+            "contributed_capital": 0.0,
+        },
+    )
+    monkeypatch.setattr(
+        ap, "get_active_margin_loan", lambda access_token=None: state["margin_loan"]
+    )
+    return state
+
+
+@pytest.fixture
 def fake_price_history(monkeypatch):
     """Patch ``services.market_data.get_price_history``."""
 
@@ -176,6 +199,67 @@ def test_happy_path_returns_complete_score_envelope(
     # The caller's JWT was forwarded to the active-portfolio resolver
     # so Supabase RLS applied. Same security contract as /portfolios/me.
     assert fake_active_portfolio.calls == [token]
+
+
+def _run_score(test_client, token, fake_active_portfolio, fake_price_history, holdings):
+    fake_active_portfolio.set(holdings)
+    fake_price_history.set(_make_history(sorted(holdings.keys())))
+    resp = test_client.post(
+        "/api/v1/risk/score_from_active",
+        json={"risk_preference": 3, "risk_free_rate": 0.045},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200, resp.json()
+    return resp.json()["data"]
+
+
+def test_margin_amplifies_risk_in_score(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_capital
+):
+    """A margin loan levers the book. The same holdings with a loan must
+    report higher daily VaR than the unlevered version, and flag the
+    leverage in the data-quality notes."""
+    holdings = {"SPY": {"shares": 100, "avg_cost": 400.0}}
+    token = mint_token(sub="user-lev")
+
+    fake_capital["cash_balance"] = 0.0
+    fake_capital["margin_loan"] = 0.0
+    base = _run_score(test_client, token, fake_active_portfolio, fake_price_history, holdings)
+
+    # ~50% loan against the equity → leverage ≈ 2× (gross/net).
+    fake_capital["margin_loan"] = 0.5 * 100 * 100.0  # shares×~price (history ~100)
+    levered = _run_score(
+        test_client, token, fake_active_portfolio, fake_price_history, holdings
+    )
+
+    base_var = base["metrics"]["var_95_daily"]
+    lev_var = levered["metrics"]["var_95_daily"]
+    assert base_var is not None and lev_var is not None
+    assert lev_var > base_var * 1.5  # leverage clearly amplified VaR
+    assert any("everage" in n for n in levered["metrics"]["data_quality_notes"])
+
+
+def test_cash_drag_lowers_risk_in_score(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_capital
+):
+    """Idle cash dilutes a pure-equity book: same holdings + a cash
+    balance must report lower daily VaR (cash is ~risk-free)."""
+    holdings = {"SPY": {"shares": 100, "avg_cost": 400.0}}
+    token = mint_token(sub="user-cash")
+
+    fake_capital["cash_balance"] = 0.0
+    fake_capital["margin_loan"] = 0.0
+    base = _run_score(test_client, token, fake_active_portfolio, fake_price_history, holdings)
+
+    # Add cash roughly equal to the equity → ~half the book is risk-free.
+    fake_capital["cash_balance"] = 100 * 100.0
+    with_cash = _run_score(
+        test_client, token, fake_active_portfolio, fake_price_history, holdings
+    )
+
+    assert with_cash["metrics"]["var_95_daily"] < base["metrics"]["var_95_daily"]
+    # cash_weight should now be a meaningful fraction of the book.
+    assert with_cash["metrics"]["cash_weight"] > 0.3
 
 
 def test_drops_zero_share_holdings_silently(

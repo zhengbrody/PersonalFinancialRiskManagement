@@ -38,6 +38,7 @@ def score_portfolio_from_input(
     asset_returns: pd.DataFrame,
     *,
     benchmark_returns: pd.Series | None = None,
+    leverage: float = 1.0,
 ) -> PortfolioScore:
     """Validate raw input via Pydantic, then run the deterministic math.
 
@@ -52,6 +53,9 @@ def score_portfolio_from_input(
             construction time.
         asset_returns:    Daily returns DataFrame (date × ticker).
         benchmark_returns: Optional benchmark series for beta calc.
+        leverage:         gross_assets / net_equity (1.0 = no margin).
+            Passed through to the metrics so the score reflects margin
+            amplification of risk.
 
     Returns:
         Frozen ``PortfolioScore`` dataclass: same shape downstream code
@@ -64,4 +68,5 @@ def score_portfolio_from_input(
         benchmark_returns=benchmark_returns,
         risk_preference=portfolio_input.risk_preference,
         risk_free_rate=portfolio_input.risk_free_rate,
+        leverage=leverage,
     )

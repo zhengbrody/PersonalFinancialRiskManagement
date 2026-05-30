@@ -322,8 +322,22 @@ def compute_portfolio_metrics(
     *,
     benchmark_returns: pd.Series | None = None,
     risk_free_rate: float = 0.045,
+    leverage: float = 1.0,
 ) -> PortfolioMetrics:
-    """Compute exact local portfolio metrics used by the score engine."""
+    """Compute exact local portfolio metrics used by the score engine.
+
+    ``leverage`` is the ratio gross_assets / net_equity (1.0 = no
+    margin). When > 1 the daily portfolio return series is converted
+    from an asset-level series to the equity holder's levered series::
+
+        r_equity = L · r_assets − (L − 1) · daily_borrow_rate
+
+    so volatility, VaR, CVaR and drawdown all scale up by L (margin
+    amplifies risk) and the borrow carry drags the return. Borrow rate
+    is proxied by ``risk_free_rate`` — a documented simplification (real
+    margin rates carry a spread, so this slightly understates carry).
+    Default 1.0 leaves every existing caller's numbers unchanged.
+    """
 
     active = active_positions(positions)
     total_value = float(sum(p.market_value for p in active))
@@ -332,6 +346,19 @@ def compute_portfolio_metrics(
         asset_returns,
         risk_free_rate,
     )
+    notes = list(notes)
+
+    # Apply leverage to lift the asset-level series to the equity level.
+    lev = float(leverage) if leverage and np.isfinite(leverage) else 1.0
+    lev = _clamp(lev, 1.0, 10.0)
+    if lev > 1.0:
+        daily_borrow = float(risk_free_rate) / TRADING_DAYS
+        port_returns = lev * port_returns - (lev - 1.0) * daily_borrow
+        notes.append(
+            f"Leverage {lev:.2f}× applied from margin loan; risk metrics are "
+            "equity-level (amplified by leverage, net of borrow carry)."
+        )
+
     observations = int(port_returns.shape[0])
 
     annual_return = float(port_returns.mean() * TRADING_DAYS)
@@ -370,7 +397,7 @@ def compute_portfolio_metrics(
         cash_weight=float(cash_weight),
         data_coverage=float(coverage),
         observations=observations,
-        data_quality_notes=notes,
+        data_quality_notes=tuple(notes),
     )
 
 
@@ -407,8 +434,13 @@ def score_portfolio(
     benchmark_returns: pd.Series | None = None,
     risk_preference: int = 3,
     risk_free_rate: float = 0.045,
+    leverage: float = 1.0,
 ) -> PortfolioScore:
-    """Score a portfolio on a 0-1000 PortfolioPilot-style scale."""
+    """Score a portfolio on a 0-1000 PortfolioPilot-style scale.
+
+    ``leverage`` (gross_assets / net_equity) flows straight into
+    ``compute_portfolio_metrics`` so margin amplifies the risk the score
+    sees. Default 1.0 = unlevered, unchanged behaviour."""
 
     pref = int(_clamp(risk_preference, 1, 5))
     target = RISK_TARGETS[pref]
@@ -417,6 +449,7 @@ def score_portfolio(
         asset_returns,
         benchmark_returns=benchmark_returns,
         risk_free_rate=risk_free_rate,
+        leverage=leverage,
     )
 
     target_vol = float(target["annual_volatility"])

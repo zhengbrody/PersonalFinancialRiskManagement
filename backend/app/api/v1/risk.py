@@ -23,6 +23,7 @@ endpoint inherits the change for free.
 
 from __future__ import annotations
 
+import logging
 import time
 
 import numpy as np
@@ -46,6 +47,8 @@ from ...schemas.risk import (
 )
 
 router = APIRouter(prefix="/api/v1/risk", tags=["risk"])
+
+_log = logging.getLogger(__name__)
 
 
 def _serialize_score(score) -> ScoreResponse:
@@ -268,7 +271,11 @@ def score_from_active_endpoint(
 
     # Resolve the active portfolio (RLS-filtered).
     try:
-        from libs.auth.active_portfolio import get_active_holdings
+        from libs.auth.active_portfolio import (
+            get_active_capital_inputs,
+            get_active_holdings,
+            get_active_margin_loan,
+        )
     except Exception as exc:  # pragma: no cover - import guard
         raise server_error("active_portfolio module unavailable.", reason=str(exc)) from exc
 
@@ -350,6 +357,31 @@ def score_from_active_endpoint(
             message="Could not price any holding (shares=0 or no quote).",
         )
 
+    # ── Portfolio-level cash + margin ─────────────────────────────────
+    # The equity legs above are only part of the picture. Idle cash drags
+    # return and lowers volatility; a margin loan levers the whole book.
+    # Pull both for THIS user (token-scoped, never owner-fallback) and
+    # fold them in so the score matches /report_from_active and reality.
+    # A capital-fetch hiccup must not fail the score — degrade to the
+    # unlevered, cash-free book it computed before.
+    equity_value = float(sum(p.market_value for p in positions_input))
+    cash_balance, margin_loan = _resolve_cash_and_margin(user)
+
+    if cash_balance > 0:
+        positions_input.append(
+            AssetPositionInput(
+                ticker="CASH",
+                name="Cash",
+                asset_type="cash",
+                market_value=cash_balance,
+                # Cash has no capital gain; cost_basis == value → 0 P&L.
+                cost_basis=cash_balance,
+                enabled=True,
+            )
+        )
+
+    leverage = _leverage_factor(gross_assets=equity_value + cash_balance, margin_loan=margin_loan)
+
     try:
         portfolio_input = PortfolioInput(
             positions=positions_input,
@@ -367,7 +399,7 @@ def score_from_active_endpoint(
     from engine.quant import score_portfolio_from_input
 
     try:
-        score = score_portfolio_from_input(portfolio_input, returns_frame)
+        score = score_portfolio_from_input(portfolio_input, returns_frame, leverage=leverage)
     except Exception as exc:
         raise unprocessable(f"Score computation failed: {exc}") from exc
 
@@ -405,6 +437,74 @@ def _resolve_active_or_raise(user: AuthedUser) -> dict:
             message="No active portfolio. Create one before scoring.",
         )
     return holdings
+
+
+# Cap leverage well above any realistic retail margin account (Reg-T is
+# 2×; portfolio margin ~6-7×). Beyond this the input is almost certainly
+# bad data, and the engine clamps to the same ceiling regardless.
+_MAX_LEVERAGE = 10.0
+
+
+def _resolve_cash_and_margin(user: AuthedUser) -> tuple[float, float]:
+    """Return ``(cash_balance, margin_loan)`` for the caller's active
+    portfolio, token-scoped. Fails SOFT: any error (Supabase blip, schema
+    drift) degrades to ``(0.0, 0.0)`` so a capital-fetch hiccup never
+    takes down the score/report — the book just reads as cash-free and
+    unlevered, exactly as it did before this was wired in."""
+    try:
+        from libs.auth.active_portfolio import (
+            get_active_capital_inputs,
+            get_active_margin_loan,
+        )
+
+        cap = get_active_capital_inputs(access_token=user.access_token) or {}
+        cash = float(cap.get("cash_balance") or 0.0)
+        margin = float(get_active_margin_loan(access_token=user.access_token) or 0.0)
+        return (max(0.0, cash), max(0.0, margin))
+    except Exception as exc:  # pragma: no cover - defensive
+        _log.warning("risk.capital_fetch_failed reason=%s", type(exc).__name__)
+        return (0.0, 0.0)
+
+
+def _leverage_factor(*, gross_assets: float, margin_loan: float) -> float:
+    """Leverage = gross_assets / net_equity, where net_equity =
+    gross_assets − margin_loan. Returns 1.0 (unlevered) when there's no
+    margin. When the loan meets or exceeds assets (net equity wiped out)
+    we return the max-leverage cap rather than ``inf`` — the account is
+    in/near a margin call, i.e. maximal risk."""
+    gross = float(gross_assets)
+    loan = max(0.0, float(margin_loan))
+    if loan <= 0 or gross <= 0:
+        return 1.0
+    net_equity = gross - loan
+    if net_equity <= 0:
+        return _MAX_LEVERAGE
+    return min(_MAX_LEVERAGE, gross / net_equity)
+
+
+def _equity_risk_scale(
+    *, equity_value: float, cash_balance: float, margin_loan: float
+) -> float:
+    """Scalar that converts the equity sub-portfolio's risk into risk on
+    the investor's NET equity::
+
+        scale = equity_value / net_equity
+        net_equity = equity_value + cash_balance − margin_loan
+
+    Cash (idle, ~risk-free) dilutes → scale < 1; margin levers → scale
+    > 1. This is exactly the combined effect of the cash-position +
+    leverage path used by /score_from_active, so both endpoints report
+    consistent equity-level risk. Capped at ``_MAX_LEVERAGE``; returns
+    1.0 when there's no cash and no margin (nothing to adjust)."""
+    equity = max(0.0, float(equity_value))
+    cash = max(0.0, float(cash_balance))
+    loan = max(0.0, float(margin_loan))
+    if equity <= 0 or (cash <= 0 and loan <= 0):
+        return 1.0
+    net_equity = equity + cash - loan
+    if net_equity <= 0:
+        return _MAX_LEVERAGE
+    return min(_MAX_LEVERAGE, equity / net_equity)
 
 
 def _compute_weights(
@@ -471,11 +571,26 @@ def _df_or_none_to_rows(df, *, value_col: str = None) -> list[dict]:
     return []
 
 
-def _serialize_report(report, market_values: dict[str, float]) -> RiskReportOut:
+def _serialize_report(
+    report, market_values: dict[str, float], *, risk_scale: float = 1.0
+) -> RiskReportOut:
     """Project the engine's ``RiskReport`` dataclass into the
     JSON-safe response model. The heavy matrices (cov, corr, MC sim
-    paths) are dropped — see the schema docstring."""
+    paths) are dropped — see the schema docstring.
+
+    ``risk_scale`` (= equity_value / net_equity) lifts the engine's
+    equity-only risk to the investor's net-equity level (cash drag +
+    margin leverage). It scales the magnitude metrics that are linear in
+    the return distribution — volatility, VaR/CVaR, stress loss — and,
+    as a first-order approximation, max drawdown. Ratio metrics (betas,
+    factor betas, component-VaR %, macro betas) are leverage-invariant
+    and pass through unscaled. Sharpe is invariant under this mix (the
+    excess-return and vol both scale, cancelling), so it's left as-is;
+    annual return is re-mixed toward the risk-free rate by the same
+    weight. ``1.0`` (the default) is a no-op."""
     import math
+
+    scale = float(risk_scale) if math.isfinite(risk_scale) and risk_scale > 0 else 1.0
 
     def _finite(v):
         try:
@@ -483,6 +598,11 @@ def _serialize_report(report, market_values: dict[str, float]) -> RiskReportOut:
         except Exception:
             return None
         return f if math.isfinite(f) else None
+
+    def _scaled(v):
+        """Finite value lifted to net-equity level (None stays None)."""
+        f = _finite(v)
+        return None if f is None else f * scale
 
     factor_betas: list[FactorBetaRow] = []
     fb = getattr(report, "factor_betas", None)
@@ -528,19 +648,28 @@ def _serialize_report(report, market_values: dict[str, float]) -> RiskReportOut:
                 )
             )
 
+    # Annual return re-mixed toward the risk-free rate by the same
+    # weight that scales risk: r_net = scale·r_equity + (1−scale)·rf.
+    # (scale<1 = cash drag pulls toward rf; scale>1 = margin amplifies
+    # the excess return AND its carry cost.)
+    rf = _finite(report.risk_free_rate)
+    ann_ret = _finite(report.annual_return)
+    if ann_ret is not None and scale != 1.0:
+        ann_ret = scale * ann_ret + (1.0 - scale) * (rf if rf is not None else 0.0)
+
     return RiskReportOut(
-        annual_return=_finite(report.annual_return),
-        annual_volatility=_finite(report.annual_volatility),
+        annual_return=ann_ret,
+        annual_volatility=_scaled(report.annual_volatility),
         sharpe_ratio=_finite(report.sharpe_ratio),
-        max_drawdown=_finite(report.max_drawdown),
-        var_95=_finite(report.var_95),
-        var_99=_finite(report.var_99),
-        cvar_95=_finite(report.cvar_95),
-        risk_free_rate=_finite(report.risk_free_rate),
+        max_drawdown=_scaled(report.max_drawdown),
+        var_95=_scaled(report.var_95),
+        var_99=_scaled(report.var_99),
+        cvar_95=_scaled(report.cvar_95),
+        risk_free_rate=rf,
         betas={k: float(v) for k, v in (report.betas or {}).items() if _finite(v) is not None},
         factor_betas=factor_betas,
         component_var_pct=component_var,
-        stress_loss=_finite(report.stress_loss),
+        stress_loss=_scaled(report.stress_loss),
         stress_market_shock=_finite(report.stress_market_shock),
         stress_asset_losses=stress_losses,
         macro_betas={
@@ -598,6 +727,20 @@ def report_from_active_endpoint(
             message="Could not price any holding (shares=0 or no quote).",
         )
 
+    # Fold in portfolio-level cash + margin as a single risk scalar on
+    # the equity sub-portfolio the engine prices. RiskEngine normalises
+    # equity weights to sum=1 (no cash, no leverage), so the investor's
+    # risk on NET equity is the engine's risk × (equity / net_equity):
+    #   net_equity = equity + cash − margin
+    # cash dilutes (↑net_equity ⇒ scalar<1), margin levers (↑margin ⇒
+    # scalar>1). Algebraically identical to the cash-position + leverage
+    # path /score_from_active uses, so the two endpoints now agree.
+    equity_value = float(sum(market_values.values()))
+    cash_balance, margin_loan = _resolve_cash_and_margin(user)
+    risk_scale = _equity_risk_scale(
+        equity_value=equity_value, cash_balance=cash_balance, margin_loan=margin_loan
+    )
+
     # DataProvider expects the original holdings dict (with shares etc.)
     # for liquidity calculations. Engine takes the DP, does its own
     # internal fetches via the same CachedDataProvider file cache.
@@ -621,5 +764,5 @@ def report_from_active_endpoint(
         # raw exception text to the client.
         raise server_error("Risk report computation failed.", reason=type(exc).__name__) from exc
 
-    out = _serialize_report(report, market_values)
+    out = _serialize_report(report, market_values, risk_scale=risk_scale)
     return ok(out.model_dump(), request=request, started_at=started)
