@@ -214,6 +214,39 @@ def test_multi_factor_betas_with_significance():
             assert isinstance(row["is_significant"], (bool, np.bool_))
 
 
+@pytest.mark.integration
+def test_portfolio_factor_betas_shape_is_factor_indexed():
+    """Portfolio-level factor regression: ONE row per factor, indexed by
+    factor ticker, with columns beta/r_squared/t_stat/p_value. This is the
+    shape the report API serialises — distinct from the per-asset matrix
+    `_compute_multi_factor_betas` returns. Guards the serializer contract
+    (a mismatch here silently blanked the report's Factor-betas table)."""
+    dates = pd.date_range("2023-01-01", periods=252, freq="D")
+    np.random.seed(42)
+    asset_returns = pd.DataFrame(
+        {"AAPL": np.random.randn(252) * 0.02, "TSLA": np.random.randn(252) * 0.03},
+        index=dates,
+    )
+    np.random.seed(7)
+    factor_ret = pd.DataFrame(
+        {tk: np.random.randn(252) * 0.01 for tk in ["SPY", "QQQ", "GLD", "TLT", "IWM", "VTV"]},
+        index=dates,
+    )
+    mock_dp = Mock(spec=DataProvider)
+    mock_dp.get_benchmark_returns.return_value = factor_ret
+
+    engine = RiskEngine(mock_dp)
+    weights = np.array([0.6, 0.4])
+    fb = engine._compute_portfolio_factor_betas(asset_returns, weights)
+
+    assert isinstance(fb, pd.DataFrame)
+    # Indexed by factor ticker, NOT by holding ticker.
+    assert set(fb.index) == {"SPY", "QQQ", "GLD", "TLT", "IWM", "VTV"}
+    assert "AAPL" not in fb.index
+    # Exactly the columns the serializer reads.
+    assert set(fb.columns) == {"beta", "r_squared", "t_stat", "p_value"}
+
+
 # ══════════════════════════════════════════════════════════════
 #  性能测试
 # ══════════════════════════════════════════════════════════════

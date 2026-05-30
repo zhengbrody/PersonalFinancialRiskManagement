@@ -605,9 +605,11 @@ def _serialize_report(
         return None if f is None else f * scale
 
     factor_betas: list[FactorBetaRow] = []
-    fb = getattr(report, "factor_betas", None)
+    # PORTFOLIO-level factor regression (one row per factor: beta/R²/t/p).
+    # NOT report.factor_betas — that's the per-asset beta MATRIX (indexed
+    # by ticker, columns = factor names), which this table is not.
+    fb = getattr(report, "portfolio_factor_betas", None)
     if fb is not None:
-        # `factor_betas` is a DataFrame; rows indexed by factor name.
         for row in _df_or_none_to_rows(fb):
             factor_betas.append(
                 FactorBetaRow(
@@ -639,11 +641,15 @@ def _serialize_report(
     if liq is not None:
         for row in _df_or_none_to_rows(liq):
             tk = row.get("index", "")
+            # RiskEngine emits PascalCase columns (ADV_30d /
+            # Days_to_Liquidate); fall back to lower_snake for safety.
             liquidity_rows.append(
                 LiquidityRow(
                     ticker=tk,
-                    days_to_liquidate=_finite(row.get("days_to_liquidate")),
-                    adv_30d=_finite(row.get("adv_30d")),
+                    days_to_liquidate=_finite(
+                        row.get("Days_to_Liquidate", row.get("days_to_liquidate"))
+                    ),
+                    adv_30d=_finite(row.get("ADV_30d", row.get("adv_30d"))),
                     market_value=_finite(market_values.get(tk)),
                 )
             )
