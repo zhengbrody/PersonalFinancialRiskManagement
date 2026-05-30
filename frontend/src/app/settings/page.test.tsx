@@ -13,7 +13,9 @@ import userEvent from "@testing-library/user-event";
 import { renderWithQuery } from "@/test-utils";
 
 const replaceMock = vi.fn();
-const searchMock = vi.fn(() => ({ get: () => null }));
+const searchMock = vi.fn(
+  (): { get: (key: string) => string | null } => ({ get: () => null }),
+);
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: replaceMock }),
   useSearchParams: () => searchMock(),
