@@ -83,6 +83,9 @@ class _FakeReport:
     risk_free_rate: float = 0.045
     betas: dict[str, float] = field(default_factory=lambda: {"SPY": 0.96})
     factor_betas: Optional[pd.DataFrame] = None
+    # Portfolio-level factor regression (index=factor, cols=beta/r²/t/p) —
+    # this is what the report serialises, NOT the per-asset factor_betas matrix.
+    portfolio_factor_betas: Optional[pd.DataFrame] = None
     component_var_pct: Optional[pd.Series] = None
     stress_loss: float = 0.09
     stress_market_shock: float = -0.10
@@ -227,7 +230,9 @@ def test_happy_path_returns_full_report(
     )
     fake_price_history.set(_make_history(["BND", "SPY"]))
 
-    factor_betas = pd.DataFrame(
+    # Portfolio-level factor regression: one row per factor (the shape the
+    # real RiskEngine.portfolio_factor_betas produces).
+    portfolio_factor_betas = pd.DataFrame(
         {
             "beta": [1.02, 0.85],
             "r_squared": [0.91, 0.80],
@@ -237,12 +242,13 @@ def test_happy_path_returns_full_report(
         index=["SPY", "QQQ"],
     )
     component_var = pd.Series({"SPY": 0.6, "BND": 0.4})
+    # RiskEngine liquidity columns are PascalCase: ADV_30d / Days_to_Liquidate.
     liquidity = pd.DataFrame(
-        {"days_to_liquidate": [0.5, 1.2], "adv_30d": [1.0e9, 5.0e7]},
+        {"Days_to_Liquidate": [0.5, 1.2], "ADV_30d": [1.0e9, 5.0e7]},
         index=["SPY", "BND"],
     )
     fake_engine.last_report = _FakeReport(
-        factor_betas=factor_betas,
+        portfolio_factor_betas=portfolio_factor_betas,
         component_var_pct=component_var,
         liquidity_risk=liquidity,
     )

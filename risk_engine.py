@@ -39,10 +39,13 @@ class RiskReport:
     max_drawdown: float = 0.0
     # Beta (相对基准)
     betas: Dict[str, float] = field(default_factory=dict)
-    # 多因子 Beta (SPY/QQQ/GLD/TLT)
+    # 多因子 Beta (SPY/QQQ/GLD/TLT) — 每个资产对每个因子的 beta 矩阵 (index=ticker)
     factor_betas: Optional[pd.DataFrame] = None
     # 多因子 Beta 统计显著性信息
     factor_betas_significance: Optional[pd.DataFrame] = None
+    # 组合层面因子暴露：组合收益对每个因子的单因子回归
+    # (index=factor ticker, columns=[beta, r_squared, t_stat, p_value])
+    portfolio_factor_betas: Optional[pd.DataFrame] = None
     # 协方差 & 相关系数矩阵（EWMA）
     cov_matrix: Optional[pd.DataFrame] = None
     cov_matrix_ewma: Optional[pd.DataFrame] = None
@@ -194,6 +197,8 @@ class RiskEngine:
         factor_result = self._compute_multi_factor_betas(returns)
         report.factor_betas = factor_result["betas"]
         report.factor_betas_significance = factor_result["significance"]
+        # 组合层面因子暴露（组合收益 vs 每个因子）
+        report.portfolio_factor_betas = self._compute_portfolio_factor_betas(returns, weights)
 
         # ── 压力测试 (uses user-configured market_shock, not default) ───
         stress_loss, asset_losses = self._stress_test(
@@ -878,6 +883,54 @@ class RiskEngine:
                     )
 
         return {"betas": pd.DataFrame(beta_result).T, "significance": pd.DataFrame(sig_result)}
+
+    def _compute_portfolio_factor_betas(self, returns, weights):
+        """Portfolio-level factor exposures.
+
+        Regresses the *portfolio* daily return series (returns · weights) on
+        each factor (SPY/QQQ/GLD/TLT/IWM/VTV) univariately — i.e. the
+        sensitivity of the whole book to each factor. This is what the
+        report UI's "Regression of portfolio returns on each factor" table
+        shows; it is distinct from ``factor_betas`` (the per-asset beta
+        matrix indexed by ticker).
+
+        Returns a DataFrame indexed by factor ticker with columns
+        ``[beta, r_squared, t_stat, p_value]``, or ``None`` when factor
+        history is unavailable / too short to regress.
+        """
+        factor_tickers = list(self.FACTOR_TICKERS.keys())
+        factor_ret = self.dp.get_benchmark_returns(factor_tickers)
+        if factor_ret is None or getattr(factor_ret, "empty", True):
+            logger.warning("risk.portfolio_factor_beta.benchmarks_unavailable")
+            return None
+
+        port = pd.Series(returns.dot(weights), index=returns.index, name="__port__")
+        aligned = pd.concat([port, factor_ret], axis=1, join="inner").dropna()
+        if len(aligned) < 60:
+            logger.warning(
+                "risk.portfolio_factor_beta.insufficient_overlap", observations=len(aligned)
+            )
+            return None
+
+        y = aligned["__port__"].values
+        rows = {}
+        for f in factor_tickers:
+            if f not in aligned.columns:
+                continue
+            try:
+                stats = self._compute_beta_with_significance(y, aligned[f].values)
+            except Exception as e:  # pragma: no cover - defensive
+                logger.warning("risk.portfolio_factor_beta.failed", factor=f, error=str(e))
+                continue
+            rows[f] = {
+                "beta": stats["beta"],
+                "r_squared": stats["r_squared"],
+                "t_stat": stats["t_stat"],
+                "p_value": stats["p_value"],
+            }
+        if not rows:
+            return None
+        return pd.DataFrame(rows).T
 
     # ── Barra 风格因子风险归因 ────────────────────────────────
     def compute_factor_risk_attribution(
