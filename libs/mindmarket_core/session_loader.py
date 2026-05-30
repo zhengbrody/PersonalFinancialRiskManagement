@@ -63,7 +63,10 @@ def build_user_positions(
 
         market_value = shares * last_price
         avg_cost = holding.get("avg_cost")
-        cost_basis = float(shares) * float(avg_cost) if avg_cost not in (None, 0, 0.0) else 0.0
+        # Missing avg_cost → cost basis UNKNOWN (None), NOT 0.0. A 0 basis
+        # would report the entire position as profit; None excludes it
+        # from P&L instead (see AssetPosition.unrealized_pnl).
+        cost_basis = float(shares) * float(avg_cost) if avg_cost not in (None, 0, 0.0) else None
 
         raw_type = str(
             holding.get("asset_type")

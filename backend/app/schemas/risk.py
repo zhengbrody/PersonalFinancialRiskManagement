@@ -31,7 +31,8 @@ class HoldingIn(BaseModel):
     name: str = Field(default="", max_length=120)
     asset_type: AssetType = "public_security"
     market_value: float = Field(..., ge=0)
-    cost_basis: float = Field(default=0.0, ge=0)
+    # None = unknown cost basis (omit from P&L); distinct from a real 0.
+    cost_basis: Optional[float] = Field(default=None, ge=0)
     expense_ratio: float = Field(default=0.0, ge=0, le=0.10)
     source: str = Field(default="api", max_length=40)
     proxy_ticker: Optional[str] = None

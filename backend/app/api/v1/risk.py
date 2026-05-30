@@ -339,13 +339,18 @@ def score_from_active_endpoint(
         shares = float(h.get("shares") or 0.0)
         if shares <= 0 or last_close <= 0:
             continue
+        # Missing avg_cost → cost basis UNKNOWN (None), not 0 — a 0 basis
+        # would book the whole position as profit. None excludes it from
+        # P&L instead of fabricating a gain.
+        avg_cost = h.get("avg_cost")
+        cost_basis = float(avg_cost) * shares if avg_cost not in (None, 0, 0.0) else None
         positions_input.append(
             AssetPositionInput(
                 ticker=tk,
                 name=tk,
                 asset_type=str(h.get("asset_type") or "public_security"),
                 market_value=shares * last_close,
-                cost_basis=float(h.get("avg_cost") or 0.0) * shares,
+                cost_basis=cost_basis,
                 enabled=True,
             )
         )

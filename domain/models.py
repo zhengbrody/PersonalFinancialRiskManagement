@@ -61,7 +61,9 @@ class AssetPositionInput(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
     asset_type: AssetType
     market_value: float = Field(..., ge=0)
-    cost_basis: float = Field(default=0.0, ge=0)
+    # ``None`` = cost basis UNKNOWN (excluded from P&L), distinct from a
+    # real 0.0 basis. See AssetPosition.unrealized_pnl.
+    cost_basis: float | None = Field(default=None, ge=0)
     expense_ratio: float = Field(default=0.0, ge=0, le=0.10)
     source: str = Field(default="manual", max_length=40)
     proxy_ticker: str | None = None
@@ -106,7 +108,7 @@ class AssetPositionInput(BaseModel):
         a real and common state. We only reject impossibly-large cost
         bases that look like data entry slip-ups.
         """
-        if self.cost_basis > 0 and self.market_value > 0:
+        if self.cost_basis is not None and self.cost_basis > 0 and self.market_value > 0:
             ratio = self.cost_basis / self.market_value
             if ratio > 50:
                 raise ValueError(
@@ -123,7 +125,7 @@ class AssetPositionInput(BaseModel):
             name=self.name,
             asset_type=self.asset_type,
             market_value=float(self.market_value),
-            cost_basis=float(self.cost_basis),
+            cost_basis=(None if self.cost_basis is None else float(self.cost_basis)),
             expense_ratio=float(self.expense_ratio),
             source=self.source,
             proxy_ticker=self.proxy_ticker,

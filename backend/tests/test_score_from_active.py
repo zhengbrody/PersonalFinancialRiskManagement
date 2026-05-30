@@ -262,6 +262,24 @@ def test_cash_drag_lowers_risk_in_score(
     assert with_cash["metrics"]["cash_weight"] > 0.3
 
 
+def test_missing_avg_cost_scores_without_fabricating_pnl(
+    test_client, mint_token, fake_active_portfolio, fake_price_history
+):
+    """A holding with no avg_cost must still score cleanly — the missing
+    cost basis becomes UNKNOWN (None) at the boundary, not a fake 0 that
+    would imply 100% profit. The score itself doesn't depend on cost
+    basis, so this just proves the None path doesn't crash."""
+    fake_active_portfolio.set({"SPY": {"shares": 100}})  # no avg_cost
+    fake_price_history.set(_make_history(["SPY"]))
+    resp = test_client.post(
+        "/api/v1/risk/score_from_active",
+        json={},
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    assert resp.status_code == 200, resp.json()
+    assert 0 <= resp.json()["data"]["overall_score"] <= 1000
+
+
 def test_drops_zero_share_holdings_silently(
     test_client, mint_token, fake_active_portfolio, fake_price_history
 ):

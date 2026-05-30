@@ -51,9 +51,17 @@ def build_agent_context(score: PortfolioScore, positions: Iterable[AssetPosition
                 "asset_type": p.asset_type,
                 "market_value": round(float(p.market_value), 2),
                 "weight": round(_position_weights(active).get(p.ticker, 0.0), 6),
-                "cost_basis": round(float(p.cost_basis), 2),
-                "unrealized_pnl": round(float(p.unrealized_pnl), 2),
-                "unrealized_pnl_pct": round(float(p.unrealized_pnl_pct), 6),
+                # Unknown cost basis surfaces as null, not a fabricated 0 —
+                # the agent must not claim a P&L it can't ground.
+                "cost_basis": (None if p.cost_basis is None else round(float(p.cost_basis), 2)),
+                "unrealized_pnl": (
+                    None if p.unrealized_pnl is None else round(float(p.unrealized_pnl), 2)
+                ),
+                "unrealized_pnl_pct": (
+                    None
+                    if p.unrealized_pnl_pct is None
+                    else round(float(p.unrealized_pnl_pct), 6)
+                ),
                 "expense_ratio": round(float(p.expense_ratio), 6),
                 "proxy_ticker": p.proxy_ticker,
             }
@@ -90,6 +98,9 @@ def scan_tax_loss_harvesting(
     opportunities = []
     for p in positions:
         if not p.enabled or p.market_value <= 0 or p.asset_type == "cash":
+            continue
+        # Unknown cost basis → can't size a loss → not a harvest candidate.
+        if p.unrealized_pnl is None or p.unrealized_pnl_pct is None:
             continue
         if p.unrealized_pnl <= -min_loss_usd and p.unrealized_pnl_pct <= -min_loss_pct:
             opportunities.append(

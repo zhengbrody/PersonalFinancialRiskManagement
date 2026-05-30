@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from libs.mindmarket_core.portfolio_scoring import (
+    AssetPosition,
     compute_portfolio_metrics,
     create_draft_positions,
     demo_asset_positions,
@@ -85,6 +86,43 @@ def test_leverage_is_clamped_and_defaults_noop():
         positions, returns, risk_free_rate=0.04, leverage=1.0
     )
     assert same.annual_volatility == pytest.approx(base.annual_volatility, rel=1e-9)
+
+
+def test_unknown_cost_basis_excludes_from_pnl():
+    """cost_basis=None means UNKNOWN, not 0 — P&L must be None (excluded),
+    never the full market value booked as profit."""
+    unknown = AssetPosition(
+        ticker="AAPL",
+        name="Apple",
+        asset_type="public_security",
+        market_value=10_000.0,
+        cost_basis=None,
+    )
+    assert unknown.unrealized_pnl is None
+    assert unknown.unrealized_pnl_pct is None
+
+    known = AssetPosition(
+        ticker="MSFT",
+        name="Microsoft",
+        asset_type="public_security",
+        market_value=10_000.0,
+        cost_basis=8_000.0,
+    )
+    assert known.unrealized_pnl == pytest.approx(2_000.0)
+    assert known.unrealized_pnl_pct == pytest.approx(0.25)
+
+
+def test_draft_positions_propagate_unknown_cost_basis():
+    """Rebalancing an unknown-cost position must keep it unknown, not
+    invent a basis (which would manufacture P&L out of thin air)."""
+    base = [
+        AssetPosition("AAPL", "Apple", "public_security", 10_000.0, cost_basis=None),
+        AssetPosition("BND", "Bonds", "public_security", 10_000.0, cost_basis=9_000.0),
+    ]
+    drafted = create_draft_positions(base, {"AAPL": 0.5, "BND": 0.5})
+    by_ticker = {p.ticker: p for p in drafted}
+    assert by_ticker["AAPL"].cost_basis is None
+    assert by_ticker["BND"].cost_basis is not None
 
 
 def test_risk_preference_changes_risk_match_score():

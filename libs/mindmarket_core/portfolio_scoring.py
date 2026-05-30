@@ -37,18 +37,31 @@ class AssetPosition:
     name: str
     asset_type: str
     market_value: float
-    cost_basis: float = 0.0
+    # ``None`` means the cost basis is UNKNOWN (e.g. broker import with no
+    # avg_cost). That is NOT the same as 0.0 — a 0 cost basis would imply
+    # the whole position is profit. Unknown-cost positions are excluded
+    # from P&L aggregation and flagged, rather than fabricating a gain.
+    cost_basis: float | None = None
     expense_ratio: float = 0.0
     source: str = "manual"
     proxy_ticker: str | None = None
     enabled: bool = True
 
     @property
-    def unrealized_pnl(self) -> float:
+    def unrealized_pnl(self) -> float | None:
+        """Unrealized P&L, or ``None`` when cost basis is unknown."""
+        if self.cost_basis is None:
+            return None
         return float(self.market_value - self.cost_basis)
 
     @property
-    def unrealized_pnl_pct(self) -> float:
+    def unrealized_pnl_pct(self) -> float | None:
+        """Unrealized P&L %, or ``None`` when cost basis is unknown.
+
+        An explicit cost basis of 0 keeps the legacy 0.0 return (avoids a
+        divide-by-zero); only ``None`` (unknown) yields ``None``."""
+        if self.cost_basis is None:
+            return None
         if self.cost_basis <= 0:
             return 0.0
         return float((self.market_value - self.cost_basis) / self.cost_basis)
@@ -231,7 +244,11 @@ def create_draft_positions(
             drafted.append(p)
             continue
         new_value = portfolio_value * normalized.get(p.ticker.upper(), 0.0)
-        if p.market_value <= 0:
+        if p.cost_basis is None:
+            # Unknown cost stays unknown after a hypothetical rebalance —
+            # never fabricate a basis the user never gave us.
+            new_cost_basis = None
+        elif p.market_value <= 0:
             new_cost_basis = new_value
         elif new_value >= p.market_value:
             new_cost_basis = p.cost_basis + (new_value - p.market_value)
@@ -243,7 +260,7 @@ def create_draft_positions(
                 name=p.name,
                 asset_type=p.asset_type,
                 market_value=float(new_value),
-                cost_basis=float(new_cost_basis),
+                cost_basis=None if new_cost_basis is None else float(new_cost_basis),
                 expense_ratio=p.expense_ratio,
                 source=p.source,
                 proxy_ticker=p.proxy_ticker,
