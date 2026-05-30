@@ -171,6 +171,94 @@ export function useDeletePortfolio() {
   });
 }
 
+// ── billing ──────────────────────────────────────────────────────
+
+export type SubscriptionRow = {
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  plan: string | null;
+  status: string | null;
+  current_period_start: string | null;
+  current_period_end: string | null;
+  cancel_at_period_end: boolean | null;
+};
+
+export type PlanCard = {
+  plan: string;
+  label: string;
+  price_usd_per_month: number;
+  monthly_analysis: number;
+  monthly_chat: number;
+};
+
+export type BillingMe = {
+  user_id: string;
+  email: string | null;
+  plan: string;
+  subscription: SubscriptionRow | null;
+  plans: PlanCard[];
+};
+
+export type CheckoutSessionResponse = {
+  checkout_url: string;
+  session_id: string;
+};
+
+export type PortalSessionResponse = { portal_url: string };
+
+/** Plan + subscription snapshot for the signed-in user. */
+export function useBillingMe() {
+  const { accessToken, user } = useAuth();
+  return useQuery<BillingMe>({
+    queryKey: ["billing", "me", user?.id ?? null],
+    enabled: Boolean(accessToken),
+    queryFn: () =>
+      apiFetch<BillingMe>("/api/v1/billing/me", {
+        authToken: accessToken!,
+      }),
+    staleTime: 30 * 1000,
+  });
+}
+
+/**
+ * Start a Stripe Checkout flow. The mutation resolves to the hosted
+ * Stripe URL; the caller does `window.location.href = url` to send
+ * the user to Stripe's page. Stripe handles card capture + 3DS and
+ * fires the webhook back into our Supabase Edge Function.
+ */
+export function useStartCheckout() {
+  const { accessToken } = useAuth();
+  return useMutation<
+    CheckoutSessionResponse,
+    Error,
+    { plan: "basic" | "pro"; success_path?: string; cancel_path?: string }
+  >({
+    mutationFn: (body) =>
+      apiFetch<CheckoutSessionResponse>("/api/v1/billing/checkout_session", {
+        method: "POST",
+        body,
+        authToken: accessToken ?? undefined,
+      }),
+  });
+}
+
+/** Open the Stripe Customer Portal (manage card, switch plan, cancel). */
+export function useStartPortal() {
+  const { accessToken } = useAuth();
+  return useMutation<
+    PortalSessionResponse,
+    Error,
+    { return_path?: string } | void
+  >({
+    mutationFn: (body) =>
+      apiFetch<PortalSessionResponse>("/api/v1/billing/portal_session", {
+        method: "POST",
+        body: body ?? {},
+        authToken: accessToken ?? undefined,
+      }),
+  });
+}
+
 // ── risk report ──────────────────────────────────────────────────
 
 export type FactorBetaRow = {

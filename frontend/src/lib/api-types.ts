@@ -271,10 +271,100 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/billing/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Plan + subscription snapshot for the caller
+         * @description Return the authed user's current plan, their Stripe
+         *     subscription row (if any), and the plan catalogue for rendering
+         *     the pricing table without a second round-trip.
+         */
+        get: operations["billing_me_api_v1_billing_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/checkout_session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a Stripe Checkout session for a paid plan
+         * @description Returns the one-time hosted Checkout URL. The frontend redirects
+         *     to it; Stripe's hosted page handles card capture + 3DS + webhook
+         *     fire-back into our Supabase project.
+         *
+         *     The user's ``user.id`` is set as ``client_reference_id`` on the
+         *     Stripe session so the webhook can correlate Stripe customer → our
+         *     auth user when the subscription is created.
+         */
+        post: operations["create_checkout_session_endpoint_api_v1_billing_checkout_session_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/portal_session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a Stripe Customer Portal session
+         * @description Returns a one-time URL into Stripe's hosted Customer Portal
+         *     (card management, plan switch, cancel, invoices). The customer ID
+         *     is resolved from the user's subscription row — clients do NOT
+         *     pass it.
+         *
+         *     422 when the user has never had a subscription (free-tier user who
+         *     wandered onto Settings before subscribing). The frontend should
+         *     redirect them to /pricing instead.
+         */
+        post: operations["create_portal_session_endpoint_api_v1_billing_portal_session_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * CheckoutSessionRequest
+         * @description Body for ``POST /api/v1/billing/checkout_session``.
+         */
+        CheckoutSessionRequest: {
+            /**
+             * Plan
+             * @enum {string}
+             */
+            plan: "basic" | "pro";
+            /** Success Path */
+            success_path?: string | null;
+            /** Cancel Path */
+            cancel_path?: string | null;
+        };
         /** DeepAnalysisRequest */
         DeepAnalysisRequest: {
             /** Ticker */
@@ -365,6 +455,14 @@ export interface components {
             margin_eligible?: boolean | null;
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * PortalSessionRequest
+         * @description Body for ``POST /api/v1/billing/portal_session``.
+         */
+        PortalSessionRequest: {
+            /** Return Path */
+            return_path?: string | null;
         };
         /**
          * PortfolioCreateRequest
@@ -886,6 +984,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    billing_me_api_v1_billing_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    create_checkout_session_endpoint_api_v1_billing_checkout_session_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckoutSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_portal_session_endpoint_api_v1_billing_portal_session_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

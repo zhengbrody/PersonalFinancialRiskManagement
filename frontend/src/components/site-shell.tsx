@@ -37,6 +37,12 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
             >
               Portfolios
             </Link>
+            <Link
+              href="/pricing"
+              className="rounded px-3 py-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            >
+              Pricing
+            </Link>
             <a
               href="http://localhost:8000/docs"
               target="_blank"
@@ -85,12 +91,13 @@ function AuthPill() {
   }
   return (
     <div className="ml-2 flex items-center gap-2">
-      <span
-        className="hidden font-mono text-xs text-muted-foreground sm:inline"
+      <Link
+        href="/settings"
+        className="hidden font-mono text-xs text-muted-foreground hover:text-foreground sm:inline"
         title={user.email ?? user.id}
       >
         {user.email ?? user.id}
-      </span>
+      </Link>
       <button
         type="button"
         onClick={() => signOut()}
