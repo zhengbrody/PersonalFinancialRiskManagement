@@ -105,7 +105,10 @@ async def score_portfolio(arguments: dict[str, Any]) -> dict[str, Any]:
                 name=str(h.get("name") or tk),
                 asset_type=str(h.get("asset_type") or "public_security"),
                 market_value=float(h["market_value"]),
-                cost_basis=float(h.get("cost_basis") or 0.0),
+                # Unknown cost basis stays unknown (None), not a fake 0.
+                cost_basis=(
+                    float(h["cost_basis"]) if h.get("cost_basis") not in (None, 0, 0.0) else None
+                ),
                 expense_ratio=float(h.get("expense_ratio") or 0.0),
                 enabled=True,
             )

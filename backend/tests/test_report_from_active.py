@@ -131,6 +131,26 @@ def fake_engine(monkeypatch):
     return _Engine
 
 
+@pytest.fixture
+def fake_capital(monkeypatch):
+    """Token-scoped cash + margin getters; defaults to none (scale=1.0)."""
+    state = {"cash_balance": 0.0, "margin_loan": 0.0}
+    import libs.auth.active_portfolio as ap
+
+    monkeypatch.setattr(
+        ap,
+        "get_active_capital_inputs",
+        lambda access_token=None: {
+            "cash_balance": state["cash_balance"],
+            "contributed_capital": 0.0,
+        },
+    )
+    monkeypatch.setattr(
+        ap, "get_active_margin_loan", lambda access_token=None: state["margin_loan"]
+    )
+    return state
+
+
 def _make_history(tickers: list[str], days: int = 260) -> pd.DataFrame:
     """Deterministic levels around 100 — only the *last* row matters
     for weight calc; the rest is unused under the engine mock."""
@@ -270,6 +290,44 @@ def test_happy_path_returns_full_report(
 
     # Engine got the body's market_shock.
     assert fake_engine.last_kwargs["market_shock"] == pytest.approx(-0.10)
+
+
+def test_margin_scales_report_risk_to_net_equity(
+    test_client,
+    mint_token,
+    fake_active_portfolio,
+    fake_price_history,
+    fake_engine,
+    fake_capital,
+):
+    """A margin loan equal to half the equity → net_equity = ½·equity →
+    risk scalar = 2.0. The magnitude metrics (vol, VaR, CVaR, stress
+    loss) must double; Sharpe (scale-invariant) and betas (leverage-
+    invariant) must NOT change."""
+    history = _make_history(["SPY"])
+    fake_active_portfolio.set({"SPY": {"shares": 100, "avg_cost": 50.0}})
+    fake_price_history.set(history)
+    fake_engine.last_report = _FakeReport()  # var_95=0.012, cvar=0.017, vol=0.12
+
+    equity_value = 100 * float(history["SPY"].dropna().iloc[-1])
+    fake_capital["margin_loan"] = 0.5 * equity_value  # → leverage 2×
+
+    resp = test_client.post(
+        "/api/v1/risk/report_from_active",
+        json={},
+        headers={"Authorization": f"Bearer {mint_token(sub='user-lev-rep')}"},
+    )
+    assert resp.status_code == 200, resp.json()
+    data = resp.json()["data"]
+
+    assert data["var_95"] == pytest.approx(0.012 * 2.0, rel=1e-6)
+    assert data["cvar_95"] == pytest.approx(0.017 * 2.0, rel=1e-6)
+    assert data["annual_volatility"] == pytest.approx(0.12 * 2.0, rel=1e-6)
+    assert data["stress_loss"] == pytest.approx(0.09 * 2.0, rel=1e-6)
+    # Sharpe is invariant under this leverage/cash mix.
+    assert data["sharpe_ratio"] == pytest.approx(0.5, rel=1e-6)
+    # Per-asset betas are leverage-invariant.
+    assert data["betas"]["SPY"] == pytest.approx(0.96)
 
 
 def test_nan_values_are_scrubbed_to_null(

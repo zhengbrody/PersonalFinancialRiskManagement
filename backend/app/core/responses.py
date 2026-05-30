@@ -105,6 +105,19 @@ def server_error(message: str = "Internal error.", **details: Any) -> APIError:
     return APIError(status=500, code="server_error", message=message, details=details or None)
 
 
+def service_unavailable(
+    message: str = "Service temporarily unavailable.", **details: Any
+) -> APIError:
+    """503 — a *transient* dependency failure the caller should retry,
+    as opposed to a 401 (their token is bad) or 500 (our bug). Used when
+    an upstream we don't own is slow/down (e.g. the Supabase JWKS
+    endpoint times out) so clients + monitoring don't misread it as an
+    auth rejection."""
+    return APIError(
+        status=503, code="service_unavailable", message=message, details=details or None
+    )
+
+
 # ── envelope helpers ───────────────────────────────────────────────
 
 

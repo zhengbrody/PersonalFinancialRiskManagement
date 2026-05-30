@@ -5,57 +5,86 @@
  * here so pages stay declarative: `const { data, isLoading } =
  * useMyPortfolios()`. The query-key tuples are intentionally small
  * and stable — `['portfolios','me']` not `['portfolios','me', token]`
- * — because cache invalidation on sign-out is handled separately
- * (see `useAuth().signOut` → `queryClient.clear()` later).
+ * — because cache invalidation on sign-out is handled by
+ * `useAuth().signOut` → `queryClient.clear()`.
+ *
+ * Response payloads are mirrored as zod schemas (not bare types) so
+ * each hook passes `schema` into `apiFetch` and backend shape-drift
+ * surfaces as a clean `invalid_response` error rather than an
+ * `undefined` crash inside a component. TS types are derived via
+ * `z.infer` so type and runtime guard can't drift.
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { z } from "zod";
 import { apiFetch } from "./api";
 import { useAuth } from "./auth-context";
-import type {
-  ScoreFromActiveRequest,
-  ScoreResponse,
+import {
+  scoreResponseSchema,
+  type ScoreFromActiveRequest,
+  type ScoreResponse,
 } from "./schemas";
 
 // ── shapes (manual mirror — Phase 4 will pull from api-types once
 // the portfolios route declares response_model) ───────────────────
 
-export type PortfolioRow = {
-  id: string;
-  user_id: string | null;
-  name: string;
-  holdings: Record<string, { shares: number; avg_cost?: number } & Record<string, unknown>>;
-  margin_loan: number | null;
-  contributed_capital: number | null;
-  cash_balance: number | null;
-  is_default: boolean;
-  created_at: string | null;
-  updated_at: string | null;
-};
+export const portfolioRowSchema = z.looseObject({
+  id: z.string(),
+  user_id: z.string().nullable(),
+  name: z.string(),
+  holdings: z.record(
+    z.string(),
+    z.looseObject({ shares: z.number(), avg_cost: z.number().optional() }),
+  ),
+  margin_loan: z.number().nullable(),
+  contributed_capital: z.number().nullable(),
+  cash_balance: z.number().nullable(),
+  is_default: z.boolean(),
+  created_at: z.string().nullable(),
+  updated_at: z.string().nullable(),
+});
+export type PortfolioRow = z.infer<typeof portfolioRowSchema>;
 
-export type PortfoliosMe = {
-  user_id: string;
-  email: string | null;
-  portfolios: PortfolioRow[];
-};
+export const portfoliosMeSchema = z.looseObject({
+  user_id: z.string(),
+  email: z.string().nullable(),
+  portfolios: z.array(portfolioRowSchema),
+});
+export type PortfoliosMe = z.infer<typeof portfoliosMeSchema>;
 
 // ── macro ────────────────────────────────────────────────────────
 
-export type MacroSeriesPoint = { date: string; value: number };
+export const macroSeriesPointSchema = z.looseObject({
+  date: z.string(),
+  value: z.number(),
+});
+export type MacroSeriesPoint = z.infer<typeof macroSeriesPointSchema>;
 
-export type MacroSeries = {
-  series_id: string;
-  label: string;
-  latest_value: number | null;
-  latest_date: string | null;
-  points: MacroSeriesPoint[];
-};
+export const macroSeriesSchema = z.looseObject({
+  series_id: z.string(),
+  label: z.string(),
+  latest_value: z.number().nullable(),
+  latest_date: z.string().nullable(),
+  points: z.array(macroSeriesPointSchema),
+});
+export type MacroSeries = z.infer<typeof macroSeriesSchema>;
 
-export type MacroSeriesBatch = { series: MacroSeries[] };
+export const macroSeriesBatchSchema = z.looseObject({
+  series: z.array(macroSeriesSchema),
+});
+export type MacroSeriesBatch = z.infer<typeof macroSeriesBatchSchema>;
 
-export type YieldCurvePoint = { tenor: string; yield_pct: number };
+export const yieldCurvePointSchema = z.looseObject({
+  tenor: z.string(),
+  yield_pct: z.number(),
+});
+export type YieldCurvePoint = z.infer<typeof yieldCurvePointSchema>;
 
-export type YieldCurve = { as_of: string; points: YieldCurvePoint[] };
+export const yieldCurveSchema = z.looseObject({
+  as_of: z.string(),
+  points: z.array(yieldCurvePointSchema),
+});
+export type YieldCurve = z.infer<typeof yieldCurveSchema>;
 
 // ── hooks ─────────────────────────────────────────────────────────
 
@@ -89,6 +118,7 @@ export function useMyPortfolios() {
     queryFn: () =>
       apiFetch<PortfoliosMe>("/api/v1/portfolios/me", {
         authToken: accessToken!,
+        schema: portfoliosMeSchema,
       }),
   });
 }
@@ -105,6 +135,7 @@ export function useMacroSnapshot(seriesIds: string[]) {
     queryFn: () =>
       apiFetch<MacroSeriesBatch>(
         `/api/v1/macro/series?series=${encodeURIComponent(key)}&days=180`,
+        { schema: macroSeriesBatchSchema },
       ),
     // Macro updates daily — 10 minutes of client-side staleness is fine.
     staleTime: 10 * 60 * 1000,
@@ -117,7 +148,10 @@ export function useMacroSnapshot(seriesIds: string[]) {
 export function useYieldCurve() {
   return useQuery<YieldCurve>({
     queryKey: ["macro", "yield_curve"],
-    queryFn: () => apiFetch<YieldCurve>("/api/v1/macro/yield_curve"),
+    queryFn: () =>
+      apiFetch<YieldCurve>("/api/v1/macro/yield_curve", {
+        schema: yieldCurveSchema,
+      }),
     staleTime: 10 * 60 * 1000,
   });
 }
@@ -136,6 +170,7 @@ export function useCreatePortfolio() {
         method: "POST",
         body,
         authToken: accessToken ?? undefined,
+        schema: portfolioRowSchema,
       }),
     onSuccess: () => invalidatePortfoliosKey(qc),
   });
@@ -150,61 +185,74 @@ export function useUpdatePortfolio(portfolioId: string) {
         method: "PATCH",
         body,
         authToken: accessToken ?? undefined,
+        schema: portfolioRowSchema,
       }),
     onSuccess: () => invalidatePortfoliosKey(qc),
   });
 }
 
+const deleteResultSchema = z.looseObject({
+  deleted: z.boolean(),
+  id: z.string(),
+});
+
 export function useDeletePortfolio() {
   const { accessToken } = useAuth();
   const qc = useQueryClient();
-  return useMutation<{ deleted: boolean; id: string }, Error, string>({
+  return useMutation<z.infer<typeof deleteResultSchema>, Error, string>({
     mutationFn: (portfolioId) =>
-      apiFetch<{ deleted: boolean; id: string }>(
-        `/api/v1/portfolios/${portfolioId}`,
-        {
-          method: "DELETE",
-          authToken: accessToken ?? undefined,
-        },
-      ),
+      apiFetch(`/api/v1/portfolios/${portfolioId}`, {
+        method: "DELETE",
+        authToken: accessToken ?? undefined,
+        schema: deleteResultSchema,
+      }),
     onSuccess: () => invalidatePortfoliosKey(qc),
   });
 }
 
 // ── billing ──────────────────────────────────────────────────────
 
-export type SubscriptionRow = {
-  stripe_customer_id: string | null;
-  stripe_subscription_id: string | null;
-  plan: string | null;
-  status: string | null;
-  current_period_start: string | null;
-  current_period_end: string | null;
-  cancel_at_period_end: boolean | null;
-};
+export const subscriptionRowSchema = z.looseObject({
+  stripe_customer_id: z.string().nullable(),
+  stripe_subscription_id: z.string().nullable(),
+  plan: z.string().nullable(),
+  status: z.string().nullable(),
+  current_period_start: z.string().nullable(),
+  current_period_end: z.string().nullable(),
+  cancel_at_period_end: z.boolean().nullable(),
+});
+export type SubscriptionRow = z.infer<typeof subscriptionRowSchema>;
 
-export type PlanCard = {
-  plan: string;
-  label: string;
-  price_usd_per_month: number;
-  monthly_analysis: number;
-  monthly_chat: number;
-};
+export const planCardSchema = z.looseObject({
+  plan: z.string(),
+  label: z.string(),
+  price_usd_per_month: z.number(),
+  monthly_analysis: z.number(),
+  monthly_chat: z.number(),
+});
+export type PlanCard = z.infer<typeof planCardSchema>;
 
-export type BillingMe = {
-  user_id: string;
-  email: string | null;
-  plan: string;
-  subscription: SubscriptionRow | null;
-  plans: PlanCard[];
-};
+export const billingMeSchema = z.looseObject({
+  user_id: z.string(),
+  email: z.string().nullable(),
+  plan: z.string(),
+  subscription: subscriptionRowSchema.nullable(),
+  plans: z.array(planCardSchema),
+});
+export type BillingMe = z.infer<typeof billingMeSchema>;
 
-export type CheckoutSessionResponse = {
-  checkout_url: string;
-  session_id: string;
-};
+export const checkoutSessionResponseSchema = z.looseObject({
+  checkout_url: z.string(),
+  session_id: z.string(),
+});
+export type CheckoutSessionResponse = z.infer<
+  typeof checkoutSessionResponseSchema
+>;
 
-export type PortalSessionResponse = { portal_url: string };
+export const portalSessionResponseSchema = z.looseObject({
+  portal_url: z.string(),
+});
+export type PortalSessionResponse = z.infer<typeof portalSessionResponseSchema>;
 
 /** Plan + subscription snapshot for the signed-in user. */
 export function useBillingMe() {
@@ -215,6 +263,7 @@ export function useBillingMe() {
     queryFn: () =>
       apiFetch<BillingMe>("/api/v1/billing/me", {
         authToken: accessToken!,
+        schema: billingMeSchema,
       }),
     staleTime: 30 * 1000,
   });
@@ -238,6 +287,7 @@ export function useStartCheckout() {
         method: "POST",
         body,
         authToken: accessToken ?? undefined,
+        schema: checkoutSessionResponseSchema,
       }),
   });
 }
@@ -255,50 +305,62 @@ export function useStartPortal() {
         method: "POST",
         body: body ?? {},
         authToken: accessToken ?? undefined,
+        schema: portalSessionResponseSchema,
       }),
   });
 }
 
 // ── risk report ──────────────────────────────────────────────────
 
-export type FactorBetaRow = {
-  factor: string;
-  beta: number | null;
-  r_squared: number | null;
-  t_stat: number | null;
-  p_value: number | null;
-};
+export const factorBetaRowSchema = z.looseObject({
+  factor: z.string(),
+  beta: z.number().nullable(),
+  r_squared: z.number().nullable(),
+  t_stat: z.number().nullable(),
+  p_value: z.number().nullable(),
+});
+export type FactorBetaRow = z.infer<typeof factorBetaRowSchema>;
 
-export type ComponentVarRow = { ticker: string; pct: number };
+export const componentVarRowSchema = z.looseObject({
+  ticker: z.string(),
+  pct: z.number(),
+});
+export type ComponentVarRow = z.infer<typeof componentVarRowSchema>;
 
-export type StressAssetLoss = { ticker: string; loss_pct: number };
+export const stressAssetLossSchema = z.looseObject({
+  ticker: z.string(),
+  loss_pct: z.number(),
+});
+export type StressAssetLoss = z.infer<typeof stressAssetLossSchema>;
 
-export type LiquidityRow = {
-  ticker: string;
-  days_to_liquidate: number | null;
-  adv_30d: number | null;
-  market_value: number | null;
-};
+export const liquidityRowSchema = z.looseObject({
+  ticker: z.string(),
+  days_to_liquidate: z.number().nullable(),
+  adv_30d: z.number().nullable(),
+  market_value: z.number().nullable(),
+});
+export type LiquidityRow = z.infer<typeof liquidityRowSchema>;
 
-export type RiskReport = {
-  annual_return: number | null;
-  annual_volatility: number | null;
-  sharpe_ratio: number | null;
-  max_drawdown: number | null;
-  var_95: number | null;
-  var_99: number | null;
-  cvar_95: number | null;
-  risk_free_rate: number | null;
-  betas: Record<string, number>;
-  factor_betas: FactorBetaRow[];
-  component_var_pct: ComponentVarRow[];
-  stress_loss: number | null;
-  stress_market_shock: number | null;
-  stress_asset_losses: StressAssetLoss[];
-  macro_betas: Record<string, number>;
-  liquidity: LiquidityRow[];
-  drawdown_stats: Record<string, unknown> | null;
-};
+export const riskReportSchema = z.looseObject({
+  annual_return: z.number().nullable(),
+  annual_volatility: z.number().nullable(),
+  sharpe_ratio: z.number().nullable(),
+  max_drawdown: z.number().nullable(),
+  var_95: z.number().nullable(),
+  var_99: z.number().nullable(),
+  cvar_95: z.number().nullable(),
+  risk_free_rate: z.number().nullable(),
+  betas: z.record(z.string(), z.number()),
+  factor_betas: z.array(factorBetaRowSchema),
+  component_var_pct: z.array(componentVarRowSchema),
+  stress_loss: z.number().nullable(),
+  stress_market_shock: z.number().nullable(),
+  stress_asset_losses: z.array(stressAssetLossSchema),
+  macro_betas: z.record(z.string(), z.number()),
+  liquidity: z.array(liquidityRowSchema),
+  drawdown_stats: z.record(z.string(), z.unknown()).nullable(),
+});
+export type RiskReport = z.infer<typeof riskReportSchema>;
 
 export type ReportFromActiveBody = {
   risk_preference?: number;
@@ -325,6 +387,7 @@ export function useRiskReport() {
         method: "POST",
         body: body ?? {},
         authToken: accessToken ?? undefined,
+        schema: riskReportSchema,
       }),
   });
 }
@@ -345,6 +408,7 @@ export function useScoreActivePortfolio() {
         method: "POST",
         body: body ?? {},
         authToken: accessToken ?? undefined,
+        schema: scoreResponseSchema,
       }),
   });
 }

@@ -78,13 +78,30 @@ def get_active_margin_loan(access_token: Optional[str] = None) -> float:
     return margin
 
 
-def get_active_capital_inputs() -> Dict[str, float]:
+def get_active_capital_inputs(
+    access_token: Optional[str] = None,
+) -> Dict[str, float]:
     """Return account-level capital fields for the active portfolio.
 
     contributed_capital is true user principal (net deposits), while
     cash_balance is idle cash included in net equity. These are portfolio-row
     fields for SaaS users and portfolio_config fields for owner/demo mode.
+
+    Streamlit callers omit ``access_token`` and the resolver reads the
+    session. FastAPI callers pass the verified JWT — the resolver then
+    fetches that user's row directly and NEVER owner-falls-back (mirrors
+    ``_resolve``'s backend branch), so one user never sees another's
+    capital figures.
     """
+    if access_token is not None:
+        portfolio = _fetch_db_portfolio(access_token=access_token)
+        if portfolio is None or not (portfolio.get("holdings") or {}):
+            return {"contributed_capital": 0.0, "cash_balance": 0.0}
+        return {
+            "contributed_capital": float(portfolio.get("contributed_capital") or 0.0),
+            "cash_balance": float(portfolio.get("cash_balance") or 0.0),
+        }
+
     if not is_authenticated():
         return _hardcoded_capital()
 

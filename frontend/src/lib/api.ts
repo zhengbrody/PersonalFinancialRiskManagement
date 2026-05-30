@@ -16,6 +16,7 @@
  * how envelope-shape drift starts.
  */
 
+import { z, type ZodType } from "zod";
 import { env } from "./env";
 
 export type ApiErrorBody = {
@@ -34,6 +35,33 @@ export type ApiEnvelope<T> = {
   error: ApiErrorBody | null;
   meta: ApiMeta;
 };
+
+/**
+ * Runtime guard for the envelope WRAPPER itself — `{ data, error, meta }`.
+ *
+ * We validate the wrapper on every response (cheap) so a misbehaving
+ * proxy or a backend shape-drift surfaces as a clean `invalid_response`
+ * ApiError instead of an `undefined` that blows up three components
+ * deep. The `data` payload is left as `unknown` here; callers opt into
+ * payload validation by passing a `schema` (see `apiFetch`).
+ *
+ * `looseObject` keeps unknown keys instead of stripping them, so adding
+ * a field server-side never silently drops data the client reads.
+ */
+const envelopeSchema = z.looseObject({
+  data: z.unknown().nullable(),
+  error: z
+    .looseObject({
+      code: z.string(),
+      message: z.string(),
+      details: z.record(z.string(), z.unknown()).optional(),
+    })
+    .nullable(),
+  meta: z.looseObject({
+    request_id: z.string(),
+    elapsed_ms: z.number().optional(),
+  }),
+});
 
 export class ApiError extends Error {
   readonly status: number;
@@ -66,19 +94,35 @@ function mintRequestId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
-export type ApiFetchOptions = Omit<RequestInit, "body"> & {
+export type ApiFetchOptions<T = unknown> = Omit<RequestInit, "body"> & {
   body?: unknown;
   /** Bearer token for protected routes. Phase 2: usually undefined. */
   authToken?: string;
   /** Override the auto-minted request id. */
   requestId?: string;
+  /**
+   * Zod schema for the `data` payload. When supplied, a success
+   * response is parsed through it and a mismatch throws an
+   * `invalid_response` ApiError — turning backend shape-drift into a
+   * clean, attributable error instead of an `undefined` crash inside a
+   * component. Strongly recommended for every typed endpoint.
+   */
+  schema?: ZodType<T>;
+  /**
+   * Endpoints that legitimately return `null` on success (rare) set
+   * this. Otherwise a `{ data: null, error: null }` 200 is treated as a
+   * contract violation and throws `empty_response`, rather than handing
+   * the caller a `null` typed as `T`.
+   */
+  allowNull?: boolean;
 };
 
 export async function apiFetch<T>(
   path: string,
-  opts: ApiFetchOptions = {},
+  opts: ApiFetchOptions<T> = {},
 ): Promise<T> {
-  const { body, authToken, requestId, headers, ...rest } = opts;
+  const { body, authToken, requestId, headers, schema, allowNull, ...rest } =
+    opts;
   const url = path.startsWith("http") ? path : `${env.apiBaseUrl}${path}`;
   const id = requestId ?? mintRequestId();
 
@@ -111,9 +155,9 @@ export async function apiFetch<T>(
   }
 
   // The backend always returns JSON, but a misbehaving proxy might not.
-  let envelope: ApiEnvelope<T>;
+  let rawJson: unknown;
   try {
-    envelope = (await response.json()) as ApiEnvelope<T>;
+    rawJson = await response.json();
   } catch {
     throw new ApiError(
       response.status,
@@ -123,6 +167,21 @@ export async function apiFetch<T>(
       id,
     );
   }
+
+  // Validate the envelope WRAPPER shape before trusting any field on it.
+  // A 200 that isn't `{ data, error, meta }` is contract drift, not data.
+  const parsedEnvelope = envelopeSchema.safeParse(rawJson);
+  if (!parsedEnvelope.success) {
+    throw new ApiError(
+      response.status,
+      "invalid_response",
+      "Server response did not match the API envelope contract.",
+      { status: response.status, issues: parsedEnvelope.error.issues },
+      id,
+    );
+  }
+  const envelope = parsedEnvelope.data;
+  const envRequestId = envelope.meta.request_id ?? id;
 
   if (envelope.error || !response.ok) {
     const e = envelope.error ?? {
@@ -134,12 +193,40 @@ export async function apiFetch<T>(
       e.code,
       e.message,
       e.details ?? {},
-      envelope.meta?.request_id ?? id,
+      envRequestId,
     );
   }
 
-  // Success envelopes promise `data !== null` for endpoints that
-  // declare a payload. If a route legitimately returns null, callers
-  // should type T as `null` — we don't second-guess here.
+  // Caller opted into payload validation: parse `data` through their
+  // schema so shape-drift surfaces here, not as `undefined` in the UI.
+  if (schema) {
+    const parsed = schema.safeParse(envelope.data);
+    if (!parsed.success) {
+      throw new ApiError(
+        response.status,
+        "invalid_response",
+        "Server response payload failed validation.",
+        { issues: parsed.error.issues },
+        envRequestId,
+      );
+    }
+    return parsed.data;
+  }
+
+  // No schema: a success envelope still promises a non-null payload for
+  // endpoints that declare one. Hand back `null` only when the caller
+  // explicitly allows it; otherwise treat it as a contract violation so
+  // the bug is one clean error, not a downstream property-access crash.
+  if (envelope.data === null || envelope.data === undefined) {
+    if (allowNull) return envelope.data as T;
+    throw new ApiError(
+      response.status,
+      "empty_response",
+      "Server returned an empty payload for an endpoint that should return data.",
+      {},
+      envRequestId,
+    );
+  }
+
   return envelope.data as T;
 }

@@ -6,9 +6,10 @@
  * the current JWT to FastAPI calls that need Row-Level Security.
  *
  * The client is lazy: when the Supabase env vars are missing,
- * `getSupabase()` returns null and `getAccessToken()` returns null
- * instead of crashing at module load. That keeps public pages renderable
- * on a contributor's machine that has no `.env.local`.
+ * `getSupabase()` returns null instead of crashing at module load.
+ * That keeps public pages renderable on a contributor's machine that
+ * has no `.env.local`. Read the live access token from
+ * `useAuth().accessToken`, which is sourced from the same client.
  */
 
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
@@ -27,16 +28,4 @@ export function getSupabase(): SupabaseClient | null {
     },
   });
   return cached;
-}
-
-/**
- * Convenience: pull the current access token, if any. Returns null when
- * the user is signed out OR when Supabase env vars are missing. Use to
- * seed `apiFetch({ authToken })` on protected calls.
- */
-export async function getAccessToken(): Promise<string | null> {
-  const client = getSupabase();
-  if (!client) return null;
-  const { data } = await client.auth.getSession();
-  return data.session?.access_token ?? null;
 }

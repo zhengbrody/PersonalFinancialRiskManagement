@@ -238,6 +238,52 @@ def test_portfolios_me_accepts_es256_jwks_token(
     assert fake_portfolios.calls == [token]
 
 
+def test_portfolios_me_503_when_jwks_unreachable(
+    test_client,
+    monkeypatch,
+):
+    """A JWKS-signed token must NOT be rejected as 401 when the failure
+    is really an upstream outage (Supabase JWKS slow/down). That would
+    mask an outage as a wave of auth failures and tell the client to
+    re-login when retrying is the right move. Expect a 503 instead."""
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    token = pyjwt.encode(
+        {
+            "sub": "user-rs256",
+            "email": "rs256@mindmarket.test",
+            "aud": "authenticated",
+            "exp": int(time.time()) + 600,
+            "iat": int(time.time()),
+        },
+        private_key,
+        algorithm="RS256",
+        headers={"kid": "test-key"},
+    )
+
+    class _DownJwkClient:
+        def get_signing_key_from_jwt(self, jwt_token):
+            raise pyjwt.exceptions.PyJWKClientError("Fail to fetch data from the url")
+
+    monkeypatch.delenv("SUPABASE_JWT_SECRET", raising=False)
+    monkeypatch.setenv("SUPABASE_URL", "https://project.supabase.co")
+    monkeypatch.setattr(
+        "backend.app.core.deps_auth._jwk_client",
+        lambda url: _DownJwkClient(),
+    )
+    from backend.app.core.config import reset_settings_cache
+
+    reset_settings_cache()
+
+    resp = test_client.get(
+        "/api/v1/portfolios/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 503
+    body = resp.json()
+    assert body["data"] is None
+    assert body["error"]["code"] == "service_unavailable"
+
+
 @pytest.mark.parametrize("alg", ["none", "HS384"])
 def test_portfolios_me_rejects_unsupported_alg(test_client, jwt_secret, alg):
     if alg == "none":

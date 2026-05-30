@@ -5,6 +5,8 @@ import pandas as pd
 import pytest
 
 from libs.mindmarket_core.portfolio_scoring import (
+    AssetPosition,
+    compute_portfolio_metrics,
     create_draft_positions,
     demo_asset_positions,
     positions_to_frame,
@@ -49,6 +51,74 @@ def test_score_portfolio_returns_bounded_score_and_exact_metrics():
         "risk_adjusted_return",
         "downside_protection",
     }
+
+
+def test_leverage_amplifies_volatility_and_var():
+    """leverage L scales the equity return series by L (net of borrow
+    carry), so annualised vol and daily VaR scale ~linearly by L while
+    the unlevered run is unchanged (default L=1.0)."""
+    positions = demo_asset_positions(100_000)
+    returns = _sample_returns()
+
+    base = compute_portfolio_metrics(positions, returns, risk_free_rate=0.04)
+    levered = compute_portfolio_metrics(positions, returns, risk_free_rate=0.04, leverage=2.0)
+
+    # Vol scales exactly by L (scaling a series scales its std exactly).
+    assert levered.annual_volatility == pytest.approx(2.0 * base.annual_volatility, rel=1e-6)
+    # VaR scales by L too (quantile of a scaled series), modulo the tiny
+    # borrow-carry shift — so clearly larger, ~2×.
+    assert levered.var_95_daily > 1.7 * base.var_95_daily
+    # The leverage is disclosed in the notes for auditability.
+    assert any("everage" in n for n in levered.data_quality_notes)
+    # Default path is untouched.
+    assert not any("everage" in n for n in base.data_quality_notes)
+
+
+def test_leverage_is_clamped_and_defaults_noop():
+    positions = demo_asset_positions(100_000)
+    returns = _sample_returns()
+
+    base = compute_portfolio_metrics(positions, returns, risk_free_rate=0.04)
+    # leverage=1.0 (and non-finite) must be a no-op.
+    same = compute_portfolio_metrics(positions, returns, risk_free_rate=0.04, leverage=1.0)
+    assert same.annual_volatility == pytest.approx(base.annual_volatility, rel=1e-9)
+
+
+def test_unknown_cost_basis_excludes_from_pnl():
+    """cost_basis=None means UNKNOWN, not 0 — P&L must be None (excluded),
+    never the full market value booked as profit."""
+    unknown = AssetPosition(
+        ticker="AAPL",
+        name="Apple",
+        asset_type="public_security",
+        market_value=10_000.0,
+        cost_basis=None,
+    )
+    assert unknown.unrealized_pnl is None
+    assert unknown.unrealized_pnl_pct is None
+
+    known = AssetPosition(
+        ticker="MSFT",
+        name="Microsoft",
+        asset_type="public_security",
+        market_value=10_000.0,
+        cost_basis=8_000.0,
+    )
+    assert known.unrealized_pnl == pytest.approx(2_000.0)
+    assert known.unrealized_pnl_pct == pytest.approx(0.25)
+
+
+def test_draft_positions_propagate_unknown_cost_basis():
+    """Rebalancing an unknown-cost position must keep it unknown, not
+    invent a basis (which would manufacture P&L out of thin air)."""
+    base = [
+        AssetPosition("AAPL", "Apple", "public_security", 10_000.0, cost_basis=None),
+        AssetPosition("BND", "Bonds", "public_security", 10_000.0, cost_basis=9_000.0),
+    ]
+    drafted = create_draft_positions(base, {"AAPL": 0.5, "BND": 0.5})
+    by_ticker = {p.ticker: p for p in drafted}
+    assert by_ticker["AAPL"].cost_basis is None
+    assert by_ticker["BND"].cost_basis is not None
 
 
 def test_risk_preference_changes_risk_match_score():

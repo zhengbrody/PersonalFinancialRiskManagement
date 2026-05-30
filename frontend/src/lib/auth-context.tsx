@@ -25,6 +25,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Session, User } from "@supabase/supabase-js";
 import { getSupabase } from "./supabase";
 
@@ -61,6 +62,7 @@ const AuthContext = createContext<AuthState | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const supabase = getSupabase();
   const configured = supabase !== null;
+  const queryClient = useQueryClient();
 
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState<boolean>(configured);
@@ -133,7 +135,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
-  }, [supabase]);
+    // Drop every cached query. Without this, the previous user's
+    // portfolios / billing data lingers in the React Query cache and is
+    // visible to the next person on a shared machine (via back-button
+    // or devtools) before a refetch replaces it. Clearing on sign-out
+    // is the data-isolation boundary.
+    queryClient.clear();
+  }, [supabase, queryClient]);
 
   const value: AuthState = useMemo(
     () => ({
