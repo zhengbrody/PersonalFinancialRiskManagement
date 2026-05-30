@@ -123,21 +123,44 @@ def get_price_history(
             df = fut.result()
             if df is None or df.empty:
                 continue
-            # CachedDataProvider returns a DataFrame whose "Close" column
-            # is already adjusted (see data_provider.py); use that as
-            # the canonical close.
-            if "Close" in df.columns:
-                series = df["Close"].dropna()
-            else:
-                # Some yfinance shapes return a single Series with the
-                # ticker as the column name.
-                series = df.iloc[:, 0].dropna()
-            if not series.empty:
+            series = _extract_close_series(df)
+            if series is not None and not series.empty:
                 frames[t] = series
 
     if not frames:
         return pd.DataFrame()
     return pd.DataFrame(frames).sort_index()
+
+
+def _extract_close_series(df: pd.DataFrame) -> Optional[pd.Series]:
+    """Pull the adjusted-close Series out of whatever shape yfinance
+    handed back.
+
+    Three shapes seen in the wild (yfinance keeps changing this):
+      1. Single-index columns: ``Close``, ``High``, ``Low``, ``Open``.
+         → ``df["Close"]`` returns a Series. Easy path.
+      2. **MultiIndex columns** (current default for yf 0.2.x even on a
+         single-ticker download): ``('Close', 'AA')``, ``('High', 'AA')``.
+         → ``df["Close"]`` returns a DataFrame with one sub-column,
+         NOT a Series; we extract that sub-column.
+      3. Single unnamed column (very old or already-flattened cache
+         entries): take the first column.
+    """
+    cols = df.columns
+    # Path 1 or 2 — top-level "Close" present.
+    if "Close" in cols:
+        close = df["Close"]
+        if isinstance(close, pd.DataFrame):
+            # MultiIndex: ('Close', '<ticker>'). The sub-DataFrame has
+            # exactly one column; collapse to that Series.
+            if close.shape[1] == 0:
+                return None
+            return close.iloc[:, 0].dropna()
+        return close.dropna()
+    # Path 3 — pre-flattened.
+    if df.shape[1] > 0:
+        return df.iloc[:, 0].dropna()
+    return None
 
 
 def get_latest_prices(
