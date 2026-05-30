@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, apiFetch } from "@/lib/api";
+import { scoreResponseSchema } from "@/lib/schemas";
 import type { Holding, ScoreRequest, ScoreResponse } from "@/lib/schemas";
 
 type HoldingRow = { ticker: string; market_value: string };
@@ -63,6 +64,7 @@ export default function ScorePage() {
       const data = await apiFetch<ScoreResponse>("/api/v1/risk/score", {
         method: "POST",
         body,
+        schema: scoreResponseSchema,
       });
       setResult(data);
     } catch (err) {

@@ -12,6 +12,7 @@
  * disappears and we re-export from `api-types.ts` like the requests.
  */
 
+import { z } from "zod";
 import type { components } from "./api-types";
 
 // ── request types (single source of truth: generated) ─────────────
@@ -19,33 +20,44 @@ export type Holding = components["schemas"]["HoldingIn"];
 export type ScoreRequest = components["schemas"]["ScoreRequest"];
 export type ScoreFromActiveRequest = components["schemas"]["ScoreFromActiveRequest"];
 
-// ── response types (hand-mirrored — see file header) ──────────────
-export type DimensionScore = {
-  name: string;
-  score: number;
-  status: string;
-  detail: string;
-};
+// ── response schemas (hand-mirrored — see file header) ────────────
+//
+// These are zod schemas, not bare types, so `apiFetch({ schema })` can
+// validate the payload at the network boundary. The TS types are
+// derived via `z.infer` so the type and the runtime guard can never
+// drift apart. `looseObject` keeps unknown keys (forward-compatible
+// with additive backend changes) while still requiring the declared
+// fields to be present and correctly typed.
 
-export type PortfolioMetrics = {
-  annual_return: number | null;
-  annual_volatility: number | null;
-  sharpe_ratio: number | null;
-  max_drawdown: number | null;
-  var_95_daily: number | null;
-  cvar_95_daily: number | null;
-  beta_to_benchmark: number | null;
-  total_value: number | null;
-  cash_weight: number | null;
-  data_coverage: number | null;
-  observations: number | null;
-  data_quality_notes: string[];
-};
+export const dimensionScoreSchema = z.looseObject({
+  name: z.string(),
+  score: z.number(),
+  status: z.string(),
+  detail: z.string(),
+});
+export type DimensionScore = z.infer<typeof dimensionScoreSchema>;
 
-export type ScoreResponse = {
-  overall_score: number;
-  risk_preference: number;
-  risk_target: Record<string, unknown>;
-  metrics: PortfolioMetrics;
-  dimensions: Record<string, DimensionScore>;
-};
+export const portfolioMetricsSchema = z.looseObject({
+  annual_return: z.number().nullable(),
+  annual_volatility: z.number().nullable(),
+  sharpe_ratio: z.number().nullable(),
+  max_drawdown: z.number().nullable(),
+  var_95_daily: z.number().nullable(),
+  cvar_95_daily: z.number().nullable(),
+  beta_to_benchmark: z.number().nullable(),
+  total_value: z.number().nullable(),
+  cash_weight: z.number().nullable(),
+  data_coverage: z.number().nullable(),
+  observations: z.number().nullable(),
+  data_quality_notes: z.array(z.string()),
+});
+export type PortfolioMetrics = z.infer<typeof portfolioMetricsSchema>;
+
+export const scoreResponseSchema = z.looseObject({
+  overall_score: z.number(),
+  risk_preference: z.number(),
+  risk_target: z.record(z.string(), z.unknown()),
+  metrics: portfolioMetricsSchema,
+  dimensions: z.record(z.string(), dimensionScoreSchema),
+});
+export type ScoreResponse = z.infer<typeof scoreResponseSchema>;

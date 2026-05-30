@@ -6,8 +6,10 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient } from "@tanstack/react-query";
+import { renderWithQuery } from "../test-utils";
 
 type AuthChangeCb = (
   evt: string,
@@ -61,7 +63,7 @@ describe("AuthProvider", () => {
       data: { subscription: { unsubscribe: vi.fn() } },
     });
 
-    render(
+    renderWithQuery(
       <AuthProvider>
         <Probe />
       </AuthProvider>,
@@ -88,7 +90,7 @@ describe("AuthProvider", () => {
       data: { subscription: { unsubscribe: vi.fn() } },
     });
 
-    render(
+    renderWithQuery(
       <AuthProvider>
         <Probe />
       </AuthProvider>,
@@ -110,7 +112,7 @@ describe("AuthProvider", () => {
       return { data: { subscription: { unsubscribe: vi.fn() } } };
     });
 
-    render(
+    renderWithQuery(
       <AuthProvider>
         <Probe />
       </AuthProvider>,
@@ -142,7 +144,7 @@ describe("AuthProvider", () => {
     });
     fakeClient.auth.signInWithPassword.mockResolvedValueOnce({ error: null });
 
-    render(
+    renderWithQuery(
       <AuthProvider>
         <Probe />
       </AuthProvider>,
@@ -158,5 +160,29 @@ describe("AuthProvider", () => {
       email: "owner@mindmarket.test",
       password: "pw",
     });
+  });
+
+  it("signOut clears the React Query cache (data-isolation boundary)", async () => {
+    fakeClient.auth.getSession.mockResolvedValueOnce({ data: { session: null } });
+    fakeClient.auth.onAuthStateChange.mockReturnValueOnce({
+      data: { subscription: { unsubscribe: vi.fn() } },
+    });
+    fakeClient.auth.signOut.mockResolvedValueOnce({ error: null });
+    const clearSpy = vi.spyOn(QueryClient.prototype, "clear");
+
+    renderWithQuery(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("loading").textContent).toBe("false"),
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByText("sign-out"));
+
+    await waitFor(() => expect(fakeClient.auth.signOut).toHaveBeenCalled());
+    expect(clearSpy).toHaveBeenCalled();
   });
 });

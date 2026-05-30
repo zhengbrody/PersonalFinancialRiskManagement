@@ -7,6 +7,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { ApiError, apiFetch } from "./api";
 
 function mockFetchOnce(
@@ -106,6 +107,56 @@ describe("apiFetch", () => {
       expect((err as ApiError).code).toBe("network_error");
       expect((err as ApiError).status).toBe(0);
     }
+  });
+
+  it("throws 'invalid_response' when the body isn't envelope-shaped", async () => {
+    // Valid JSON, but a misbehaving proxy stripped the envelope.
+    mockFetchOnce({ hello: "world" });
+    await expect(apiFetch("/api/v1/health")).rejects.toMatchObject({
+      code: "invalid_response",
+    });
+  });
+
+  it("throws 'empty_response' on a success envelope with null data", async () => {
+    mockFetchOnce({
+      data: null,
+      error: null,
+      meta: { request_id: "rid-null" },
+    });
+    await expect(apiFetch("/api/v1/portfolios/me")).rejects.toMatchObject({
+      code: "empty_response",
+      requestId: "rid-null",
+    });
+  });
+
+  it("returns null when the caller passes allowNull", async () => {
+    mockFetchOnce({ data: null, error: null, meta: { request_id: "rid" } });
+    const result = await apiFetch<null>("/api/v1/health", { allowNull: true });
+    expect(result).toBeNull();
+  });
+
+  it("parses a valid payload through the supplied schema", async () => {
+    mockFetchOnce({
+      data: { n: 7 },
+      error: null,
+      meta: { request_id: "rid" },
+    });
+    const schema = z.object({ n: z.number() });
+    const result = await apiFetch("/api/v1/thing", { schema });
+    expect(result).toEqual({ n: 7 });
+  });
+
+  it("throws 'invalid_response' when the payload fails schema validation", async () => {
+    mockFetchOnce({
+      data: { n: "not-a-number" },
+      error: null,
+      meta: { request_id: "rid-bad" },
+    });
+    const schema = z.object({ n: z.number() });
+    await expect(apiFetch("/api/v1/thing", { schema })).rejects.toMatchObject({
+      code: "invalid_response",
+      requestId: "rid-bad",
+    });
   });
 
   it("throws ApiError with code 'bad_response' on non-JSON body", async () => {
