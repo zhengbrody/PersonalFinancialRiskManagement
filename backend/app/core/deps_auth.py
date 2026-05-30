@@ -43,9 +43,15 @@ from typing import Any, Optional
 from fastapi import Depends, Request
 
 from .config import Settings, get_settings
-from .responses import unauthorized
+from .responses import service_unavailable, unauthorized
 
 _logger = logging.getLogger(__name__)
+
+# How long to wait on the Supabase JWKS HTTPS fetch. Without a timeout
+# PyJWKClient blocks the worker thread indefinitely if Supabase is slow
+# or down — one outage then exhausts the thread pool. Kept short: the
+# fetched keys are cached, so this only bites on a cold key cache.
+_JWKS_FETCH_TIMEOUT_S = 5.0
 
 _HMAC_ALGS = {"HS256"}
 _JWKS_ALGS = {"RS256", "ES256"}
@@ -101,10 +107,22 @@ def _jwks_url(settings: Settings) -> str:
 
 @lru_cache(maxsize=8)
 def _jwk_client(jwks_url: str):
-    """Cached PyJWT JWKS client. The client itself caches fetched keys."""
+    """Cached PyJWT JWKS client. The client itself caches fetched keys.
+
+    ``timeout`` bounds the underlying ``urllib`` fetch so a slow/down
+    Supabase JWKS endpoint can't hang the request thread indefinitely.
+    """
     import jwt
 
-    return jwt.PyJWKClient(jwks_url)
+    return jwt.PyJWKClient(jwks_url, timeout=_JWKS_FETCH_TIMEOUT_S)
+
+
+class _JWKSUnavailable(Exception):
+    """Marker: the JWKS endpoint couldn't be reached/fetched in time.
+
+    Distinct from a bad token — this is a transient upstream failure
+    that must surface as 503, not 401, so clients retry and monitoring
+    doesn't misread an outage as a wave of auth rejections."""
 
 
 def _decode(token: str, settings: Settings) -> dict[str, Any]:
@@ -142,7 +160,22 @@ def _decode(token: str, settings: Settings) -> dict[str, Any]:
                 raise _MissingSecret("SUPABASE_JWT_SECRET is required for HS256 tokens.")
             key = secret
         else:
-            signing_key = _jwk_client(_jwks_url(settings)).get_signing_key_from_jwt(token)
+            # Fetching the signing key hits the network (Supabase JWKS).
+            # A timeout/connection error here is an UPSTREAM outage, not
+            # an invalid token — isolate it so it becomes a 503, not a
+            # misleading 401. PyJWKClient raises PyJWKClientError (a
+            # subclass of PyJWTError) on fetch failure; urllib may raise
+            # URLError/socket.timeout under it.
+            try:
+                signing_key = _jwk_client(_jwks_url(settings)).get_signing_key_from_jwt(token)
+            except _MissingSecret:
+                raise
+            except jwt.exceptions.PyJWKClientError as exc:
+                _logger.warning("auth.jwks.fetch_failed err=%s", exc)
+                raise _JWKSUnavailable(str(exc)) from exc
+            except (OSError, TimeoutError) as exc:
+                _logger.warning("auth.jwks.network_error err=%s", exc)
+                raise _JWKSUnavailable(str(exc)) from exc
             key = signing_key.key
 
         return jwt.decode(
@@ -153,7 +186,10 @@ def _decode(token: str, settings: Settings) -> dict[str, Any]:
             audience="authenticated",
             options={"require": ["exp", "sub"]},
         )
-    except _MissingSecret:
+    except (_MissingSecret, _JWKSUnavailable):
+        # Config-missing and upstream-outage are NOT "bad token" — let
+        # them propagate so the dependency can map them to 401-config /
+        # 503 respectively, not a generic 401.
         raise
     except Exception as exc:
         _logger.info("auth.jwt.decode_failed err=%s", exc)
@@ -212,6 +248,14 @@ def require_user(
         # `from None` — the _MissingSecret marker is internal noise.
         # Don't surface it in tracebacks served to clients.
         raise unauthorized("Server is not configured to verify tokens.") from None
+    except _JWKSUnavailable:
+        # Upstream (Supabase JWKS) is unreachable — we can't say whether
+        # the token is valid. That's a transient 503, not a 401: clients
+        # should retry, and a real auth rejection shouldn't be masked by
+        # an outage (or vice-versa).
+        raise service_unavailable(
+            "Unable to verify credentials right now; please retry."
+        ) from None
 
     return _claims_to_user(claims, token)
 
@@ -232,7 +276,15 @@ def optional_user(
         claims = _decode(token, settings)
     except _MissingSecret:
         return None
+    except _JWKSUnavailable:
+        # A JWKS outage is NOT "anon" — silently downgrading a signed-in
+        # caller to anonymous would serve them the wrong (generic) data.
+        # Surface the transient failure so they retry.
+        raise service_unavailable(
+            "Unable to verify credentials right now; please retry."
+        ) from None
     except Exception:
-        # Treat unverifiable tokens as anon; don't leak why.
+        # A genuinely bad/expired token on an optional route → treat as
+        # anon; don't leak why.
         return None
     return _claims_to_user(claims, token)

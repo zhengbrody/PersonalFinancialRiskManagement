@@ -143,6 +143,29 @@
 		redir /legacy/ permanent
 	}
 
+	# ── /_stcore/* → Streamlit session keep-alive ─────────────────
+	# Streamlit's WebSocket + session endpoints live at the ROOT path
+	# (`/_stcore/stream`, `/_stcore/health`, `/_stcore/host-config`,
+	# …), NOT under `/legacy/`. Before cutover `/` → Streamlit caught
+	# these for free; now `/` → Next.js, so without this route an
+	# active legacy session's WebSocket falls through to the frontend
+	# catch-all and the page silently goes stale. Long timeouts mirror
+	# the /legacy/* route.
+	#
+	# NOTE: on EC2 the live legacy container is service-named `app`
+	# (it still runs from compose.aws.yml), so the deployed copy of
+	# this file targets `app:8501`. In git we target `streamlit:8501`
+	# — the service name compose.split.yml actually defines. Keep both
+	# in sync if the legacy container is ever renamed.
+	handle /_stcore/* {
+		reverse_proxy streamlit:8501 {
+			transport http {
+				read_timeout 300s
+				write_timeout 300s
+			}
+		}
+	}
+
 	# ── / → Next.js frontend (default route) ──────────────────────
 	# The catch-all `handle` MUST come last; matches everything not
 	# pattern-matched above.
