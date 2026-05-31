@@ -32,6 +32,12 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
               Score
             </Link>
             <Link
+              href="/markets"
+              className="rounded px-3 py-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            >
+              Markets
+            </Link>
+            <Link
               href="/portfolios"
               className="rounded px-3 py-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             >

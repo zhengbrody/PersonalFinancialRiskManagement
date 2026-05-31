@@ -148,3 +148,90 @@ def test_yield_curve_upstream_failure_is_server_error(test_client, fake_http):
     resp = test_client.get("/api/v1/macro/yield_curve")
     assert resp.status_code == 500
     assert resp.json()["error"]["code"] == "server_error"
+
+
+# ── /macro/regime ─────────────────────────────────────────────────
+
+
+@pytest.fixture
+def _reset_regime_cache():
+    from backend.app.services import market_regime as mr
+
+    mr.reset_cache()
+    yield
+    mr.reset_cache()
+
+
+@pytest.fixture
+def fake_regime_sources(monkeypatch, _reset_regime_cache):
+    """Patch the market_intelligence fns market_regime imports lazily.
+    Defaults to all-healthy; tests override individual legs."""
+    import market_intelligence as mi
+
+    state = {
+        "vix": {"current": 18.4, "change": -0.031, "level": "Calm"},
+        "fear_greed": {"score": 62.0, "rating_display": "Greed"},
+        # fetch_yield_curve returns (df, analysis)
+        "yield_curve": (None, {"curve_status": "Normal", "3M-10Y Spread": 0.76}),
+    }
+
+    def _mk(key):
+        def _fn(*a, **k):
+            v = state[key]
+            if isinstance(v, Exception):
+                raise v
+            return v
+
+        return _fn
+
+    monkeypatch.setattr(mi, "get_vix_current", _mk("vix"))
+    monkeypatch.setattr(mi, "fetch_fear_greed", _mk("fear_greed"))
+    monkeypatch.setattr(mi, "fetch_yield_curve", _mk("yield_curve"))
+    return state
+
+
+def test_regime_happy_path(test_client, fake_regime_sources):
+    resp = test_client.get("/api/v1/macro/regime")
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["vix"]["current"] == pytest.approx(18.4)
+    assert data["vix"]["level"] == "Calm"
+    assert data["fear_greed"]["score"] == pytest.approx(62.0)
+    assert data["fear_greed"]["rating"] == "Greed"
+    assert data["yield_curve"]["status"] == "Normal"
+    assert data["yield_curve"]["spread_3m_10y"] == pytest.approx(0.76)
+    assert data["yield_curve"]["inverted"] is False
+
+
+def test_regime_inverted_curve_flag(test_client, fake_regime_sources):
+    fake_regime_sources["yield_curve"] = (
+        None,
+        {"curve_status": "Inverted", "3M-10Y Spread": -0.45},
+    )
+    resp = test_client.get("/api/v1/macro/regime")
+    data = resp.json()["data"]
+    assert data["yield_curve"]["inverted"] is True
+
+
+def test_regime_partial_failure_nulls_only_that_leg(test_client, fake_regime_sources):
+    """A dead VIX upstream must null ONLY vix — F&G + yield curve still
+    render, and the response is still a 200 (panel degrades gracefully)."""
+    fake_regime_sources["vix"] = RuntimeError("yfinance VIX down")
+    resp = test_client.get("/api/v1/macro/regime")
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["vix"]["current"] is None
+    assert data["fear_greed"]["score"] == pytest.approx(62.0)
+    assert data["yield_curve"]["status"] == "Normal"
+
+
+def test_regime_all_sources_down_is_still_200(test_client, fake_regime_sources):
+    fake_regime_sources["vix"] = RuntimeError("x")
+    fake_regime_sources["fear_greed"] = RuntimeError("y")
+    fake_regime_sources["yield_curve"] = RuntimeError("z")
+    resp = test_client.get("/api/v1/macro/regime")
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["vix"]["current"] is None
+    assert data["fear_greed"]["score"] is None
+    assert data["yield_curve"]["status"] is None

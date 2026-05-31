@@ -36,3 +36,35 @@ class YieldCurveResponse(BaseModel):
 
     as_of: str
     points: list[YieldCurvePointOut]
+
+
+# ── /api/v1/macro/regime ───────────────────────────────────────────
+
+
+class RegimeVixOut(BaseModel):
+    current: Optional[float] = None
+    change: Optional[float] = None
+    level: Optional[str] = None
+
+
+class RegimeFearGreedOut(BaseModel):
+    score: Optional[float] = None
+    rating: Optional[str] = None
+
+
+class RegimeYieldCurveOut(BaseModel):
+    status: Optional[str] = None
+    spread_3m_10y: Optional[float] = None
+    inverted: Optional[bool] = None
+
+
+class RegimeResponse(BaseModel):
+    """Payload for ``GET /api/v1/macro/regime``.
+
+    Every leg is independently nullable — a dead upstream nulls only its
+    own block, never the whole response.
+    """
+
+    vix: RegimeVixOut
+    fear_greed: RegimeFearGreedOut
+    yield_curve: RegimeYieldCurveOut
