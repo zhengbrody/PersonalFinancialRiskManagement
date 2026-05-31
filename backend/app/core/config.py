@@ -83,6 +83,12 @@ class Settings:
     # We surface it here so the same Settings object is reusable.
     supabase_anon_key: str = field(default_factory=lambda: _env_str("SUPABASE_ANON_KEY"))
 
+    # Anthropic API key for the Copilot chat. Inherited from the host
+    # environment (same ``ANTHROPIC_API_KEY`` the Streamlit era used).
+    # Optional by design: when blank, the Copilot degrades to the
+    # orchestrator's deterministic templates (see services/llm_client.py).
+    anthropic_api_key: str = field(default_factory=lambda: _env_str("ANTHROPIC_API_KEY"))
+
     @property
     def allowed_origins(self) -> list[str]:
         """Environment-aware CORS allow-list. Never returns ``["*"]``
