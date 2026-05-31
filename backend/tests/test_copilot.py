@@ -103,7 +103,7 @@ def fake_llm(monkeypatch):
 
     state = {"callable": None}
 
-    def _get():
+    def _get(*, with_tools=False):
         return state["callable"]
 
     # Patch where the router imported it (it does ``from ...services.
