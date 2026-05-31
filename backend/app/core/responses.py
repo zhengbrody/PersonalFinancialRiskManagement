@@ -101,6 +101,16 @@ def unprocessable(message: str, **details: Any) -> APIError:
     return APIError(status=422, code="unprocessable", message=message, details=details or None)
 
 
+def too_many_requests(message: str = "Rate limit or quota exceeded.", **details: Any) -> APIError:
+    """429 — the caller has exhausted a metered allowance (here, their
+    plan's monthly chat quota). Distinct from a 503 (transient upstream
+    blip the caller should retry verbatim): a 429 means the request was
+    well-formed but the caller must upgrade or wait for the quota window
+    to reset. The ``quota_exceeded`` code lets the frontend render an
+    upgrade CTA instead of a generic retry toast."""
+    return APIError(status=429, code="quota_exceeded", message=message, details=details or None)
+
+
 def server_error(message: str = "Internal error.", **details: Any) -> APIError:
     return APIError(status=500, code="server_error", message=message, details=details or None)
 

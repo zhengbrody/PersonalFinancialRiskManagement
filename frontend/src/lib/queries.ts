@@ -428,6 +428,38 @@ export function useRiskReport() {
   });
 }
 
+// ── copilot chat ─────────────────────────────────────────────────
+
+export const copilotResponseSchema = z.looseObject({
+  agent_name: z.string(),
+  response_markdown: z.string(),
+  draft_trades: z.array(z.looseObject({})),
+  tool_trace: z.array(z.string()),
+  grounded_in: z.record(z.string(), z.unknown()),
+});
+export type CopilotResponse = z.infer<typeof copilotResponseSchema>;
+
+/**
+ * Send one message to the AI Portfolio Copilot. The backend resolves
+ * the user's active portfolio, runs the typed agent, and returns
+ * plain-language guidance plus the grounded numbers behind it.
+ *
+ * Mutation rather than query: each send is an explicit user action and
+ * we want every message to fire fresh, not be served from a cache key.
+ */
+export function useCopilotChat() {
+  const { accessToken } = useAuth();
+  return useMutation<CopilotResponse, Error, { message: string }>({
+    mutationFn: (body) =>
+      apiFetch<CopilotResponse>("/api/v1/copilot/chat", {
+        method: "POST",
+        body,
+        authToken: accessToken ?? undefined,
+        schema: copilotResponseSchema,
+      }),
+  });
+}
+
 /**
  * Score the user's active portfolio using real market data.
  *

@@ -44,6 +44,12 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
               Portfolios
             </Link>
             <Link
+              href="/copilot"
+              className="rounded px-3 py-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            >
+              Copilot
+            </Link>
+            <Link
               href="/pricing"
               className="rounded px-3 py-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             >
