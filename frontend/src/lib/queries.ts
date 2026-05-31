@@ -192,6 +192,34 @@ export function useMarketRegime() {
   });
 }
 
+// ── market regime detail (bull/bear/transition "season") ──────────
+
+export const regimeDetailSchema = z.looseObject({
+  current_regime: z.string().nullable(),
+  confidence: z.number().nullable(),
+  regime_since_date: z.string().nullable(),
+  vix_regime: z.string().nullable(),
+  trend_regime: z.string().nullable(),
+  vol_regime: z.string().nullable(),
+  history: z.array(z.looseObject({ date: z.string(), regime: z.string() })),
+});
+export type RegimeDetail = z.infer<typeof regimeDetailSchema>;
+
+/**
+ * Market-wide regime (bull / bear / transition) + ~1y history. Public,
+ * server-cached. Powers the "Market season" panel on /markets.
+ */
+export function useRegimeDetail() {
+  return useQuery<RegimeDetail>({
+    queryKey: ["macro", "regime_detail"],
+    queryFn: () =>
+      apiFetch<RegimeDetail>("/api/v1/macro/regime_detail", {
+        schema: regimeDetailSchema,
+      }),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 /** Invalidate the portfolios list so the next render refetches. */
 function invalidatePortfoliosKey(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ["portfolios"] });
