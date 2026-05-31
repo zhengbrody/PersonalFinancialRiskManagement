@@ -428,6 +428,79 @@ export function useRiskReport() {
   });
 }
 
+// ── quant lab: backtest ──────────────────────────────────────────
+
+/** A single point on the equity / drawdown time series. */
+export const backtestPointSchema = z.looseObject({
+  date: z.string(),
+  value: z.number(),
+});
+export type BacktestPoint = z.infer<typeof backtestPointSchema>;
+
+/**
+ * Backtest summary stats. Every metric is independently nullable —
+ * the backend returns null when a series is too short to compute
+ * (e.g. alpha/beta need a benchmark overlap) so the UI must tolerate
+ * any subset being present.
+ */
+export const backtestStatsSchema = z.looseObject({
+  total_return: z.number().nullable(),
+  annual_return: z.number().nullable(),
+  annual_volatility: z.number().nullable(),
+  sharpe_ratio: z.number().nullable(),
+  sortino_ratio: z.number().nullable(),
+  calmar_ratio: z.number().nullable(),
+  max_drawdown: z.number().nullable(),
+  win_rate: z.number().nullable(),
+  alpha: z.number().nullable(),
+  beta: z.number().nullable(),
+});
+export type BacktestStats = z.infer<typeof backtestStatsSchema>;
+
+export const backtestResponseSchema = z.looseObject({
+  strategy: z.string(),
+  start_date: z.string(),
+  end_date: z.string(),
+  benchmark: z.string(),
+  stats: backtestStatsSchema,
+  equity_curve: z.array(backtestPointSchema),
+  drawdown_series: z.array(backtestPointSchema),
+  benchmark_total_return: z.number().nullable(),
+});
+export type BacktestResponse = z.infer<typeof backtestResponseSchema>;
+
+export type BacktestRequest = {
+  strategy: "static" | "equal_weight" | "momentum";
+  years?: number;
+  rebalance_freq?: "D" | "W" | "M" | "Q";
+  benchmark?: string;
+  lookback?: number;
+  top_n?: number;
+};
+
+/**
+ * Run a historical backtest of the user's active portfolio. The
+ * backend pulls real prices and replays the chosen strategy — a
+ * multi-second, network-bound call, so the page masks it with a
+ * chart-shaped skeleton.
+ *
+ * Mutation rather than query: the user explicitly clicks "Run
+ * backtest", and we want each click to fire fresh rather than be
+ * served from a cache key.
+ */
+export function useRunBacktest() {
+  const { accessToken } = useAuth();
+  return useMutation<BacktestResponse, Error, BacktestRequest>({
+    mutationFn: (body) =>
+      apiFetch<BacktestResponse>("/api/v1/quant/backtest", {
+        method: "POST",
+        body,
+        authToken: accessToken ?? undefined,
+        schema: backtestResponseSchema,
+      }),
+  });
+}
+
 // ── copilot chat ─────────────────────────────────────────────────
 
 export const copilotResponseSchema = z.looseObject({
