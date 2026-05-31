@@ -3,9 +3,12 @@
 @tailwind utilities;
 
 /*
- * MindMarket dark fintech theme.
- * Forced dark by default; light tokens are kept for forward-compat but
- * the <html> element gets the .dark class in layout.tsx unconditionally.
+ * MindMarket market-synced theme.
+ * `:root` = light palette (clean white/gray) shown during US market hours
+ * (09:30-16:00 ET, Mon-Fri). `.dark` = Bloomberg-ish near-black shown
+ * after-hours / overnight / weekends. The `.dark` class is toggled on
+ * <html> by the boot script + <MarketThemeSync> in layout.tsx based on the
+ * live ET session (see lib/market-hours.ts).
  */
 @layer base {
   :root {

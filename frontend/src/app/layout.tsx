@@ -2,7 +2,26 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { SiteShell } from "@/components/site-shell";
+import { MarketThemeSync } from "@/components/market-theme-sync";
 import { Providers } from "./providers";
+
+/**
+ * Pre-hydration theme boot. Runs before first paint (flash-free) and at
+ * runtime in the browser — so it's correct even when the HTML is
+ * statically generated / CDN-cached. Sets `.dark` when the US market is
+ * CLOSED (after-hours/overnight/weekend); light during 09:30–16:00 ET.
+ *
+ * This mirrors `isUsMarketOpen()` in lib/market-hours.ts — keep in sync.
+ */
+const THEME_BOOT = `(function(){try{
+  var p=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",weekday:"short",hour:"2-digit",minute:"2-digit",hour12:false}).formatToParts(new Date());
+  var g=function(t){var f=p.find(function(x){return x.type===t});return f?f.value:""};
+  var wd=g("weekday"),h=parseInt(g("hour"),10)%24,m=parseInt(g("minute"),10),mins=h*60+m;
+  var open=wd!=="Sat"&&wd!=="Sun"&&mins>=570&&mins<960;
+  var e=document.documentElement;
+  e.classList.toggle("dark",!open);
+  e.style.colorScheme=open?"light":"dark";
+}catch(_){document.documentElement.classList.add("dark");}})();`;
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -25,12 +44,15 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // `dark` class is unconditional in Phase 2 — fintech dark is the
-  // brand. Light theme tokens stay in globals.css for forward-compat
-  // but no toggle ships yet.
+  // Market-synced theme: the boot script below sets `.dark` from the live
+  // ET market session before paint; <MarketThemeSync> flips it at the
+  // open/close boundary while the tab stays open. `suppressHydrationWarning`
+  // because that script mutates the <html> class before React hydrates.
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
+        <MarketThemeSync />
         <Providers>
           <SiteShell>{children}</SiteShell>
         </Providers>
