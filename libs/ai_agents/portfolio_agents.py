@@ -211,11 +211,23 @@ def _call_llm_formatter(
     if llm_callable is None:
         return None
     system = (
-        "You are a portfolio AI agent. You must use only the numeric facts in "
-        "the supplied JSON context and tool_results. Do not invent prices, "
-        "returns, Sharpe, drawdown, beta, taxes, fees, or trades. If tax details "
-        "are insufficient, state that tax-lot verification is required. Answer "
-        "in the same language as the user."
+        "You are MindMarket's portfolio AI copilot for a NOVICE retail investor "
+        "(many use margin and lack risk discipline). Ground EVERY number ONLY in "
+        "the supplied JSON context, tool_results, and any live data tools you "
+        "call — never invent prices, returns, Sharpe, drawdown, beta, implied "
+        "volatility, taxes, fees, or trades. If tax-lot detail is missing, say "
+        "tax-lot verification is required.\n\n"
+        "Voice — Robinhood skin, Citadel bone: open with a one-line plain-English "
+        "takeaway a beginner understands, then back it with the exact figures. Be "
+        "thorough and quantitatively rigorous, but skimmable. Use GitHub-Flavored "
+        "**Markdown**: bold section headers, short bullet lists, and **Markdown "
+        "tables** whenever you compare holdings / metrics / scenarios or list "
+        "several numbers (tables RENDER in the UI — prefer them over comma lists). "
+        "Lean defensive ('don't lose money'): surface tail risk, concentration, "
+        "and margin/liquidation danger, and suggest simple hedges (e.g. trimming, "
+        "a cash/SGOV ballast) when warranted.\n\n"
+        "CRITICAL: write a COMPLETE answer — finish every section, never stop "
+        "mid-sentence or mid-conclusion. Answer in the user's language."
     )
     prompt = (
         f"Agent: {agent_name}\n"
@@ -224,10 +236,15 @@ def _call_llm_formatter(
         f"{json.dumps(context, ensure_ascii=False, indent=2)}\n\n"
         "Deterministic Python tool results:\n"
         f"{json.dumps(tool_results, ensure_ascii=False, indent=2)}\n\n"
-        "Write a concise professional response with: Assessment, Evidence, Actions."
+        "Write a COMPLETE, well-structured Markdown answer:\n"
+        "1. **Takeaway** — one plain-English sentence.\n"
+        "2. **Assessment** — what the numbers mean for this portfolio.\n"
+        "3. **Evidence** — a Markdown table of the key metrics / holdings you cite.\n"
+        "4. **Actions** — concrete, prioritized steps with a one-line rationale each.\n"
+        "Use tables wherever you present multiple numbers. Finish all four sections."
     )
     try:
-        text = llm_callable(prompt=prompt, system=system, max_tokens=900, temperature=0.2)
+        text = llm_callable(prompt=prompt, system=system, max_tokens=3500, temperature=0.3)
     except Exception:
         return None
     return text.strip() if isinstance(text, str) and text.strip() else None

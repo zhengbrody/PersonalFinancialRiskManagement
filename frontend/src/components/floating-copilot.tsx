@@ -3,36 +3,38 @@
 /**
  * App-wide floating Portfolio Copilot.
  *
- * A persistent bottom-right launcher that opens a compact chat panel,
- * so a signed-in user can ask the Copilot a question from ANY page
- * without navigating to /copilot. The panel renders the exact same
- * <CopilotConversation /> that powers the full page (DRY) — only the
- * `variant="floating"` chrome differs.
+ * A persistent bottom-right launcher that opens a chat panel, so a
+ * signed-in user can ask the Copilot from ANY page without navigating to
+ * /copilot. The panel renders the exact same <CopilotConversation /> that
+ * powers the full page (DRY) — only the `variant="floating"` chrome differs.
  *
- * Visibility rules:
- *   • Only mounts for signed-in users on a configured build
- *     (`user && configured`). Anonymous/public visitors see nothing.
- *   • Hidden on the dedicated /copilot route so there aren't two chats
- *     at once.
+ * UX: the panel is **draggable by its header** (so it never sits where it's
+ * in the way) and has a **maximize toggle** for reading longer, table-rich
+ * answers. Default sits bottom-right.
  *
- * No dialog library: a fixed div + local open state is enough, and it
- * keeps the bundle lean. Escape closes the panel. Semantic theme tokens
- * only, so it reads correctly in the light/dark market-synced theme.
+ * Visibility: only mounts for signed-in users on a configured build; hidden
+ * on the dedicated /copilot route. Escape closes. Semantic theme tokens only
+ * (reads correctly in the market-synced light/dark theme). No drag library —
+ * a small pointer handler keeps the bundle lean.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { CopilotConversation } from "@/components/copilot-conversation";
 import { useAuth } from "@/lib/auth-context";
+
+type Pos = { x: number; y: number };
 
 export function FloatingCopilot() {
   const { user, configured } = useAuth();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [maximized, setMaximized] = useState(false);
+  const [pos, setPos] = useState<Pos | null>(null); // null = default bottom-right anchor
+  const panelRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ offsetX: number; offsetY: number } | null>(null);
 
-  // Close on Escape for keyboard users. Registered unconditionally
-  // (hooks can't be conditional); the listener is cheap and only acts
-  // when the panel is open.
+  // Close on Escape.
   useEffect(() => {
     if (!open) return;
     function onKey(e: KeyboardEvent) {
@@ -42,36 +44,101 @@ export function FloatingCopilot() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
+  const clamp = useCallback((x: number, y: number): Pos => {
+    const el = panelRef.current;
+    const w = el?.offsetWidth ?? 440;
+    const h = el?.offsetHeight ?? 640;
+    const maxX = Math.max(0, window.innerWidth - w);
+    const maxY = Math.max(0, window.innerHeight - h);
+    return { x: Math.min(Math.max(0, x), maxX), y: Math.min(Math.max(0, y), maxY) };
+  }, []);
+
+  // Re-clamp a previously-dragged panel back into view whenever it reopens.
+  useEffect(() => {
+    if (open && pos) setPos((p) => (p ? clamp(p.x, p.y) : p));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  function onHeaderPointerDown(e: React.PointerEvent) {
+    // Don't start a drag from the close/maximize buttons.
+    if ((e.target as HTMLElement).closest("button")) return;
+    const el = panelRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    drag.current = { offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top };
+    // Seed pos from the current rect so it doesn't jump from the anchor.
+    setPos(clamp(rect.left, rect.top));
+    try {
+      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    } catch {
+      /* jsdom / unsupported — drag still works via window listeners below */
+    }
+  }
+
+  useEffect(() => {
+    function onMove(e: PointerEvent) {
+      if (!drag.current) return;
+      setPos(clamp(e.clientX - drag.current.offsetX, e.clientY - drag.current.offsetY));
+    }
+    function onUp() {
+      drag.current = null;
+    }
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [clamp]);
+
   // Anonymous visitors / unconfigured builds: render nothing.
   if (!configured || !user) return null;
-
   // Avoid two chats on the dedicated page.
   if (pathname === "/copilot") return null;
+
+  const size = maximized
+    ? "w-[min(96vw,720px)] h-[85vh]"
+    : "w-[min(94vw,440px)] h-[min(78vh,640px)]";
+  const anchor = pos ? "" : "bottom-20 right-4";
+  const style = pos ? { left: pos.x, top: pos.y } : undefined;
 
   return (
     <>
       {open && (
         <div
+          ref={panelRef}
           role="dialog"
           aria-label="Portfolio Copilot"
           aria-modal="false"
-          className="fixed bottom-20 right-4 z-50 flex h-[min(70vh,560px)] w-[min(92vw,400px)] flex-col overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-xl"
+          style={style}
+          className={`fixed ${anchor} ${size} z-50 flex flex-col overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-xl`}
         >
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <div
+            onPointerDown={onHeaderPointerDown}
+            className="flex cursor-move touch-none select-none items-center justify-between border-b border-border px-4 py-3"
+          >
             <div className="flex items-center gap-2">
               <span className="inline-block h-2 w-2 rounded-full bg-primary" />
-              <span className="text-sm font-semibold tracking-tight">
-                Portfolio Copilot
-              </span>
+              <span className="text-sm font-semibold tracking-tight">Portfolio Copilot</span>
             </div>
-            <button
-              type="button"
-              aria-label="Close Copilot"
-              onClick={() => setOpen(false)}
-              className="rounded-md px-2 py-0.5 text-lg leading-none text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
-            >
-              ×
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                aria-label={maximized ? "Restore Copilot size" : "Maximize Copilot"}
+                onClick={() => setMaximized((v) => !v)}
+                className="rounded-md px-2 py-0.5 text-sm leading-none text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
+              >
+                {maximized ? "❐" : "▢"}
+              </button>
+              <button
+                type="button"
+                aria-label="Close Copilot"
+                onClick={() => setOpen(false)}
+                className="rounded-md px-2 py-0.5 text-lg leading-none text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
+              >
+                ×
+              </button>
+            </div>
           </div>
 
           <CopilotConversation variant="floating" />
@@ -86,9 +153,7 @@ export function FloatingCopilot() {
         className="fixed bottom-4 right-4 z-50 flex h-12 items-center gap-2 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground shadow-lg transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         <ChatGlyph />
-        <span className="hidden sm:inline">
-          {open ? "Close" : "Ask Copilot"}
-        </span>
+        <span className="hidden sm:inline">{open ? "Close" : "Ask Copilot"}</span>
       </button>
     </>
   );
