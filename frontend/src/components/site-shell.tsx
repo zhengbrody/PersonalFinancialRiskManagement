@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
+import { FloatingCopilot } from "@/components/floating-copilot";
 
 /**
  * Top-level page shell with sticky header + max-w container.
@@ -72,6 +73,7 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-10">{children}</main>
+      <FloatingCopilot />
     </div>
   );
 }
