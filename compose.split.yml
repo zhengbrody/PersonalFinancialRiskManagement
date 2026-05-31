@@ -54,6 +54,10 @@ services:
     restart: unless-stopped
 
   backend:
+    # Pull the CI-built image on EC2 (`docker compose pull`); `build:` stays
+    # for local dev. NEVER build this on the t3.micro — see the 2026-05-31
+    # OOM incident + .github/workflows/build-images.yml.
+    image: ghcr.io/zhengbrody/mindmarket-backend:${MM_IMAGE_TAG:-latest}
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -83,6 +87,11 @@ services:
     restart: unless-stopped
 
   frontend:
+    # Pull the CI-built image on EC2 (`docker compose pull`); `build:` stays
+    # for local dev. NEVER build this on the t3.micro — the Next.js build
+    # OOM'd the box (2026-05-31). CI bakes the NEXT_PUBLIC_* args (below)
+    # from GitHub repo Variables; see .github/workflows/build-images.yml.
+    image: ghcr.io/zhengbrody/mindmarket-frontend:${MM_IMAGE_TAG:-latest}
     build:
       context: ./frontend
       dockerfile: Dockerfile
