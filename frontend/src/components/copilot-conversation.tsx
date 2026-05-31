@@ -20,6 +20,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -200,9 +201,7 @@ function AssistantBubble({ message }: { message: ChatMessage }) {
             {message.agentName}
           </p>
         )}
-        <p className="whitespace-pre-wrap leading-relaxed text-foreground">
-          {message.text}
-        </p>
+        <Markdown>{message.text}</Markdown>
 
         {message.trades && message.trades.length > 0 && (
           <DraftTrades trades={message.trades} />
