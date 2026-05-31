@@ -73,7 +73,11 @@ def copilot_chat_endpoint(
     # failure) and degrades to templates when llm is None.
     from agents.orchestrator import route_message
 
-    llm = get_llm_callable()
+    # with_tools=True → the LLM seam runs an Anthropic tool-use loop so
+    # Claude can fetch live free data (sentiment/news/macro/fundamentals/
+    # options IV) and ground its answer. Degrades to None (templates) with
+    # no key, exactly as before.
+    llm = get_llm_callable(with_tools=True)
     resp = route_message(body.message, score, positions, llm_callable=llm)
 
     payload = ChatResponse(**resp.model_dump()).model_dump()
