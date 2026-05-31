@@ -15,13 +15,17 @@ from fastapi import APIRouter, Query, Request
 
 from ...core.responses import ok, server_error, unprocessable
 from ...schemas.macro import (
+    RegimeFearGreedOut,
+    RegimeResponse,
+    RegimeVixOut,
+    RegimeYieldCurveOut,
     SeriesBatchResponse,
     SeriesPointOut,
     SeriesResultOut,
     YieldCurvePointOut,
     YieldCurveResponse,
 )
-from ...services import macro_data
+from ...services import macro_data, market_regime
 
 router = APIRouter(prefix="/api/v1/macro", tags=["macro"])
 
@@ -101,5 +105,29 @@ def get_yield_curve(request: Request):
     payload = YieldCurveResponse(
         as_of=result.as_of,
         points=[YieldCurvePointOut(tenor=p.tenor, yield_pct=p.yield_pct) for p in result.points],
+    )
+    return ok(payload.model_dump(), request=request, started_at=started)
+
+
+@router.get("/regime", summary="Market-regime snapshot: VIX, Fear & Greed, yield curve")
+def get_regime(request: Request):
+    """Return the current market regime. Public.
+
+    Each leg (VIX / Fear & Greed / yield-curve status) is fetched
+    independently and nulls itself on upstream failure — the panel
+    renders partially rather than 500-ing on one dead source. Hence no
+    error branch here: a well-formed (possibly partially-null) snapshot
+    is always a 200.
+    """
+    started = time.perf_counter()
+    snap = market_regime.get_market_regime()
+    payload = RegimeResponse(
+        vix=RegimeVixOut(current=snap.vix.current, change=snap.vix.change, level=snap.vix.level),
+        fear_greed=RegimeFearGreedOut(score=snap.fear_greed.score, rating=snap.fear_greed.rating),
+        yield_curve=RegimeYieldCurveOut(
+            status=snap.yield_curve.status,
+            spread_3m_10y=snap.yield_curve.spread_3m_10y,
+            inverted=snap.yield_curve.inverted,
+        ),
     )
     return ok(payload.model_dump(), request=request, started_at=started)

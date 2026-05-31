@@ -156,6 +156,42 @@ export function useYieldCurve() {
   });
 }
 
+// ── market regime ─────────────────────────────────────────────────
+
+export const marketRegimeSchema = z.looseObject({
+  vix: z.looseObject({
+    current: z.number().nullable(),
+    change: z.number().nullable(),
+    level: z.string().nullable(),
+  }),
+  fear_greed: z.looseObject({
+    score: z.number().nullable(),
+    rating: z.string().nullable(),
+  }),
+  yield_curve: z.looseObject({
+    status: z.string().nullable(),
+    spread_3m_10y: z.number().nullable(),
+    inverted: z.boolean().nullable(),
+  }),
+});
+export type MarketRegime = z.infer<typeof marketRegimeSchema>;
+
+/**
+ * Market-regime snapshot (VIX / Fear & Greed / yield-curve status).
+ * Public, server-cached ~5 min. Each leg is independently nullable, so
+ * the panel renders partially when one upstream is down.
+ */
+export function useMarketRegime() {
+  return useQuery<MarketRegime>({
+    queryKey: ["macro", "regime"],
+    queryFn: () =>
+      apiFetch<MarketRegime>("/api/v1/macro/regime", {
+        schema: marketRegimeSchema,
+      }),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 /** Invalidate the portfolios list so the next render refetches. */
 function invalidatePortfoliosKey(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ["portfolios"] });
