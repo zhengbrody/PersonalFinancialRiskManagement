@@ -180,3 +180,55 @@ def get_llm_callable(
     if with_tools:
         return _make_tool_using_callable(client)
     return _make_plain_callable(client)
+
+
+def get_answer_streamer():
+    """Return a generator ``(prompt, system, max_tokens, temperature) ->
+    Iterator[str]`` that STREAMS the answer text token-by-token while running
+    the same free-data tool-use loop — so the UI shows text as it's written
+    instead of waiting for the whole turn. ``None`` when no key/SDK (caller
+    falls back to a one-shot non-streamed answer).
+
+    Each turn is streamed via the Anthropic streaming API: text deltas are
+    yielded live; if the turn ends by requesting tools, we execute them and
+    stream the next turn. The final (end_turn) turn's deltas ARE the answer.
+    """
+    client = _get_client()
+    if client is None:
+        return None
+
+    from .copilot_tools import TOOL_SPECS, execute_tool
+
+    def _stream(prompt: str, system: str, max_tokens: int, temperature: float):
+        messages: list[dict] = [{"role": "user", "content": prompt}]
+        for _ in range(MAX_TOOL_TURNS):
+            with client.messages.stream(
+                model=_SONNET_MODEL,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                system=system,
+                tools=TOOL_SPECS,
+                messages=messages,
+            ) as stream:
+                for chunk in stream.text_stream:
+                    if chunk:
+                        yield chunk
+                final = stream.get_final_message()
+
+            if getattr(final, "stop_reason", None) != "tool_use":
+                return  # end_turn — the streamed deltas were the answer
+
+            messages.append({"role": "assistant", "content": final.content})
+            tool_results = []
+            for block in final.content:
+                if getattr(block, "type", None) == "tool_use":
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": block.id,
+                            "content": execute_tool(block.name, block.input),
+                        }
+                    )
+            messages.append({"role": "user", "content": tool_results})
+
+    return _stream

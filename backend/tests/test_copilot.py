@@ -226,3 +226,87 @@ def test_quota_exceeded_returns_429(
     )
     assert resp.status_code == 429
     assert resp.json()["error"]["code"] == "quota_exceeded"
+
+
+# ── streaming (SSE) ────────────────────────────────────────────────
+
+
+@pytest.fixture
+def fake_streamer(monkeypatch):
+    """Patch the binding the stream endpoint uses
+    (``copilot.get_answer_streamer``). Default: a 2-chunk fake stream."""
+    import backend.app.api.v1.copilot as copilot_mod
+
+    state = {"chunks": ["Hello", " world"], "enabled": True}
+
+    def _get():
+        if not state["enabled"]:
+            return None  # simulates no API key → template fallback
+
+        def _stream(prompt, system, max_tokens, temperature):
+            for c in state["chunks"]:
+                yield c
+
+        return _stream
+
+    monkeypatch.setattr(copilot_mod, "get_answer_streamer", _get)
+    return state
+
+
+def test_stream_requires_bearer_token(test_client):
+    resp = test_client.post("/api/v1/copilot/chat/stream", json={"message": "hi"})
+    assert resp.status_code == 401
+
+
+def test_stream_happy_path_emits_delta_and_done(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_quota, fake_streamer
+):
+    fake_active_portfolio.set({"SPY": {"shares": 100, "avg_cost": 400.0}})
+    fake_price_history.set(_make_history(["SPY"]))
+
+    resp = test_client.post(
+        "/api/v1/copilot/chat/stream",
+        json={"message": "how risky am I?"},
+        headers={"Authorization": f"Bearer {mint_token(sub='user-stream')}"},
+    )
+    assert resp.status_code == 200
+    body = resp.text
+    assert "event: status" in body
+    assert "event: delta" in body
+    assert "Hello" in body and "world" in body
+    assert "event: done" in body
+    assert "grounded_in" in body
+    # quota consumed for chat
+    assert fake_quota.calls == [("user-stream", "chat")]
+
+
+def test_stream_no_portfolio_emits_error_event(
+    test_client, mint_token, fake_active_portfolio, fake_streamer
+):
+    fake_active_portfolio.set({})  # signed in, no holdings
+    resp = test_client.post(
+        "/api/v1/copilot/chat/stream",
+        json={"message": "hi"},
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    # Stream already started → 200, the failure is an SSE error event.
+    assert resp.status_code == 200
+    assert "event: error" in resp.text
+    assert "no_active_portfolio" in resp.text
+
+
+def test_stream_degraded_template_when_no_streamer(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_quota, fake_streamer
+):
+    fake_active_portfolio.set({"SPY": {"shares": 100, "avg_cost": 400.0}})
+    fake_price_history.set(_make_history(["SPY"]))
+    fake_streamer["enabled"] = False  # no API key → template fallback
+
+    resp = test_client.post(
+        "/api/v1/copilot/chat/stream",
+        json={"message": "diagnose my risk"},
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    assert resp.status_code == 200
+    body = resp.text
+    assert "event: delta" in body and "event: done" in body  # template still streamed as one delta

@@ -32,7 +32,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api";
-import { useCopilotChat } from "@/lib/queries";
+import { env } from "@/lib/env";
+import { useAuth } from "@/lib/auth-context";
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -61,52 +62,147 @@ export function CopilotConversation({
 }: {
   variant?: CopilotConversationVariant;
 }) {
-  const chat = useCopilotChat();
+  const { accessToken } = useAuth();
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<ApiError | null>(null);
+  const [pending, setPending] = useState(false);
   const scrollAnchor = useRef<HTMLDivElement>(null);
 
   const floating = variant === "floating";
 
-  // Keep the newest message in view as the conversation grows.
+  // Keep the newest message in view as the conversation grows / streams.
   useEffect(() => {
     scrollAnchor.current?.scrollIntoView?.({ behavior: "smooth" });
-  }, [messages.length, chat.isPending]);
+  }, [messages, pending]);
 
-  function send(text: string) {
+  /** Append streamed text to the in-flight assistant bubble (create it on
+   * the first delta so the "Thinking…" bubble shows until words arrive). */
+  function pushDelta(text: string) {
+    setMessages((prev) => {
+      const copy = [...prev];
+      const last = copy[copy.length - 1];
+      if (last && last.role === "assistant") {
+        copy[copy.length - 1] = { ...last, text: last.text + text };
+      } else {
+        copy.push({ role: "assistant", text });
+      }
+      return copy;
+    });
+  }
+
+  function setAssistantMeta(meta: {
+    agent_name?: string;
+    grounded_in?: Record<string, unknown>;
+    draft_trades?: unknown[];
+  }) {
+    setMessages((prev) => {
+      const copy = [...prev];
+      const last = copy[copy.length - 1];
+      if (last && last.role === "assistant") {
+        copy[copy.length - 1] = {
+          ...last,
+          agentName: meta.agent_name,
+          grounded: meta.grounded_in,
+          trades: meta.draft_trades,
+        };
+      }
+      return copy;
+    });
+  }
+
+  async function send(text: string) {
     const trimmed = text.trim();
-    if (trimmed === "" || chat.isPending) return;
+    if (trimmed === "" || pending) return;
 
     setError(null);
     setMessages((prev) => [...prev, { role: "user", text: trimmed }]);
     setDraft("");
+    setPending(true);
 
-    chat.mutate(
-      { message: trimmed },
-      {
-        onSuccess: (data) => {
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: "assistant",
-              text: data.response_markdown,
-              agentName: data.agent_name,
-              grounded: data.grounded_in,
-              trades: data.draft_trades,
-            },
-          ]);
+    try {
+      const res = await fetch(`${env.apiBaseUrl}/api/v1/copilot/chat/stream`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
-        onError: (err) => {
-          setError(
-            err instanceof ApiError
-              ? err
-              : new ApiError(0, "unknown", String(err)),
-          );
-        },
-      },
-    );
+        body: JSON.stringify({ message: trimmed }),
+      });
+      if (!res.ok || !res.body) {
+        throw new ApiError(
+          res.status,
+          res.status === 401 ? "unauthorized" : "http_error",
+          `Request failed (${res.status}).`,
+        );
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let streamErr: { code?: string; message?: string } | null = null;
+
+      // Parse Server-Sent Event frames (separated by a blank line).
+      const drain = () => {
+        let i;
+        while ((i = buffer.indexOf("\n\n")) >= 0) {
+          const frame = buffer.slice(0, i);
+          buffer = buffer.slice(i + 2);
+          let event = "message";
+          const dataLines: string[] = [];
+          for (const line of frame.split("\n")) {
+            if (line.startsWith("event:")) event = line.slice(6).trim();
+            else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+          }
+          if (!dataLines.length) continue;
+          let data: Record<string, unknown> = {};
+          try {
+            data = JSON.parse(dataLines.join("\n"));
+          } catch {
+            continue;
+          }
+          if (event === "delta" && typeof data.text === "string") {
+            pushDelta(data.text);
+          } else if (event === "done") {
+            setAssistantMeta(data as never);
+          } else if (event === "error") {
+            streamErr = data as { code?: string; message?: string };
+          }
+        }
+      };
+
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        drain();
+      }
+      buffer += decoder.decode();
+      drain();
+
+      if (streamErr) {
+        // Drop the empty assistant placeholder, surface the friendly error.
+        setMessages((prev) =>
+          prev[prev.length - 1]?.role === "assistant" && !prev[prev.length - 1]?.text
+            ? prev.slice(0, -1)
+            : prev,
+        );
+        const e = streamErr as { code?: string; message?: string };
+        setError(new ApiError(0, e.code ?? "unknown", e.message ?? "Something went wrong."));
+      }
+    } catch (err) {
+      setMessages((prev) =>
+        prev[prev.length - 1]?.role === "assistant" && !prev[prev.length - 1]?.text
+          ? prev.slice(0, -1)
+          : prev,
+      );
+      setError(
+        err instanceof ApiError ? err : new ApiError(0, "network_error", String(err)),
+      );
+    } finally {
+      setPending(false);
+    }
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -132,7 +228,7 @@ export function CopilotConversation({
             : "space-y-4"
         }
       >
-        {messages.length === 0 && !chat.isPending && (
+        {messages.length === 0 && !pending && (
           <EmptyState onPick={(q) => send(q)} compact={floating} />
         )}
 
@@ -144,7 +240,9 @@ export function CopilotConversation({
           ),
         )}
 
-        {chat.isPending && <ThinkingBubble />}
+        {pending && messages[messages.length - 1]?.role !== "assistant" && (
+          <ThinkingBubble />
+        )}
 
         {error && <ErrorNotice error={error} />}
 
@@ -165,16 +263,16 @@ export function CopilotConversation({
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKeyDown}
           rows={2}
-          disabled={chat.isPending}
+          disabled={pending}
         />
         <div className="flex justify-end">
           <Button
             type="button"
             size={floating ? "sm" : "default"}
             onClick={() => send(draft)}
-            disabled={chat.isPending || draft.trim() === ""}
+            disabled={pending || draft.trim() === ""}
           >
-            {chat.isPending ? "Thinking…" : "Ask"}
+            {pending ? "Thinking…" : "Ask"}
           </Button>
         </div>
       </div>

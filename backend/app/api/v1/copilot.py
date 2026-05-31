@@ -13,20 +13,42 @@ in ``services/llm_client.py``.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import StreamingResponse
 
 from ...core.deps_auth import AuthedUser, require_user
-from ...core.responses import ok, too_many_requests
+from ...core.responses import APIError, ok, too_many_requests
 from ...schemas.copilot import ChatRequest, ChatResponse
 from ...services import copilot_context
-from ...services.llm_client import get_llm_callable
+from ...services.llm_client import get_answer_streamer, get_llm_callable
 
 router = APIRouter(prefix="/api/v1/copilot", tags=["copilot"])
 
 _log = logging.getLogger(__name__)
+
+
+def _grounded(score) -> dict:
+    """The exact engine metrics every answer must be grounded in (mirrors
+    orchestrator.route_message's grounded_in)."""
+    m = score.metrics
+    return {
+        "overall_score": score.overall_score,
+        "sharpe_ratio": m.sharpe_ratio,
+        "annual_volatility": m.annual_volatility,
+        "max_drawdown": m.max_drawdown,
+        "var_95_daily": m.var_95_daily,
+        "beta_to_benchmark": m.beta_to_benchmark,
+        "total_value": m.total_value,
+    }
+
+
+def _sse(event: str, data: dict) -> str:
+    """Format one Server-Sent Event frame."""
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 @router.post(
@@ -82,3 +104,124 @@ def copilot_chat_endpoint(
 
     payload = ChatResponse(**resp.model_dump()).model_dump()
     return ok(payload, request=request, started_at=started)
+
+
+@router.post(
+    "/chat/stream",
+    summary="Streaming (SSE) Copilot chat — answer tokens arrive as written",
+    response_model=None,
+)
+def copilot_chat_stream_endpoint(
+    body: ChatRequest,
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    """Same as /chat but **streams** the answer over Server-Sent Events so
+    the UI renders text as it's generated instead of waiting for the whole
+    turn. Events: ``status`` (phase), ``delta`` ({text}), ``done``
+    ({agent_name, grounded_in, draft_trades}), ``error`` ({code, message}).
+
+    Auth is enforced up-front (a 401 here is a normal HTTP error, not an SSE
+    frame). Everything after the stream starts is reported via SSE events —
+    a 422 (no portfolio) / 429 (quota) becomes an ``error`` event so the
+    client maps it to the same friendly CTA as the non-streaming route.
+    """
+
+    def gen():
+        yield _sse("status", {"phase": "analyzing"})
+
+        # Resolve positions + score (422 codes → error event, not a 500).
+        try:
+            positions, score = copilot_context.load_positions_and_score(user)
+        except APIError as exc:
+            yield _sse("error", {"code": exc.code, "message": exc.message})
+            return
+        except Exception as exc:  # noqa: BLE001
+            _log.warning("copilot.stream.context_failed reason=%s", type(exc).__name__)
+            yield _sse("error", {"code": "server_error", "message": "Could not load portfolio."})
+            return
+
+        # Quota gate (429 → error event; fail-open on a metering blip).
+        from libs.billing.usage import QuotaExceeded, check_and_consume
+
+        try:
+            check_and_consume(user.id, "chat")
+        except QuotaExceeded as exc:
+            yield _sse("error", {"code": "quota_exceeded", "message": str(exc)})
+            return
+        except Exception as exc:  # noqa: BLE001 - fail-open
+            _log.warning("copilot.stream.quota_failed reason=%s", type(exc).__name__)
+
+        grounded = _grounded(score)
+        from agents.orchestrator import generate_draft_trades
+        from libs.ai_agents.portfolio_agents import build_agent_context, build_formatter_messages
+
+        try:
+            draft_trades = generate_draft_trades(score, list(positions))
+        except Exception:  # noqa: BLE001
+            draft_trades = []
+
+        streamer = get_answer_streamer()
+
+        # No LLM key → one-shot deterministic template (still grounded).
+        if streamer is None:
+            from agents.orchestrator import route_message
+
+            resp = route_message(body.message, score, positions, llm_callable=None)
+            yield _sse("delta", {"text": resp.response_markdown})
+            yield _sse(
+                "done",
+                {
+                    "agent_name": resp.agent_name,
+                    "grounded_in": grounded,
+                    "draft_trades": draft_trades,
+                },
+            )
+            return
+
+        context = build_agent_context(score, list(positions))
+        tool_results = {
+            "overall_score": score.overall_score,
+            "annual_return": score.metrics.annual_return,
+            "annual_volatility": score.metrics.annual_volatility,
+            "sharpe_ratio": score.metrics.sharpe_ratio,
+            "max_drawdown": score.metrics.max_drawdown,
+            "var_95_daily": score.metrics.var_95_daily,
+            "beta_to_benchmark": score.metrics.beta_to_benchmark,
+        }
+        system, prompt = build_formatter_messages(
+            user_message=body.message,
+            context=context,
+            tool_results=tool_results,
+            agent_name="Portfolio Copilot",
+        )
+
+        yield _sse("status", {"phase": "writing"})
+        produced = False
+        try:
+            for chunk in streamer(prompt, system, 3500, 0.3):
+                produced = True
+                yield _sse("delta", {"text": chunk})
+        except Exception as exc:  # noqa: BLE001 - stream blew up
+            _log.warning("copilot.stream.failed reason=%s", type(exc).__name__)
+            if not produced:
+                # Nothing streamed yet → fall back to a template answer.
+                from agents.orchestrator import route_message
+
+                resp = route_message(body.message, score, positions, llm_callable=None)
+                yield _sse("delta", {"text": resp.response_markdown})
+
+        yield _sse(
+            "done",
+            {
+                "agent_name": "Portfolio Copilot",
+                "grounded_in": grounded,
+                "draft_trades": draft_trades,
+            },
+        )
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

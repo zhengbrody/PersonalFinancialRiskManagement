@@ -200,16 +200,19 @@ def generate_draft_trades(score: PortfolioScore, positions: Iterable[AssetPositi
     return trades
 
 
-def _call_llm_formatter(
+def build_formatter_messages(
     *,
-    llm_callable: LLMCallable | None,
     user_message: str,
     context: dict,
     tool_results: dict,
     agent_name: str,
-) -> str | None:
-    if llm_callable is None:
-        return None
+) -> tuple[str, str]:
+    """Build the ``(system, prompt)`` pair for the LLM formatter.
+
+    Pulled out of ``_call_llm_formatter`` so BOTH the non-streaming path
+    (below) and the streaming Copilot endpoint reuse the exact same
+    grounding rules + structure — no second, drifting prompt.
+    """
     system = (
         "You are MindMarket's portfolio AI copilot for a NOVICE retail investor "
         "(many use margin and lack risk discipline). Ground EVERY number ONLY in "
@@ -242,6 +245,25 @@ def _call_llm_formatter(
         "3. **Evidence** — a Markdown table of the key metrics / holdings you cite.\n"
         "4. **Actions** — concrete, prioritized steps with a one-line rationale each.\n"
         "Use tables wherever you present multiple numbers. Finish all four sections."
+    )
+    return system, prompt
+
+
+def _call_llm_formatter(
+    *,
+    llm_callable: LLMCallable | None,
+    user_message: str,
+    context: dict,
+    tool_results: dict,
+    agent_name: str,
+) -> str | None:
+    if llm_callable is None:
+        return None
+    system, prompt = build_formatter_messages(
+        user_message=user_message,
+        context=context,
+        tool_results=tool_results,
+        agent_name=agent_name,
     )
     try:
         text = llm_callable(prompt=prompt, system=system, max_tokens=3500, temperature=0.3)

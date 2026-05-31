@@ -57,18 +57,45 @@ const billingEnvelope = {
   meta: { request_id: "r-billing" },
 };
 
+/** One Server-Sent Event frame. */
+function sseFrame(event: string, data: unknown): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
 /**
- * Route fetch by URL: the billing/me query fires on mount and the
- * copilot/chat call fires on send. Ordering between them is racy, so
- * we dispatch on the request path instead of `mockResolvedValueOnce`.
+ * A minimal streaming Response stand-in: the copilot conversation reads
+ * `res.body.getReader()` and decodes SSE frames. We feed the frames as
+ * encoded chunks. (Real `Response` streaming bodies aren't reliable under
+ * jsdom, so we mock the shape the component actually uses.)
  */
-function routeFetch(chat: { body: unknown; status?: number }) {
+function sseResponse(frames: string[]): Response {
+  const enc = new TextEncoder();
+  let i = 0;
+  const reader = {
+    read: () =>
+      i < frames.length
+        ? Promise.resolve({ done: false, value: enc.encode(frames[i++]) })
+        : Promise.resolve({ done: true, value: undefined }),
+  };
+  return {
+    ok: true,
+    status: 200,
+    body: { getReader: () => reader },
+  } as unknown as Response;
+}
+
+/**
+ * Route fetch by URL: the billing/me query fires on mount (JSON) and the
+ * copilot/chat/stream call fires on send (SSE). Ordering is racy, so we
+ * dispatch on the request path instead of `mockResolvedValueOnce`.
+ */
+function routeFetch(chatFrames: string[]) {
   return vi
     .spyOn(globalThis, "fetch")
     .mockImplementation(async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
       if (url.includes("/copilot/chat")) {
-        return envelope(chat.body, chat.status ?? 200);
+        return sseResponse(chatFrames);
       }
       return envelope(billingEnvelope);
     });
@@ -85,7 +112,7 @@ afterEach(() => {
 
 describe("CopilotPage", () => {
   it("renders the empty state with example questions", () => {
-    routeFetch({ body: {} });
+    routeFetch([]);
     renderWithQuery(<CopilotPage />);
 
     expect(
@@ -103,20 +130,17 @@ describe("CopilotPage", () => {
   });
 
   it("renders the assistant reply and the grounded numbers", async () => {
-    routeFetch({
-      body: {
-        data: {
-          agent_name: "Portfolio Analyzer",
-          response_markdown:
-            "Your portfolio leans aggressive for a beginner. Consider trimming margin.",
-          draft_trades: [],
-          tool_trace: ["score_portfolio"],
-          grounded_in: { overall_score: 612, annual_volatility: 0.18 },
-        },
-        error: null,
-        meta: { request_id: "r-chat" },
-      },
-    });
+    routeFetch([
+      sseFrame("status", { phase: "writing" }),
+      sseFrame("delta", {
+        text: "Your portfolio leans aggressive for a beginner. Consider trimming margin.",
+      }),
+      sseFrame("done", {
+        agent_name: "Portfolio Analyzer",
+        grounded_in: { overall_score: 612, annual_volatility: 0.18 },
+        draft_trades: [],
+      }),
+    ]);
 
     const user = userEvent.setup();
     renderWithQuery(<CopilotPage />);
@@ -140,17 +164,12 @@ describe("CopilotPage", () => {
   });
 
   it("shows the friendly upgrade message on quota_exceeded", async () => {
-    routeFetch({
-      body: {
-        data: null,
-        error: {
-          code: "quota_exceeded",
-          message: "Monthly chat quota exhausted.",
-        },
-        meta: { request_id: "r-quota" },
-      },
-      status: 429,
-    });
+    routeFetch([
+      sseFrame("error", {
+        code: "quota_exceeded",
+        message: "Monthly chat quota exhausted.",
+      }),
+    ]);
 
     const user = userEvent.setup();
     renderWithQuery(<CopilotPage />);
