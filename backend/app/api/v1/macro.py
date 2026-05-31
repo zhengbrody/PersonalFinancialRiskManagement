@@ -15,7 +15,9 @@ from fastapi import APIRouter, Query, Request
 
 from ...core.responses import ok, server_error, unprocessable
 from ...schemas.macro import (
+    RegimeDetailResponse,
     RegimeFearGreedOut,
+    RegimeHistoryPointOut,
     RegimeResponse,
     RegimeVixOut,
     RegimeYieldCurveOut,
@@ -25,7 +27,7 @@ from ...schemas.macro import (
     YieldCurvePointOut,
     YieldCurveResponse,
 )
-from ...services import macro_data, market_regime
+from ...services import macro_data, market_regime, regime_detail
 
 router = APIRouter(prefix="/api/v1/macro", tags=["macro"])
 
@@ -129,5 +131,24 @@ def get_regime(request: Request):
             spread_3m_10y=snap.yield_curve.spread_3m_10y,
             inverted=snap.yield_curve.inverted,
         ),
+    )
+    return ok(payload.model_dump(), request=request, started_at=started)
+
+
+@router.get("/regime_detail", summary="Market-wide regime (bull/bear/transition) + history")
+def get_regime_detail_endpoint(request: Request):
+    """Return the composite market regime (bull / bear / transition) with a
+    confidence, the sub-signals, and a ~1y history. Public. Fails soft to an
+    empty snapshot — always a 200, never blocks the /markets page."""
+    started = time.perf_counter()
+    d = regime_detail.get_regime_detail()
+    payload = RegimeDetailResponse(
+        current_regime=d.current_regime,
+        confidence=d.confidence,
+        regime_since_date=d.regime_since_date,
+        vix_regime=d.vix_regime,
+        trend_regime=d.trend_regime,
+        vol_regime=d.vol_regime,
+        history=[RegimeHistoryPointOut(date=p.date, regime=p.regime) for p in d.history],
     )
     return ok(payload.model_dump(), request=request, started_at=started)

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { MarketRegime } from "@/components/market-regime";
+import { MarketSeason } from "@/components/market-season";
 import { MacroSnapshot } from "@/components/macro-snapshot";
 
 export const metadata: Metadata = {
@@ -29,6 +30,8 @@ export default function MarketsPage() {
       </header>
 
       <MarketRegime />
+
+      <MarketSeason />
 
       <MacroSnapshot />
 

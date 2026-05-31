@@ -235,3 +235,89 @@ def test_regime_all_sources_down_is_still_200(test_client, fake_regime_sources):
     assert data["vix"]["current"] is None
     assert data["fear_greed"]["score"] is None
     assert data["yield_curve"]["status"] is None
+
+
+# ── /macro/regime_detail ──────────────────────────────────────────
+
+
+@pytest.fixture
+def _reset_regime_detail_cache():
+    from backend.app.services import regime_detail as rd
+
+    rd.reset_cache()
+    yield
+    rd.reset_cache()
+
+
+@pytest.fixture
+def fake_regime_summary(monkeypatch, _reset_regime_detail_cache):
+    """Patch regime_detector.get_regime_summary (lazily imported by the
+    regime_detail service). Defaults to a healthy bull snapshot."""
+    import pandas as pd
+
+    state = {
+        "ret": {
+            "current_regime": "Bullish",
+            "confidence": 0.72,
+            "vix_regime": "Calm",
+            "trend_regime": "Uptrend",
+            "vol_regime": "Low Vol",
+            "regime_since_date": "2026-03-01",
+            "historical_regimes": pd.DataFrame(
+                {
+                    "composite_signal": ["Bearish", "Transition", "Bullish"],
+                },
+                index=pd.to_datetime(["2026-01-02", "2026-02-02", "2026-03-02"]),
+            ),
+        }
+    }
+    import regime_detector as rdmod
+
+    def _fn(*a, **k):
+        v = state["ret"]
+        if isinstance(v, Exception):
+            raise v
+        return v
+
+    monkeypatch.setattr(rdmod, "get_regime_summary", _fn)
+    return state
+
+
+def test_regime_detail_happy_path(test_client, fake_regime_summary):
+    resp = test_client.get("/api/v1/macro/regime_detail")
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["current_regime"] == "Bullish"
+    assert data["confidence"] == pytest.approx(0.72)
+    assert data["trend_regime"] == "Uptrend"
+    assert len(data["history"]) == 3
+    assert data["history"][0] == {"date": "2026-01-02", "regime": "Bearish"}
+    assert data["history"][-1]["regime"] == "Bullish"
+
+
+def test_regime_detail_unknown_sentinel_nulled(test_client, fake_regime_summary):
+    import pandas as pd
+
+    fake_regime_summary["ret"] = {
+        "current_regime": "Unknown",
+        "confidence": 0.0,
+        "vix_regime": "Unknown",
+        "trend_regime": "Unknown",
+        "vol_regime": "Unknown",
+        "regime_since_date": None,
+        "historical_regimes": pd.DataFrame(),
+    }
+    resp = test_client.get("/api/v1/macro/regime_detail")
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["current_regime"] is None  # "Unknown" sentinel → null
+    assert data["history"] == []
+
+
+def test_regime_detail_fail_soft(test_client, fake_regime_summary):
+    fake_regime_summary["ret"] = RuntimeError("regime engine down")
+    resp = test_client.get("/api/v1/macro/regime_detail")
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["current_regime"] is None
+    assert data["history"] == []

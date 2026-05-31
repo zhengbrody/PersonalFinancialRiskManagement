@@ -68,3 +68,24 @@ class RegimeResponse(BaseModel):
     vix: RegimeVixOut
     fear_greed: RegimeFearGreedOut
     yield_curve: RegimeYieldCurveOut
+
+
+# ── /api/v1/macro/regime_detail (bull/bear/transition "market season") ──
+
+
+class RegimeHistoryPointOut(BaseModel):
+    date: str
+    regime: str
+
+
+class RegimeDetailResponse(BaseModel):
+    """Payload for ``GET /api/v1/macro/regime_detail``. Every scalar is
+    nullable (fail-soft); ``history`` may be empty."""
+
+    current_regime: Optional[str] = None
+    confidence: Optional[float] = None
+    regime_since_date: Optional[str] = None
+    vix_regime: Optional[str] = None
+    trend_regime: Optional[str] = None
+    vol_regime: Optional[str] = None
+    history: list[RegimeHistoryPointOut] = Field(default_factory=list)
