@@ -1,0 +1,255 @@
+"use client";
+
+/**
+ * Signed-in home — the "why come back" dashboard.
+ *
+ * Surfaces the active portfolio's health score + the single biggest risk,
+ * the live market regime, AI credits remaining, and a one-tap Copilot prompt,
+ * with quick links into the rest of the app. Reuses existing hooks/components
+ * (no new backend). Anonymous visitors get the marketing landing instead
+ * (see app/page.tsx).
+ */
+
+import { useEffect } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { MarketRegime } from "@/components/market-regime";
+import { ApiError } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
+import { useBillingMe, useScoreActivePortfolio } from "@/lib/queries";
+import type { ScoreResponse } from "@/lib/schemas";
+
+const COPILOT_PROMPTS = [
+  "Is my portfolio too risky?",
+  "What's my biggest risk right now?",
+  "How do I protect against a crash?",
+];
+
+export function Dashboard() {
+  const { user } = useAuth();
+  const score = useScoreActivePortfolio();
+  const billing = useBillingMe();
+
+  // Fire once on mount — score the caller's ACTIVE portfolio.
+  useEffect(() => {
+    score.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const greeting = user?.email ? user.email.split("@")[0] : "there";
+
+  return (
+    <div className="space-y-8">
+      <header className="space-y-1">
+        <h1 className="text-3xl font-semibold tracking-tight">
+          Welcome back, <span className="capitalize">{greeting}</span>
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Your portfolio at a glance — and what to look at today.
+        </p>
+      </header>
+
+      {score.isPending && <HeroSkeleton />}
+
+      {score.isError && !score.isPending && (
+        <ScoreError error={score.error as Error} />
+      )}
+
+      {score.data && !score.isPending && <ScoreHero score={score.data} />}
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <MarketRegime />
+        <CopilotCard credits={billing.data?.credits} />
+      </div>
+
+      <QuickLinks />
+    </div>
+  );
+}
+
+function ScoreHero({ score }: { score: ScoreResponse }) {
+  const tone = scoreTone(score.overall_score);
+  const dims = Object.values(score.dimensions);
+  const weakest = dims.length
+    ? dims.reduce((a, b) => (b.score < a.score ? b : a))
+    : null;
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardContent className="flex flex-col gap-4 py-6 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-muted-foreground">
+              Portfolio Health Score
+            </p>
+            <div className="flex items-baseline gap-2">
+              <span className={`text-5xl font-semibold tabular-nums ${tone.text}`}>
+                {Math.round(score.overall_score)}
+              </span>
+              <span className="text-lg text-muted-foreground">/ 1000</span>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Link href="/risk">
+              <Button variant="outline" size="sm">
+                Full risk report
+              </Button>
+            </Link>
+            <Link href="/scenarios">
+              <Button variant="outline" size="sm">
+                Run scenarios
+              </Button>
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        {dims.map((d) => (
+          <Card key={d.name}>
+            <CardHeader className="pb-2">
+              <CardDescription>{d.name}</CardDescription>
+              <CardTitle className="flex items-baseline gap-2 text-2xl">
+                {d.score.toFixed(1)}
+                <span className="text-sm font-normal text-muted-foreground">/ 10</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <span className={`text-xs font-medium ${statusTone(d.status)}`}>
+                {d.status}
+              </span>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {weakest && (
+        <Card className="border-amber-500/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">
+              Focus first: {weakest.name}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            {weakest.detail}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function CopilotCard({ credits }: { credits?: { unlimited?: boolean; credits_remaining?: number | null } | null }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Ask your Copilot</CardTitle>
+        <CardDescription>
+          Plain-English answers grounded in your real numbers.
+          {credits && !credits.unlimited && credits.credits_remaining != null && (
+            <> {credits.credits_remaining} AI credits left this month.</>
+          )}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {COPILOT_PROMPTS.map((q) => (
+          <Link
+            key={q}
+            href={`/copilot?q=${encodeURIComponent(q)}`}
+            className="block rounded-md border border-border px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+          >
+            {q}
+          </Link>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function QuickLinks() {
+  const links = [
+    { href: "/portfolios", label: "Holdings", desc: "Edit your positions" },
+    { href: "/research", label: "Stock research", desc: "Any-ticker deep dive" },
+    { href: "/quant", label: "Backtest", desc: "How a strategy held up" },
+    { href: "/markets", label: "Markets", desc: "The risk climate today" },
+  ];
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {links.map((l) => (
+        <Link
+          key={l.href}
+          href={l.href}
+          className="rounded-lg border border-border p-4 transition hover:border-primary/40 hover:bg-accent/40"
+        >
+          <div className="text-sm font-medium">{l.label}</div>
+          <div className="mt-0.5 text-xs text-muted-foreground">{l.desc}</div>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function ScoreError({ error }: { error: Error }) {
+  const code = error instanceof ApiError ? error.code : "";
+  const noPortfolio =
+    code === "no_active_portfolio" ||
+    code === "no_priced_holdings" ||
+    code === "no_market_data";
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">
+          {noPortfolio ? "Set up your first portfolio" : "Couldn't load your score"}
+        </CardTitle>
+        <CardDescription>
+          {noPortfolio
+            ? "Add your holdings and we'll score the risk + show what to fix."
+            : "Your data is safe — try refreshing in a moment."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {noPortfolio && (
+          <Link href="/portfolios/new">
+            <Button>Create a portfolio</Button>
+          </Link>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function HeroSkeleton() {
+  return (
+    <div className="space-y-4">
+      <Skeleton className="h-28 w-full" />
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-24 w-full" />
+      </div>
+    </div>
+  );
+}
+
+function scoreTone(v: number): { text: string } {
+  if (v >= 700) return { text: "text-emerald-600 dark:text-emerald-400" };
+  if (v >= 400) return { text: "text-amber-600 dark:text-amber-400" };
+  return { text: "text-red-600 dark:text-red-400" };
+}
+
+function statusTone(status: string): string {
+  const s = status.toLowerCase();
+  if (s.includes("strong") || s.includes("good") || s.includes("healthy"))
+    return "text-emerald-600 dark:text-emerald-400";
+  if (s.includes("weak") || s.includes("poor") || s.includes("high risk"))
+    return "text-red-600 dark:text-red-400";
+  return "text-amber-600 dark:text-amber-400";
+}
