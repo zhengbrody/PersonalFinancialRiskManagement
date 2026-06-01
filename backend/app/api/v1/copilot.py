@@ -185,20 +185,25 @@ def copilot_chat_stream_endpoint(
             _log.warning("copilot.stream.credit_failed reason=%s", type(exc).__name__)
 
         grounded = _grounded(score)
-        from agents.orchestrator import generate_draft_trades
-        from libs.ai_agents.portfolio_agents import build_agent_context, build_formatter_messages
+
+        # Route + assemble the prompt the SAME way the non-streaming /chat
+        # does, so the streaming (live) path gets real agent routing: a
+        # fee/tax/rebalance question reaches the StrategyOptimizer's scans,
+        # not analyzer-only metrics. Cheap (no LLM) → safe before streaming.
+        from agents.orchestrator import PortfolioAgentRouter, route_message
 
         try:
-            draft_trades = generate_draft_trades(score, list(positions))
-        except Exception:  # noqa: BLE001
-            draft_trades = []
+            plan = PortfolioAgentRouter().prepare(body.message, score, list(positions))
+        except Exception:  # noqa: BLE001 - never fail the stream on routing
+            plan = None
+
+        agent_name = plan["agent_name"] if plan else "Portfolio Copilot"
+        draft_trades = plan["draft_trades"] if plan else []
 
         streamer = get_answer_streamer()
 
-        # No LLM key → one-shot deterministic template (still grounded).
-        if streamer is None:
-            from agents.orchestrator import route_message
-
+        # No LLM key (or routing failed) → one-shot deterministic template.
+        if streamer is None or plan is None:
             resp = route_message(body.message, score, positions, llm_callable=None)
             yield _sse("delta", {"text": resp.response_markdown})
             yield _sse(
@@ -213,22 +218,7 @@ def copilot_chat_stream_endpoint(
             _record_chat_cost(user.id, resp.response_markdown or "")
             return
 
-        context = build_agent_context(score, list(positions))
-        tool_results = {
-            "overall_score": score.overall_score,
-            "annual_return": score.metrics.annual_return,
-            "annual_volatility": score.metrics.annual_volatility,
-            "sharpe_ratio": score.metrics.sharpe_ratio,
-            "max_drawdown": score.metrics.max_drawdown,
-            "var_95_daily": score.metrics.var_95_daily,
-            "beta_to_benchmark": score.metrics.beta_to_benchmark,
-        }
-        system, prompt = build_formatter_messages(
-            user_message=body.message,
-            context=context,
-            tool_results=tool_results,
-            agent_name="Portfolio Copilot",
-        )
+        system, prompt = plan["system"], plan["prompt"]
 
         yield _sse("status", {"phase": "writing"})
         produced = False
@@ -255,7 +245,7 @@ def copilot_chat_stream_endpoint(
         yield _sse(
             "done",
             {
-                "agent_name": "Portfolio Copilot",
+                "agent_name": agent_name,
                 "grounded_in": grounded,
                 "draft_trades": draft_trades,
             },
