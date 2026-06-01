@@ -35,7 +35,7 @@ export function ReportSections({ report }: { report: RiskReport }) {
 
 function KpiGrid({ report }: { report: RiskReport }) {
   return (
-    <section className="grid gap-3 md:grid-cols-4">
+    <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
       <Kpi label="Annual return" value={fmtPct(report.annual_return)} />
       <Kpi label="Annual vol" value={fmtPct(report.annual_volatility)} />
       <Kpi label="Sharpe" value={fmtNum(report.sharpe_ratio, 2)} />
@@ -87,7 +87,7 @@ function FactorBetasTable({ report }: { report: RiskReport }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="overflow-x-auto p-4">
-        <table className="w-full text-xs">
+        <table className="w-full min-w-[460px] text-xs">
           <thead>
             <tr className="border-b border-border text-left text-muted-foreground">
               <th className="py-2 pr-3">Factor</th>
@@ -223,7 +223,7 @@ function LiquidityTable({ report }: { report: RiskReport }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="overflow-x-auto p-4">
-        <table className="w-full text-xs">
+        <table className="w-full min-w-[420px] text-xs">
           <thead>
             <tr className="border-b border-border text-left text-muted-foreground">
               <th className="py-2 pr-3">Ticker</th>
