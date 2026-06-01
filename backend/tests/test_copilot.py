@@ -69,8 +69,9 @@ def fake_price_history(monkeypatch):
 
 @pytest.fixture
 def fake_quota(monkeypatch):
-    """Patch ``libs.billing.usage.check_and_consume``. Defaults to a
-    no-op allow; call ``.deny()`` to make it raise QuotaExceeded."""
+    """Patch the credit gate ``libs.billing.usage.check_credits`` (the chat
+    endpoints' primary limiter) + silence ``record_event`` so cost logging
+    doesn't hit Supabase. Defaults to allow; ``.deny()`` → QuotaExceeded."""
 
     import libs.billing.usage as usage
 
@@ -82,14 +83,17 @@ def fake_quota(monkeypatch):
         def deny(self) -> None:
             self.denied = True
 
-        def __call__(self, user_id, kind, **kwargs):
-            self.calls.append((user_id, kind))
+        def __call__(self, user_id, *, estimated_cost_usd=0.0):
+            self.calls.append((user_id, estimated_cost_usd))
             if self.denied:
-                raise usage.QuotaExceeded(kind=kind, plan="free", used=2, limit=2)
-            return {"used": 1, "limit": 2}
+                raise usage.QuotaExceeded(
+                    kind="credits", plan="free", used=25, limit=25, message="Out of AI credits."
+                )
+            return {"credits_remaining": 100}
 
     stub = _Stub()
-    monkeypatch.setattr(usage, "check_and_consume", stub)
+    monkeypatch.setattr(usage, "check_credits", stub)
+    monkeypatch.setattr(usage, "record_event", lambda *a, **k: None)
     return stub
 
 
@@ -182,7 +186,7 @@ def test_happy_path_degraded_templates(
     # The caller's JWT was forwarded to the active-portfolio resolver.
     assert fake_active_portfolio.calls == [token]
     # Quota was consumed for the chat kind.
-    assert fake_quota.calls == [("user-degraded", "chat")]
+    assert len(fake_quota.calls) == 1 and fake_quota.calls[0][0] == "user-degraded"
 
 
 def test_happy_path_with_live_llm(
@@ -277,7 +281,7 @@ def test_stream_happy_path_emits_delta_and_done(
     assert "event: done" in body
     assert "grounded_in" in body
     # quota consumed for chat
-    assert fake_quota.calls == [("user-stream", "chat")]
+    assert fake_quota.calls and fake_quota.calls[0][0] == "user-stream"
 
 
 def test_stream_no_portfolio_emits_error_event(

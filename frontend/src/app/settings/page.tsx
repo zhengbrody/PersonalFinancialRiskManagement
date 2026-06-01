@@ -23,7 +23,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { useBillingMe, useStartPortal } from "@/lib/queries";
+import { useBillingMe, useStartPortal, type CreditStatus } from "@/lib/queries";
 
 export default function SettingsPage() {
   return (
@@ -79,6 +79,8 @@ function SettingsPageInner() {
           Signed in as <span className="font-mono">{me.email ?? me.user_id}</span>.
         </p>
       </header>
+
+      <CreditsCard credits={me.credits} />
 
       {justReturned && (
         <Card className="border-primary/30">
@@ -170,6 +172,64 @@ function SettingsPageInner() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function CreditsCard({ credits }: { credits?: CreditStatus | null }) {
+  if (!credits) return null;
+
+  if (credits.unlimited) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">AI credits</CardTitle>
+          <CardDescription>Unlimited on your plan.</CardDescription>
+        </CardHeader>
+      </Card>
+    );
+  }
+
+  const total = credits.credits_total ?? 0;
+  const used = credits.credits_used ?? 0;
+  const remaining = credits.credits_remaining ?? Math.max(0, total - used);
+  const usedPct = total > 0 ? Math.min(100, (used / total) * 100) : 0;
+  const low = remaining <= total * 0.1;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">AI credits</CardTitle>
+        <CardDescription>
+          Used for the Copilot and AI ticker analysis. Credits reset at the
+          start of each month — heavier answers use more.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="flex items-baseline justify-between">
+          <span className="text-2xl font-semibold tabular-nums">
+            {remaining.toLocaleString()}
+          </span>
+          <span className="text-sm text-muted-foreground">
+            of {total.toLocaleString()} left
+          </span>
+        </div>
+        <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className={`h-full rounded-full ${low ? "bg-amber-500" : "bg-primary"}`}
+            style={{ width: `${usedPct}%` }}
+          />
+        </div>
+        {low && (
+          <p className="text-xs text-amber-600 dark:text-amber-400">
+            Running low — credits reset next month, or{" "}
+            <Link href="/pricing" className="underline">
+              upgrade for more
+            </Link>
+            .
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
