@@ -11,8 +11,16 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { renderWithQuery } from "@/test-utils";
+
+// Anonymous by default → the public manual sandbox (these tests cover that
+// path). Signed-in auto-scoring of saved Holdings is exercised elsewhere.
+vi.mock("@/lib/auth-context", () => ({
+  useAuth: () => ({ user: null, configured: true, loading: false, accessToken: null }),
+}));
+
 import ScorePage from "./page";
 
 function mockEnvelope(
@@ -35,7 +43,7 @@ afterEach(() => {
 
 describe("ScorePage", () => {
   it("renders the empty state by default", () => {
-    render(<ScorePage />);
+    renderWithQuery(<ScorePage />);
     expect(
       screen.getByRole("heading", { name: /portfolio score/i }),
     ).toBeInTheDocument();
@@ -83,7 +91,7 @@ describe("ScorePage", () => {
     });
 
     const user = userEvent.setup();
-    render(<ScorePage />);
+    renderWithQuery(<ScorePage />);
 
     await user.click(screen.getByRole("button", { name: /run score/i }));
 
@@ -113,7 +121,7 @@ describe("ScorePage", () => {
     );
 
     const user = userEvent.setup();
-    render(<ScorePage />);
+    renderWithQuery(<ScorePage />);
     await user.click(screen.getByRole("button", { name: /run score/i }));
 
     expect(await screen.findByText(/request failed/i)).toBeInTheDocument();
