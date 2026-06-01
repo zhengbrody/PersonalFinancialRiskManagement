@@ -8,7 +8,7 @@
  * /portfolios/[id]/risk via <ReportSections/>.
  */
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -37,11 +37,17 @@ export default function RiskPage() {
     if (!authLoading && !user) router.replace("/login");
   }, [user, authLoading, configured, router]);
 
-  // Auto-run on first load so the page isn't an empty "click to run" shell.
+  // Auto-run once per signed-in user. Keyed on user.id (not the object, which
+  // Supabase recreates on token refresh) so a refresh doesn't recompute.
+  const ranFor = useRef<string | null>(null);
   useEffect(() => {
-    if (user) report.mutate();
+    const uid = user?.id ?? null;
+    if (uid && ranFor.current !== uid) {
+      ranFor.current = uid;
+      report.mutate();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user?.id]);
 
   if (!configured || authLoading || !user) return <PageSkeleton />;
 

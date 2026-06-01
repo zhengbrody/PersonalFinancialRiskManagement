@@ -191,15 +191,17 @@ function PlanColumn({
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         <Bullet>
-          <span className="font-mono">{plan.monthly_analysis}</span>{" "}
-          portfolio analyses / month
+          <span className="font-mono">{plan.monthly_credits ?? 0}</span> AI
+          credits / month
         </Bullet>
         <Bullet>
-          <span className="font-mono">{plan.monthly_chat}</span> AI chat
-          messages / month
+          <span className="text-muted-foreground">
+            ≈ {plan.monthly_chat} Copilot chats or {plan.monthly_analysis} deep
+            analyses — heavier answers use more
+          </span>
         </Bullet>
         <Bullet>Real market data + macro panel</Bullet>
-        <Bullet>VaR / CVaR / factor analysis</Bullet>
+        <Bullet>VaR / CVaR / factor analysis · scenarios · backtests</Bullet>
         {isPaid ? (
           <Button
             type="button"
@@ -255,6 +257,7 @@ const FALLBACK_PLANS: PlanCard[] = [
     price_usd_per_month: 0,
     monthly_analysis: 2,
     monthly_chat: 2,
+    monthly_credits: 25,
   },
   {
     plan: "basic",
@@ -262,6 +265,7 @@ const FALLBACK_PLANS: PlanCard[] = [
     price_usd_per_month: 10,
     monthly_analysis: 30,
     monthly_chat: 100,
+    monthly_credits: 300,
   },
   {
     plan: "pro",
@@ -269,5 +273,6 @@ const FALLBACK_PLANS: PlanCard[] = [
     price_usd_per_month: 25,
     monthly_analysis: 100,
     monthly_chat: 300,
+    monthly_credits: 800,
   },
 ];

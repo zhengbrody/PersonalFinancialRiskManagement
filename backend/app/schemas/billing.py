@@ -19,6 +19,10 @@ class PlanCard(BaseModel):
     price_usd_per_month: float
     monthly_analysis: int
     monthly_chat: int
+    # HeyGen-style monthly AI credits (1 credit = $0.01 LLM cost) — the
+    # primary, user-facing allowance. monthly_analysis/chat are kept for
+    # backward-compat but are no longer the gate.
+    monthly_credits: int = 0
 
 
 class SubscriptionOut(BaseModel):

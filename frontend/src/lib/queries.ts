@@ -293,6 +293,7 @@ export const planCardSchema = z.looseObject({
   price_usd_per_month: z.number(),
   monthly_analysis: z.number(),
   monthly_chat: z.number(),
+  monthly_credits: z.number().optional(),
 });
 export type PlanCard = z.infer<typeof planCardSchema>;
 
