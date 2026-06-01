@@ -211,3 +211,61 @@ def test_analyze_requires_ticker_or_dossier(test_client, mint_token, fake_equity
         headers={"Authorization": f"Bearer {mint_token()}"},
     )
     assert resp.status_code == 422
+
+
+# ── dossier builder: free yfinance enrichment (no network) ─────────
+
+
+def test_dossier_merges_yfinance_enrichment():
+    """A sparse FMP fetcher (no key) + a yfinance enricher → the dossier is
+    filled from the free enrichment, including analyst consensus + quarterly
+    earnings, with yfinance winning the scalar fields."""
+    from libs.analysis.equity_research import build_company_dossier
+
+    def fetcher(ticker, fmp_key):
+        return {"company_name": "Apple Inc.", "sector": "Technology"}
+
+    def yf_enricher(ticker):
+        return {
+            "market": {"current_price": 200.0, "beta": 1.2, "market_cap": 3e12},
+            "fundamentals": {"roe": 0.36, "net_margin": 0.25, "pe_ttm": 26.0},
+            "technicals": {"sma_50": 190.0, "fifty_two_week_high": 260.0},
+            "ratings": {
+                "analyst_rating": "buy",
+                "analyst_count": 40,
+                "price_targets": {"low": 180, "mean": 230, "high": 300, "current": 200},
+            },
+            "ownership": {"institutional_pct": 0.6},
+            "earnings_quarterly": [
+                {"period": "2025-12-31", "revenue": 1.0, "net_income": 0.2, "eps": 1.5}
+            ],
+        }
+
+    d = build_company_dossier("aapl", fetcher=fetcher, yf_enricher=yf_enricher)
+
+    assert d["ticker"] == "AAPL"
+    assert d["market"]["current_price"] == 200.0
+    assert d["market"]["beta"] == 1.2
+    assert d["fundamentals"]["roe"] == 0.36
+    assert d["technicals"]["sma_50"] == 190.0
+    assert d["ratings"]["analyst_rating"] == "buy"
+    assert d["ratings"]["price_targets"]["mean"] == 230
+    assert d["ownership"]["institutional_pct"] == 0.6
+    assert d["earnings_quarterly"][0]["eps"] == 1.5
+    # Enrichment ran before the gap audit → market.current_price isn't a gap.
+    assert "market.current_price" not in d["data_gaps_detected"]
+
+
+def test_dossier_survives_yfinance_failure():
+    """A throwing enricher must NOT sink the dossier (fail-soft)."""
+    from libs.analysis.equity_research import build_company_dossier
+
+    def fetcher(ticker, fmp_key):
+        return {"company_name": "X Corp"}
+
+    def boom(ticker):
+        raise RuntimeError("yfinance is down")
+
+    d = build_company_dossier("x", fetcher=fetcher, yf_enricher=boom)
+    assert d["ticker"] == "X"
+    assert d["earnings_quarterly"] == []

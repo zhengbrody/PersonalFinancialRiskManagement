@@ -615,7 +615,24 @@ export const equityDossierSchema = z.looseObject({
     max_drawdown_1y: fnum,
   }),
   ratings: z
-    .looseObject({ analyst_rating: fstr, analyst_count: fnum })
+    .looseObject({
+      analyst_rating: fstr,
+      analyst_count: fnum,
+      price_targets: z
+        .looseObject({ low: fnum, mean: fnum, high: fnum, current: fnum })
+        .optional(),
+    })
+    .optional(),
+  ownership: z.looseObject({ institutional_pct: fnum }).optional(),
+  earnings_quarterly: z
+    .array(
+      z.looseObject({
+        period: z.string(),
+        revenue: fnum,
+        net_income: fnum,
+        eps: fnum,
+      }),
+    )
     .optional(),
 });
 export type EquityDossier = z.infer<typeof equityDossierSchema>;
