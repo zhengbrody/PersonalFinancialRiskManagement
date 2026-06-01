@@ -204,12 +204,16 @@ def copilot_chat_stream_endpoint(
                 yield _sse("delta", {"text": chunk})
         except Exception as exc:  # noqa: BLE001 - stream blew up
             _log.warning("copilot.stream.failed reason=%s", type(exc).__name__)
-            if not produced:
-                # Nothing streamed yet → fall back to a template answer.
-                from agents.orchestrator import route_message
 
-                resp = route_message(body.message, score, positions, llm_callable=None)
-                yield _sse("delta", {"text": resp.response_markdown})
+        # If NOTHING streamed — whether the stream raised before the first
+        # token OR completed yielding no text (e.g. the model spent every
+        # tool turn without composing an answer) — fall back to the
+        # deterministic template so the user never gets a blank bubble.
+        if not produced:
+            from agents.orchestrator import route_message
+
+            resp = route_message(body.message, score, positions, llm_callable=None)
+            yield _sse("delta", {"text": resp.response_markdown})
 
         yield _sse(
             "done",

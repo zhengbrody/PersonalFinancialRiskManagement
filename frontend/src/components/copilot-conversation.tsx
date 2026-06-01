@@ -69,6 +69,10 @@ export function CopilotConversation({
   const [error, setError] = useState<ApiError | null>(null);
   const [pending, setPending] = useState(false);
   const scrollAnchor = useRef<HTMLDivElement>(null);
+  // Lets us cancel an in-flight SSE stream — otherwise closing the floating
+  // widget (unmount) mid-answer leaks the connection and the server keeps
+  // running the (quota-consuming) LLM tool loop with no consumer.
+  const abortRef = useRef<AbortController | null>(null);
 
   const floating = variant === "floating";
 
@@ -76,6 +80,9 @@ export function CopilotConversation({
   useEffect(() => {
     scrollAnchor.current?.scrollIntoView?.({ behavior: "smooth" });
   }, [messages, pending]);
+
+  // Cancel any in-flight stream when the component unmounts.
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   /** Append streamed text to the in-flight assistant bubble (create it on
    * the first delta so the "Thinking…" bubble shows until words arrive). */
@@ -121,6 +128,9 @@ export function CopilotConversation({
     setDraft("");
     setPending(true);
 
+    const ac = new AbortController();
+    abortRef.current = ac;
+
     try {
       const res = await fetch(`${env.apiBaseUrl}/api/v1/copilot/chat/stream`, {
         method: "POST",
@@ -129,6 +139,7 @@ export function CopilotConversation({
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
         body: JSON.stringify({ message: trimmed }),
+        signal: ac.signal,
       });
       if (!res.ok || !res.body) {
         throw new ApiError(
@@ -192,6 +203,8 @@ export function CopilotConversation({
         setError(new ApiError(0, e.code ?? "unknown", e.message ?? "Something went wrong."));
       }
     } catch (err) {
+      // Intentional cancel (unmount / new send) — leave state alone.
+      if (err instanceof DOMException && err.name === "AbortError") return;
       setMessages((prev) =>
         prev[prev.length - 1]?.role === "assistant" && !prev[prev.length - 1]?.text
           ? prev.slice(0, -1)
@@ -201,6 +214,7 @@ export function CopilotConversation({
         err instanceof ApiError ? err : new ApiError(0, "network_error", String(err)),
       );
     } finally {
+      if (abortRef.current === ac) abortRef.current = null;
       setPending(false);
     }
   }

@@ -17,7 +17,17 @@
 # the legacy routes to the `streamlit` service and drop this divergence.
 
 {$SITE_HOST}, www.{$SITE_HOST} {
-	encode gzip
+	# gzip everything EXCEPT Server-Sent Event streams: Caddy's encoder
+	# buffers up to its minimum-length before the first flush, which would
+	# delay the start of the Copilot SSE stream (/api/v1/copilot/chat/stream)
+	# and undercut token-by-token rendering. Excluding text/event-stream
+	# lets those responses flush each event immediately.
+	encode {
+		gzip
+		match {
+			not header Content-Type text/event-stream*
+		}
+	}
 	log {
 		output stdout
 		format json

@@ -116,16 +116,23 @@ def _make_tool_using_callable(client) -> Callable[[str, str, int, float], str]:
         try:
             messages: list[dict] = [{"role": "user", "content": prompt}]
             resp = None
-            for _ in range(MAX_TOOL_TURNS):
-                resp = client.messages.create(
+            for turn in range(MAX_TOOL_TURNS):
+                # On the FINAL allowed turn, withhold the tools so the model is
+                # forced to SYNTHESIZE a text answer from what it already
+                # gathered — otherwise a model that keeps asking for tools
+                # leaves us returning an empty/partial tool_use turn.
+                last_turn = turn == MAX_TOOL_TURNS - 1
+                kwargs: dict = dict(
                     model=_SONNET_MODEL,
                     max_tokens=max_tokens,
                     temperature=temperature,
                     system=system,
-                    tools=TOOL_SPECS,
                     messages=messages,
                 )
-                if getattr(resp, "stop_reason", None) != "tool_use":
+                if not last_turn:
+                    kwargs["tools"] = TOOL_SPECS
+                resp = client.messages.create(**kwargs)
+                if last_turn or getattr(resp, "stop_reason", None) != "tool_use":
                     break
 
                 # Record the assistant turn (text + tool_use blocks) verbatim.
@@ -201,22 +208,28 @@ def get_answer_streamer():
 
     def _stream(prompt: str, system: str, max_tokens: int, temperature: float):
         messages: list[dict] = [{"role": "user", "content": prompt}]
-        for _ in range(MAX_TOOL_TURNS):
-            with client.messages.stream(
+        for turn in range(MAX_TOOL_TURNS):
+            # Final allowed turn → withhold tools so the model must stream a
+            # text answer instead of requesting yet another tool (which would
+            # end the loop with no answer). Mirrors _make_tool_using_callable.
+            last_turn = turn == MAX_TOOL_TURNS - 1
+            kwargs: dict = dict(
                 model=_SONNET_MODEL,
                 max_tokens=max_tokens,
                 temperature=temperature,
                 system=system,
-                tools=TOOL_SPECS,
                 messages=messages,
-            ) as stream:
+            )
+            if not last_turn:
+                kwargs["tools"] = TOOL_SPECS
+            with client.messages.stream(**kwargs) as stream:
                 for chunk in stream.text_stream:
                     if chunk:
                         yield chunk
                 final = stream.get_final_message()
 
-            if getattr(final, "stop_reason", None) != "tool_use":
-                return  # end_turn — the streamed deltas were the answer
+            if last_turn or getattr(final, "stop_reason", None) != "tool_use":
+                return  # end_turn (or tools exhausted) — deltas were the answer
 
             messages.append({"role": "assistant", "content": final.content})
             tool_results = []
