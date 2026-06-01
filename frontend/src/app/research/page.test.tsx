@@ -25,6 +25,23 @@ vi.mock("@/lib/auth-context", () => ({
   useAuth: () => useAuthMock(),
 }));
 
+// recharts' ResponsiveContainer renders nothing in jsdom (no layout). Stub
+// the chart pieces as passthrough so the EarningsTrend card still renders.
+vi.mock("recharts", () => {
+  const Pass = ({ children }: { children?: React.ReactNode }) => <div>{children}</div>;
+  const Noop = () => null;
+  return {
+    ResponsiveContainer: Pass,
+    ComposedChart: Pass,
+    Bar: Noop,
+    Line: Noop,
+    XAxis: Noop,
+    YAxis: Noop,
+    CartesianGrid: Noop,
+    Tooltip: Noop,
+  };
+});
+
 import ResearchPage from "./page";
 
 function authed() {
@@ -65,6 +82,17 @@ const DOSSIER = {
   fundamentals: { pe_ttm: 30.1, roe: 1.5 },
   valuation: {},
   technicals: { rsi_14: 55 },
+  ratings: {
+    analyst_rating: "buy",
+    analyst_count: 40,
+    price_targets: { low: 180, mean: 240, high: 300, current: 200.5 },
+  },
+  ownership: { institutional_pct: 0.62 },
+  earnings_quarterly: [
+    { period: "2025-09-30", revenue: 9.0e10, net_income: 2.0e10, eps: 1.4 },
+    { period: "2025-12-31", revenue: 1.0e11, net_income: 2.5e10, eps: 1.8 },
+    { period: "2026-03-31", revenue: 1.1e11, net_income: 2.9e10, eps: 2.0 },
+  ],
 };
 
 const ANALYSIS = {
@@ -139,8 +167,14 @@ describe("ResearchPage", () => {
     expect(screen.getAllByText(/apple inc\./i).length).toBeGreaterThanOrEqual(1);
     // AI verdict.
     expect(await screen.findByText(/durable franchise/i)).toBeInTheDocument();
-    expect(screen.getByText(/^Buy$/)).toBeInTheDocument();
     expect(screen.getByText("80/100")).toBeInTheDocument();
+    // Wall Street consensus (analyst rating + targets + institutional %).
+    expect(screen.getByText(/wall street consensus/i)).toBeInTheDocument();
+    expect(screen.getByText(/40 analysts/i)).toBeInTheDocument();
+    expect(screen.getByText(/institutions hold/i)).toBeInTheDocument();
+    // Earnings trend chart card.
+    expect(screen.getByText(/earnings trend/i)).toBeInTheDocument();
+    expect(screen.getByTestId("earnings-chart")).toBeInTheDocument();
   });
 
   it("shows the upgrade CTA on a quota_exceeded verdict, keeping the data", async () => {

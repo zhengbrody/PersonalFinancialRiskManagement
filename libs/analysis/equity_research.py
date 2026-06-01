@@ -256,11 +256,150 @@ def _take(d: Any, key: str) -> Any:
     return getattr(d, key, None)
 
 
+def _quarterly_earnings(tk: Any, limit: int = 6) -> list[dict[str, Any]]:
+    """Recent quarters (oldest→newest) of revenue / net income / EPS from
+    yfinance's quarterly income statement. Empty list on any failure."""
+    try:
+        q = tk.quarterly_income_stmt
+        if q is None or getattr(q, "empty", True):
+            return []
+    except Exception:  # noqa: BLE001
+        return []
+
+    def _row(name: str):
+        return q.loc[name] if name in q.index else None
+
+    rev, ni = _row("Total Revenue"), _row("Net Income")
+    eps = _row("Diluted EPS")
+    if eps is None:
+        eps = _row("Basic EPS")
+
+    points: list[dict[str, Any]] = []
+    for c in reversed(list(q.columns)[:limit]):  # oldest → newest (L→R chart)
+        try:
+            period = c.date().isoformat()
+        except Exception:  # noqa: BLE001
+            period = str(c)[:10]
+        points.append(
+            {
+                "period": period,
+                "revenue": _finite(rev[c]) if rev is not None else None,
+                "net_income": _finite(ni[c]) if ni is not None else None,
+                "eps": _finite(eps[c]) if eps is not None else None,
+            }
+        )
+    return points
+
+
+def _enrich_from_yfinance(ticker: str) -> dict[str, Any]:
+    """Best-effort FREE enrichment from yfinance — fundamentals, analyst
+    consensus, institutional ownership, and a quarterly earnings series.
+    Returns ``{}`` on ANY failure so the dossier still renders.
+
+    Percent-type fields are normalised to RATIOS (0-1) so the UI formats
+    them uniformly; valuation multiples are left as-is.
+    """
+    try:
+        import yfinance as yf
+
+        tk = yf.Ticker(ticker)
+        info = tk.info or {}
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning("equity.enrich.info_failed ticker=%s err=%s", ticker, type(exc).__name__)
+        return {}
+
+    def g(key: str):
+        return _finite(info.get(key))
+
+    price = g("currentPrice") or g("regularMarketPrice")
+    # dividendYield in this yfinance version is a PERCENT (e.g. 0.81 => 0.81%,
+    # 0.35 => 0.35%) — NOT a ratio. Normalise to a ratio so the UI's percent
+    # formatter (×100) renders it correctly alongside ROE/margins.
+    div = g("dividendYield")
+    if div is not None:
+        div = div / 100.0
+
+    return {
+        "market": {
+            "current_price": price,
+            "market_cap": g("marketCap"),
+            "beta": g("beta"),
+            "shares_outstanding": g("sharesOutstanding"),
+        },
+        "fundamentals": {
+            "pe_ttm": g("trailingPE"),
+            "ps_ttm": g("priceToSalesTrailing12Months"),
+            "pb": g("priceToBook"),
+            "ev_ebitda": g("enterpriseToEbitda"),
+            "roe": g("returnOnEquity"),
+            "roa": g("returnOnAssets"),
+            "gross_margin": g("grossMargins"),
+            "operating_margin": g("operatingMargins"),
+            "net_margin": g("profitMargins"),
+            "eps_ttm": g("trailingEps"),
+            "dividend_yield": div,
+            "revenue_growth_yoy": g("revenueGrowth"),
+            "earnings_growth_yoy": g("earningsGrowth"),
+            "debt_to_equity": g("debtToEquity"),
+            "current_ratio": g("currentRatio"),
+            "free_cash_flow": g("freeCashflow"),
+        },
+        "technicals": {
+            "sma_50": g("fiftyDayAverage"),
+            "sma_200": g("twoHundredDayAverage"),
+            "fifty_two_week_high": g("fiftyTwoWeekHigh"),
+            "fifty_two_week_low": g("fiftyTwoWeekLow"),
+        },
+        "ratings": {
+            "analyst_rating": info.get("recommendationKey"),
+            "analyst_count": _safe_int(info.get("numberOfAnalystOpinions")),
+            "price_targets": {
+                "low": g("targetLowPrice"),
+                "mean": g("targetMeanPrice"),
+                "high": g("targetHighPrice"),
+                "current": price,
+            },
+        },
+        "ownership": {"institutional_pct": g("heldPercentInstitutions")},
+        "earnings_quarterly": _quarterly_earnings(tk),
+    }
+
+
+def _apply_enrichment(dossier: dict[str, Any], enrich: dict[str, Any]) -> None:
+    """Overlay yfinance enrichment onto ``dossier`` IN PLACE. For the scalar
+    sections (market/fundamentals/technicals) yfinance WINS when it has a
+    value (free + complete + consistently-normalised); the FMP dossier fills
+    the gaps yfinance lacks. ratings/ownership leaves + earnings_quarterly are
+    filled only where the dossier doesn't already have a value."""
+    if not enrich:
+        return
+    for section in ("market", "fundamentals", "technicals"):
+        src = enrich.get(section) or {}
+        dst = dossier.setdefault(section, {})
+        for key, val in src.items():
+            if val is not None:
+                dst[key] = val
+    for section in ("ratings", "ownership"):
+        src = enrich.get(section) or {}
+        dst = dossier.setdefault(section, {})
+        for key, val in src.items():
+            if isinstance(val, dict):
+                cur = dst.setdefault(key, {})
+                for k2, v2 in val.items():
+                    if v2 is not None and cur.get(k2) is None:
+                        cur[k2] = v2
+            elif val is not None and dst.get(key) is None:
+                dst[key] = val
+    if enrich.get("earnings_quarterly") and not dossier.get("earnings_quarterly"):
+        dossier["earnings_quarterly"] = enrich["earnings_quarterly"]
+
+
 def build_company_dossier(
     ticker: str,
     *,
     fmp_key: str = "",
     fetcher: Optional[Callable[..., dict]] = None,
+    yf_enricher: Optional[Callable[[str], dict]] = None,
 ) -> dict[str, Any]:
     """Return the compact dossier we feed to both the LLM and the PDF.
 
@@ -361,8 +500,18 @@ def build_company_dossier(
             "sell_count_6m": _safe_int(insider.get("sell_count_6m")),
             "latest_transaction": insider.get("latest_transaction"),
         },
+        "earnings_quarterly": [],
         "_summary_context": (raw.get("summary_context") or "")[:4000],
     }
+
+    # FREE enrichment (yfinance): fills the many fields FMP leaves null
+    # without a key + adds analyst consensus / institutional % / quarterly
+    # earnings. Fail-soft — a yfinance hiccup must never sink the dossier.
+    enricher = yf_enricher if yf_enricher is not None else _enrich_from_yfinance
+    try:
+        _apply_enrichment(dossier, enricher(ticker))
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning("equity.enrich.apply_failed ticker=%s err=%s", ticker, type(exc).__name__)
 
     # Lightweight self-describing data-gap audit — saves the LLM a step
     # and lets us colour the UI confidence pill deterministically.

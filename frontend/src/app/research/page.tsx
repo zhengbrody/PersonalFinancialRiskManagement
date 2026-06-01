@@ -29,6 +29,16 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Bar,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -130,6 +140,8 @@ function ResearchWorkbench() {
             analysis={verdictM.data?.analysis}
             dossier={dossier}
           />
+          <AnalystConsensus dossier={dossier} />
+          <EarningsTrend dossier={dossier} />
           <DossierDashboard dossier={dossier} />
         </>
       )}
@@ -351,18 +363,18 @@ function DossierDashboard({ dossier }: { dossier: EquityDossier }) {
             ["P/S (TTM)", num(f.ps_ttm)],
             ["P/B", num(f.pb)],
             ["EV/EBITDA", num(f.ev_ebitda)],
-            ["EPS (TTM)", num(f.eps_ttm)],
-            ["Dividend yield", num(f.dividend_yield)],
+            ["EPS (TTM)", money(f.eps_ttm)],
+            ["Dividend yield", pct(f.dividend_yield)],
           ]}
         />
         <StatGrid
           title="Quality & growth"
           stats={[
-            ["ROE", num(f.roe)],
-            ["ROA", num(f.roa)],
-            ["Gross margin", num(f.gross_margin)],
-            ["Net margin", num(f.net_margin)],
-            ["Revenue growth (YoY)", num(f.revenue_growth_yoy)],
+            ["ROE", pct(f.roe)],
+            ["ROA", pct(f.roa)],
+            ["Gross margin", pct(f.gross_margin)],
+            ["Net margin", pct(f.net_margin)],
+            ["Revenue growth (YoY)", pct(f.revenue_growth_yoy)],
             ["Debt / equity", num(f.debt_to_equity)],
           ]}
         />
@@ -371,8 +383,8 @@ function DossierDashboard({ dossier }: { dossier: EquityDossier }) {
             title="DCF valuation"
             stats={[
               ["Intrinsic value", money(v.dcf_intrinsic_value)],
-              ["Upside", num(v.dcf_upside_pct)],
-              ["WACC", num(v.wacc)],
+              ["Upside", pct(v.dcf_upside_pct)],
+              ["WACC", pct(v.wacc)],
             ]}
           />
         )}
@@ -380,11 +392,11 @@ function DossierDashboard({ dossier }: { dossier: EquityDossier }) {
           title="Technicals"
           stats={[
             ["RSI (14)", num(t.rsi_14)],
-            ["SMA 50", num(t.sma_50)],
-            ["SMA 200", num(t.sma_200)],
+            ["SMA 50", money(t.sma_50)],
+            ["SMA 200", money(t.sma_200)],
             ["52w high", money(t.fifty_two_week_high)],
             ["52w low", money(t.fifty_two_week_low)],
-            ["Max drawdown (1y)", num(t.max_drawdown_1y)],
+            ["Max drawdown (1y)", pct(t.max_drawdown_1y)],
           ]}
         />
         {p.description && (
@@ -526,7 +538,271 @@ function PageSkeleton() {
   );
 }
 
+// ── Wall Street consensus (analyst ratings + price targets) ─────────
+
+function AnalystConsensus({ dossier }: { dossier: EquityDossier }) {
+  const r = dossier.ratings;
+  const pt = r?.price_targets;
+  const inst = dossier.ownership?.institutional_pct;
+  const hasTargets =
+    pt != null && (pt.low != null || pt.mean != null || pt.high != null);
+  if (!r?.analyst_rating && !hasTargets && inst == null) return null;
+
+  const current = pt?.current ?? dossier.market?.current_price ?? null;
+  const mean = pt?.mean ?? null;
+  const upside =
+    current != null && mean != null && current > 0
+      ? (mean - current) / current
+      : null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Wall Street consensus</CardTitle>
+        <CardDescription>
+          {r?.analyst_count != null
+            ? `${r.analyst_count} analysts`
+            : "Street view"}{" "}
+          · price targets · ownership
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+          {r?.analyst_rating && (
+            <span
+              className={`rounded-md px-3 py-1 font-semibold ${ratingTone(r.analyst_rating).badge}`}
+            >
+              {humanizeRating(r.analyst_rating)}
+            </span>
+          )}
+          {upside != null && (
+            <span className="text-muted-foreground">
+              Avg target implies{" "}
+              <span
+                className={
+                  upside >= 0
+                    ? "font-medium text-emerald-600 dark:text-emerald-400"
+                    : "font-medium text-red-600 dark:text-red-400"
+                }
+              >
+                {upside >= 0 ? "+" : ""}
+                {(upside * 100).toFixed(1)}%
+              </span>{" "}
+              vs {money(current)}
+            </span>
+          )}
+          {inst != null && (
+            <span className="text-muted-foreground">
+              Institutions hold{" "}
+              <span className="font-medium text-foreground">
+                {(inst * 100).toFixed(1)}%
+              </span>
+            </span>
+          )}
+        </div>
+        {hasTargets && (
+          <PriceTargetBar
+            low={pt?.low}
+            mean={mean}
+            high={pt?.high}
+            current={current}
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PriceTargetBar({
+  low,
+  mean,
+  high,
+  current,
+}: {
+  low: number | null | undefined;
+  mean: number | null | undefined;
+  high: number | null | undefined;
+  current: number | null | undefined;
+}) {
+  // Need a real low<high range to draw the scale; otherwise list numbers.
+  if (low == null || high == null || high <= low) {
+    return (
+      <div className="flex gap-5 text-sm">
+        {low != null && (
+          <span className="text-muted-foreground">
+            Low <span className="font-medium text-foreground">{money(low)}</span>
+          </span>
+        )}
+        {mean != null && (
+          <span className="text-muted-foreground">
+            Avg <span className="font-medium text-foreground">{money(mean)}</span>
+          </span>
+        )}
+        {high != null && (
+          <span className="text-muted-foreground">
+            High <span className="font-medium text-foreground">{money(high)}</span>
+          </span>
+        )}
+      </div>
+    );
+  }
+  const span = high - low;
+  const posPct = (v: number) => Math.max(0, Math.min(100, ((v - low) / span) * 100));
+  return (
+    <div>
+      <div className="relative h-2 w-full rounded-full bg-gradient-to-r from-red-500/30 via-amber-500/30 to-emerald-500/40">
+        {current != null && (
+          <div
+            className="absolute top-1/2 h-4 w-0.5 -translate-y-1/2 bg-foreground"
+            style={{ left: `${posPct(current)}%` }}
+            title={`Current ${money(current)}`}
+          />
+        )}
+      </div>
+      <div className="mt-2 flex justify-between text-xs">
+        <span className="text-muted-foreground">
+          Low <span className="font-medium text-foreground">{money(low)}</span>
+        </span>
+        {mean != null && (
+          <span className="text-muted-foreground">
+            Avg <span className="font-medium text-foreground">{money(mean)}</span>
+          </span>
+        )}
+        <span className="text-muted-foreground">
+          High <span className="font-medium text-foreground">{money(high)}</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── quarterly earnings trend (revenue bars + EPS line) ──────────────
+
+const CHART_AXIS = "hsl(var(--muted-foreground))";
+const CHART_GRID = "hsl(var(--border))";
+
+type EarningsTipProps = {
+  active?: boolean;
+  payload?: ReadonlyArray<{
+    dataKey?: string | number | ((obj: unknown) => unknown);
+    value?: unknown;
+  }>;
+  label?: unknown;
+};
+
+function EarningsTooltip(props: EarningsTipProps) {
+  const { active, payload, label } = props;
+  if (!active || !payload || payload.length === 0) return null;
+  const rev = payload.find((p) => p.dataKey === "revenue")?.value;
+  const eps = payload.find((p) => p.dataKey === "eps")?.value;
+  return (
+    <div className="rounded-md border border-border bg-card px-3 py-2 text-xs shadow-sm">
+      <p className="text-muted-foreground">{String(label)}</p>
+      {typeof rev === "number" && (
+        <p className="font-mono text-foreground">Revenue {money(rev)}</p>
+      )}
+      {typeof eps === "number" && (
+        <p className="font-mono text-foreground">EPS ${eps.toFixed(2)}</p>
+      )}
+    </div>
+  );
+}
+
+function EarningsTrend({ dossier }: { dossier: EquityDossier }) {
+  const q = (dossier.earnings_quarterly ?? []).filter(
+    (p) => p.revenue != null || p.eps != null,
+  );
+  if (q.length < 2) return null;
+  const data = q.map((p) => ({
+    label: quarterLabel(p.period),
+    revenue: p.revenue ?? null,
+    eps: p.eps ?? null,
+  }));
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Earnings trend</CardTitle>
+        <CardDescription>
+          Quarterly revenue and EPS — most recent {data.length} quarters
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div
+          style={{ width: "100%", height: 260 }}
+          role="img"
+          aria-label="Quarterly revenue and EPS"
+          data-testid="earnings-chart"
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid stroke={CHART_GRID} strokeDasharray="3 3" vertical={false} />
+              <XAxis
+                dataKey="label"
+                stroke={CHART_AXIS}
+                tick={{ fontSize: 11, fill: CHART_AXIS }}
+                tickLine={false}
+                axisLine={{ stroke: CHART_GRID }}
+              />
+              <YAxis
+                yAxisId="rev"
+                stroke={CHART_AXIS}
+                tick={{ fontSize: 11, fill: CHART_AXIS }}
+                width={52}
+                tickFormatter={(v) => money(v)}
+                tickLine={false}
+                axisLine={false}
+              />
+              <YAxis
+                yAxisId="eps"
+                orientation="right"
+                stroke={CHART_AXIS}
+                tick={{ fontSize: 11, fill: CHART_AXIS }}
+                width={44}
+                tickFormatter={(v) => `$${v}`}
+                tickLine={false}
+                axisLine={false}
+              />
+              <Tooltip content={EarningsTooltip} cursor={{ fill: "hsl(var(--muted))" }} />
+              <Bar
+                yAxisId="rev"
+                dataKey="revenue"
+                fill="hsl(var(--primary))"
+                radius={[3, 3, 0, 0]}
+                isAnimationActive={false}
+              />
+              <Line
+                yAxisId="eps"
+                type="monotone"
+                dataKey="eps"
+                stroke="hsl(var(--foreground))"
+                strokeWidth={2}
+                dot={false}
+                isAnimationActive={false}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Bars: revenue · Line: EPS
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function quarterLabel(period: string): string {
+  const d = new Date(period);
+  if (Number.isNaN(d.getTime())) return period;
+  return d.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
+}
+
 // ── format helpers ──────────────────────────────────────────────────
+
+function pct(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return "—";
+  return `${(v * 100).toFixed(1)}%`;
+}
 
 function num(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return "—";
