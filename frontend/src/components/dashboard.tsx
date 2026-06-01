@@ -209,24 +209,75 @@ function ScoreError({ error }: { error: Error }) {
     code === "no_active_portfolio" ||
     code === "no_priced_holdings" ||
     code === "no_market_data";
+
+  // New users (no portfolio yet) get a guided 3-step start — the activation
+  // hook. A genuine error (not "no portfolio") shows a calm retry message.
+  if (noPortfolio) return <OnboardingGuide />;
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">
-          {noPortfolio ? "Set up your first portfolio" : "Couldn't load your score"}
-        </CardTitle>
-        <CardDescription>
-          {noPortfolio
-            ? "Add your holdings and we'll score the risk + show what to fix."
-            : "Your data is safe — try refreshing in a moment."}
-        </CardDescription>
+        <CardTitle className="text-base">Couldn&apos;t load your score</CardTitle>
+        <CardDescription>Your data is safe — try refreshing in a moment.</CardDescription>
       </CardHeader>
-      <CardContent>
-        {noPortfolio && (
-          <Link href="/portfolios/new">
-            <Button>Create a portfolio</Button>
-          </Link>
-        )}
+    </Card>
+  );
+}
+
+function OnboardingGuide() {
+  const steps = [
+    {
+      n: 1,
+      title: "Add your holdings",
+      body: "Tickers + shares (avg cost optional). Takes about a minute.",
+      cta: { href: "/portfolios/new", label: "Add holdings" },
+      active: true,
+    },
+    {
+      n: 2,
+      title: "See your Health Score",
+      body: "A 0–1000 score + your biggest risk, the moment your holdings are in.",
+    },
+    {
+      n: 3,
+      title: "Ask your Copilot",
+      body: "Plain-English answers about your risk — grounded in your real numbers.",
+    },
+  ];
+  return (
+    <Card className="border-primary/30">
+      <CardHeader>
+        <CardTitle>Welcome — let&apos;s get your first score</CardTitle>
+        <CardDescription>Three quick steps to your institutional-grade risk view.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {steps.map((s) => (
+          <div
+            key={s.n}
+            className={`flex items-start gap-3 rounded-lg border p-3 ${
+              s.active ? "border-primary/40 bg-primary/5" : "border-border"
+            }`}
+          >
+            <div
+              className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
+                s.active
+                  ? "bg-primary text-primary-foreground"
+                  : "border border-border text-muted-foreground"
+              }`}
+            >
+              {s.n}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium">{s.title}</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">{s.body}</div>
+            </div>
+            {s.cta && (
+              <Link href={s.cta.href}>
+                <Button size="sm">{s.cta.label}</Button>
+              </Link>
+            )}
+          </div>
+        ))}
       </CardContent>
     </Card>
   );
