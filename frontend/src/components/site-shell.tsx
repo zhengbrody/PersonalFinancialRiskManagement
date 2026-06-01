@@ -47,7 +47,8 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
               alpha
             </span>
           </Link>
-          <nav className="flex items-center gap-1 text-sm">
+          {/* Desktop nav */}
+          <nav className="hidden items-center gap-1 text-sm md:flex">
             <NavGroup label="Portfolio" items={PORTFOLIO_ITEMS} />
             <NavGroup label="Research" items={RESEARCH_ITEMS} />
             <Link
@@ -58,6 +59,8 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
             </Link>
             <AccountMenu />
           </nav>
+          {/* Mobile nav */}
+          <MobileNav />
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-4 py-10">{children}</main>
@@ -136,6 +139,88 @@ function MenuLink({ item, onNavigate }: { item: NavItem; onNavigate: () => void 
     <Link href={item.href} role="menuitem" className={cls} onClick={onNavigate}>
       {item.label}
     </Link>
+  );
+}
+
+function MobileNav() {
+  const { user, configured, signOut } = useAuth();
+  const billing = useBillingMe();
+  const [open, setOpen] = useState(false);
+  const ref = useDismiss(open, () => setOpen(false));
+  const close = () => setOpen(false);
+  const isOwner = billing.data?.plan === "owner";
+
+  return (
+    <div ref={ref} className="relative md:hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label="Menu"
+        className="flex h-9 w-9 items-center justify-center rounded-md border border-border text-foreground hover:bg-accent"
+      >
+        <span aria-hidden className="text-lg leading-none">
+          {open ? "✕" : "☰"}
+        </span>
+      </button>
+      {open && (
+        <div className="absolute right-0 z-50 mt-2 w-60 rounded-md border border-border bg-card p-2 shadow-lg">
+          <Section label="Portfolio" items={PORTFOLIO_ITEMS} onNavigate={close} />
+          <Section label="Research" items={RESEARCH_ITEMS} onNavigate={close} />
+          <MenuLink item={{ href: "/copilot", label: "Copilot" }} onNavigate={close} />
+          <div className="my-1 border-t border-border" />
+          {configured && user ? (
+            <>
+              <MenuLink item={{ href: "/settings", label: "Settings" }} onNavigate={close} />
+              <MenuLink item={{ href: "/pricing", label: "Plan & billing" }} onNavigate={close} />
+              <MenuLink
+                item={{ href: "/legacy/", label: "Advanced workbench", external: true }}
+                onNavigate={close}
+              />
+              {isOwner && (
+                <MenuLink item={{ href: "/admin", label: "Admin · usage" }} onNavigate={close} />
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  close();
+                  signOut();
+                }}
+                className="block w-full rounded px-3 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              >
+                Sign out
+              </button>
+            </>
+          ) : configured ? (
+            <>
+              <MenuLink item={{ href: "/login", label: "Sign in" }} onNavigate={close} />
+              <MenuLink item={{ href: "/signup", label: "Sign up" }} onNavigate={close} />
+            </>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Section({
+  label,
+  items,
+  onNavigate,
+}: {
+  label: string;
+  items: NavItem[];
+  onNavigate: () => void;
+}) {
+  return (
+    <div className="mb-1">
+      <div className="px-3 pb-0.5 pt-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+        {label}
+      </div>
+      {items.map((it) => (
+        <MenuLink key={it.href} item={it} onNavigate={onNavigate} />
+      ))}
+    </div>
   );
 }
 
