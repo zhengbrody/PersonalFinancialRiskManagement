@@ -120,14 +120,48 @@ def billing_me(request: Request, user: AuthedUser = Depends(require_user)):
     except Exception as exc:
         _logger.warning("billing.subscription_lookup_failed user=%s err=%s", user.id, exc)
 
+    credits = None
+    try:
+        from libs.billing.usage import get_credit_status
+
+        credits = get_credit_status(user.id)
+    except Exception as exc:  # noqa: BLE001 - credits are display-only here
+        _logger.warning("billing.credit_status_failed user=%s err=%s", user.id, exc)
+
     payload = BillingMeResponse(
         user_id=user.id,
         email=user.email,
         plan=plan,
         subscription=subscription_row,
         plans=_plan_catalogue(),
+        credits=credits,
     )
     return ok(payload.model_dump(), request=request, started_at=started)
+
+
+# ── GET /admin/usage — owner-only cost/usage dashboard ─────────────
+
+
+@router.get("/admin/usage", summary="Owner-only: aggregate token/cost/credit usage")
+def billing_admin_usage(request: Request, user: AuthedUser = Depends(require_user)):
+    """Month-to-date usage aggregates (tokens / $ / credits, per kind + per
+    user) for the owner dashboard. 403 for everyone else."""
+    started = time.perf_counter()
+
+    from libs.admin.status import is_owner_email
+
+    if not is_owner_email(user.email):
+        raise APIError(status=403, code="forbidden", message="Owner only.")
+
+    try:
+        from libs.billing.usage import get_admin_usage
+
+        summary = get_admin_usage()
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning("billing.admin_usage_failed err=%s", type(exc).__name__)
+        summary = {"since": None, "totals": {}, "by_kind": {}, "users": []}
+
+    return ok(summary, request=request, started_at=started)
 
 
 # ── POST /checkout_session — start a paid plan ─────────────────────

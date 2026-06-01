@@ -36,6 +36,36 @@ router = APIRouter(prefix="/api/v1/equity", tags=["equity"])
 
 _log = logging.getLogger(__name__)
 
+_ANALYSIS_MODEL = "claude-sonnet-4-6"
+
+
+def _record_analysis_cost(user_id: str, dossier: dict, analysis) -> None:
+    """Record the actual token cost of a ticker analysis so credits deplete
+    and the owner dashboard is accurate. Input ≈ dossier JSON + analyst system
+    prompt; output ≈ the structured verdict. Never raises."""
+    try:
+        import json
+
+        from libs.billing.costs import estimate_cost_usd, estimate_tokens
+        from libs.billing.usage import record_event
+
+        tokens_in = estimate_tokens(json.dumps(dossier, default=str)) + 1400  # +system
+        tokens_out = estimate_tokens(json.dumps(analysis.model_dump(), default=str))
+        cost = estimate_cost_usd(
+            "anthropic", _ANALYSIS_MODEL, tokens_in=tokens_in, tokens_out=tokens_out
+        )
+        record_event(
+            user_id,
+            "analysis",
+            provider="anthropic",
+            model=_ANALYSIS_MODEL,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost_usd=cost,
+        )
+    except Exception:  # noqa: BLE001
+        _log.warning("equity.cost_record_failed")
+
 
 class DossierRequest(BaseModel):
     ticker: str = Field(min_length=1, max_length=20)
@@ -115,22 +145,28 @@ def equity_analyze(
             _log.warning("equity.analyze.dossier_failed err=%s", type(exc).__name__)
             raise unprocessable(f"Could not build a dossier for {body.ticker!r}.") from exc
 
-    # ── Quota gate ────────────────────────────────────────────────────
-    # Hard QuotaExceeded → 429. ANY other failure (Supabase blip, schema
-    # drift) must NOT lock a paying user out — eat the rare unmetered call.
-    from libs.billing.usage import QuotaExceeded, check_and_consume
+    # ── Credit gate ───────────────────────────────────────────────────
+    # Metered by credits (= real token cost). Out of credits → 429; any other
+    # failure must NOT lock a paying user out — eat the rare unmetered call.
+    from libs.billing.usage import ESTIMATED_COST_USD, QuotaExceeded, check_credits
 
     try:
-        check_and_consume(user.id, "analysis")
+        check_credits(user.id, estimated_cost_usd=ESTIMATED_COST_USD["analysis"])
     except QuotaExceeded as exc:
         raise too_many_requests(str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - fail-open on metering blip
-        _log.warning("equity.analyze.quota_check_failed reason=%s", type(exc).__name__)
+        _log.warning("equity.analyze.credit_check_failed reason=%s", type(exc).__name__)
 
     # llm_callable=None → analyze_equity returns the data-only placeholder.
     from ...services.llm_client import get_llm_callable
 
-    analysis = analyze_equity(dossier, llm_callable=get_llm_callable(with_tools=False))
+    llm = get_llm_callable(with_tools=False)
+    analysis = analyze_equity(dossier, llm_callable=llm)
+
+    # Record the ACTUAL cost so credits deplete + the dashboard is accurate —
+    # but ONLY when a real model ran (the placeholder path is free).
+    if llm is not None:
+        _record_analysis_cost(user.id, dossier, analysis)
 
     return ok(
         {"analysis": analysis.model_dump(), "dossier": dossier},

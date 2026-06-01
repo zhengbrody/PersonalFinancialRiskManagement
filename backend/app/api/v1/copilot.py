@@ -51,6 +51,35 @@ def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
+_CHAT_MODEL = "claude-sonnet-4-6"
+
+
+def _record_chat_cost(user_id: str, answer_text: str) -> None:
+    """Record the ACTUAL token cost of a chat turn so credits deplete and the
+    owner dashboard reflects real spend. Output dominates cost; input is a
+    fixed context proxy (positions + score + grounding). Never raises."""
+    try:
+        from libs.billing.costs import estimate_cost_usd, estimate_tokens
+        from libs.billing.usage import record_event
+
+        tokens_out = estimate_tokens(answer_text)
+        tokens_in = 1500  # context proxy; output dominates the bill
+        cost = estimate_cost_usd(
+            "anthropic", _CHAT_MODEL, tokens_in=tokens_in, tokens_out=tokens_out
+        )
+        record_event(
+            user_id,
+            "chat",
+            provider="anthropic",
+            model=_CHAT_MODEL,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost_usd=cost,
+        )
+    except Exception:  # noqa: BLE001
+        _log.warning("copilot.cost_record_failed")
+
+
 @router.post(
     "/chat",
     summary="Chat with the AI Portfolio Copilot about the active portfolio",
@@ -76,19 +105,19 @@ def copilot_chat_endpoint(
     # the shared 422/500 envelope codes; let them propagate.
     positions, score = copilot_context.load_positions_and_score(user)
 
-    # ── Quota gate ────────────────────────────────────────────────────
-    # A hard QuotaExceeded → 429 (caller must upgrade/wait). ANY OTHER
-    # failure (Supabase outage, schema drift) must NOT lock the user out:
-    # we'd rather eat the rare unmetered call than hand a paying customer
-    # a 500. Same fail-soft posture as risk.py:_resolve_cash_and_margin.
-    from libs.billing.usage import QuotaExceeded, check_and_consume
+    # ── Credit gate ───────────────────────────────────────────────────
+    # AI usage is metered by credits (= real token cost). A hard
+    # QuotaExceeded → 429 (out of credits). ANY OTHER failure (Supabase
+    # outage, schema drift) must NOT lock the user out: we'd rather eat the
+    # rare unmetered call than hand a paying customer a 500.
+    from libs.billing.usage import ESTIMATED_COST_USD, QuotaExceeded, check_credits
 
     try:
-        check_and_consume(user.id, "chat")
+        check_credits(user.id, estimated_cost_usd=ESTIMATED_COST_USD["chat"])
     except QuotaExceeded as exc:
         raise too_many_requests(str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - fail-open on metering blip
-        _log.warning("copilot.quota_check_failed reason=%s", type(exc).__name__)
+        _log.warning("copilot.credit_check_failed reason=%s", type(exc).__name__)
 
     # ── Agent dispatch ────────────────────────────────────────────────
     # route_message never raises (returns a typed error response on
@@ -101,6 +130,9 @@ def copilot_chat_endpoint(
     # no key, exactly as before.
     llm = get_llm_callable(with_tools=True)
     resp = route_message(body.message, score, positions, llm_callable=llm)
+
+    # Record the ACTUAL cost so credits deplete + the dashboard is accurate.
+    _record_chat_cost(user.id, resp.response_markdown or "")
 
     payload = ChatResponse(**resp.model_dump()).model_dump()
     return ok(payload, request=request, started_at=started)
@@ -141,16 +173,16 @@ def copilot_chat_stream_endpoint(
             yield _sse("error", {"code": "server_error", "message": "Could not load portfolio."})
             return
 
-        # Quota gate (429 → error event; fail-open on a metering blip).
-        from libs.billing.usage import QuotaExceeded, check_and_consume
+        # Credit gate (429 → error event; fail-open on a metering blip).
+        from libs.billing.usage import ESTIMATED_COST_USD, QuotaExceeded, check_credits
 
         try:
-            check_and_consume(user.id, "chat")
+            check_credits(user.id, estimated_cost_usd=ESTIMATED_COST_USD["chat"])
         except QuotaExceeded as exc:
             yield _sse("error", {"code": "quota_exceeded", "message": str(exc)})
             return
         except Exception as exc:  # noqa: BLE001 - fail-open
-            _log.warning("copilot.stream.quota_failed reason=%s", type(exc).__name__)
+            _log.warning("copilot.stream.credit_failed reason=%s", type(exc).__name__)
 
         grounded = _grounded(score)
         from agents.orchestrator import generate_draft_trades
@@ -177,6 +209,8 @@ def copilot_chat_stream_endpoint(
                     "draft_trades": draft_trades,
                 },
             )
+            # Template path is cheap, but still meter it for an honest ledger.
+            _record_chat_cost(user.id, resp.response_markdown or "")
             return
 
         context = build_agent_context(score, list(positions))
@@ -198,9 +232,11 @@ def copilot_chat_stream_endpoint(
 
         yield _sse("status", {"phase": "writing"})
         produced = False
+        parts: list[str] = []
         try:
             for chunk in streamer(prompt, system, 3500, 0.3):
                 produced = True
+                parts.append(chunk)
                 yield _sse("delta", {"text": chunk})
         except Exception as exc:  # noqa: BLE001 - stream blew up
             _log.warning("copilot.stream.failed reason=%s", type(exc).__name__)
@@ -213,6 +249,7 @@ def copilot_chat_stream_endpoint(
             from agents.orchestrator import route_message
 
             resp = route_message(body.message, score, positions, llm_callable=None)
+            parts.append(resp.response_markdown or "")
             yield _sse("delta", {"text": resp.response_markdown})
 
         yield _sse(
@@ -223,6 +260,9 @@ def copilot_chat_stream_endpoint(
                 "draft_trades": draft_trades,
             },
         )
+
+        # Meter the ACTUAL answer (accumulated deltas) so credits deplete.
+        _record_chat_cost(user.id, "".join(parts))
 
     return StreamingResponse(
         gen(),

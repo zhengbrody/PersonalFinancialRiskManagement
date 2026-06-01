@@ -46,6 +46,9 @@ class BillingMeResponse(BaseModel):
     plan: str
     subscription: Optional[SubscriptionOut] = None
     plans: list[PlanCard] = Field(default_factory=list)
+    # Monthly AI credit balance (HeyGen-style metering). None fields when the
+    # plan is unlimited (owner). Shaped by libs.billing.usage.get_credit_status.
+    credits: Optional[dict] = None
 
 
 class CheckoutSessionRequest(BaseModel):

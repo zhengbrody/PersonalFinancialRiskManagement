@@ -296,12 +296,25 @@ export const planCardSchema = z.looseObject({
 });
 export type PlanCard = z.infer<typeof planCardSchema>;
 
+export const creditStatusSchema = z.looseObject({
+  plan: z.string(),
+  label: z.string().optional(),
+  unlimited: z.boolean(),
+  credits_total: z.number().nullable(),
+  credits_used: z.number(),
+  credits_remaining: z.number().nullable(),
+  budget_usd: z.number().nullable(),
+  used_usd: z.number(),
+});
+export type CreditStatus = z.infer<typeof creditStatusSchema>;
+
 export const billingMeSchema = z.looseObject({
   user_id: z.string(),
   email: z.string().nullable(),
   plan: z.string(),
   subscription: subscriptionRowSchema.nullable(),
   plans: z.array(planCardSchema),
+  credits: creditStatusSchema.nullable().optional(),
 });
 export type BillingMe = z.infer<typeof billingMeSchema>;
 
@@ -317,6 +330,46 @@ export const portalSessionResponseSchema = z.looseObject({
   portal_url: z.string(),
 });
 export type PortalSessionResponse = z.infer<typeof portalSessionResponseSchema>;
+
+// ── owner usage/cost dashboard ───────────────────────────────────
+const usageAggSchema = z.looseObject({
+  events: z.number().optional(),
+  tokens_in: z.number().optional(),
+  tokens_out: z.number().optional(),
+  cost_usd: z.number().optional(),
+  credits: z.number().optional(),
+});
+const usageUserSchema = z.looseObject({
+  user_id: z.string(),
+  events: z.number().optional(),
+  tokens_in: z.number().optional(),
+  tokens_out: z.number().optional(),
+  cost_usd: z.number().optional(),
+  credits: z.number().optional(),
+});
+export const adminUsageSchema = z.looseObject({
+  since: z.string().nullable(),
+  totals: usageAggSchema,
+  by_kind: z.record(z.string(), usageAggSchema),
+  users: z.array(usageUserSchema),
+});
+export type AdminUsage = z.infer<typeof adminUsageSchema>;
+
+/** Owner-only month-to-date token/cost/credit aggregates. */
+export function useAdminUsage(enabled: boolean) {
+  const { accessToken } = useAuth();
+  return useQuery<AdminUsage>({
+    queryKey: ["billing", "admin", "usage"],
+    enabled: enabled && Boolean(accessToken),
+    queryFn: () =>
+      apiFetch<AdminUsage>("/api/v1/billing/admin/usage", {
+        authToken: accessToken!,
+        schema: adminUsageSchema,
+      }),
+    staleTime: 30 * 1000,
+    retry: false,
+  });
+}
 
 /** Plan + subscription snapshot for the signed-in user. */
 export function useBillingMe() {

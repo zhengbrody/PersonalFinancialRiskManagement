@@ -68,7 +68,8 @@ def fake_equity_llm(monkeypatch):
 
 @pytest.fixture
 def fake_quota(monkeypatch):
-    """Patch ``libs.billing.usage.check_and_consume``."""
+    """Patch the credit gate ``libs.billing.usage.check_credits`` + silence
+    ``record_event`` (no Supabase). Default allow; ``.deny()`` → QuotaExceeded."""
     import libs.billing.usage as usage
 
     class _Stub:
@@ -79,14 +80,17 @@ def fake_quota(monkeypatch):
         def deny(self) -> None:
             self.denied = True
 
-        def __call__(self, user_id, kind, **kwargs):
-            self.calls.append((user_id, kind))
+        def __call__(self, user_id, *, estimated_cost_usd=0.0):
+            self.calls.append((user_id, estimated_cost_usd))
             if self.denied:
-                raise usage.QuotaExceeded(kind=kind, plan="free", used=2, limit=2)
-            return {"used": 1, "limit": 2}
+                raise usage.QuotaExceeded(
+                    kind="credits", plan="free", used=25, limit=25, message="Out of AI credits."
+                )
+            return {"credits_remaining": 100}
 
     stub = _Stub()
-    monkeypatch.setattr(usage, "check_and_consume", stub)
+    monkeypatch.setattr(usage, "check_credits", stub)
+    monkeypatch.setattr(usage, "record_event", lambda *a, **k: None)
     return stub
 
 
@@ -146,7 +150,7 @@ def test_analyze_degraded_placeholder_consumes_quota(
     data = resp.json()["data"]
     assert data["analysis"]["verdict"]["rating"] == "HOLD"
     assert data["dossier"]["ticker"] == "AAPL"
-    assert fake_quota.calls == [("u-eq", "analysis")]
+    assert fake_quota.calls and fake_quota.calls[0][0] == "u-eq"
 
 
 def test_analyze_with_live_llm_uses_verdict(
