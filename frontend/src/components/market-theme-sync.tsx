@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * Keeps the `.dark` class on <html> in sync with the US market session
- * *while the tab is open*, so the theme flips on its own at 09:30 / 16:00
- * ET without a reload.
+ * Keeps the `.dark` class on <html> in sync with the day/night session
+ * *while the tab is open*, so the theme flips on its own at the 04:00 / 20:00
+ * ET boundaries without a reload.
  *
  * The INITIAL theme is set flash-free by the inline boot script in
  * `app/layout.tsx` (runs before paint). This component only handles the
@@ -15,10 +15,10 @@
  */
 
 import { useEffect } from "react";
-import { isUsMarketOpen } from "@/lib/market-hours";
+import { marketTheme } from "@/lib/market-hours";
 
 function apply() {
-  const dark = !isUsMarketOpen();
+  const dark = marketTheme() === "dark";
   const root = document.documentElement;
   root.classList.toggle("dark", dark);
   // Keep native UI (scrollbars, form controls) matched to the theme.
