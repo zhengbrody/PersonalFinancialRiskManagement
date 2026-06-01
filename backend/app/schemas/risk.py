@@ -112,6 +112,36 @@ class RiskReportOut(BaseModel):
     drawdown_stats: Optional[dict[str, Any]] = None
 
 
+class FrontierPoint(BaseModel):
+    """One point on the risk/return plane (annualized)."""
+
+    vol: float
+    ret: float
+
+
+class EfficientFrontierOut(BaseModel):
+    """Payload for ``POST /api/v1/risk/efficient_frontier``."""
+
+    frontier: list[FrontierPoint] = Field(default_factory=list)
+    current: FrontierPoint
+    risk_free_rate: float
+
+
+class ScenarioPoint(BaseModel):
+    """Projected portfolio outcome under a broad market move."""
+
+    shock_pct: float  # e.g. -0.30 = market −30%
+    pnl_pct: float  # signed portfolio P&L fraction (leverage-scaled)
+    portfolio_value: float  # projected $ value after the move
+
+
+class ScenariosOut(BaseModel):
+    """Payload for ``POST /api/v1/risk/scenarios``."""
+
+    total_value: float
+    scenarios: list[ScenarioPoint] = Field(default_factory=list)
+
+
 class ReportFromActiveRequest(BaseModel):
     """Body for ``POST /api/v1/risk/report_from_active``.
 

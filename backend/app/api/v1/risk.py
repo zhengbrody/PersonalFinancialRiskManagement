@@ -35,11 +35,15 @@ from ...core.responses import APIError, ok, server_error, unprocessable
 from ...schemas.risk import (
     ComponentVarRow,
     DimensionScoreOut,
+    EfficientFrontierOut,
     FactorBetaRow,
+    FrontierPoint,
     LiquidityRow,
     PortfolioMetricsOut,
     ReportFromActiveRequest,
     RiskReportOut,
+    ScenarioPoint,
+    ScenariosOut,
     ScoreFromActiveRequest,
     ScoreRequest,
     ScoreResponse,
@@ -771,4 +775,160 @@ def report_from_active_endpoint(
         raise server_error("Risk report computation failed.", reason=type(exc).__name__) from exc
 
     out = _serialize_report(report, market_values, risk_scale=risk_scale)
+    return ok(out.model_dump(), request=request, started_at=started)
+
+
+# ── scenario simulator + efficient frontier ───────────────────────────
+# Both reuse RiskEngine (same wiring as report_from_active). The efficient
+# frontier shows "are you paid for your risk?"; the scenario sweep shows
+# downside/upside under a broad market move — the Citadel-bone, defensive
+# "what could go wrong" view for a novice.
+
+_SCENARIO_SHOCKS = [-0.30, -0.20, -0.10, -0.05, 0.0, 0.05, 0.10, 0.20, 0.30]
+
+
+def _build_active_engine(user: AuthedUser, body: ReportFromActiveRequest):
+    """Shared: active holdings → prices → weights → a constructed RiskEngine.
+
+    Returns ``(engine, returns, weights_norm, total_value, risk_scale)`` where
+    ``weights_norm`` is a numpy array aligned to ``returns.columns`` summing to
+    1. Raises the same 422/500 envelope codes as report_from_active.
+    """
+    holdings = _resolve_active_or_raise(user)
+    tickers = sorted(holdings.keys())
+
+    from ...services import market_data
+
+    try:
+        price_frame = market_data.get_price_history(tickers, days=body.history_days)
+    except Exception as exc:
+        raise server_error("Market data fetch failed.", reason=type(exc).__name__) from exc
+    if price_frame.empty:
+        raise APIError(
+            status=422,
+            code="no_market_data",
+            message="Could not fetch prices for any holding.",
+            details={"tickers": tickers},
+        )
+
+    weights, market_values = _compute_weights(holdings, price_frame, tickers=tickers)
+    if not weights:
+        raise APIError(
+            status=422,
+            code="no_priced_holdings",
+            message="Could not price any holding (shares=0 or no quote).",
+        )
+
+    equity_value = float(sum(market_values.values()))
+    cash_balance, margin_loan = _resolve_cash_and_margin(user)
+    risk_scale = _equity_risk_scale(
+        equity_value=equity_value, cash_balance=cash_balance, margin_loan=margin_loan
+    )
+
+    try:
+        from data_provider import DataProvider
+        from risk_engine import RiskEngine
+    except Exception as exc:  # pragma: no cover - import guard
+        raise server_error("Risk engine modules unavailable.", reason=str(exc)) from exc
+
+    try:
+        dp = DataProvider(weights=weights, holdings=holdings)
+        engine = RiskEngine(
+            dp,
+            risk_free_rate_fallback=body.risk_free_rate,
+            market_shock=body.market_shock,
+        )
+        returns = dp.get_daily_returns()
+    except Exception as exc:
+        raise server_error("Risk engine init failed.", reason=type(exc).__name__) from exc
+
+    w = np.array([float(weights.get(t, 0.0)) for t in returns.columns], dtype=float)
+    s = float(w.sum())
+    if s > 0:
+        w = w / s
+    return engine, returns, w, equity_value, risk_scale
+
+
+@router.post(
+    "/efficient_frontier",
+    summary="Efficient frontier + the active portfolio's risk/return point",
+    response_model=None,
+)
+def efficient_frontier_endpoint(
+    body: ReportFromActiveRequest,
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    started = time.perf_counter()
+    engine, returns, w, _equity, _scale = _build_active_engine(user, body)
+
+    if returns is None or returns.empty or returns.shape[1] < 2:
+        raise unprocessable("Need at least 2 priced holdings to draw an efficient frontier.")
+
+    try:
+        ef = engine.compute_efficient_frontier(returns, body.risk_free_rate)
+    except Exception as exc:
+        raise server_error("Frontier computation failed.", reason=type(exc).__name__) from exc
+
+    vols = ef.get("frontier_vols") or []
+    rets = ef.get("frontier_rets") or []
+    points = [
+        FrontierPoint(vol=float(v), ret=float(r))
+        for v, r in zip(vols, rets)
+        if np.isfinite(v) and np.isfinite(r)
+    ]
+
+    port_daily = returns.values @ w
+    cur_ret = float(np.nanmean(port_daily) * engine.TRADING_DAYS)
+    cur_vol = float(np.nanstd(port_daily) * np.sqrt(engine.TRADING_DAYS))
+    if not (np.isfinite(cur_ret) and np.isfinite(cur_vol)):
+        raise unprocessable("Could not compute the portfolio's risk/return point.")
+
+    out = EfficientFrontierOut(
+        frontier=points,
+        current=FrontierPoint(vol=cur_vol, ret=cur_ret),
+        risk_free_rate=body.risk_free_rate,
+    )
+    return ok(out.model_dump(), request=request, started_at=started)
+
+
+@router.post(
+    "/scenarios",
+    summary="Project portfolio P&L across a −30%…+30% market move sweep",
+    response_model=None,
+)
+def scenarios_endpoint(
+    body: ReportFromActiveRequest,
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    started = time.perf_counter()
+    engine, returns, w, equity_value, risk_scale = _build_active_engine(user, body)
+
+    if returns is None or returns.empty:
+        raise unprocessable("No return history to simulate scenarios on.")
+
+    points: list[ScenarioPoint] = []
+    for shock in _SCENARIO_SHOCKS:
+        try:
+            # _stress_test → signed portfolio P&L (Σ wᵢ·βᵢ·shock). Scale by
+            # the leverage/cash factor so $ outcomes match the risk report.
+            port_pnl, _assets = engine._stress_test(returns, w, market_shock=shock)
+            pnl = float(port_pnl) * float(risk_scale)
+        except Exception:  # noqa: BLE001 - a single bad shock shouldn't sink the sweep
+            continue
+        if not np.isfinite(pnl):
+            continue
+        points.append(
+            ScenarioPoint(
+                shock_pct=float(shock),
+                pnl_pct=pnl,
+                portfolio_value=float(equity_value * (1.0 + pnl)),
+            )
+        )
+
+    if not points:
+        raise server_error("Scenario simulation produced no usable points.")
+
+    out = ScenariosOut(total_value=float(equity_value), scenarios=points)
     return ok(out.model_dump(), request=request, started_at=started)
