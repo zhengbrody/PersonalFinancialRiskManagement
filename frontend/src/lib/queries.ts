@@ -583,6 +583,7 @@ export const equityDossierSchema = z.looseObject({
   }),
   fundamentals: z.looseObject({
     pe_ttm: fnum,
+    pe_forward: fnum,
     ps_ttm: fnum,
     pb: fnum,
     ev_ebitda: fnum,

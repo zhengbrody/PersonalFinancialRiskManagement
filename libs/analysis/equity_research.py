@@ -291,6 +291,25 @@ def _quarterly_earnings(tk: Any, limit: int = 6) -> list[dict[str, Any]]:
     return points
 
 
+def _rsi_14(tk: Any) -> Optional[float]:
+    """14-day RSI from ~3 months of daily closes (Wilders-style SMA). None on
+    any failure — RSI is a nice-to-have, never a blocker."""
+    try:
+        closes = tk.history(period="3mo")["Close"].dropna()
+        if len(closes) < 15:
+            return None
+        delta = closes.diff()
+        gain = delta.clip(lower=0).rolling(14).mean()
+        loss = (-delta.clip(upper=0)).rolling(14).mean()
+        last_gain, last_loss = float(gain.iloc[-1]), float(loss.iloc[-1])
+        if last_loss == 0:
+            return 100.0
+        rs = last_gain / last_loss
+        return _finite(100.0 - 100.0 / (1.0 + rs))
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _enrich_from_yfinance(ticker: str) -> dict[str, Any]:
     """Best-effort FREE enrichment from yfinance — fundamentals, analyst
     consensus, institutional ownership, and a quarterly earnings series.
@@ -319,15 +338,27 @@ def _enrich_from_yfinance(ticker: str) -> dict[str, Any]:
     if div is not None:
         div = div / 100.0
 
+    # yfinance debtToEquity is a PERCENT-style number (e.g. 30.27 means a 0.30×
+    # debt/equity ratio). Normalise to the ratio investors expect.
+    dte = g("debtToEquity")
+    if dte is not None:
+        dte = dte / 100.0
+
+    # FCF yield = free cash flow / market cap (a ratio) — yfinance has no direct
+    # field, so derive it when both legs are present.
+    fcf, mcap = g("freeCashflow"), g("marketCap")
+    fcf_yield = (fcf / mcap) if (fcf is not None and mcap) else None
+
     return {
         "market": {
             "current_price": price,
-            "market_cap": g("marketCap"),
+            "market_cap": mcap,
             "beta": g("beta"),
             "shares_outstanding": g("sharesOutstanding"),
         },
         "fundamentals": {
             "pe_ttm": g("trailingPE"),
+            "pe_forward": g("forwardPE"),
             "ps_ttm": g("priceToSalesTrailing12Months"),
             "pb": g("priceToBook"),
             "ev_ebitda": g("enterpriseToEbitda"),
@@ -340,11 +371,13 @@ def _enrich_from_yfinance(ticker: str) -> dict[str, Any]:
             "dividend_yield": div,
             "revenue_growth_yoy": g("revenueGrowth"),
             "earnings_growth_yoy": g("earningsGrowth"),
-            "debt_to_equity": g("debtToEquity"),
+            "debt_to_equity": dte,
             "current_ratio": g("currentRatio"),
-            "free_cash_flow": g("freeCashflow"),
+            "free_cash_flow": fcf,
+            "fcf_yield": fcf_yield,
         },
         "technicals": {
+            "rsi_14": _rsi_14(tk),
             "sma_50": g("fiftyDayAverage"),
             "sma_200": g("twoHundredDayAverage"),
             "fifty_two_week_high": g("fiftyTwoWeekHigh"),

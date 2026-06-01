@@ -79,9 +79,17 @@ const DOSSIER = {
   as_of: "2026-05-31T00:00:00+00:00",
   profile: { name: "Apple Inc.", sector: "Technology", industry: "Consumer Electronics" },
   market: { current_price: 200.5, market_cap: 3.1e12, beta: 1.2 },
-  fundamentals: { pe_ttm: 30.1, roe: 1.5 },
+  fundamentals: {
+    pe_ttm: 30.1,
+    pe_forward: 25.0,
+    roe: 1.5,
+    dividend_yield: 0.025, // ratio → 2.5%
+    debt_to_equity: 0.32, // ratio (×), not 32
+    current_ratio: 1.28,
+    fcf_yield: 0.031,
+  },
   valuation: {},
-  technicals: { rsi_14: 55 },
+  technicals: { rsi_14: 55, fifty_two_week_high: 250 },
   ratings: {
     analyst_rating: "buy",
     analyst_count: 40,
@@ -89,7 +97,9 @@ const DOSSIER = {
   },
   ownership: { institutional_pct: 0.62 },
   earnings_quarterly: [
-    { period: "2025-09-30", revenue: 9.0e10, net_income: 2.0e10, eps: 1.4 },
+    { period: "2025-03-31", revenue: 9.5e10, net_income: 2.2e10, eps: 1.5 },
+    { period: "2025-06-30", revenue: 8.5e10, net_income: 2.0e10, eps: 1.4 },
+    { period: "2025-09-30", revenue: 9.0e10, net_income: 2.4e10, eps: 1.6 },
     { period: "2025-12-31", revenue: 1.0e11, net_income: 2.5e10, eps: 1.8 },
     { period: "2026-03-31", revenue: 1.1e11, net_income: 2.9e10, eps: 2.0 },
   ],
@@ -172,9 +182,16 @@ describe("ResearchPage", () => {
     expect(screen.getByText(/wall street consensus/i)).toBeInTheDocument();
     expect(screen.getByText(/40 analysts/i)).toBeInTheDocument();
     expect(screen.getByText(/institutions hold/i)).toBeInTheDocument();
-    // Earnings trend chart card.
+    // Earnings trend chart card + YoY caption (latest rev 110B vs 95B a year ago).
     expect(screen.getByText(/earnings trend/i)).toBeInTheDocument();
     expect(screen.getByTestId("earnings-chart")).toBeInTheDocument();
+    expect(screen.getAllByText(/% YoY/i).length).toBeGreaterThanOrEqual(1);
+    // Unit-correctness: institutional % and debt/equity ratio render correctly.
+    expect(screen.getByText(/62\.0%/)).toBeInTheDocument(); // institutional, not 6200%
+    expect(screen.getByText("0.32")).toBeInTheDocument(); // debt/equity as a ratio
+    expect(screen.getByText("2.5%")).toBeInTheDocument(); // dividend yield
+    expect(screen.getByText(/data as of/i)).toBeInTheDocument();
+    expect(screen.getByText(/fcf yield/i)).toBeInTheDocument();
   });
 
   it("shows the upgrade CTA on a quota_exceeded verdict, keeping the data", async () => {
