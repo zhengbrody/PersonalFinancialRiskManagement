@@ -275,43 +275,12 @@ def _call_llm_formatter(
 class PortfolioAnalyzerAgent:
     name = "Portfolio Analyzer Agent"
 
-    def run(
-        self,
-        user_message: str,
-        score: PortfolioScore,
-        positions: Iterable[AssetPosition],
-        *,
-        llm_callable: LLMCallable | None = None,
-    ) -> AgentResult:
-        context = build_agent_context(score, positions)
+    def prepare(self, score: PortfolioScore, positions: Iterable[AssetPosition]) -> dict:
+        """Build the turn's context / tool_results / fallback WITHOUT the LLM
+        call, so both ``run()`` and the streaming endpoint share one path."""
         metric = score.metrics
-        tool_trace = [
-            "read_exact_quant_score",
-            "read_exact_sharpe_vol_drawdown_var_beta",
-            "format_post_investment_diagnosis",
-        ]
-        tool_results = {
-            "overall_score": score.overall_score,
-            "annual_return": metric.annual_return,
-            "annual_volatility": metric.annual_volatility,
-            "sharpe_ratio": metric.sharpe_ratio,
-            "max_drawdown": metric.max_drawdown,
-            "var_95_daily": metric.var_95_daily,
-            "beta_to_benchmark": metric.beta_to_benchmark,
-            "dimensions": {k: asdict(v) for k, v in score.dimensions.items()},
-        }
-        llm_text = _call_llm_formatter(
-            llm_callable=llm_callable,
-            user_message=user_message,
-            context=context,
-            tool_results=tool_results,
-            agent_name=self.name,
-        )
-        if llm_text:
-            return AgentResult(self.name, llm_text, [], tool_trace)
-
         weakest = min(score.dimensions.values(), key=lambda item: item.score)
-        response = (
+        fallback_md = (
             f"**Assessment:** Portfolio score is **{score.overall_score}/1000**. "
             f"The weakest dimension is **{weakest.name}** at **{weakest.score:.1f}/10** "
             f"({weakest.status}).\n\n"
@@ -321,11 +290,27 @@ class PortfolioAnalyzerAgent:
             f"**{_pct(metric.var_95_daily)}**.\n\n"
             f"**Action:** Focus first on {weakest.name.lower()}: {weakest.detail}"
         )
-        return AgentResult(self.name, response, [], tool_trace)
-
-
-class StrategyOptimizerAgent:
-    name = "Strategy Optimizer Agent"
+        return {
+            "agent_name": self.name,
+            "context": build_agent_context(score, positions),
+            "tool_results": {
+                "overall_score": score.overall_score,
+                "annual_return": metric.annual_return,
+                "annual_volatility": metric.annual_volatility,
+                "sharpe_ratio": metric.sharpe_ratio,
+                "max_drawdown": metric.max_drawdown,
+                "var_95_daily": metric.var_95_daily,
+                "beta_to_benchmark": metric.beta_to_benchmark,
+                "dimensions": {k: asdict(v) for k, v in score.dimensions.items()},
+            },
+            "tool_trace": [
+                "read_exact_quant_score",
+                "read_exact_sharpe_vol_drawdown_var_beta",
+                "format_post_investment_diagnosis",
+            ],
+            "draft_trades": [],
+            "fallback_md": fallback_md,
+        }
 
     def run(
         self,
@@ -335,30 +320,32 @@ class StrategyOptimizerAgent:
         *,
         llm_callable: LLMCallable | None = None,
     ) -> AgentResult:
+        plan = self.prepare(score, positions)
+        llm_text = _call_llm_formatter(
+            llm_callable=llm_callable,
+            user_message=user_message,
+            context=plan["context"],
+            tool_results=plan["tool_results"],
+            agent_name=plan["agent_name"],
+        )
+        return AgentResult(
+            plan["agent_name"],
+            llm_text or plan["fallback_md"],
+            plan["draft_trades"],
+            plan["tool_trace"],
+        )
+
+
+class StrategyOptimizerAgent:
+    name = "Strategy Optimizer Agent"
+
+    def prepare(self, score: PortfolioScore, positions: Iterable[AssetPosition]) -> dict:
+        """Build the turn's scans / context / tool_results / fallback WITHOUT
+        the LLM call (shared by ``run()`` and the streaming endpoint)."""
         positions_list = list(positions)
         fees = scan_hidden_fees(positions_list)
         tax_losses = scan_tax_loss_harvesting(positions_list)
         draft_trades = generate_draft_trades(score, positions_list)
-        context = build_agent_context(score, positions_list)
-        tool_trace = [
-            "scan_hidden_fund_fees",
-            "scan_unrealized_tax_losses",
-            "generate_non_binding_draft_trades",
-        ]
-        tool_results = {
-            "hidden_fees": fees,
-            "tax_loss_harvesting": tax_losses,
-            "draft_trades": draft_trades,
-        }
-        llm_text = _call_llm_formatter(
-            llm_callable=llm_callable,
-            user_message=user_message,
-            context=context,
-            tool_results=tool_results,
-            agent_name=self.name,
-        )
-        if llm_text:
-            return AgentResult(self.name, llm_text, draft_trades, tool_trace)
 
         fee_text = (
             "; ".join(
@@ -383,14 +370,52 @@ class StrategyOptimizerAgent:
             if draft_trades
             else "- No draft trade is necessary from the current rule set."
         )
-        response = (
+        fallback_md = (
             f"**Fee scan:** {fee_text}\n\n"
             f"**Tax-loss scan:** {tax_text}\n\n"
             f"**Draft trades:**\n{trade_text}\n\n"
             "These are draft suggestions only; confirm tax lots, wash-sale exposure, "
             "liquidity, and transaction costs before execution."
         )
-        return AgentResult(self.name, response, draft_trades, tool_trace)
+        return {
+            "agent_name": self.name,
+            "context": build_agent_context(score, positions_list),
+            "tool_results": {
+                "hidden_fees": fees,
+                "tax_loss_harvesting": tax_losses,
+                "draft_trades": draft_trades,
+            },
+            "tool_trace": [
+                "scan_hidden_fund_fees",
+                "scan_unrealized_tax_losses",
+                "generate_non_binding_draft_trades",
+            ],
+            "draft_trades": draft_trades,
+            "fallback_md": fallback_md,
+        }
+
+    def run(
+        self,
+        user_message: str,
+        score: PortfolioScore,
+        positions: Iterable[AssetPosition],
+        *,
+        llm_callable: LLMCallable | None = None,
+    ) -> AgentResult:
+        plan = self.prepare(score, positions)
+        llm_text = _call_llm_formatter(
+            llm_callable=llm_callable,
+            user_message=user_message,
+            context=plan["context"],
+            tool_results=plan["tool_results"],
+            agent_name=plan["agent_name"],
+        )
+        return AgentResult(
+            plan["agent_name"],
+            llm_text or plan["fallback_md"],
+            plan["draft_trades"],
+            plan["tool_trace"],
+        )
 
 
 class PortfolioAgentRouter:
@@ -479,3 +504,60 @@ class PortfolioAgentRouter:
             positions,
             llm_callable=llm_callable,
         )
+
+    def prepare(
+        self,
+        user_message: str,
+        score: PortfolioScore,
+        positions: Iterable[AssetPosition],
+    ) -> dict:
+        """Route + assemble ``(agent_name, system, prompt, tool_results,
+        draft_trades)`` WITHOUT calling the LLM. The streaming endpoint streams
+        this, so the live (streaming) path gets the SAME agent routing as the
+        non-streaming ``route()`` — fee/tax/rebalance questions reach the
+        optimizer's scans instead of analyzer-only metrics. For a combined
+        ('both') ask we merge both agents' tool_results into one streamed turn.
+        """
+        text = (user_message or "").lower()
+        wants_optimizer = any(keyword in text for keyword in self.optimizer_keywords)
+        wants_analyzer = any(keyword in text for keyword in self.analyzer_keywords)
+        wants_both = any(keyword in text for keyword in ("both", "full", "全面", "全部", "完整"))
+
+        positions = list(positions)
+        if wants_both or (wants_optimizer and wants_analyzer):
+            a = self.analyzer.prepare(score, positions)
+            o = self.optimizer.prepare(score, positions)
+            agent_name = "Portfolio Analyzer + Strategy Optimizer"
+            context = a["context"]
+            tool_results = {**a["tool_results"], **o["tool_results"]}
+            draft_trades = o["draft_trades"]
+        elif wants_optimizer:
+            p = self.optimizer.prepare(score, positions)
+            agent_name, context, tool_results, draft_trades = (
+                p["agent_name"],
+                p["context"],
+                p["tool_results"],
+                p["draft_trades"],
+            )
+        else:
+            p = self.analyzer.prepare(score, positions)
+            agent_name, context, tool_results, draft_trades = (
+                p["agent_name"],
+                p["context"],
+                p["tool_results"],
+                p["draft_trades"],
+            )
+
+        system, prompt = build_formatter_messages(
+            user_message=user_message,
+            context=context,
+            tool_results=tool_results,
+            agent_name=agent_name,
+        )
+        return {
+            "agent_name": agent_name,
+            "system": system,
+            "prompt": prompt,
+            "tool_results": tool_results,
+            "draft_trades": draft_trades,
+        }

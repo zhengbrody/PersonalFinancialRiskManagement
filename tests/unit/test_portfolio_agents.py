@@ -73,3 +73,25 @@ def test_agent_router_dispatches_optimizer_for_tax_question():
         "scan_unrealized_tax_losses",
         "generate_non_binding_draft_trades",
     ]
+
+
+def test_router_prepare_routes_optimizer_for_fee_question():
+    """The streaming path uses router.prepare(): a fee/tax question must get
+    the optimizer's scans (hidden_fees/tax_loss_harvesting), not analyzer-only
+    metrics — this is the streaming↔/chat routing parity."""
+    positions = demo_asset_positions(100_000)
+    returns = _returns()
+    score = score_portfolio(positions, returns, benchmark_returns=returns["SPY"], risk_preference=3)
+    router = PortfolioAgentRouter()
+
+    plan = router.prepare("What fund fees am I paying?", score, positions)
+    assert plan["agent_name"] == "Strategy Optimizer Agent"
+    assert "hidden_fees" in plan["tool_results"]
+    assert "tax_loss_harvesting" in plan["tool_results"]
+    assert plan["system"] and plan["prompt"]  # ready to stream
+
+    # A risk/diagnosis question stays with the analyzer (metrics + dimensions).
+    plan2 = router.prepare("How risky is my portfolio?", score, positions)
+    assert plan2["agent_name"] == "Portfolio Analyzer Agent"
+    assert "dimensions" in plan2["tool_results"]
+    assert plan2["draft_trades"] == []

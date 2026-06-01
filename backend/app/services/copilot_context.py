@@ -8,11 +8,12 @@ The same 422 envelope codes ``/risk/score_from_active`` uses are reused
 verbatim so the frontend handles "no portfolio / no market data / no
 priced holdings" identically across both features.
 
-Deliberately NOT handled here (documented follow-up): portfolio-level
-cash + margin leverage. ``/risk/score_from_active`` folds those in; the
-Copilot's first cut scores the equity sub-portfolio only. Adding the
-cash/leverage scalar here is a clean follow-up once the chat surface
-needs it.
+Portfolio-level cash + margin leverage ARE folded in (parity with
+``/risk/score_from_active``): idle cash is added as a native ``cash``
+position (drags return, lowers vol) and a margin loan lifts the whole book
+via the ``leverage`` scalar — so the Copilot's score matches the Risk page
+for the same portfolio. A capital-fetch hiccup degrades soft to the
+unlevered, cash-free book rather than failing the chat.
 """
 
 from __future__ import annotations
@@ -90,16 +91,72 @@ def load_positions_and_score(
             message="Could not price any holding (shares=0 or no quote).",
         )
 
+    # ── Cash + margin leverage (parity with /risk/score_from_active) ──
+    # Fold idle cash in as a native `cash` position and lift the book by
+    # `leverage = gross / net_equity`. Fail-soft to the unlevered, cash-free
+    # book on any capital-fetch hiccup — never fail the chat.
+    from libs.mindmarket_core.portfolio_scoring import AssetPosition, score_portfolio
+
+    equity_value = float(sum(p.market_value for p in positions))
+    cash_balance, margin_loan = _resolve_cash_and_margin(user)
+    if cash_balance > 0:
+        positions = [
+            *positions,
+            AssetPosition(
+                ticker="CASH",
+                name="Cash",
+                asset_type="cash",
+                market_value=cash_balance,
+                cost_basis=cash_balance,  # no capital gain → 0 P&L
+            ),
+        ]
+    leverage = _leverage_factor(gross_assets=equity_value + cash_balance, margin_loan=margin_loan)
+
     # Daily returns matrix from the same history. pct_change drops the
     # leading NaN row; dropna(how="all") removes fully-empty rows.
     returns = prices.pct_change().dropna(how="all")
-
-    from libs.mindmarket_core.portfolio_scoring import score_portfolio
 
     score = score_portfolio(
         positions,
         returns,
         risk_preference=risk_preference,
         risk_free_rate=risk_free_rate,
+        leverage=leverage,
     )
     return positions, score
+
+
+# Mirror of risk.py's helpers (kept local so this service doesn't import from
+# the API layer). Cap leverage well above any realistic retail margin account.
+_MAX_LEVERAGE = 10.0
+
+
+def _resolve_cash_and_margin(user: AuthedUser) -> tuple[float, float]:
+    """Return ``(cash_balance, margin_loan)`` for the caller's active
+    portfolio (token-scoped). Fail-soft to ``(0.0, 0.0)`` — a Supabase blip
+    must degrade to the prior unlevered book, never 500 the chat."""
+    try:
+        from libs.auth.active_portfolio import (
+            get_active_capital_inputs,
+            get_active_margin_loan,
+        )
+
+        cap = get_active_capital_inputs(access_token=user.access_token) or {}
+        cash = float(cap.get("cash_balance") or 0.0)
+        margin = float(get_active_margin_loan(access_token=user.access_token) or 0.0)
+        return max(0.0, cash), max(0.0, margin)
+    except Exception:
+        return 0.0, 0.0
+
+
+def _leverage_factor(*, gross_assets: float, margin_loan: float) -> float:
+    """``gross_assets / net_equity`` (net = gross − loan). 1.0 when no loan;
+    capped at ``_MAX_LEVERAGE`` if net equity is wiped out."""
+    gross = float(gross_assets)
+    loan = max(0.0, float(margin_loan))
+    if loan <= 0 or gross <= 0:
+        return 1.0
+    net_equity = gross - loan
+    if net_equity <= 0:
+        return _MAX_LEVERAGE
+    return min(_MAX_LEVERAGE, gross / net_equity)
