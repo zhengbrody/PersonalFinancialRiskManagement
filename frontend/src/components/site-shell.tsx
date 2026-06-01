@@ -66,16 +66,20 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Close `open` when clicking outside `ref` or pressing Escape. */
+/** Close `open` when clicking outside `ref` or pressing Escape. The latest
+ * `close` is read via a ref so the listeners subscribe once per open/close
+ * (not on every re-render while open). */
 function useDismiss(open: boolean, close: () => void) {
   const ref = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(close);
+  closeRef.current = close;
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) close();
+      if (ref.current && !ref.current.contains(e.target as Node)) closeRef.current();
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
+      if (e.key === "Escape") closeRef.current();
     };
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onKey);
@@ -83,7 +87,7 @@ function useDismiss(open: boolean, close: () => void) {
       document.removeEventListener("mousedown", onDoc);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open, close]);
+  }, [open]);
   return ref;
 }
 

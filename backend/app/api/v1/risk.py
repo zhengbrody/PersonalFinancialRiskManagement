@@ -878,9 +878,18 @@ def efficient_frontier_endpoint(
         if np.isfinite(v) and np.isfinite(r)
     ]
 
+    if not points:
+        # Every SLSQP target failed (near-singular covariance / degenerate
+        # history) → a lone dot with no curve reads as a broken chart.
+        raise unprocessable(
+            "Could not compute an efficient frontier (too few or too " "collinear holdings)."
+        )
+
     port_daily = returns.values @ w
     cur_ret = float(np.nanmean(port_daily) * engine.TRADING_DAYS)
-    cur_vol = float(np.nanstd(port_daily) * np.sqrt(engine.TRADING_DAYS))
+    # ddof=1 (sample) to match the frontier curve's returns.cov() so the
+    # portfolio's point is plotted on the same vol basis as the curve.
+    cur_vol = float(np.nanstd(port_daily, ddof=1) * np.sqrt(engine.TRADING_DAYS))
     if not (np.isfinite(cur_ret) and np.isfinite(cur_vol)):
         raise unprocessable("Could not compute the portfolio's risk/return point.")
 
@@ -908,13 +917,20 @@ def scenarios_endpoint(
     if returns is None or returns.empty:
         raise unprocessable("No return history to simulate scenarios on.")
 
+    # The investor holds NET equity (= equity + cash − margin = equity/scale).
+    # `pnl_pct` is the return ON that net equity (leverage amplifies it); the
+    # $ value must therefore move the NET-equity base, not gross equity — else
+    # a levered/cash book over/understates the dollar swing.
+    risk_scale = float(risk_scale) if risk_scale and np.isfinite(risk_scale) else 1.0
+    net_equity = equity_value / risk_scale if risk_scale > 0 else equity_value
+
     points: list[ScenarioPoint] = []
     for shock in _SCENARIO_SHOCKS:
         try:
-            # _stress_test → signed portfolio P&L (Σ wᵢ·βᵢ·shock). Scale by
-            # the leverage/cash factor so $ outcomes match the risk report.
+            # _stress_test → signed equity-book P&L (Σ wᵢ·βᵢ·shock); scale to
+            # the net-equity (leverage-aware) return.
             port_pnl, _assets = engine._stress_test(returns, w, market_shock=shock)
-            pnl = float(port_pnl) * float(risk_scale)
+            pnl = float(port_pnl) * risk_scale
         except Exception:  # noqa: BLE001 - a single bad shock shouldn't sink the sweep
             continue
         if not np.isfinite(pnl):
@@ -923,12 +939,12 @@ def scenarios_endpoint(
             ScenarioPoint(
                 shock_pct=float(shock),
                 pnl_pct=pnl,
-                portfolio_value=float(equity_value * (1.0 + pnl)),
+                portfolio_value=float(net_equity * (1.0 + pnl)),
             )
         )
 
     if not points:
         raise server_error("Scenario simulation produced no usable points.")
 
-    out = ScenariosOut(total_value=float(equity_value), scenarios=points)
+    out = ScenariosOut(total_value=float(net_equity), scenarios=points)
     return ok(out.model_dump(), request=request, started_at=started)

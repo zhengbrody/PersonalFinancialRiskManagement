@@ -49,12 +49,18 @@ def _plan_catalogue() -> list[PlanCard]:
     """Build the pricing-table rows from the canonical PLAN_PRICING +
     PLAN_LIMITS dicts. Pulled from libs.billing so a price/limit
     change in one place updates UI + checkout + quota gate together."""
-    from libs.billing.usage import PLAN_LIMITS, PLAN_PRICING
+    from libs.billing.usage import (
+        PLAN_LIMITS,
+        PLAN_MONTHLY_BUDGET_USD,
+        PLAN_PRICING,
+        usd_to_credits,
+    )
 
     out: list[PlanCard] = []
     for plan in ("free", "basic", "pro"):
         pricing = PLAN_PRICING.get(plan, {})
         limits = PLAN_LIMITS.get(plan, {})
+        budget = PLAN_MONTHLY_BUDGET_USD.get(plan)
         out.append(
             PlanCard(
                 plan=plan,
@@ -62,6 +68,7 @@ def _plan_catalogue() -> list[PlanCard]:
                 price_usd_per_month=float(pricing.get("price_usd_per_month", 0)),
                 monthly_analysis=int(limits.get("analysis", 0)),
                 monthly_chat=int(limits.get("chat", 0)),
+                monthly_credits=usd_to_credits(budget) if budget is not None else 0,
             )
         )
     return out

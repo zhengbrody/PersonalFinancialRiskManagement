@@ -10,7 +10,7 @@
  *      move, with the defensive "in a crash you'd be here" callout.
  */
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -57,13 +57,18 @@ export default function ScenariosPage() {
     if (!authLoading && !user) router.replace("/login");
   }, [user, authLoading, configured, router]);
 
+  // Run once per signed-in user; keyed on user.id so a silent token refresh
+  // (which recreates the user object) doesn't recompute both reads.
+  const ranFor = useRef<string | null>(null);
   useEffect(() => {
-    if (user) {
+    const uid = user?.id ?? null;
+    if (uid && ranFor.current !== uid) {
+      ranFor.current = uid;
       frontier.mutate();
       scenarios.mutate();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user?.id]);
 
   if (!configured || authLoading || !user) return <PageSkeleton />;
 
@@ -100,7 +105,7 @@ function ScenarioCard({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {state.isPending && <Skeleton className="h-64 w-full" />}
+        {(state.isIdle || state.isPending) && <Skeleton className="h-64 w-full" />}
         {state.isError && <Notice error={state.error as Error} />}
         {state.data && !state.isPending && <ScenarioView data={state.data} />}
       </CardContent>
@@ -193,7 +198,7 @@ function FrontierCard({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {state.isPending && <Skeleton className="h-64 w-full" />}
+        {(state.isIdle || state.isPending) && <Skeleton className="h-64 w-full" />}
         {state.isError && <Notice error={state.error as Error} />}
         {state.data && !state.isPending && <FrontierView data={state.data} />}
       </CardContent>

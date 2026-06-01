@@ -10,7 +10,7 @@
  * (see app/page.tsx).
  */
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,11 +38,18 @@ export function Dashboard() {
   const score = useScoreActivePortfolio();
   const billing = useBillingMe();
 
-  // Fire once on mount — score the caller's ACTIVE portfolio.
+  // Score the active portfolio once per signed-in user. Keyed on user.id
+  // (not the user OBJECT, which Supabase recreates on every token refresh /
+  // tab refocus) so we don't re-fire the scorer on a silent token refresh.
+  const scoredFor = useRef<string | null>(null);
   useEffect(() => {
-    score.mutate();
+    const uid = user?.id ?? null;
+    if (uid && scoredFor.current !== uid) {
+      scoredFor.current = uid;
+      score.mutate();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user?.id]);
 
   const greeting = user?.email ? user.email.split("@")[0] : "there";
 
@@ -57,11 +64,10 @@ export function Dashboard() {
         </p>
       </header>
 
-      {score.isPending && <HeroSkeleton />}
+      {/* idle (pre-fire) + pending both show the skeleton — no blank flash */}
+      {(score.isIdle || score.isPending) && <HeroSkeleton />}
 
-      {score.isError && !score.isPending && (
-        <ScoreError error={score.error as Error} />
-      )}
+      {score.isError && <ScoreError error={score.error as Error} />}
 
       {score.data && !score.isPending && <ScoreHero score={score.data} />}
 
