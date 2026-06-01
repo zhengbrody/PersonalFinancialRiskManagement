@@ -553,3 +553,130 @@ export function useScoreActivePortfolio() {
       }),
   });
 }
+
+// ── ticker research (single-name equity) ────────────────────────────
+// Two-stage: useTickerDossier (fast, authed, no quota) paints the data
+// dashboard; useTickerVerdict (authed + quota) fills the AI verdict. The
+// verdict REUSES the dossier the dashboard already fetched, so /analyze
+// doesn't re-hit the network.
+
+const fnum = z.number().nullish();
+const fstr = z.string().nullish();
+
+export const equityDossierSchema = z.looseObject({
+  ticker: z.string(),
+  as_of: z.string().optional(),
+  profile: z.looseObject({
+    name: fstr,
+    sector: fstr,
+    industry: fstr,
+    description: fstr,
+    employees: fnum,
+    website: fstr,
+  }),
+  market: z.looseObject({
+    current_price: fnum,
+    market_cap: fnum,
+    beta: fnum,
+    implied_volatility: fnum,
+    shares_outstanding: fnum,
+  }),
+  fundamentals: z.looseObject({
+    pe_ttm: fnum,
+    ps_ttm: fnum,
+    pb: fnum,
+    ev_ebitda: fnum,
+    roe: fnum,
+    roa: fnum,
+    gross_margin: fnum,
+    operating_margin: fnum,
+    net_margin: fnum,
+    eps_ttm: fnum,
+    dividend_yield: fnum,
+    revenue_growth_yoy: fnum,
+    earnings_growth_yoy: fnum,
+    debt_to_equity: fnum,
+    current_ratio: fnum,
+    free_cash_flow: fnum,
+    fcf_yield: fnum,
+  }),
+  valuation: z.looseObject({
+    dcf_intrinsic_value: fnum,
+    dcf_upside_pct: fnum,
+    wacc: fnum,
+    terminal_growth: fnum,
+  }),
+  technicals: z.looseObject({
+    rsi_14: fnum,
+    sma_50: fnum,
+    sma_200: fnum,
+    fifty_two_week_high: fnum,
+    fifty_two_week_low: fnum,
+    max_drawdown_1y: fnum,
+  }),
+  ratings: z
+    .looseObject({ analyst_rating: fstr, analyst_count: fnum })
+    .optional(),
+});
+export type EquityDossier = z.infer<typeof equityDossierSchema>;
+
+const dimensionSchema = z.looseObject({
+  score_0_100: z.number(),
+  key_points: z.array(z.string()),
+  evidence: z.array(z.string()),
+});
+export const deepAnalysisSchema = z.looseObject({
+  ticker: z.string(),
+  as_of: z.string().optional(),
+  verdict: z.looseObject({
+    rating: z.string(),
+    confidence: z.string(),
+    target_weight_pct_band: z.string().optional(),
+    thesis_one_liner: z.string().optional(),
+  }),
+  dimensions: z.record(z.string(), dimensionSchema),
+  catalysts_90d: z.array(z.string()),
+  risks: z.array(z.string()),
+  data_gaps: z.array(z.string()),
+  would_change_mind: z.array(z.string()),
+});
+export type DeepAnalysis = z.infer<typeof deepAnalysisSchema>;
+
+export const dossierResponseSchema = z.looseObject({
+  dossier: equityDossierSchema,
+});
+export type DossierResponse = z.infer<typeof dossierResponseSchema>;
+
+export const analyzeResponseSchema = z.looseObject({
+  analysis: deepAnalysisSchema,
+  dossier: equityDossierSchema,
+});
+export type AnalyzeResponse = z.infer<typeof analyzeResponseSchema>;
+
+/** Fetch the deterministic dossier for a ticker (fast, no quota). */
+export function useTickerDossier() {
+  const { accessToken } = useAuth();
+  return useMutation<DossierResponse, Error, { ticker: string }>({
+    mutationFn: (body) =>
+      apiFetch<DossierResponse>("/api/v1/equity/dossier", {
+        method: "POST",
+        body,
+        authToken: accessToken ?? undefined,
+        schema: dossierResponseSchema,
+      }),
+  });
+}
+
+/** Run the AI analyst verdict over an already-fetched dossier (quota). */
+export function useTickerVerdict() {
+  const { accessToken } = useAuth();
+  return useMutation<AnalyzeResponse, Error, { dossier: EquityDossier }>({
+    mutationFn: (body) =>
+      apiFetch<AnalyzeResponse>("/api/v1/equity/analyze", {
+        method: "POST",
+        body,
+        authToken: accessToken ?? undefined,
+        schema: analyzeResponseSchema,
+      }),
+  });
+}

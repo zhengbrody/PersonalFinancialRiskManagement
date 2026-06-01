@@ -89,6 +89,12 @@ class Settings:
     # orchestrator's deterministic templates (see services/llm_client.py).
     anthropic_api_key: str = field(default_factory=lambda: _env_str("ANTHROPIC_API_KEY"))
 
+    # FMP (Financial Modeling Prep) key for the equity dossier fetch. Optional:
+    # when blank the dossier still builds from the free (yfinance) legs and FMP
+    # premium fields are simply null — Ticker Research degrades, never 500s.
+    # See libs/analysis/equity_research.build_company_dossier.
+    fmp_api_key: str = field(default_factory=lambda: _env_str("FMP_API_KEY"))
+
     @property
     def allowed_origins(self) -> list[str]:
         """Environment-aware CORS allow-list. Never returns ``["*"]``
