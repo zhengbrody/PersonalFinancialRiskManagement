@@ -360,11 +360,13 @@ function DossierDashboard({ dossier }: { dossier: EquityDossier }) {
           title="Valuation multiples"
           stats={[
             ["P/E (TTM)", num(f.pe_ttm)],
+            ["P/E (forward)", num(f.pe_forward)],
             ["P/S (TTM)", num(f.ps_ttm)],
             ["P/B", num(f.pb)],
             ["EV/EBITDA", num(f.ev_ebitda)],
             ["EPS (TTM)", money(f.eps_ttm)],
             ["Dividend yield", pct(f.dividend_yield)],
+            ["FCF yield", pct(f.fcf_yield)],
           ]}
         />
         <StatGrid
@@ -375,7 +377,8 @@ function DossierDashboard({ dossier }: { dossier: EquityDossier }) {
             ["Gross margin", pct(f.gross_margin)],
             ["Net margin", pct(f.net_margin)],
             ["Revenue growth (YoY)", pct(f.revenue_growth_yoy)],
-            ["Debt / equity", num(f.debt_to_equity)],
+            ["Debt / equity (×)", num(f.debt_to_equity)],
+            ["Current ratio", num(f.current_ratio)],
           ]}
         />
         {(v.dcf_intrinsic_value != null || v.dcf_upside_pct != null) && (
@@ -392,16 +395,21 @@ function DossierDashboard({ dossier }: { dossier: EquityDossier }) {
           title="Technicals"
           stats={[
             ["RSI (14)", num(t.rsi_14)],
-            ["SMA 50", money(t.sma_50)],
-            ["SMA 200", money(t.sma_200)],
+            ["50-day avg price", money(t.sma_50)],
+            ["200-day avg price", money(t.sma_200)],
             ["52w high", money(t.fifty_two_week_high)],
             ["52w low", money(t.fifty_two_week_low)],
-            ["Max drawdown (1y)", pct(t.max_drawdown_1y)],
+            ["% from 52w high", fromHigh(m.current_price, t.fifty_two_week_high)],
           ]}
         />
         {p.description && (
           <p className="text-sm leading-relaxed text-muted-foreground">
             {p.description}
+          </p>
+        )}
+        {dossier.as_of && (
+          <p className="text-xs text-muted-foreground">
+            Data as of {formatAsOf(dossier.as_of)} · sources: yfinance (free).
           </p>
         )}
       </CardContent>
@@ -719,12 +727,42 @@ function EarningsTrend({ dossier }: { dossier: EquityDossier }) {
     eps: p.eps ?? null,
   }));
 
+  // YoY comparison for the latest quarter (vs 4 quarters prior, if available).
+  const last = q[q.length - 1];
+  const yearAgo = q.length >= 5 ? q[q.length - 5] : undefined;
+  const revYoY =
+    last?.revenue != null && yearAgo?.revenue != null && yearAgo.revenue !== 0
+      ? (last.revenue - yearAgo.revenue) / Math.abs(yearAgo.revenue)
+      : null;
+  const epsYoY =
+    last?.eps != null && yearAgo?.eps != null && yearAgo.eps !== 0
+      ? (last.eps - yearAgo.eps) / Math.abs(yearAgo.eps)
+      : null;
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Earnings trend</CardTitle>
         <CardDescription>
           Quarterly revenue and EPS — most recent {data.length} quarters
+          {revYoY != null && (
+            <>
+              {" · latest revenue "}
+              <span className={revYoY >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
+                {revYoY >= 0 ? "+" : ""}
+                {(revYoY * 100).toFixed(1)}% YoY
+              </span>
+              {epsYoY != null && (
+                <>
+                  {", EPS "}
+                  <span className={epsYoY >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
+                    {epsYoY >= 0 ? "+" : ""}
+                    {(epsYoY * 100).toFixed(1)}% YoY
+                  </span>
+                </>
+              )}
+            </>
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -802,6 +840,26 @@ function quarterLabel(period: string): string {
 function pct(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return "—";
   return `${(v * 100).toFixed(1)}%`;
+}
+
+function fromHigh(
+  price: number | null | undefined,
+  high: number | null | undefined,
+): string {
+  if (price == null || high == null || high <= 0) return "—";
+  return `${(((price - high) / high) * 100).toFixed(1)}%`;
+}
+
+function formatAsOf(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function num(v: number | null | undefined): string {
