@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -12,6 +13,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, apiFetch } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
+import { useScoreActivePortfolio } from "@/lib/queries";
 import { scoreResponseSchema } from "@/lib/schemas";
 import type { Holding, ScoreRequest, ScoreResponse } from "@/lib/schemas";
 
@@ -28,6 +31,28 @@ export default function ScorePage() {
   const [result, setResult] = useState<ScoreResponse | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Signed-in users get their SAVED portfolio scored automatically (no need
+  // to re-type holdings) — the manual form below is an optional what-if.
+  const { user, configured } = useAuth();
+  const signedIn = Boolean(configured && user);
+  const active = useScoreActivePortfolio();
+  const scoredFor = useRef<string | null>(null);
+  useEffect(() => {
+    const uid = user?.id ?? null;
+    if (signedIn && uid && scoredFor.current !== uid) {
+      scoredFor.current = uid;
+      active.mutate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, signedIn]);
+
+  // What the result panel shows: a manual run takes precedence; otherwise the
+  // signed-in user's auto-scored saved portfolio.
+  const shown = result ?? (signedIn ? active.data ?? null : null);
+  const showLoading = loading || (signedIn && !result && active.isPending);
+  const showError =
+    error ?? (signedIn && !result ? (active.error as ApiError | null) : null);
 
   function updateRow(i: number, patch: Partial<HoldingRow>) {
     setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -91,8 +116,12 @@ export default function ScorePage() {
         {/* ── form ──────────────────────────────────────────── */}
         <Card>
           <CardHeader>
-            <CardTitle>Holdings</CardTitle>
-            <CardDescription>Edit, then run.</CardDescription>
+            <CardTitle>{signedIn ? "What-if sandbox" : "Holdings"}</CardTitle>
+            <CardDescription>
+              {signedIn
+                ? "Try a hypothetical mix — your saved portfolio is scored on the right."
+                : "Edit, then run."}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={onSubmit} className="space-y-4">
@@ -165,17 +194,25 @@ export default function ScorePage() {
 
         {/* ── result panel ───────────────────────────────────── */}
         <div className="space-y-4">
-          {loading && <ResultSkeleton />}
-          {error && <ErrorPanel error={error} />}
-          {result && !loading && <ResultPanel result={result} />}
-          {!loading && !error && !result && (
+          {signedIn && !result && active.data && (
+            <p className="text-xs text-muted-foreground">
+              Scored from your saved Holdings.{" "}
+              <Link href="/portfolios" className="text-primary hover:underline">
+                Edit holdings →
+              </Link>
+            </p>
+          )}
+          {showLoading && <ResultSkeleton />}
+          {showError && !showLoading && <ScoreError error={showError} />}
+          {shown && !showLoading && <ResultPanel result={shown} />}
+          {!showLoading && !showError && !shown && (
             <Card>
               <CardHeader>
                 <CardTitle>No score yet</CardTitle>
                 <CardDescription>
-                  Hit <span className="font-mono">Run score</span> on the left.
-                  This public sandbox uses the same FastAPI scoring contract
-                  as the authenticated portfolio workflow.
+                  {signedIn
+                    ? "Add holdings to your portfolio, or run a what-if on the left."
+                    : "Hit Run score on the left — this public sandbox uses the same scoring engine as the signed-in workflow."}
                 </CardDescription>
               </CardHeader>
             </Card>
@@ -203,6 +240,32 @@ function ResultSkeleton() {
       </CardContent>
     </Card>
   );
+}
+
+/** Error renderer that turns the no-portfolio codes into a create-CTA. */
+function ScoreError({ error }: { error: ApiError }) {
+  const noPortfolio =
+    error.code === "no_active_portfolio" ||
+    error.code === "no_priced_holdings" ||
+    error.code === "no_market_data";
+  if (noPortfolio) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Set up your portfolio</CardTitle>
+          <CardDescription>
+            Add your holdings and we&apos;ll score the risk automatically.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Link href="/portfolios/new">
+            <Button>Create a portfolio</Button>
+          </Link>
+        </CardContent>
+      </Card>
+    );
+  }
+  return <ErrorPanel error={error} />;
 }
 
 function ErrorPanel({ error }: { error: ApiError }) {

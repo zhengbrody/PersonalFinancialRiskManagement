@@ -63,7 +63,7 @@ const components: Components = {
   // narrow floating panel.
   table: ({ children }) => (
     <div className="my-2 overflow-x-auto">
-      <table className="w-full border-collapse text-xs">{children}</table>
+      <table className="w-full border-collapse text-[13px]">{children}</table>
     </div>
   ),
   thead: ({ children }) => <thead>{children}</thead>,
@@ -79,7 +79,7 @@ const components: Components = {
 
 export function Markdown({ children }: { children: string }) {
   return (
-    <div className="text-sm">
+    <div className="text-[15px] leading-relaxed">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {children}
       </ReactMarkdown>

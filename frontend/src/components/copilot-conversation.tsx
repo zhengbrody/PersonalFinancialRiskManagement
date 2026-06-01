@@ -297,7 +297,7 @@ export function CopilotConversation({
 function UserBubble({ text }: { text: string }) {
   return (
     <div className="flex justify-end">
-      <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-primary/10 px-4 py-3 text-sm text-foreground">
+      <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-primary/10 px-4 py-3 text-[15px] leading-relaxed text-foreground">
         {text}
       </div>
     </div>
@@ -307,7 +307,7 @@ function UserBubble({ text }: { text: string }) {
 function AssistantBubble({ message }: { message: ChatMessage }) {
   return (
     <div className="flex justify-start">
-      <div className="max-w-[90%] space-y-3 rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-3 text-sm">
+      <div className="max-w-[90%] space-y-3 rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-3 text-[15px]">
         {message.agentName && (
           <p className="text-[10px] font-medium uppercase tracking-widest text-primary">
             {message.agentName}
