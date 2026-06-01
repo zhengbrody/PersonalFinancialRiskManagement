@@ -310,3 +310,26 @@ def test_stream_degraded_template_when_no_streamer(
     assert resp.status_code == 200
     body = resp.text
     assert "event: delta" in body and "event: done" in body  # template still streamed as one delta
+
+
+def test_stream_empty_yield_falls_back_to_template(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_quota, fake_streamer
+):
+    """A streamer that completes WITHOUT yielding any text (e.g. the model
+    spent every tool turn without composing an answer) must still produce a
+    non-empty answer via the template — never a silent blank `done`."""
+    fake_active_portfolio.set({"SPY": {"shares": 100, "avg_cost": 400.0}})
+    fake_price_history.set(_make_history(["SPY"]))
+    fake_streamer["chunks"] = []  # streamer yields nothing, raises nothing
+
+    resp = test_client.post(
+        "/api/v1/copilot/chat/stream",
+        json={"message": "diagnose my risk"},
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    assert resp.status_code == 200
+    body = resp.text
+    # The fallback template delta carries real content (a score/assessment),
+    # so `delta` is present and non-trivial, and `done` still closes the stream.
+    assert "event: delta" in body and "event: done" in body
+    assert 'data: {"text": ""}' not in body  # not an empty delta

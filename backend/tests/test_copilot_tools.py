@@ -383,10 +383,12 @@ def test_tool_loop_caps_iterations(monkeypatch):
     class _AlwaysToolClient:
         def __init__(self):
             self.n = 0
+            self.had_tools = []
 
             class _M:
                 def create(_s, **kwargs):
                     self.n += 1
+                    self.had_tools.append("tools" in kwargs)
                     return _Resp(
                         "tool_use",
                         [_Block("tool_use", name="get_macro_news", input={}, id=f"t{self.n}")],
@@ -405,6 +407,9 @@ def test_tool_loop_caps_iterations(monkeypatch):
     llm = lc.get_llm_callable(with_tools=True)
     llm("x", "y", 1000, 0.2)
     assert fake.n == lc.MAX_TOOL_TURNS  # capped, no infinite loop
+    # The FINAL turn withholds tools so the model must synthesize a text
+    # answer instead of being able to request yet another tool.
+    assert fake.had_tools == [True] * (lc.MAX_TOOL_TURNS - 1) + [False]
 
 
 def test_tool_loop_falls_back_to_plain_on_error(monkeypatch):
