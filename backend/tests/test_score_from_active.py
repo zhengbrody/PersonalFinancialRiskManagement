@@ -166,6 +166,27 @@ def test_market_data_exception_is_server_error(
 # ── happy path ─────────────────────────────────────────────────────
 
 
+def test_legacy_asset_type_does_not_500(
+    test_client, mint_token, fake_active_portfolio, fake_price_history
+):
+    """A holding stored with a legacy/unknown asset_type (e.g. 'equity', not in
+    the domain's allowed set) must be normalised to public_security, not 500."""
+    fake_active_portfolio.set(
+        {
+            "SPY": {"shares": 100, "avg_cost": 400.0, "asset_type": "equity"},
+            "AAPL": {"shares": 10, "avg_cost": 150.0, "asset_type": "stock"},
+        }
+    )
+    fake_price_history.set(_make_history(["AAPL", "SPY"]))
+    resp = test_client.post(
+        "/api/v1/risk/score_from_active",
+        json={},
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    assert resp.status_code == 200, resp.json()
+    assert isinstance(resp.json()["data"]["overall_score"], int)
+
+
 def test_happy_path_returns_complete_score_envelope(
     test_client, mint_token, fake_active_portfolio, fake_price_history
 ):

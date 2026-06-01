@@ -54,6 +54,22 @@ router = APIRouter(prefix="/api/v1/risk", tags=["risk"])
 
 _log = logging.getLogger(__name__)
 
+# The domain model (AssetPositionInput) only accepts these asset_type labels.
+# Stored/legacy holdings may carry others (e.g. 'equity', 'stock', 'etf') —
+# normalise unknowns to 'public_security' so a stray label never 500s the score.
+_VALID_ASSET_TYPES = {"public_security", "cash", "crypto", "real_estate"}
+
+
+def _normalize_asset_type(raw: object) -> str:
+    s = str(raw or "").strip().lower()
+    if s in _VALID_ASSET_TYPES:
+        return s
+    if "crypto" in s:
+        return "crypto"
+    if "real" in s or "estate" in s or "reit" in s:
+        return "real_estate"
+    return "public_security"
+
 
 def _serialize_score(score) -> ScoreResponse:
     """Convert the engine's frozen dataclass into the API response
@@ -182,7 +198,7 @@ def score_portfolio_endpoint(body: ScoreRequest, request: Request):
             AssetPositionInput(
                 ticker=h.ticker,
                 name=h.name or h.ticker,
-                asset_type=h.asset_type,
+                asset_type=_normalize_asset_type(h.asset_type),
                 market_value=h.market_value,
                 cost_basis=h.cost_basis,
                 expense_ratio=h.expense_ratio,
@@ -349,7 +365,7 @@ def score_from_active_endpoint(
             AssetPositionInput(
                 ticker=tk,
                 name=tk,
-                asset_type=str(h.get("asset_type") or "public_security"),
+                asset_type=_normalize_asset_type(h.get("asset_type")),
                 market_value=shares * last_close,
                 cost_basis=cost_basis,
                 enabled=True,
