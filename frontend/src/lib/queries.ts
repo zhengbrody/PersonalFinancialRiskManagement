@@ -751,3 +751,51 @@ export function useTickerVerdict() {
       }),
   });
 }
+
+// ── scenario simulator + efficient frontier ─────────────────────────
+const frontierPointSchema = z.looseObject({ vol: z.number(), ret: z.number() });
+export const efficientFrontierSchema = z.looseObject({
+  frontier: z.array(frontierPointSchema),
+  current: frontierPointSchema,
+  risk_free_rate: z.number(),
+});
+export type EfficientFrontier = z.infer<typeof efficientFrontierSchema>;
+
+const scenarioPointSchema = z.looseObject({
+  shock_pct: z.number(),
+  pnl_pct: z.number(),
+  portfolio_value: z.number(),
+});
+export const scenariosSchema = z.looseObject({
+  total_value: z.number(),
+  scenarios: z.array(scenarioPointSchema),
+});
+export type Scenarios = z.infer<typeof scenariosSchema>;
+
+/** Efficient frontier + the active portfolio's risk/return point. */
+export function useEfficientFrontier() {
+  const { accessToken } = useAuth();
+  return useMutation<EfficientFrontier, Error, void>({
+    mutationFn: () =>
+      apiFetch<EfficientFrontier>("/api/v1/risk/efficient_frontier", {
+        method: "POST",
+        body: {},
+        authToken: accessToken ?? undefined,
+        schema: efficientFrontierSchema,
+      }),
+  });
+}
+
+/** −30%…+30% market-move P&L sweep for the active portfolio. */
+export function useScenarios() {
+  const { accessToken } = useAuth();
+  return useMutation<Scenarios, Error, void>({
+    mutationFn: () =>
+      apiFetch<Scenarios>("/api/v1/risk/scenarios", {
+        method: "POST",
+        body: {},
+        authToken: accessToken ?? undefined,
+        schema: scenariosSchema,
+      }),
+  });
+}
