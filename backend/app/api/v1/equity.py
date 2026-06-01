@@ -1,84 +1,139 @@
-"""``POST /api/v1/equity/deep_analysis`` — single-name research view.
+"""``/api/v1/equity/*`` — single-name (Ticker Research) endpoints.
 
-Public for now (Phase 1) so the frontend can fetch a deep-analysis
-payload from a ticker without round-tripping a session. We DO NOT
-run the LLM by default — the placeholder ``DeepAnalysis`` returned
-when ``llm_callable=None`` is enough to drive the dashboard skeleton
-during the migration. A future Phase 4 will accept the user's JWT
-and route LLM calls through the billing layer.
+Two-stage by design so the UI paints fast then deepens:
 
-The endpoint takes EITHER a ticker (and pulls the dossier server-side
-via the existing ``market_intelligence.fetch_ticker_research`` chain)
-OR an inline dossier (so tests + offline demos don't need network).
+* ``POST /equity/dossier`` — authed, NO quota. Builds the deterministic
+  company dossier (profile / market / fundamentals / valuation /
+  technicals) via ``build_company_dossier``. Fast, repeatable, free —
+  this drives the dashboard the instant the user searches a ticker.
+
+* ``POST /equity/analyze`` — authed + **quota** (``analysis`` bucket).
+  Runs the senior-analyst LLM over the dossier and returns a typed
+  ``DeepAnalysis`` (rating + 5 dimension scores + catalysts/risks). The
+  client passes back the dossier it already fetched (``dossier``) so we
+  DON'T re-hit the network. With no LLM key the analysis degrades to the
+  data-only placeholder (the feature still renders).
+
+The analysis is structured JSON (not free prose), so there's no token
+streaming — the fast-dossier / spinner-for-verdict split is the latency
+mask instead.
 """
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import Any, Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
-from ...core.responses import ok, unprocessable
+from ...core.config import get_settings
+from ...core.deps_auth import AuthedUser, require_user
+from ...core.responses import ok, too_many_requests, unprocessable
 
 router = APIRouter(prefix="/api/v1/equity", tags=["equity"])
 
+_log = logging.getLogger(__name__)
 
-class DeepAnalysisRequest(BaseModel):
+
+class DossierRequest(BaseModel):
+    ticker: str = Field(min_length=1, max_length=20)
+
+
+class AnalyzeRequest(BaseModel):
     ticker: Optional[str] = Field(default=None, min_length=1, max_length=20)
-    fmp_key: Optional[str] = Field(
-        default=None,
-        description="Pass-through FMP key for the dossier fetch. Optional.",
-    )
-    dossier_override: Optional[dict[str, Any]] = Field(
+    dossier: Optional[dict[str, Any]] = Field(
         default=None,
         description=(
-            "When supplied, the endpoint SKIPS the network dossier fetch and "
-            "uses this dict verbatim. Lets tests + offline clients exercise "
-            "the analysis without yfinance / FMP."
+            "The dossier already fetched from /equity/dossier. When supplied "
+            "the analysis REUSES it (no second network fetch). If omitted, the "
+            "dossier is rebuilt server-side from `ticker`."
         ),
     )
 
 
 @router.post(
-    "/deep_analysis",
-    summary="Run the single-name equity analyst (no LLM in Phase 1)",
+    "/dossier",
+    summary="Build the deterministic company dossier for a ticker",
     response_model=None,
 )
-def deep_analysis(body: DeepAnalysisRequest, request: Request):
-    """Return the deterministic ``DeepAnalysis`` placeholder for the
-    requested ticker / dossier.
+def equity_dossier(
+    body: DossierRequest,
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    """Return the data-only dossier (no LLM, no quota). Fail closed with a
+    422 on a bad/unfetchable ticker so the UI can show a clear message."""
+    started = time.perf_counter()
 
-    Phase 1 does NOT invoke the LLM: it returns the placeholder
-    analysis (HOLD / low confidence) so the frontend can wire the
-    dashboard before we plumb billing-aware LLM routing. The placeholder
-    is the same one the equity module emits when its ``llm_callable``
-    argument is None — see ``libs.analysis.equity_research``.
+    from libs.analysis.equity_research import build_company_dossier
+
+    try:
+        dossier = build_company_dossier(body.ticker, fmp_key=get_settings().fmp_api_key)
+    except ValueError as exc:  # empty/invalid ticker
+        raise unprocessable(str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - network/fetch failure
+        _log.warning("equity.dossier.failed ticker=%s err=%s", body.ticker, type(exc).__name__)
+        raise unprocessable(f"Could not build a dossier for {body.ticker!r}.") from exc
+
+    return ok({"dossier": dossier}, request=request, started_at=started)
+
+
+@router.post(
+    "/analyze",
+    summary="Run the senior-analyst LLM verdict over a dossier (quota-gated)",
+    response_model=None,
+)
+def equity_analyze(
+    body: AnalyzeRequest,
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    """Return the typed ``DeepAnalysis`` verdict for the dossier.
+
+    Flow mirrors copilot.py: quota gate on the ``analysis`` bucket (429
+    when exhausted, fail-OPEN on a metering blip), then the LLM verdict
+    (degrades to the data-only placeholder when no key is configured).
     """
     started = time.perf_counter()
 
-    if not body.ticker and not body.dossier_override:
-        raise unprocessable("Provide either `ticker` or `dossier_override`.")
+    if not body.ticker and not body.dossier:
+        raise unprocessable("Provide either `ticker` or a `dossier`.")
 
     from libs.analysis.equity_research import analyze_equity, build_company_dossier
 
-    if body.dossier_override is not None:
-        dossier = body.dossier_override
+    # Resolve the dossier: prefer the one the client already fetched.
+    if body.dossier is not None:
+        dossier = body.dossier
     else:
         try:
-            dossier = build_company_dossier(str(body.ticker), fmp_key=body.fmp_key or "")
-        except Exception as exc:
-            raise unprocessable(f"Dossier fetch failed: {exc}") from exc
+            dossier = build_company_dossier(str(body.ticker), fmp_key=get_settings().fmp_api_key)
+        except ValueError as exc:
+            raise unprocessable(str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001
+            _log.warning("equity.analyze.dossier_failed err=%s", type(exc).__name__)
+            raise unprocessable(f"Could not build a dossier for {body.ticker!r}.") from exc
 
-    # llm_callable=None → DeepAnalysis returns the data-only placeholder.
-    analysis = analyze_equity(dossier, llm_callable=None)
+    # ── Quota gate ────────────────────────────────────────────────────
+    # Hard QuotaExceeded → 429. ANY other failure (Supabase blip, schema
+    # drift) must NOT lock a paying user out — eat the rare unmetered call.
+    from libs.billing.usage import QuotaExceeded, check_and_consume
+
+    try:
+        check_and_consume(user.id, "analysis")
+    except QuotaExceeded as exc:
+        raise too_many_requests(str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - fail-open on metering blip
+        _log.warning("equity.analyze.quota_check_failed reason=%s", type(exc).__name__)
+
+    # llm_callable=None → analyze_equity returns the data-only placeholder.
+    from ...services.llm_client import get_llm_callable
+
+    analysis = analyze_equity(dossier, llm_callable=get_llm_callable(with_tools=False))
 
     return ok(
-        {
-            "dossier": dossier,
-            "analysis": analysis.model_dump(),
-        },
+        {"analysis": analysis.model_dump(), "dossier": dossier},
         request=request,
         started_at=started,
     )
