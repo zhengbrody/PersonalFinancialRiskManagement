@@ -140,7 +140,7 @@ function Table({
   }
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full min-w-[360px] text-sm">
         <thead>
           <tr className="border-b border-border text-left text-xs text-muted-foreground">
             {head.map((h) => (
