@@ -10,7 +10,6 @@
  * (see app/page.tsx).
  */
 
-import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,9 +21,10 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MarketRegime } from "@/components/market-regime";
-import { ApiError } from "@/lib/api";
+import { isNoPortfolioError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useBillingMe, useScoreActivePortfolio } from "@/lib/queries";
+import { useRunOncePerUser } from "@/lib/use-run-once-per-user";
 import type { ScoreResponse } from "@/lib/schemas";
 
 const COPILOT_PROMPTS = [
@@ -38,18 +38,8 @@ export function Dashboard() {
   const score = useScoreActivePortfolio();
   const billing = useBillingMe();
 
-  // Score the active portfolio once per signed-in user. Keyed on user.id
-  // (not the user OBJECT, which Supabase recreates on every token refresh /
-  // tab refocus) so we don't re-fire the scorer on a silent token refresh.
-  const scoredFor = useRef<string | null>(null);
-  useEffect(() => {
-    const uid = user?.id ?? null;
-    if (uid && scoredFor.current !== uid) {
-      scoredFor.current = uid;
-      score.mutate();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  // Score the active portfolio once per signed-in user (survives token refresh).
+  useRunOncePerUser(user?.id, () => score.mutate());
 
   const greeting = user?.email ? user.email.split("@")[0] : "there";
 
@@ -204,15 +194,9 @@ function QuickLinks() {
 }
 
 function ScoreError({ error }: { error: Error }) {
-  const code = error instanceof ApiError ? error.code : "";
-  const noPortfolio =
-    code === "no_active_portfolio" ||
-    code === "no_priced_holdings" ||
-    code === "no_market_data";
-
   // New users (no portfolio yet) get a guided 3-step start — the activation
   // hook. A genuine error (not "no portfolio") shows a calm retry message.
-  if (noPortfolio) return <OnboardingGuide />;
+  if (isNoPortfolioError(error)) return <OnboardingGuide />;
 
   return (
     <Card>
