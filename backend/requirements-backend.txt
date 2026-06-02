@@ -34,3 +34,8 @@ httpx>=0.27,<1
 # imports it), but pinned here so a fresh contributor install gets a
 # working MCP environment without an extra step.
 mcp>=1.0,<2
+
+# Sentry — error tracking. The FastAPI integration auto-captures unhandled
+# 500s (e.g. an uncaught ValidationError) with full context. Only initialised
+# in production (see app/main.py:_maybe_init_sentry); a no-op otherwise.
+sentry-sdk[fastapi]>=2.0,<3

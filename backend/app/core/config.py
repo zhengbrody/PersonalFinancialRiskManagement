@@ -95,6 +95,16 @@ class Settings:
     # See libs/analysis/equity_research.build_company_dossier.
     fmp_api_key: str = field(default_factory=lambda: _env_str("FMP_API_KEY"))
 
+    # Sentry DSN for backend error tracking. The DSN is a write-only ingest
+    # endpoint (not a secret), so we bake the project default and allow an env
+    # override. Init is gated to production in app/main.py.
+    sentry_dsn: str = field(
+        default_factory=lambda: _env_str(
+            "SENTRY_DSN",
+            "https://be2e3fb7de7215080f092d86a884d8ec@o4511493492178944.ingest.us.sentry.io/4511494042550272",
+        )
+    )
+
     @property
     def allowed_origins(self) -> list[str]:
         """Environment-aware CORS allow-list. Never returns ``["*"]``

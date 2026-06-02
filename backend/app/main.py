@@ -26,11 +26,32 @@ from .core.responses import (
 )
 
 
+def _maybe_init_sentry(settings) -> None:
+    """Initialise Sentry — PRODUCTION ONLY, so dev/CI/test never send events.
+    The FastAPI integration (sentry-sdk[fastapi]) auto-captures unhandled 500s.
+    Errors-only (no perf tracing) to keep cost bounded. Never raises."""
+    if settings.environment != "production" or not settings.sentry_dsn:
+        return
+    try:
+        import sentry_sdk
+
+        sentry_sdk.init(
+            dsn=settings.sentry_dsn,
+            environment=settings.environment,
+            release=settings.app_version,
+            traces_sample_rate=0.0,  # error tracking only for now
+            send_default_pii=False,  # don't ship user PII to Sentry
+        )
+    except Exception:  # noqa: BLE001 - monitoring must never break boot
+        pass
+
+
 def create_app() -> FastAPI:
     """Build a fresh FastAPI app. Factory pattern lets tests spin
     up an isolated app with a swapped Settings instance, instead of
     importing the module-level ``app`` and inheriting its config."""
     settings = get_settings()
+    _maybe_init_sentry(settings)
 
     app = FastAPI(
         title=settings.app_name,
