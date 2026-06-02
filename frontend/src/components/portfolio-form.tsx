@@ -10,9 +10,10 @@
  * never reports `NaN` during typing.
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { parseHoldingsCsv } from "@/lib/parse-holdings-csv";
 import type {
   PortfolioCreateInput,
   PortfolioHoldingInput,
@@ -91,6 +92,25 @@ export function PortfolioForm({
   onCancel?: () => void;
 }) {
   const [values, setValues] = useState<PortfolioFormValues>(initial);
+  const [csvNote, setCsvNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function onCsvFile(file: File | undefined) {
+    if (!file) return;
+    try {
+      const { rows, warning } = parseHoldingsCsv(await file.text());
+      if (rows.length === 0) {
+        setCsvNote({ ok: false, text: warning ?? "No holdings found in that file." });
+        return;
+      }
+      setValues((prev) => ({ ...prev, rows }));
+      setCsvNote({ ok: true, text: `Imported ${rows.length} holdings — review, then save.` });
+    } catch {
+      setCsvNote({ ok: false, text: "Could not read that file. Is it a .csv?" });
+    } finally {
+      if (fileRef.current) fileRef.current.value = ""; // allow re-importing the same file
+    }
+  }
 
   function updateRow(i: number, patch: Partial<Row>) {
     setValues((prev) => ({
@@ -149,12 +169,43 @@ export function PortfolioForm({
 
       {/* ── holdings ───────────────────────────────────────── */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <label className="text-sm text-muted-foreground">Holdings</label>
-          <Button type="button" variant="outline" size="sm" onClick={addRow}>
-            + add ticker
-          </Button>
+          <div className="flex items-center gap-2">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              aria-label="Import holdings CSV"
+              onChange={(e) => onCsvFile(e.target.files?.[0])}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => fileRef.current?.click()}
+            >
+              Import CSV
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={addRow}>
+              + add ticker
+            </Button>
+          </div>
         </div>
+        {csvNote && (
+          <p
+            className={`text-xs ${
+              csvNote.ok ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
+            }`}
+          >
+            {csvNote.text}
+          </p>
+        )}
+        <p className="text-[11px] text-muted-foreground">
+          Tip: export from your broker (Robinhood, Schwab, Fidelity…) and import
+          the CSV — we&apos;ll map Symbol / Quantity / Avg Cost automatically.
+        </p>
         <div className="space-y-2">
           {values.rows.map((row, i) => (
             <div
