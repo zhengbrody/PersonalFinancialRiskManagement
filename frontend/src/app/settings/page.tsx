@@ -111,7 +111,7 @@ function SettingsPageInner() {
             </span>
           </div>
           {me.subscription && (
-            <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
               <Field label="Status" value={me.subscription.status ?? "—"} />
               <Field
                 label="Renews"
@@ -247,7 +247,7 @@ function Field({
       <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
         {label}
       </p>
-      <p className={mono ? "font-mono text-xs" : "text-xs"}>{value}</p>
+      <p className={mono ? "break-all font-mono text-xs" : "text-xs"}>{value}</p>
     </div>
   );
 }
