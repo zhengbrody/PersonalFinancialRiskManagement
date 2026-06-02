@@ -157,11 +157,14 @@ export function PortfolioForm({
         </div>
         <div className="space-y-2">
           {values.rows.map((row, i) => (
-            <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2">
+            <div
+              key={i}
+              className="flex flex-wrap items-center gap-2 sm:grid sm:grid-cols-[1fr_1fr_1fr_auto]"
+            >
               <Input
                 aria-label={`Ticker ${i + 1}`}
                 placeholder="SPY"
-                className="font-mono"
+                className="min-w-[5rem] flex-1 font-mono"
                 value={row.ticker}
                 onChange={(e) => updateRow(i, { ticker: e.target.value })}
               />
@@ -170,7 +173,7 @@ export function PortfolioForm({
                 type="number"
                 step="any"
                 placeholder="shares"
-                className="font-mono"
+                className="min-w-[5rem] flex-1 font-mono"
                 value={row.shares}
                 onChange={(e) => updateRow(i, { shares: e.target.value })}
               />
@@ -179,7 +182,7 @@ export function PortfolioForm({
                 type="number"
                 step="any"
                 placeholder="avg cost"
-                className="font-mono"
+                className="min-w-[5rem] flex-1 font-mono"
                 value={row.avg_cost}
                 onChange={(e) => updateRow(i, { avg_cost: e.target.value })}
               />
