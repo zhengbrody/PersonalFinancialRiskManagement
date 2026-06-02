@@ -16,8 +16,10 @@
  * logic inline (it can't import a module). Keep the two in sync.
  */
 
-const DAY_START_MINUTES = 4 * 60; // 04:00 ET — pre-market opens
-const DAY_END_MINUTES = 20 * 60; // 20:00 ET (= 17:00 PT) — post-market ends
+// Exported so the pre-hydration boot script in app/layout.tsx can interpolate
+// them (it can't import this module before paint) — one source for the window.
+export const DAY_START_MINUTES = 4 * 60; // 04:00 ET — pre-market opens
+export const DAY_END_MINUTES = 20 * 60; // 20:00 ET (= 17:00 PT) — post-market ends
 
 /** True during the light "day" session (04:00–20:00 ET); false at night. */
 export function isDaySession(now: Date = new Date()): boolean {

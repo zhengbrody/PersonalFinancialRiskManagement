@@ -32,6 +32,16 @@ const RESEARCH_ITEMS: NavItem[] = [
   { href: "/markets", label: "Markets" },
 ];
 
+/** Account-menu links, shared by the desktop AccountMenu + the mobile menu. */
+function accountLinks(isOwner: boolean): NavItem[] {
+  return [
+    { href: "/settings", label: "Settings" },
+    { href: "/pricing", label: "Plan & billing" },
+    { href: "/legacy/", label: "Advanced workbench", external: true },
+    ...(isOwner ? [{ href: "/admin", label: "Admin · usage" } as NavItem] : []),
+  ];
+}
+
 export function SiteShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -171,15 +181,9 @@ function MobileNav() {
           <div className="my-1 border-t border-border" />
           {configured && user ? (
             <>
-              <MenuLink item={{ href: "/settings", label: "Settings" }} onNavigate={close} />
-              <MenuLink item={{ href: "/pricing", label: "Plan & billing" }} onNavigate={close} />
-              <MenuLink
-                item={{ href: "/legacy/", label: "Advanced workbench", external: true }}
-                onNavigate={close}
-              />
-              {isOwner && (
-                <MenuLink item={{ href: "/admin", label: "Admin · usage" }} onNavigate={close} />
-              )}
+              {accountLinks(isOwner).map((it) => (
+                <MenuLink key={it.href} item={it} onNavigate={close} />
+              ))}
               <button
                 type="button"
                 onClick={() => {
@@ -285,15 +289,9 @@ function AccountMenu() {
           role="menu"
           className="absolute right-0 z-50 mt-1 min-w-48 rounded-md border border-border bg-card p-1 shadow-lg"
         >
-          <MenuLink item={{ href: "/settings", label: "Settings" }} onNavigate={() => setOpen(false)} />
-          <MenuLink item={{ href: "/pricing", label: "Plan & billing" }} onNavigate={() => setOpen(false)} />
-          <MenuLink
-            item={{ href: "/legacy/", label: "Advanced workbench", external: true }}
-            onNavigate={() => setOpen(false)}
-          />
-          {isOwner && (
-            <MenuLink item={{ href: "/admin", label: "Admin · usage" }} onNavigate={() => setOpen(false)} />
-          )}
+          {accountLinks(isOwner).map((it) => (
+            <MenuLink key={it.href} item={it} onNavigate={() => setOpen(false)} />
+          ))}
           <button
             type="button"
             role="menuitem"

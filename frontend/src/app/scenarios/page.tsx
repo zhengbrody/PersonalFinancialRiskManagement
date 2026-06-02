@@ -10,7 +10,7 @@
  *      move, with the defensive "in a crash you'd be here" callout.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -34,8 +34,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ApiError } from "@/lib/api";
+import { isNoPortfolioError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { useRunOncePerUser } from "@/lib/use-run-once-per-user";
 import {
   useEfficientFrontier,
   useScenarios,
@@ -57,18 +58,11 @@ export default function ScenariosPage() {
     if (!authLoading && !user) router.replace("/login");
   }, [user, authLoading, configured, router]);
 
-  // Run once per signed-in user; keyed on user.id so a silent token refresh
-  // (which recreates the user object) doesn't recompute both reads.
-  const ranFor = useRef<string | null>(null);
-  useEffect(() => {
-    const uid = user?.id ?? null;
-    if (uid && ranFor.current !== uid) {
-      ranFor.current = uid;
-      frontier.mutate();
-      scenarios.mutate();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  // Run both reads once per signed-in user (survives token refresh; see hook).
+  useRunOncePerUser(user?.id, () => {
+    frontier.mutate();
+    scenarios.mutate();
+  });
 
   if (!configured || authLoading || !user) return <PageSkeleton />;
 
@@ -82,32 +76,57 @@ export default function ScenariosPage() {
         </p>
       </header>
 
-      <ScenarioCard state={scenarios} />
-      <FrontierCard state={frontier} />
+      <SweepCard
+        title="If the market moves…"
+        description="Projected portfolio P&L across a −30% to +30% market move (uses each holding's market beta)."
+        state={scenarios}
+      >
+        {(data) => <ScenarioView data={data} />}
+      </SweepCard>
+      <SweepCard
+        title="Are you paid for your risk?"
+        description="Your portfolio (◆) vs the efficient frontier — the best return available at each level of risk. Closer to the curve = better compensated."
+        state={frontier}
+      >
+        {(data) => <FrontierView data={data} />}
+      </SweepCard>
     </div>
   );
 }
 
 // ── scenario sweep ──────────────────────────────────────────────────
 
-function ScenarioCard({
+/**
+ * One card wrapping the idle/loading → error → data state machine shared by
+ * both scenario reads. The `children` render-prop receives the resolved data.
+ */
+function SweepCard<T>({
+  title,
+  description,
   state,
+  children,
 }: {
-  state: ReturnType<typeof useScenarios>;
+  title: string;
+  description: string;
+  state: {
+    isIdle: boolean;
+    isPending: boolean;
+    isError: boolean;
+    error: unknown;
+    data: T | undefined;
+  };
+  children: (data: T) => React.ReactNode;
 }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">If the market moves…</CardTitle>
-        <CardDescription>
-          Projected portfolio P&amp;L across a −30% to +30% market move (uses
-          each holding&apos;s market beta).
-        </CardDescription>
+        <CardTitle className="text-base">{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent>
         {(state.isIdle || state.isPending) && <Skeleton className="h-64 w-full" />}
         {state.isError && <Notice error={state.error as Error} />}
-        {state.data && !state.isPending && <ScenarioView data={state.data} />}
+        {state.data && !state.isPending && children(state.data)}
       </CardContent>
     </Card>
   );
@@ -182,30 +201,6 @@ function ScenarioTip(props: TipProps) {
 
 // ── efficient frontier ──────────────────────────────────────────────
 
-function FrontierCard({
-  state,
-}: {
-  state: ReturnType<typeof useEfficientFrontier>;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Are you paid for your risk?</CardTitle>
-        <CardDescription>
-          Your portfolio (◆) vs the efficient frontier — the best return
-          available at each level of risk. Closer to the curve = better
-          compensated.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {(state.isIdle || state.isPending) && <Skeleton className="h-64 w-full" />}
-        {state.isError && <Notice error={state.error as Error} />}
-        {state.data && !state.isPending && <FrontierView data={state.data} />}
-      </CardContent>
-    </Card>
-  );
-}
-
 function FrontierView({ data }: { data: EfficientFrontier }) {
   const curve = data.frontier.map((p) => ({ x: p.vol * 100, y: p.ret * 100 }));
   const mine = [{ x: data.current.vol * 100, y: data.current.ret * 100 }];
@@ -248,9 +243,7 @@ function FrontierView({ data }: { data: EfficientFrontier }) {
 // ── shared ──────────────────────────────────────────────────────────
 
 function Notice({ error }: { error: Error }) {
-  const code = error instanceof ApiError ? error.code : "";
-  const noPortfolio =
-    code === "no_active_portfolio" || code === "no_priced_holdings" || code === "no_market_data";
+  const noPortfolio = isNoPortfolioError(error);
   return (
     <div className="py-4 text-sm text-muted-foreground">
       {noPortfolio ? (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,9 +12,10 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ApiError, apiFetch } from "@/lib/api";
+import { ApiError, apiFetch, isNoPortfolioError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useScoreActivePortfolio } from "@/lib/queries";
+import { useRunOncePerUser } from "@/lib/use-run-once-per-user";
 import { scoreResponseSchema } from "@/lib/schemas";
 import type { Holding, ScoreRequest, ScoreResponse } from "@/lib/schemas";
 
@@ -37,15 +38,8 @@ export default function ScorePage() {
   const { user, configured } = useAuth();
   const signedIn = Boolean(configured && user);
   const active = useScoreActivePortfolio();
-  const scoredFor = useRef<string | null>(null);
-  useEffect(() => {
-    const uid = user?.id ?? null;
-    if (signedIn && uid && scoredFor.current !== uid) {
-      scoredFor.current = uid;
-      active.mutate();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, signedIn]);
+  // Auto-score the saved portfolio once per signed-in user (skip for anon).
+  useRunOncePerUser(signedIn ? user?.id : null, () => active.mutate());
 
   // What the result panel shows: a manual run takes precedence; otherwise the
   // signed-in user's auto-scored saved portfolio.
@@ -244,11 +238,7 @@ function ResultSkeleton() {
 
 /** Error renderer that turns the no-portfolio codes into a create-CTA. */
 function ScoreError({ error }: { error: ApiError }) {
-  const noPortfolio =
-    error.code === "no_active_portfolio" ||
-    error.code === "no_priced_holdings" ||
-    error.code === "no_market_data";
-  if (noPortfolio) {
+  if (isNoPortfolioError(error)) {
     return (
       <Card>
         <CardHeader>
