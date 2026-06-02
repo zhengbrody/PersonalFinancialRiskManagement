@@ -13,6 +13,7 @@
     "gen:api": "openapi-typescript http://localhost:8000/openapi.json --default-non-nullable false -o src/lib/api-types.ts"
   },
   "dependencies": {
+    "@sentry/nextjs": "^8.55.2",
     "@supabase/supabase-js": "^2.106.2",
     "@tanstack/react-query": "^5.100.14",
     "class-variance-authority": "^0.7.1",

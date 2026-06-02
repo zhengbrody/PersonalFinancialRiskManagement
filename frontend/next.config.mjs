@@ -1,3 +1,5 @@
+import { withSentryConfig } from "@sentry/nextjs";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Standalone output bundles ONLY the files the production server
@@ -8,6 +10,17 @@ const nextConfig = {
   //
   // Safe to keep on for dev too — `next dev` ignores this setting.
   output: "standalone",
+
+  // Required on Next 14 so `src/instrumentation.ts` (Sentry server init) runs.
+  experimental: { instrumentationHook: true },
 };
 
-export default nextConfig;
+// Sentry build wrapper. No auth token configured → source-map upload is
+// skipped (stack traces stay minified, still actionable for a beta); runtime
+// error capture works regardless. `silent` keeps the build log clean.
+export default withSentryConfig(nextConfig, {
+  silent: true,
+  disableLogger: true,
+  // We don't upload source maps (no auth token) → don't generate/serve them.
+  sourcemaps: { disable: true },
+});
