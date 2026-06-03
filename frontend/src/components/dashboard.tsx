@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MarketRegime } from "@/components/market-regime";
+import { track } from "@/lib/analytics";
 import { isNoPortfolioError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useBillingMe, useLastSnapshot, useScoreActivePortfolio } from "@/lib/queries";
@@ -41,7 +42,14 @@ export function Dashboard() {
   const lastSnapshot = useLastSnapshot();
 
   // Score the active portfolio once per signed-in user (survives token refresh).
-  useRunOncePerUser(user?.id, () => score.mutate());
+  useRunOncePerUser(user?.id, () => {
+    score
+      .mutateAsync()
+      .then((d) =>
+        track("score_viewed", { overall_score: Math.round(d.overall_score) }),
+      )
+      .catch(() => {}); // empty-state / errors are surfaced in the UI, not analytics
+  });
 
   const greeting = user?.email ? user.email.split("@")[0] : "there";
 

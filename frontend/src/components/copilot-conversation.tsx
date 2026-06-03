@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { track } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
 import { env } from "@/lib/env";
 import { useAuth } from "@/lib/auth-context";
@@ -123,6 +124,7 @@ export function CopilotConversation({
     const trimmed = text.trim();
     if (trimmed === "" || pending) return;
 
+    track("copilot_message_sent", { variant });
     setError(null);
     setMessages((prev) => [...prev, { role: "user", text: trimmed }]);
     setDraft("");
