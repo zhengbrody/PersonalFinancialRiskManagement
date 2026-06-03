@@ -1,0 +1,55 @@
+"""Contract test for GET /api/v1/risk/last_snapshot (the 'what changed' baseline)."""
+
+from __future__ import annotations
+
+import pytest
+
+
+@pytest.fixture
+def fake_prev(monkeypatch):
+    import backend.app.services.snapshots as snaps
+
+    state = {"row": None}
+
+    def _get(access_token=None):
+        return state["row"]
+
+    monkeypatch.setattr(snaps, "get_previous_snapshot", _get)
+    return state
+
+
+def test_last_snapshot_requires_bearer(test_client):
+    assert test_client.get("/api/v1/risk/last_snapshot").status_code == 401
+
+
+def test_last_snapshot_null_when_none(test_client, mint_token, fake_prev):
+    fake_prev["row"] = None
+    resp = test_client.get(
+        "/api/v1/risk/last_snapshot", headers={"Authorization": f"Bearer {mint_token()}"}
+    )
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["data"]["snapshot"] is None
+
+
+def test_last_snapshot_serializes_prior_row(test_client, mint_token, fake_prev):
+    fake_prev["row"] = {
+        "created_at": "2026-05-28T00:00:00+00:00",
+        "net_equity": 95000.0,
+        "leverage": 1.0,
+        "risk_metrics": {
+            "overall_score": 612,
+            "annual_volatility": 0.16,
+            "var_95_daily": 0.021,
+            "sharpe_ratio": 0.9,
+            "max_drawdown": -0.12,
+        },
+    }
+    resp = test_client.get(
+        "/api/v1/risk/last_snapshot", headers={"Authorization": f"Bearer {mint_token()}"}
+    )
+    assert resp.status_code == 200, resp.json()
+    snap = resp.json()["data"]["snapshot"]
+    assert snap["overall_score"] == 612
+    assert snap["annual_volatility"] == 0.16
+    assert snap["as_of"] == "2026-05-28T00:00:00+00:00"
+    assert snap["net_equity"] == 95000.0

@@ -425,8 +425,55 @@ def score_from_active_endpoint(
     except Exception as exc:
         raise unprocessable(f"Score computation failed: {exc}") from exc
 
+    # Record a daily snapshot (deduped, fail-soft) so the dashboard can show a
+    # "what changed since your last visit" delta. Never blocks the score.
+    from ...services import snapshots
+
+    top = sorted(positions_input, key=lambda p: p.market_value, reverse=True)[:10]
+    top_positions = [
+        {
+            "ticker": p.ticker,
+            "weight": round(p.market_value / equity_value, 6) if equity_value > 0 else 0.0,
+        }
+        for p in top
+        if p.asset_type != "cash"
+    ]
+    snapshots.record_snapshot(
+        user.access_token,
+        score=score,
+        cash_balance=cash_balance,
+        margin_loan=margin_loan,
+        top_positions=top_positions,
+    )
+
     response = _serialize_score(score)
     return ok(response.model_dump(), request=request, started_at=started)
+
+
+@router.get(
+    "/last_snapshot",
+    summary="The prior-day portfolio snapshot, for the 'what changed' delta",
+)
+def last_snapshot_endpoint(request: Request, user: AuthedUser = Depends(require_user)):
+    """Return the most recent snapshot older than ~a day (the baseline the
+    dashboard diffs today's score against), or null when there isn't one."""
+    started = time.perf_counter()
+    from ...services import snapshots
+
+    snap = snapshots.get_previous_snapshot(user.access_token)
+    out: dict | None = None
+    if snap:
+        rm = snap.get("risk_metrics") or {}
+        out = {
+            "as_of": snap.get("created_at"),
+            "overall_score": rm.get("overall_score"),
+            "annual_volatility": rm.get("annual_volatility"),
+            "var_95_daily": rm.get("var_95_daily"),
+            "sharpe_ratio": rm.get("sharpe_ratio"),
+            "max_drawdown": rm.get("max_drawdown"),
+            "net_equity": snap.get("net_equity"),
+        }
+    return ok({"snapshot": out}, request=request, started_at=started)
 
 
 # ── /score_from_active continues above. Below: /report_from_active. ──

@@ -23,7 +23,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MarketRegime } from "@/components/market-regime";
 import { isNoPortfolioError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { useBillingMe, useScoreActivePortfolio } from "@/lib/queries";
+import { useBillingMe, useLastSnapshot, useScoreActivePortfolio } from "@/lib/queries";
+import type { LastSnapshot } from "@/lib/queries";
 import { useRunOncePerUser } from "@/lib/use-run-once-per-user";
 import type { ScoreResponse } from "@/lib/schemas";
 
@@ -37,6 +38,7 @@ export function Dashboard() {
   const { user } = useAuth();
   const score = useScoreActivePortfolio();
   const billing = useBillingMe();
+  const lastSnapshot = useLastSnapshot();
 
   // Score the active portfolio once per signed-in user (survives token refresh).
   useRunOncePerUser(user?.id, () => score.mutate());
@@ -59,7 +61,12 @@ export function Dashboard() {
 
       {score.isError && <ScoreError error={score.error as Error} />}
 
-      {score.data && !score.isPending && <ScoreHero score={score.data} />}
+      {score.data && !score.isPending && (
+        <>
+          <ChangeSinceLastVisit current={score.data} prev={lastSnapshot.data?.snapshot} />
+          <ScoreHero score={score.data} />
+        </>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <MarketRegime />
@@ -69,6 +76,60 @@ export function Dashboard() {
       <QuickLinks />
     </div>
   );
+}
+
+function ChangeSinceLastVisit({
+  current,
+  prev,
+}: {
+  current: ScoreResponse;
+  prev: LastSnapshot["snapshot"] | undefined;
+}) {
+  if (!prev || prev.overall_score == null) return null;
+
+  const now = Math.round(current.overall_score);
+  const was = Math.round(prev.overall_score);
+  const dScore = now - was;
+  const curVol = current.metrics.annual_volatility;
+  const prevVol = prev.annual_volatility;
+
+  // No meaningful change to report.
+  if (dScore === 0 && (curVol == null || prevVol == null)) return null;
+
+  // A higher health score is good (green); a lower one is a heads-up (amber).
+  const tone =
+    dScore > 0
+      ? "text-emerald-600 dark:text-emerald-400"
+      : dScore < 0
+        ? "text-amber-600 dark:text-amber-400"
+        : "text-muted-foreground";
+  const sign = dScore > 0 ? "+" : "";
+  const since = prev.as_of ? fmtDate(prev.as_of) : "your last visit";
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-border bg-muted/30 px-4 py-2 text-sm">
+      <span className="text-muted-foreground">Since {since}:</span>
+      <span>
+        Health <span className="font-medium">{was}</span> →{" "}
+        <span className="font-medium">{now}</span>{" "}
+        <span className={`font-medium ${tone}`}>
+          ({sign}
+          {dScore})
+        </span>
+      </span>
+      {curVol != null && prevVol != null && (
+        <span className="text-muted-foreground">
+          · Volatility {(prevVol * 100).toFixed(1)}% → {(curVol * 100).toFixed(1)}%
+        </span>
+      )}
+    </div>
+  );
+}
+
+function fmtDate(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "your last visit";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function ScoreHero({ score }: { score: ScoreResponse }) {

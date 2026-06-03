@@ -800,3 +800,35 @@ export function useScenarios() {
       }),
   });
 }
+
+// ── "what changed since last visit" (prior-day snapshot) ────────────
+const snapshotMetricsSchema = z.looseObject({
+  as_of: z.string().nullish(),
+  overall_score: z.number().nullish(),
+  annual_volatility: z.number().nullish(),
+  var_95_daily: z.number().nullish(),
+  sharpe_ratio: z.number().nullish(),
+  max_drawdown: z.number().nullish(),
+  net_equity: z.number().nullish(),
+});
+export const lastSnapshotSchema = z.looseObject({
+  snapshot: snapshotMetricsSchema.nullable(),
+});
+export type LastSnapshot = z.infer<typeof lastSnapshotSchema>;
+
+/** The prior-day portfolio snapshot (or {snapshot:null}) for the dashboard
+ * "what changed since your last visit" delta. */
+export function useLastSnapshot() {
+  const { accessToken, user } = useAuth();
+  return useQuery<LastSnapshot>({
+    queryKey: ["risk", "last_snapshot", user?.id ?? null],
+    enabled: Boolean(accessToken),
+    queryFn: () =>
+      apiFetch<LastSnapshot>("/api/v1/risk/last_snapshot", {
+        authToken: accessToken!,
+        schema: lastSnapshotSchema,
+      }),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+}
