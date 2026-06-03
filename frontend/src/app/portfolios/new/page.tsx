@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { track } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useCreatePortfolio } from "@/lib/queries";
@@ -86,7 +87,11 @@ export default function NewPortfolioPage() {
             onSubmit={async (values) => {
               setServerError(null);
               try {
-                await mutation.mutateAsync(valuesToCreateInput(values));
+                const created = valuesToCreateInput(values);
+                await mutation.mutateAsync(created);
+                track("portfolio_created", {
+                  holdings: Object.keys(created.holdings).length,
+                });
                 router.replace("/portfolios");
               } catch (err) {
                 setServerError(

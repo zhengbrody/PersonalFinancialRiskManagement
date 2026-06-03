@@ -13,6 +13,7 @@
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { track } from "@/lib/analytics";
 import { parseHoldingsCsv } from "@/lib/parse-holdings-csv";
 import type {
   PortfolioCreateInput,
@@ -105,6 +106,7 @@ export function PortfolioForm({
       }
       setValues((prev) => ({ ...prev, rows }));
       setCsvNote({ ok: true, text: `Imported ${rows.length} holdings — review, then save.` });
+      track("csv_imported", { count: rows.length });
     } catch {
       setCsvNote({ ok: false, text: "Could not read that file. Is it a .csv?" });
     } finally {

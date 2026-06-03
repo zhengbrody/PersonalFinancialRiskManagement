@@ -26,6 +26,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { track } from "@/lib/analytics";
 import { useAuth } from "@/lib/auth-context";
 
 const POST_SIGNUP_REDIRECT = "/portfolios";
@@ -53,6 +54,7 @@ export default function SignupPage() {
     setSubmitting(true);
     try {
       const { needsConfirmation } = await signUp(email, password);
+      track("signed_up", { needs_confirmation: needsConfirmation });
       if (needsConfirmation) {
         setConfirmationSent(true);
         return;
