@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { MarketRegime } from "@/components/market-regime";
 import { MarketSeason } from "@/components/market-season";
 import { MarketMovers } from "@/components/market-movers";
+import { MarketNews } from "@/components/market-news";
+import { PortfolioSentiment } from "@/components/portfolio-sentiment";
 import { MacroSnapshot } from "@/components/macro-snapshot";
 
 export const metadata: Metadata = {
@@ -36,15 +38,18 @@ export default function MarketsPage() {
 
       <MarketMovers />
 
+      <PortfolioSentiment />
+
+      <MarketNews />
+
       <MacroSnapshot />
 
-      {/* Deferred-to-legacy cross-link: AI sentiment, per-holding news,
-          Reddit FOMO monitor — the advanced workbench until ported. */}
+      {/* Reddit FOMO monitor still lives in the legacy workbench (needs a paid
+          Apify key). Everything else on this page is now ported. */}
       <section className="rounded-lg border border-border bg-muted/30 p-5">
         <h2 className="text-sm font-semibold">Looking for more?</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          AI market sentiment, per-holding news, and the Reddit FOMO monitor
-          live in the advanced workbench while we finish porting them.
+          The Reddit FOMO monitor lives in the advanced workbench.
         </p>
         <a
           href="/legacy/3_Markets"

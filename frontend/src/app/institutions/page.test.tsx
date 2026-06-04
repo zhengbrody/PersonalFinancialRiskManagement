@@ -62,7 +62,7 @@ describe("InstitutionsPage", () => {
       const url = String(input);
       if (url.includes("/institutions/smart_money")) return Promise.resolve(mockJson(SMART_MONEY));
       if (url.includes("/institutions/top")) return Promise.resolve(mockJson(TOP));
-      return Promise.resolve(mockJson({ data: null, error: { code: "x", message: url }, meta: {} }));
+      return Promise.resolve(mockJson({ data: null, error: { code: "x", message: url }, meta: { request_id: "r" } }));
     });
 
     renderWithQuery(<InstitutionsPage />);
@@ -78,7 +78,7 @@ describe("InstitutionsPage", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("/institutions/smart_money"))
-        return Promise.resolve(mockJson({ data: { signals: [] }, error: null, meta: {} }));
+        return Promise.resolve(mockJson({ data: { signals: [] }, error: null, meta: { request_id: "r" } }));
       return Promise.resolve(mockJson(TOP));
     });
 

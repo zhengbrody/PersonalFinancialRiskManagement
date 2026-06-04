@@ -1056,3 +1056,52 @@ export function useMarketMovers() {
     staleTime: 10 * 60 * 1000,
   });
 }
+
+// ── macro news (public) + portfolio sentiment (authed, credits) ─────
+const newsItemSchema = z.looseObject({
+  source: z.string().nullish(),
+  title: z.string(),
+  link: z.string().nullish(),
+  published: z.string().nullish(),
+  summary: z.string().nullish(),
+});
+export const newsSchema = z.looseObject({ items: z.array(newsItemSchema) });
+export type NewsItem = z.infer<typeof newsItemSchema>;
+
+/** Public macro news headlines. Fail-soft to {items:[]} server-side. */
+export function useMarketNews() {
+  return useQuery({
+    queryKey: ["macro", "news"],
+    queryFn: () => apiFetch("/api/v1/macro/news", { schema: newsSchema }),
+    staleTime: 15 * 60 * 1000,
+  });
+}
+
+const sentimentRowSchema = z.looseObject({
+  ticker: z.string(),
+  score: z.number(),
+  label: z.string(),
+  narrative: z.string(),
+  headline_count: z.number(),
+});
+export const sentimentSchema = z.looseObject({
+  sentiments: z.array(sentimentRowSchema),
+  ai_generated: z.boolean(),
+});
+export type Sentiment = z.infer<typeof sentimentSchema>;
+export type SentimentRow = z.infer<typeof sentimentRowSchema>;
+
+/** Per-holding AI sentiment over the active portfolio. A mutation (explicit
+ * user action — it spends credits). 429 on quota; data-only without a key. */
+export function usePortfolioSentiment() {
+  const { accessToken } = useAuth();
+  return useMutation<Sentiment, Error, void>({
+    mutationFn: () =>
+      apiFetch<Sentiment>("/api/v1/market/sentiment", {
+        method: "POST",
+        body: {},
+        authToken: accessToken ?? undefined,
+        schema: sentimentSchema,
+      }),
+  });
+}

@@ -17,6 +17,8 @@ from ...core.responses import ok, server_error, unprocessable
 from ...schemas.macro import (
     MoverRowOut,
     MoversResponse,
+    NewsItemOut,
+    NewsResponse,
     RegimeDetailResponse,
     RegimeFearGreedOut,
     RegimeHistoryPointOut,
@@ -30,7 +32,7 @@ from ...schemas.macro import (
     YieldCurvePointOut,
     YieldCurveResponse,
 )
-from ...services import macro_data, market_movers, market_regime, regime_detail
+from ...services import macro_data, market_movers, market_news, market_regime, regime_detail
 
 router = APIRouter(prefix="/api/v1/macro", tags=["macro"])
 
@@ -189,4 +191,13 @@ def get_movers_endpoint(request: Request):
         top_losers=_movers(snap.top_losers),
         unusual_volume=_movers(snap.unusual_volume),
     )
+    return ok(payload.model_dump(), request=request, started_at=started)
+
+
+@router.get("/news", summary="Latest macro market news (free RSS + yfinance)")
+def get_news_endpoint(request: Request):
+    """Aggregated macro headlines. Public, free, fail-soft to an empty list."""
+    started = time.perf_counter()
+    items = market_news.get_macro_news()
+    payload = NewsResponse(items=[NewsItemOut(**it) for it in items])
     return ok(payload.model_dump(), request=request, started_at=started)
