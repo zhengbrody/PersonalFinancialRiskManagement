@@ -40,6 +40,8 @@ from ...schemas.risk import (
     EfficientFrontierOut,
     FactorBetaRow,
     FrontierPoint,
+    HistoricalScenarioRow,
+    HistoricalScenariosOut,
     LiquidityRow,
     PortfolioMetricsOut,
     ReportFromActiveRequest,
@@ -1114,5 +1116,27 @@ def benchmarks_endpoint(
     out = BenchmarksOut(
         as_of=data.get("as_of"),
         benchmarks=[BenchmarkRow(**b) for b in data.get("benchmarks", [])],
+    )
+    return ok(out.model_dump(), request=request, started_at=started)
+
+
+@router.post(
+    "/historical_scenarios",
+    summary="Replay real market crises on the active portfolio",
+    response_model=None,
+)
+def historical_scenarios_endpoint(
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    """What the caller's ACTUAL holdings would have done through COVID / 2022 /
+    2018Q4 / GFC — realised return, drawdown, S&P 500 over the same window, and
+    recovery time. Deterministic, no credits."""
+    started = time.perf_counter()
+    from ...services import historical_scenarios as svc
+
+    data = svc.run_historical_scenarios(user)
+    out = HistoricalScenariosOut(
+        scenarios=[HistoricalScenarioRow(**s) for s in data.get("scenarios", [])]
     )
     return ok(out.model_dump(), request=request, started_at=started)

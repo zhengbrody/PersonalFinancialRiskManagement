@@ -1096,6 +1096,38 @@ export const benchmarksSchema = z.looseObject({
 export type Benchmarks = z.infer<typeof benchmarksSchema>;
 export type BenchmarkRow = z.infer<typeof benchmarkRowSchema>;
 
+// ── historical scenario replay (authed) ─────────────────────────────
+const historicalScenarioRowSchema = z.looseObject({
+  label: z.string(),
+  start: z.string(),
+  end: z.string(),
+  portfolio_return: z.number().nullish(),
+  market_return: z.number().nullish(),
+  max_drawdown: z.number().nullish(),
+  coverage: z.number().nullish(),
+  recovery_days: z.number().nullish(),
+});
+export const historicalScenariosSchema = z.looseObject({
+  scenarios: z.array(historicalScenarioRowSchema),
+});
+export type HistoricalScenarios = z.infer<typeof historicalScenariosSchema>;
+export type HistoricalScenarioRow = z.infer<typeof historicalScenarioRowSchema>;
+
+/** Replay real crises (COVID / 2022 / 2018Q4 / GFC) on the active portfolio.
+ * Mutation — heavier (long history fetch), fired once per user like the sweep. */
+export function useHistoricalScenarios() {
+  const { accessToken } = useAuth();
+  return useMutation<HistoricalScenarios, Error, void>({
+    mutationFn: () =>
+      apiFetch<HistoricalScenarios>("/api/v1/risk/historical_scenarios", {
+        method: "POST",
+        body: {},
+        authToken: accessToken ?? undefined,
+        schema: historicalScenariosSchema,
+      }),
+  });
+}
+
 /** Public reference stats (S&P 500 + 60/40) for "vs what?" context. */
 export function useBenchmarks() {
   return useQuery<Benchmarks>({
