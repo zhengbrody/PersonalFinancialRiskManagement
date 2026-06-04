@@ -22,9 +22,8 @@ import { MetricTrend } from "@/components/metric-trend";
 import { track } from "@/lib/analytics";
 import { ApiError, apiFetch, isNoPortfolioError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { useLastSnapshot, useRiskExplain, useScoreActivePortfolio } from "@/lib/queries";
+import { useActiveScore, useLastSnapshot, useRiskExplain } from "@/lib/queries";
 import type { LastSnapshot } from "@/lib/queries";
-import { useRunOncePerUser } from "@/lib/use-run-once-per-user";
 import { explainInputFromScore } from "@/lib/risk-explain-input";
 import { scoreResponseSchema } from "@/lib/schemas";
 import type { Holding, ScoreRequest, ScoreResponse } from "@/lib/schemas";
@@ -54,14 +53,15 @@ export default function ScorePage() {
   // to re-type holdings) — the manual form below is an optional what-if.
   const { user, configured } = useAuth();
   const signedIn = Boolean(configured && user);
-  const active = useScoreActivePortfolio();
-  // Auto-score the saved portfolio once per signed-in user (skip for anon).
-  useRunOncePerUser(signedIn ? user?.id : null, () => active.mutate());
+  // Cached query (shared with the dashboard) — auto-scores the saved portfolio
+  // and is served from cache on revisit, so it no longer recomputes + blanks
+  // every time. Disabled for anon (no token).
+  const active = useActiveScore();
 
   // What the result panel shows: a manual run takes precedence; otherwise the
   // signed-in user's auto-scored saved portfolio.
   const shown = result ?? (signedIn ? active.data ?? null : null);
-  const showLoading = loading || (signedIn && !result && active.isPending);
+  const showLoading = loading || (signedIn && !result && active.isLoading);
   const showError =
     error ?? (signedIn && !result ? (active.error as ApiError | null) : null);
 

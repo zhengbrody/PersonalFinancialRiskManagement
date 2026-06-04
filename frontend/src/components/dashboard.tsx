@@ -10,7 +10,7 @@
  * (see app/page.tsx).
  */
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,10 +31,9 @@ import {
   useBillingMe,
   useLastSnapshot,
   useRiskExplain,
-  useScoreActivePortfolio,
+  useActiveScore,
 } from "@/lib/queries";
 import type { LastSnapshot } from "@/lib/queries";
-import { useRunOncePerUser } from "@/lib/use-run-once-per-user";
 import { explainInputFromScore } from "@/lib/risk-explain-input";
 import type { ScoreResponse } from "@/lib/schemas";
 
@@ -46,19 +45,20 @@ const COPILOT_PROMPTS = [
 
 export function Dashboard() {
   const { user } = useAuth();
-  const score = useScoreActivePortfolio();
+  // Cached query: shared with /score, so navigating between them is instant
+  // (no recompute / skeleton flash). Auto-fires when signed in.
+  const score = useActiveScore();
   const billing = useBillingMe();
   const lastSnapshot = useLastSnapshot();
 
-  // Score the active portfolio once per signed-in user (survives token refresh).
-  useRunOncePerUser(user?.id, () => {
-    score
-      .mutateAsync()
-      .then((d) =>
-        track("score_viewed", { overall_score: Math.round(d.overall_score) }),
-      )
-      .catch(() => {}); // empty-state / errors are surfaced in the UI, not analytics
-  });
+  // Fire the funnel event once per score result (not on every render).
+  const trackedScore = useRef<number | null>(null);
+  useEffect(() => {
+    if (score.data && trackedScore.current !== score.data.overall_score) {
+      trackedScore.current = score.data.overall_score;
+      track("score_viewed", { overall_score: Math.round(score.data.overall_score) });
+    }
+  }, [score.data]);
 
   // AI diagnosis from numbers we already have (auth-gated, cached per-input).
   const snapshot = lastSnapshot.data?.snapshot ?? null;
@@ -81,12 +81,11 @@ export function Dashboard() {
         </p>
       </header>
 
-      {/* idle (pre-fire) + pending both show the skeleton — no blank flash */}
-      {(score.isIdle || score.isPending) && <HeroSkeleton />}
+      {score.isLoading && <HeroSkeleton />}
 
       {score.isError && <ScoreError error={score.error as Error} />}
 
-      {score.data && !score.isPending && (
+      {score.data && (
         <>
           <ChangeSinceLastVisit current={score.data} prev={lastSnapshot.data?.snapshot} />
           <ScoreHero score={score.data} />

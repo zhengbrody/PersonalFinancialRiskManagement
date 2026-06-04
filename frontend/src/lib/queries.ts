@@ -223,6 +223,9 @@ export function useRegimeDetail() {
 /** Invalidate the portfolios list so the next render refetches. */
 function invalidatePortfoliosKey(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ["portfolios"] });
+  // Holdings changed → every risk-derived cache (score, snapshots, benchmarks
+  // context) is now stale; drop them so the next view recomputes fresh.
+  qc.invalidateQueries({ queryKey: ["risk"] });
 }
 
 export function useCreatePortfolio() {
@@ -636,6 +639,31 @@ export function useScoreActivePortfolio() {
         authToken: accessToken ?? undefined,
         schema: scoreResponseSchema,
       }),
+  });
+}
+
+/**
+ * Cached auto-score of the active portfolio. A QUERY (not a mutation) so the
+ * result is shared + cached across the dashboard and /score: navigating
+ * between them — or returning within `staleTime` — shows the score instantly
+ * instead of re-running the (multi-second) compute and flashing a skeleton
+ * every time. Invalidated when holdings change (see invalidatePortfoliosKey).
+ */
+export function useActiveScore() {
+  const { accessToken, user } = useAuth();
+  return useQuery<ScoreResponse>({
+    queryKey: ["risk", "score_active", user?.id ?? null],
+    enabled: Boolean(accessToken),
+    queryFn: () =>
+      apiFetch<ScoreResponse>("/api/v1/risk/score_from_active", {
+        method: "POST",
+        body: {},
+        authToken: accessToken!,
+        schema: scoreResponseSchema,
+      }),
+    staleTime: 10 * 60 * 1000, // prices are 24h-cached server-side; 10 min is safe
+    gcTime: 30 * 60 * 1000,
+    retry: false,
   });
 }
 
