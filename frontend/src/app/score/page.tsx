@@ -16,6 +16,8 @@ import { Tabs } from "@/components/ui/tabs";
 import { ScoreGauge, scoreBand } from "@/components/score-gauge";
 import { RiskDiagnosis, ActionCards } from "@/components/risk-diagnosis";
 import { ScoreDrivers } from "@/components/score-drivers";
+import { BenchmarkContext } from "@/components/benchmark-context";
+import { DataProvenance } from "@/components/data-provenance";
 import { track } from "@/lib/analytics";
 import { ApiError, apiFetch, isNoPortfolioError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -356,6 +358,7 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
       {tab === "overview" && (
         <div className="space-y-4">
           <RiskDiagnosis explain={explain.data} loading={explain.isLoading} source="score" />
+          <BenchmarkContext mine={result.metrics} />
           <MetricsCard result={result} />
         </div>
       )}
@@ -396,6 +399,12 @@ function MetricsCard({ result }: { result: ScoreResponse }) {
             </ul>
           </div>
         )}
+
+        <DataProvenance
+          source="Computed from yfinance history"
+          observations={result.metrics.observations}
+          coverage={result.metrics.data_coverage}
+        />
       </CardContent>
     </Card>
   );

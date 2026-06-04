@@ -21,6 +21,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { HorizontalBarChart, type BarDatum } from "@/components/ui/bar-chart";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { RiskDiagnosis } from "@/components/risk-diagnosis";
+import { BenchmarkContext } from "@/components/benchmark-context";
+import { DataProvenance } from "@/components/data-provenance";
 import { track } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
 import {
@@ -66,6 +68,7 @@ export function ReportSections({ report }: { report: RiskReport }) {
         title="Executive summary"
       />
       <KpiGrid report={report} />
+      <BenchmarkContext mine={report} />
       <RiskDrivers report={report} />
       <ScenarioExplorer
         scenarios={scenarios.data}
@@ -83,15 +86,18 @@ export function ReportSections({ report }: { report: RiskReport }) {
 
 function KpiGrid({ report }: { report: RiskReport }) {
   return (
-    <section className="grid grid-cols-2 gap-3 md:grid-cols-4">
-      <Kpi label="Annual return" value={fmtPct(report.annual_return)} />
-      <Kpi label="Annual vol" value={fmtPct(report.annual_volatility)} />
-      <Kpi label="Sharpe" value={fmtNum(report.sharpe_ratio, 2)} />
-      <Kpi label="Max DD" value={fmtPct(report.max_drawdown)} />
-      <Kpi label="VaR 95 (1d)" value={fmtPct(report.var_95)} accent="destructive" />
-      <Kpi label="VaR 99 (1d)" value={fmtPct(report.var_99)} accent="destructive" />
-      <Kpi label="CVaR 95 (1d)" value={fmtPct(report.cvar_95)} accent="destructive" />
-      <Kpi label="Risk-free" value={fmtPct(report.risk_free_rate)} />
+    <section className="space-y-2">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Kpi label="Annual return" value={fmtPct(report.annual_return)} />
+        <Kpi label="Annual vol" value={fmtPct(report.annual_volatility)} />
+        <Kpi label="Sharpe" value={fmtNum(report.sharpe_ratio, 2)} />
+        <Kpi label="Max DD" value={fmtPct(report.max_drawdown)} />
+        <Kpi label="VaR 95 (1d)" value={fmtPct(report.var_95)} accent="destructive" />
+        <Kpi label="VaR 99 (1d)" value={fmtPct(report.var_99)} accent="destructive" />
+        <Kpi label="CVaR 95 (1d)" value={fmtPct(report.cvar_95)} accent="destructive" />
+        <Kpi label="Risk-free" value={fmtPct(report.risk_free_rate)} />
+      </div>
+      <DataProvenance source="Monte-Carlo VaR + factor regression on yfinance history" />
     </section>
   );
 }

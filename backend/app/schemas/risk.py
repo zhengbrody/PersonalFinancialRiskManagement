@@ -235,3 +235,19 @@ class ScoreResponse(BaseModel):
     risk_target: dict
     metrics: PortfolioMetricsOut
     dimensions: dict[str, DimensionScoreOut]
+
+
+# ── /api/v1/risk/benchmarks (public reference context) ──────────────
+
+
+class BenchmarkRow(BaseModel):
+    name: str
+    annual_return: Optional[float] = None
+    annual_volatility: Optional[float] = None
+    sharpe_ratio: Optional[float] = None
+    max_drawdown: Optional[float] = None
+
+
+class BenchmarksOut(BaseModel):
+    as_of: Optional[str] = None
+    benchmarks: list[BenchmarkRow] = Field(default_factory=list)
