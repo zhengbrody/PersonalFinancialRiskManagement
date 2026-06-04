@@ -27,15 +27,16 @@ def _payload(**over):
         source="risk",
         overall_score=520,
         dimensions={
-            "risk_match": {"name": "Risk Match", "score": 600, "status": "ok"},
+            # 0–10 scale (overall score is the 0–1000 one).
+            "risk_match": {"name": "Risk Match", "score": 6.0, "status": "ok"},
             "risk_adjusted_return": {
                 "name": "Risk-Adjusted Return",
-                "score": 300,
+                "score": 3.0,
                 "status": "weak",
             },
             "downside_protection": {
                 "name": "Downside Protection",
-                "score": 480,
+                "score": 4.8,
                 "status": "watch",
             },
         },
