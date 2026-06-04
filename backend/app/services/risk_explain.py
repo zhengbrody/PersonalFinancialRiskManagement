@@ -50,7 +50,8 @@ _SHARPE_WEAK = 0.5
 _BETA_HIGH = 1.20
 _VOL_HIGH = 0.25  # 25% annualised
 _ILLIQUID_DAYS = 5.0
-_WEAK_DIMENSION_SCORE = 350.0
+# Dimension scores are on a 0–10 scale (overall is 0–1000); ≤3.5 = weak.
+_WEAK_DIMENSION_SCORE = 3.5
 
 
 # ── formatting helpers (exposed so tests can build the allowed-number set) ──
