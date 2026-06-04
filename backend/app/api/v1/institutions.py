@@ -12,7 +12,6 @@ fail-softs every leg and caches aggressively. Three reads:
 
 from __future__ import annotations
 
-import logging
 import time
 
 from fastapi import APIRouter, Depends, Request
@@ -28,21 +27,6 @@ from ...schemas.institutions import (
 
 router = APIRouter(prefix="/api/v1/institutions", tags=["institutions"])
 
-_log = logging.getLogger(__name__)
-
-
-def _active_tickers(user: AuthedUser) -> list[str]:
-    """Active-portfolio tickers, fail-soft to [] (discovery surface — never
-    block on an empty/unavailable portfolio)."""
-    try:
-        from libs.auth.active_portfolio import get_active_holdings
-
-        holdings = get_active_holdings(access_token=user.access_token) or {}
-        return [str(t).upper() for t in holdings.keys()]
-    except Exception as exc:  # noqa: BLE001
-        _log.warning("institutions.active_tickers_failed err=%s", type(exc).__name__)
-        return []
-
 
 @router.get(
     "/smart_money", summary="Institutional conviction for your holdings", response_model=None
@@ -50,9 +34,9 @@ def _active_tickers(user: AuthedUser) -> list[str]:
 def smart_money(request: Request, user: AuthedUser = Depends(require_user)):
     started = time.perf_counter()
     from ...services import institutions as svc
+    from ...services._common import active_tickers
 
-    tickers = _active_tickers(user)
-    raw = svc.smart_money_signals(tickers)
+    raw = svc.smart_money_signals(active_tickers(user.access_token))
     signals = [SmartMoneySignal.model_validate(s) for s in raw]
     out = SmartMoneyOut(signals=signals)
     return ok(out.model_dump(), request=request, started_at=started)

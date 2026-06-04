@@ -9,27 +9,38 @@ against. Heavy matrices (daily/monthly PnL) are dropped at the boundary.
 
 from __future__ import annotations
 
-import logging
-from typing import Optional
-
 from ..core.responses import APIError, server_error, unprocessable
-from .quant_backtest import _resolve_active_holdings, _static_weights
-
-_log = logging.getLogger(__name__)
+from .quant_backtest import _finite, _resolve_active_holdings
 
 # Benchmark + the factor ETFs the legacy factor regression looks for.
 _FACTORS = ["SPY", "QQQ", "GLD", "TLT", "IWM", "VTV"]
 _BENCHMARK = "SPY"
 
 
-def _finite(v) -> Optional[float]:
-    try:
-        f = float(v)
-    except (TypeError, ValueError):
-        return None
-    import math
-
-    return f if math.isfinite(f) else None
+def _mv_weights(holdings: dict, tickers: list[str], price_frame) -> dict[str, float]:
+    """Market-value weights (shares × latest close, normalised to 1) read from
+    the price frame we ALREADY fetched — so attribution needs only one price
+    pull. Mirrors quant_backtest._static_weights' rule (drop unpriced tickers,
+    raise 422 if nothing is usable), without a second 10-day fetch."""
+    mvs: dict[str, float] = {}
+    for tk in tickers:
+        if tk not in price_frame.columns:
+            continue
+        closes = price_frame[tk].dropna()
+        if closes.empty:
+            continue
+        shares = float((holdings.get(tk) or {}).get("shares") or 0.0)
+        last_close = float(closes.iloc[-1])
+        if shares > 0 and last_close > 0:
+            mvs[tk] = shares * last_close
+    total = sum(mvs.values())
+    if total <= 0:
+        raise APIError(
+            status=422,
+            code="no_priced_holdings",
+            message="Could not price any holding (shares=0 or no quote).",
+        )
+    return {tk: v / total for tk, v in mvs.items()}
 
 
 def _serialize(summary: dict) -> dict:
@@ -93,10 +104,9 @@ def run_attribution(user, *, history_days: int = 730) -> dict:
     if len(tickers) < 2:
         raise unprocessable("Need at least 2 holdings to attribute performance.")
 
-    weights = _static_weights(holdings, tickers)  # mv weights, raises 422 if unpriced
-
     from . import market_data
 
+    # One fetch covers both the weights (latest close) and the returns matrix.
     all_tickers = sorted(set(tickers) | set(_FACTORS))
     try:
         price_frame = market_data.get_price_history(all_tickers, days=history_days)
@@ -104,6 +114,8 @@ def run_attribution(user, *, history_days: int = 730) -> dict:
         raise server_error("Market data fetch failed.", reason=type(exc).__name__) from exc
     if price_frame.empty:
         raise APIError(status=422, code="no_market_data", message="Could not fetch prices.")
+
+    weights = _mv_weights(holdings, tickers, price_frame)  # raises 422 if unpriced
 
     try:
         import pandas as pd

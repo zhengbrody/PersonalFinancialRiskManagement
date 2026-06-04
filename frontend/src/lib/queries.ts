@@ -956,21 +956,23 @@ const instChangeRowSchema = z.looseObject({
   prev_shares: z.number().nullish(),
   change_pct: z.number().nullish(),
 });
+const institutionChangesSchema = z.looseObject({
+  latest_filing_date: z.string().nullish(),
+  previous_filing_date: z.string().nullish(),
+  new_positions: z.array(instChangeRowSchema),
+  increased: z.array(instChangeRowSchema),
+  decreased: z.array(instChangeRowSchema),
+  exited: z.array(instChangeRowSchema),
+  summary: z.record(z.string(), z.unknown()),
+});
 export const institutionDetailSchema = z.looseObject({
   cik: z.string(),
   name: z.string().nullable(),
   holdings: z.array(instHoldingSchema),
-  changes: z.looseObject({
-    latest_filing_date: z.string().nullish(),
-    previous_filing_date: z.string().nullish(),
-    new_positions: z.array(instChangeRowSchema),
-    increased: z.array(instChangeRowSchema),
-    decreased: z.array(instChangeRowSchema),
-    exited: z.array(instChangeRowSchema),
-    summary: z.record(z.string(), z.unknown()),
-  }),
+  changes: institutionChangesSchema,
 });
 export type InstitutionDetail = z.infer<typeof institutionDetailSchema>;
+export type InstitutionChanges = z.infer<typeof institutionChangesSchema>;
 export type InstChangeRow = z.infer<typeof instChangeRowSchema>;
 export type InstHolding = z.infer<typeof instHoldingSchema>;
 

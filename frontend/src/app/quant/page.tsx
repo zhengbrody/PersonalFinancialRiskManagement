@@ -81,7 +81,7 @@ export default function QuantPage() {
   const { user, loading: authLoading, configured } = useAuth();
   const backtest = useRunBacktest();
 
-  const [tab, setTab] = useState("backtest");
+  const [tab, setTab] = useState(QUANT_TABS[0].value);
   const [strategy, setStrategy] =
     useState<BacktestRequest["strategy"]>("static");
   const [years, setYears] = useState(3);
