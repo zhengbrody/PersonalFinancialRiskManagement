@@ -372,6 +372,37 @@ export function useAdminUsage(enabled: boolean) {
   });
 }
 
+// ── owner: integration system status ────────────────────────────────
+const integrationStatusSchema = z.looseObject({
+  name: z.string(),
+  state: z.string(),
+  detail: z.string(),
+  configured: z.boolean(),
+});
+export const adminStatusSchema = z.looseObject({
+  live: z.boolean(),
+  integrations: z.array(integrationStatusSchema),
+});
+export type AdminStatus = z.infer<typeof adminStatusSchema>;
+export type IntegrationStatus = z.infer<typeof integrationStatusSchema>;
+
+/** Owner-only integration diagnostics. `live` toggles the slower
+ * key-validation calls (separate query key → toggling refetches). */
+export function useAdminStatus(enabled: boolean, live: boolean) {
+  const { accessToken } = useAuth();
+  return useQuery<AdminStatus>({
+    queryKey: ["billing", "admin", "status", live],
+    enabled: enabled && Boolean(accessToken),
+    queryFn: () =>
+      apiFetch<AdminStatus>(
+        `/api/v1/billing/admin/status${live ? "?live=true" : ""}`,
+        { authToken: accessToken!, schema: adminStatusSchema },
+      ),
+    staleTime: 60 * 1000,
+    retry: false,
+  });
+}
+
 /** Plan + subscription snapshot for the signed-in user. */
 export function useBillingMe() {
   const { accessToken, user } = useAuth();
