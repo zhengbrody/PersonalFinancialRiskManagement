@@ -269,3 +269,27 @@ class HistoricalScenarioRow(BaseModel):
 
 class HistoricalScenariosOut(BaseModel):
     scenarios: list[HistoricalScenarioRow] = Field(default_factory=list)
+
+
+# ── /api/v1/risk/var_backtest ──────────────────────────────────────
+
+
+class HistogramBin(BaseModel):
+    x: Optional[float] = None  # bin midpoint (daily return fraction)
+    count: int = 0
+
+
+class VarBacktestOut(BaseModel):
+    n_days: int = 0
+    mean_daily: Optional[float] = None
+    vol_daily: Optional[float] = None
+    var_95: Optional[float] = None  # Gaussian 1-day VaR (positive loss fraction)
+    var_99: Optional[float] = None
+    hist_var_95: Optional[float] = None  # empirical, for comparison
+    hist_var_99: Optional[float] = None
+    breaches_95: int = 0
+    expected_95: Optional[float] = None
+    breaches_99: int = 0
+    expected_99: Optional[float] = None
+    worst_day: Optional[float] = None
+    histogram: list[HistogramBin] = Field(default_factory=list)

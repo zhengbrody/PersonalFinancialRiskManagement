@@ -1096,6 +1096,40 @@ export const benchmarksSchema = z.looseObject({
 export type Benchmarks = z.infer<typeof benchmarksSchema>;
 export type BenchmarkRow = z.infer<typeof benchmarkRowSchema>;
 
+// ── VaR backtest + distribution (authed) ────────────────────────────
+const histogramBinSchema = z.looseObject({ x: z.number().nullish(), count: z.number() });
+export const varBacktestSchema = z.looseObject({
+  n_days: z.number(),
+  mean_daily: z.number().nullish(),
+  vol_daily: z.number().nullish(),
+  var_95: z.number().nullish(),
+  var_99: z.number().nullish(),
+  hist_var_95: z.number().nullish(),
+  hist_var_99: z.number().nullish(),
+  breaches_95: z.number(),
+  expected_95: z.number().nullish(),
+  breaches_99: z.number(),
+  expected_99: z.number().nullish(),
+  worst_day: z.number().nullish(),
+  histogram: z.array(histogramBinSchema),
+});
+export type VarBacktest = z.infer<typeof varBacktestSchema>;
+
+/** Backtest the portfolio's 1-day VaR vs realised breaches + the empirical
+ * return distribution. Mutation — fired once with the risk report. */
+export function useVarBacktest() {
+  const { accessToken } = useAuth();
+  return useMutation<VarBacktest, Error, void>({
+    mutationFn: () =>
+      apiFetch<VarBacktest>("/api/v1/risk/var_backtest", {
+        method: "POST",
+        body: {},
+        authToken: accessToken ?? undefined,
+        schema: varBacktestSchema,
+      }),
+  });
+}
+
 // ── historical scenario replay (authed) ─────────────────────────────
 const historicalScenarioRowSchema = z.looseObject({
   label: z.string(),
