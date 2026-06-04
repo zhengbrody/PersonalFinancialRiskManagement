@@ -20,6 +20,7 @@ from .api.v1 import (
     equity,
     feedback,
     health,
+    institutions,
     macro,
     market,
     portfolios,
@@ -89,6 +90,7 @@ def create_app() -> FastAPI:
     app.include_router(billing.router)
     app.include_router(copilot.router)
     app.include_router(quant.router)
+    app.include_router(institutions.router)
     app.include_router(feedback.router)
 
     # Envelope-aware exception handlers. Order matters: register the
