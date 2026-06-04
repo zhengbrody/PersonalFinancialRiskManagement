@@ -33,6 +33,8 @@ from fastapi import APIRouter, Depends, Request
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import APIError, ok, server_error, unprocessable
 from ...schemas.risk import (
+    BenchmarkRow,
+    BenchmarksOut,
     ComponentVarRow,
     DimensionScoreOut,
     EfficientFrontierOut,
@@ -1088,4 +1090,29 @@ def explain_endpoint(
     if out.ai_generated:
         _record_explain_cost(user.id, body, out)
 
+    return ok(out.model_dump(), request=request, started_at=started)
+
+
+# ── benchmark reference context (public) ───────────────────────────
+# "vs what?" — annualized stats for SPY + a 60/40 blend over the same window,
+# so the score/risk pages can frame the user's numbers against a baseline.
+# Public + cached + fail-soft (empty list, never 500).
+
+
+@router.get(
+    "/benchmarks", summary="Reference annualized stats: S&P 500 + 60/40", response_model=None
+)
+def benchmarks_endpoint(
+    request: Request,
+    days: int = 365,
+    risk_free: float = 0.045,
+):
+    started = time.perf_counter()
+    from ...services import benchmarks as svc
+
+    data = svc.get_benchmarks(days=max(60, min(days, 2520)), risk_free=risk_free)
+    out = BenchmarksOut(
+        as_of=data.get("as_of"),
+        benchmarks=[BenchmarkRow(**b) for b in data.get("benchmarks", [])],
+    )
     return ok(out.model_dump(), request=request, started_at=started)

@@ -1081,6 +1081,30 @@ export type Movers = z.infer<typeof moversSchema>;
 export type MoverRow = z.infer<typeof moverRowSchema>;
 export type SectorRow = z.infer<typeof sectorRowSchema>;
 
+// ── benchmark reference context (public) ────────────────────────────
+const benchmarkRowSchema = z.looseObject({
+  name: z.string(),
+  annual_return: z.number().nullish(),
+  annual_volatility: z.number().nullish(),
+  sharpe_ratio: z.number().nullish(),
+  max_drawdown: z.number().nullish(),
+});
+export const benchmarksSchema = z.looseObject({
+  as_of: z.string().nullish(),
+  benchmarks: z.array(benchmarkRowSchema),
+});
+export type Benchmarks = z.infer<typeof benchmarksSchema>;
+export type BenchmarkRow = z.infer<typeof benchmarkRowSchema>;
+
+/** Public reference stats (S&P 500 + 60/40) for "vs what?" context. */
+export function useBenchmarks() {
+  return useQuery<Benchmarks>({
+    queryKey: ["risk", "benchmarks"],
+    queryFn: () => apiFetch<Benchmarks>("/api/v1/risk/benchmarks", { schema: benchmarksSchema }),
+    staleTime: 6 * 60 * 60 * 1000,
+  });
+}
+
 /** Public sector performance + top gainers/losers. Fail-soft server-side. */
 export function useMarketMovers() {
   return useQuery<Movers>({
