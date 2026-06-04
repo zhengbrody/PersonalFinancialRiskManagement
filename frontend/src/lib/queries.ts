@@ -1105,3 +1105,50 @@ export function usePortfolioSentiment() {
       }),
   });
 }
+
+// ── quant: performance attribution ──────────────────────────────────
+const sectorEffectSchema = z.looseObject({
+  sector: z.string(),
+  weight_diff: z.number().nullish(),
+  allocation_effect: z.number().nullish(),
+  selection_effect: z.number().nullish(),
+  total_effect: z.number().nullish(),
+});
+const brinsonSchema = z.looseObject({
+  total_active_return: z.number().nullish(),
+  allocation_effect: z.number().nullish(),
+  selection_effect: z.number().nullish(),
+  interaction_effect: z.number().nullish(),
+  sector_detail: z.array(sectorEffectSchema),
+});
+const factorSchema = z.looseObject({
+  alpha: z.number().nullish(),
+  r_squared: z.number().nullish(),
+  residual_return: z.number().nullish(),
+  factor_betas: z.record(z.string(), z.number().nullable()),
+  factor_contributions: z.record(z.string(), z.number().nullable()),
+});
+export const attributionSchema = z.looseObject({
+  tracking_error: z.number().nullish(),
+  information_ratio: z.number().nullish(),
+  hit_ratio: z.number().nullish(),
+  active_return_annual: z.number().nullish(),
+  brinson: brinsonSchema.nullable(),
+  factor: factorSchema.nullable(),
+});
+export type Attribution = z.infer<typeof attributionSchema>;
+
+/** Brinson + factor attribution for the active portfolio. Mutation (heavy,
+ * explicit run). Deterministic — no credits. */
+export function useAttribution() {
+  const { accessToken } = useAuth();
+  return useMutation<Attribution, Error, void>({
+    mutationFn: () =>
+      apiFetch<Attribution>("/api/v1/quant/attribution", {
+        method: "POST",
+        body: {},
+        authToken: accessToken ?? undefined,
+        schema: attributionSchema,
+      }),
+  });
+}
