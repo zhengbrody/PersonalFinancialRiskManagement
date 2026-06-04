@@ -122,3 +122,39 @@ def get_previous_snapshot(access_token: Optional[str]) -> Optional[dict]:
     except Exception as exc:  # noqa: BLE001
         _log.warning("snapshot.read_failed reason=%s", type(exc).__name__)
         return None
+
+
+def get_snapshot_history(access_token: Optional[str], *, limit: int = 90) -> list[dict]:
+    """Recent snapshots oldest→newest, flattened to a chartable shape:
+    ``[{as_of, overall_score, annual_volatility, var_95_daily, sharpe_ratio,
+    max_drawdown, net_equity}]``. Fail-soft to ``[]``; never raises."""
+    if not access_token:
+        return []
+    try:
+        sb = _client(access_token)
+        resp = (
+            sb.table("portfolio_snapshots")
+            .select("created_at,risk_metrics,net_equity")
+            .order("created_at", desc=True)
+            .limit(max(1, min(limit, 365)))
+            .execute()
+        )
+        rows = list(reversed(resp.data or []))  # oldest → newest for plotting
+        out: list[dict] = []
+        for r in rows:
+            m = r.get("risk_metrics") or {}
+            out.append(
+                {
+                    "as_of": r.get("created_at"),
+                    "overall_score": m.get("overall_score"),
+                    "annual_volatility": _finite(m.get("annual_volatility")),
+                    "var_95_daily": _finite(m.get("var_95_daily")),
+                    "sharpe_ratio": _finite(m.get("sharpe_ratio")),
+                    "max_drawdown": _finite(m.get("max_drawdown")),
+                    "net_equity": _finite(r.get("net_equity")),
+                }
+            )
+        return out
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("snapshot.history_failed reason=%s", type(exc).__name__)
+        return []

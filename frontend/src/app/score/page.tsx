@@ -18,6 +18,7 @@ import { RiskDiagnosis, ActionCards } from "@/components/risk-diagnosis";
 import { ScoreDrivers } from "@/components/score-drivers";
 import { BenchmarkContext } from "@/components/benchmark-context";
 import { DataProvenance } from "@/components/data-provenance";
+import { MetricTrend } from "@/components/metric-trend";
 import { track } from "@/lib/analytics";
 import { ApiError, apiFetch, isNoPortfolioError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -363,7 +364,17 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
         </div>
       )}
       {tab === "drivers" && <ScoreDrivers score={result} />}
-      {tab === "changed" && <WhatChanged current={result} prev={snapshot} />}
+      {tab === "changed" && (
+        <div className="space-y-4">
+          <MetricTrend
+            metric="overall_score"
+            title="Health score over time"
+            description="Each visit you score, we save a snapshot — here's your trend."
+            kind="score"
+          />
+          <WhatChanged current={result} prev={snapshot} />
+        </div>
+      )}
       {tab === "actions" && <ActionCards explain={explain.data} loading={explain.isLoading} />}
     </div>
   );

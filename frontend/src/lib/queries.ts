@@ -1096,6 +1096,38 @@ export const benchmarksSchema = z.looseObject({
 export type Benchmarks = z.infer<typeof benchmarksSchema>;
 export type BenchmarkRow = z.infer<typeof benchmarkRowSchema>;
 
+// ── snapshot history (score/vol/VaR over time) ──────────────────────
+const snapshotPointSchema = z.looseObject({
+  as_of: z.string().nullish(),
+  overall_score: z.number().nullish(),
+  annual_volatility: z.number().nullish(),
+  var_95_daily: z.number().nullish(),
+  sharpe_ratio: z.number().nullish(),
+  max_drawdown: z.number().nullish(),
+  net_equity: z.number().nullish(),
+});
+export const snapshotHistorySchema = z.looseObject({
+  snapshots: z.array(snapshotPointSchema),
+});
+export type SnapshotHistory = z.infer<typeof snapshotHistorySchema>;
+export type SnapshotPoint = z.infer<typeof snapshotPointSchema>;
+
+/** Recent portfolio snapshots (oldest→newest) for trend sparklines. */
+export function useSnapshotHistory() {
+  const { accessToken, user } = useAuth();
+  return useQuery<SnapshotHistory>({
+    queryKey: ["risk", "snapshot_history", user?.id ?? null],
+    enabled: Boolean(accessToken),
+    queryFn: () =>
+      apiFetch<SnapshotHistory>("/api/v1/risk/snapshot_history", {
+        authToken: accessToken!,
+        schema: snapshotHistorySchema,
+      }),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+}
+
 // ── VaR backtest + distribution (authed) ────────────────────────────
 const histogramBinSchema = z.looseObject({ x: z.number().nullish(), count: z.number() });
 export const varBacktestSchema = z.looseObject({
