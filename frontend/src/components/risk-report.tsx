@@ -24,6 +24,7 @@ import { RiskDiagnosis } from "@/components/risk-diagnosis";
 import { BenchmarkContext } from "@/components/benchmark-context";
 import { DataProvenance } from "@/components/data-provenance";
 import { VarBacktest } from "@/components/var-backtest";
+import { MetricTrend } from "@/components/metric-trend";
 import { track } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
 import {
@@ -73,6 +74,12 @@ export function ReportSections({ report }: { report: RiskReport }) {
       />
       <KpiGrid report={report} />
       <BenchmarkContext mine={report} />
+      <MetricTrend
+        metric="annual_volatility"
+        title="Your volatility over time"
+        description="From the snapshots saved each time you score."
+        kind="pct"
+      />
       <RiskDrivers report={report} />
       <ScenarioExplorer
         scenarios={scenarios.data}

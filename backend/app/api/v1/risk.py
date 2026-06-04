@@ -482,6 +482,20 @@ def last_snapshot_endpoint(request: Request, user: AuthedUser = Depends(require_
     return ok({"snapshot": out}, request=request, started_at=started)
 
 
+@router.get(
+    "/snapshot_history",
+    summary="Recent portfolio snapshots (score/vol/VaR over time) for trend lines",
+)
+def snapshot_history_endpoint(request: Request, user: AuthedUser = Depends(require_user)):
+    """Recent snapshots oldest→newest so the score/risk pages can draw trend
+    sparklines. Fail-soft to an empty list."""
+    started = time.perf_counter()
+    from ...services import snapshots
+
+    history = snapshots.get_snapshot_history(user.access_token)
+    return ok({"snapshots": history}, request=request, started_at=started)
+
+
 # ── /score_from_active continues above. Below: /report_from_active. ──
 
 
