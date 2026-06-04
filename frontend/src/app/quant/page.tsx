@@ -34,7 +34,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs } from "@/components/ui/tabs";
 import { TimeSeriesChart } from "@/components/ui/chart-line";
+import { QuantAttribution } from "@/components/quant-attribution";
+import { QuantRegime } from "@/components/quant-regime";
+import { track } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -42,6 +46,12 @@ import {
   type BacktestRequest,
   type BacktestResponse,
 } from "@/lib/queries";
+
+const QUANT_TABS = [
+  { value: "backtest", label: "Backtest" },
+  { value: "attribution", label: "Attribution" },
+  { value: "regime", label: "Regime" },
+];
 
 // ── control options ────────────────────────────────────────────────
 
@@ -71,6 +81,7 @@ export default function QuantPage() {
   const { user, loading: authLoading, configured } = useAuth();
   const backtest = useRunBacktest();
 
+  const [tab, setTab] = useState("backtest");
   const [strategy, setStrategy] =
     useState<BacktestRequest["strategy"]>("static");
   const [years, setYears] = useState(3);
@@ -120,31 +131,44 @@ export default function QuantPage() {
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
       <header className="space-y-1">
-        <h1 className="text-3xl font-semibold tracking-tight">Backtest</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Quant Lab</h1>
         <p className="text-sm text-muted-foreground">
-          See how your portfolio would have performed over the past few years —
-          in plain English.
+          Backtest your portfolio, see where your return came from, and read the
+          market&apos;s regime — in plain English.
         </p>
       </header>
 
-      <Controls
-        strategy={strategy}
-        years={years}
-        rebalanceFreq={rebalanceFreq}
-        onStrategy={setStrategy}
-        onYears={setYears}
-        onRebalance={setRebalanceFreq}
-        onRun={run}
-        running={backtest.isPending}
+      <Tabs
+        items={QUANT_TABS}
+        value={tab}
+        onValueChange={(v) => {
+          setTab(v);
+          track("quant_tab_changed", { tab: v });
+        }}
       />
 
-      {error && <ErrorNotice error={error} />}
+      {tab === "backtest" && (
+        <>
+          <Controls
+            strategy={strategy}
+            years={years}
+            rebalanceFreq={rebalanceFreq}
+            onStrategy={setStrategy}
+            onYears={setYears}
+            onRebalance={setRebalanceFreq}
+            onRun={run}
+            running={backtest.isPending}
+          />
 
-      {backtest.isPending && <ResultSkeleton />}
+          {error && <ErrorNotice error={error} />}
+          {backtest.isPending && <ResultSkeleton />}
+          {!backtest.isPending && result && <Results result={result} />}
+          {!backtest.isPending && !result && !error && <EmptyState />}
+        </>
+      )}
 
-      {!backtest.isPending && result && <Results result={result} />}
-
-      {!backtest.isPending && !result && !error && <EmptyState />}
+      {tab === "attribution" && <QuantAttribution />}
+      {tab === "regime" && <QuantRegime />}
     </div>
   );
 }

@@ -78,3 +78,41 @@ class BacktestResponse(BaseModel):
     equity_curve: List[CurvePoint] = Field(default_factory=list)
     drawdown_series: List[CurvePoint] = Field(default_factory=list)
     benchmark_total_return: Optional[float] = None
+
+
+# ── /api/v1/quant/attribution ──────────────────────────────────────
+
+
+class SectorEffectRow(BaseModel):
+    sector: str
+    weight_diff: Optional[float] = None
+    allocation_effect: Optional[float] = None
+    selection_effect: Optional[float] = None
+    total_effect: Optional[float] = None
+
+
+class BrinsonOut(BaseModel):
+    total_active_return: Optional[float] = None
+    allocation_effect: Optional[float] = None
+    selection_effect: Optional[float] = None
+    interaction_effect: Optional[float] = None
+    sector_detail: List[SectorEffectRow] = Field(default_factory=list)
+
+
+class FactorOut(BaseModel):
+    alpha: Optional[float] = None
+    r_squared: Optional[float] = None
+    residual_return: Optional[float] = None
+    factor_betas: dict[str, Optional[float]] = Field(default_factory=dict)
+    factor_contributions: dict[str, Optional[float]] = Field(default_factory=dict)
+
+
+class AttributionResponse(BaseModel):
+    """The success payload for ``POST /api/v1/quant/attribution``."""
+
+    tracking_error: Optional[float] = None
+    information_ratio: Optional[float] = None
+    hit_ratio: Optional[float] = None
+    active_return_annual: Optional[float] = None
+    brinson: Optional[BrinsonOut] = None
+    factor: Optional[FactorOut] = None

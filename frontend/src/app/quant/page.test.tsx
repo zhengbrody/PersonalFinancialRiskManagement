@@ -128,8 +128,9 @@ describe("QuantPage", () => {
     renderWithQuery(<QuantPage />);
 
     expect(
-      screen.getByRole("heading", { name: /backtest/i }),
+      screen.getByRole("heading", { name: /quant lab/i }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /backtest/i })).toBeInTheDocument();
     expect(
       screen.getByRole("combobox", { name: /strategy/i }),
     ).toBeInTheDocument();
@@ -198,5 +199,78 @@ describe("QuantPage", () => {
     expect(link).toHaveAttribute("href", "/portfolios/new");
     // No raw error code leaks to the user.
     expect(screen.queryByText(/no_active_portfolio/i)).not.toBeInTheDocument();
+  });
+
+  it("Attribution tab runs + renders KPIs", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/quant/attribution")) {
+        return envelope({
+          data: {
+            tracking_error: 0.04,
+            information_ratio: 0.6,
+            hit_ratio: 0.55,
+            active_return_annual: 0.03,
+            brinson: {
+              total_active_return: 0.03,
+              allocation_effect: 0.01,
+              selection_effect: 0.02,
+              interaction_effect: 0,
+              sector_detail: [
+                { sector: "Technology", weight_diff: 0.2, allocation_effect: 0.01, selection_effect: 0.02, total_effect: 0.03 },
+              ],
+            },
+            factor: { alpha: 0.02, r_squared: 0.88, residual_return: 0.005, factor_betas: { SPY: 1.05 }, factor_contributions: { SPY: 0.04 } },
+          },
+          error: null,
+          meta: { request_id: "r-attr" },
+        });
+      }
+      return envelope({ data: {}, error: null, meta: { request_id: "r" } });
+    });
+
+    const user = userEvent.setup();
+    renderWithQuery(<QuantPage />);
+    await user.click(screen.getByRole("tab", { name: /attribution/i }));
+    await user.click(screen.getByRole("button", { name: /run attribution/i }));
+
+    expect(await screen.findByText("Information ratio")).toBeInTheDocument();
+    expect(screen.getByText("0.60")).toBeInTheDocument(); // IR
+    expect(screen.getByText(/brinson decomposition/i)).toBeInTheDocument();
+  });
+
+  it("Regime tab renders the current regime + transition matrix", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/macro/regime_detail")) {
+        return envelope({
+          data: {
+            current_regime: "Bull",
+            confidence: 0.8,
+            regime_since_date: "2026-01-02",
+            vix_regime: "Calm",
+            trend_regime: "Up",
+            vol_regime: "Low",
+            history: [
+              { date: "2026-01-01", regime: "Bull" },
+              { date: "2026-01-02", regime: "Bull" },
+              { date: "2026-01-03", regime: "Bear" },
+            ],
+          },
+          error: null,
+          meta: { request_id: "r-reg" },
+        });
+      }
+      return envelope({ data: {}, error: null, meta: { request_id: "r" } });
+    });
+
+    const user = userEvent.setup();
+    renderWithQuery(<QuantPage />);
+    await user.click(screen.getByRole("tab", { name: /regime/i }));
+
+    // "Bull" shows in the hero + the matrix; just assert it appeared.
+    expect((await screen.findAllByText("Bull")).length).toBeGreaterThan(0);
+    expect(screen.getByText(/regime transitions/i)).toBeInTheDocument();
+    expect(screen.getByText(/current regime/i)).toBeInTheDocument();
   });
 });

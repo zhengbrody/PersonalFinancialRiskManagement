@@ -19,8 +19,8 @@ from fastapi import APIRouter, Depends, Request
 
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import ok
-from ...schemas.quant import BacktestRequest
-from ...services import quant_backtest
+from ...schemas.quant import AttributionResponse, BacktestRequest
+from ...services import quant_attribution, quant_backtest
 
 router = APIRouter(prefix="/api/v1/quant", tags=["quant"])
 
@@ -50,3 +50,22 @@ def backtest_active_endpoint(
         top_n=body.top_n,
     )
     return ok(data, request=request, started_at=started)
+
+
+@router.post(
+    "/attribution",
+    summary="Performance attribution (Brinson + factor) for the active portfolio",
+    response_model=None,
+)
+def attribution_active_endpoint(
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    """Brinson sector decomposition + multi-factor regression + tracking-error
+    / information-ratio / hit-ratio for the caller's active portfolio vs SPY.
+    Deterministic (no LLM, no credits)."""
+    started = time.perf_counter()
+    data = quant_attribution.run_attribution(user)
+    # Validate/normalize the shape at the boundary.
+    payload = AttributionResponse.model_validate(data)
+    return ok(payload.model_dump(), request=request, started_at=started)
