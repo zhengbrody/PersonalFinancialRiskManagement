@@ -23,11 +23,13 @@ import { DataTable, type Column } from "@/components/ui/data-table";
 import { RiskDiagnosis } from "@/components/risk-diagnosis";
 import { BenchmarkContext } from "@/components/benchmark-context";
 import { DataProvenance } from "@/components/data-provenance";
+import { VarBacktest } from "@/components/var-backtest";
 import { track } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
 import {
   useRiskExplain,
   useScenarios,
+  useVarBacktest,
   type ComponentVarRow,
   type FactorBetaRow,
   type LiquidityRow,
@@ -51,13 +53,15 @@ export function ReportSections({ report }: { report: RiskReport }) {
   // click. Holdings don't change within a mount, so a re-run of the report
   // doesn't need a re-sweep.
   const scenarios = useScenarios();
+  const varBacktest = useVarBacktest();
   const fired = useRef(false);
   useEffect(() => {
     if (!fired.current) {
       fired.current = true;
       scenarios.mutate();
+      varBacktest.mutate();
     }
-  }, [scenarios]);
+  }, [scenarios, varBacktest]);
 
   return (
     <div className="space-y-6">
@@ -75,6 +79,7 @@ export function ReportSections({ report }: { report: RiskReport }) {
         loading={scenarios.isPending}
         fallbackTotal={report.annual_volatility}
       />
+      <VarBacktest data={varBacktest.data} loading={varBacktest.isPending} />
       <FactorBetasTable report={report} />
       <ComponentVarTable report={report} />
       <StressSummary report={report} />

@@ -52,6 +52,7 @@ from ...schemas.risk import (
     ScoreRequest,
     ScoreResponse,
     StressAssetLoss,
+    VarBacktestOut,
 )
 from ...schemas.risk_explain import RiskExplainInput
 
@@ -1139,4 +1140,24 @@ def historical_scenarios_endpoint(
     out = HistoricalScenariosOut(
         scenarios=[HistoricalScenarioRow(**s) for s in data.get("scenarios", [])]
     )
+    return ok(out.model_dump(), request=request, started_at=started)
+
+
+@router.post(
+    "/var_backtest",
+    summary="Backtest the portfolio's 1-day VaR vs realised breaches",
+    response_model=None,
+)
+def var_backtest_endpoint(
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    """Gaussian 1-day VaR vs how often the realised daily loss actually breached
+    it over the trailing window, plus the empirical return distribution.
+    Deterministic, no credits."""
+    started = time.perf_counter()
+    from ...services import var_backtest as svc
+
+    data = svc.run_var_backtest(user)
+    out = VarBacktestOut(**data)
     return ok(out.model_dump(), request=request, started_at=started)
