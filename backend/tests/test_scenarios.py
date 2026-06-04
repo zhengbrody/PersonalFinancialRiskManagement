@@ -150,3 +150,23 @@ def test_scenarios_happy_sweep(
     crash = shocks[-0.30]
     assert crash["pnl_pct"] == pytest.approx(-0.30, abs=1e-6)
     assert crash["portfolio_value"] == pytest.approx(data["total_value"] * 0.70, rel=1e-6)
+
+
+def test_scenarios_carry_per_asset_losses(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_engine
+):
+    """Each scenario point now ships the per-holding move under that shock so
+    the Scenario Explorer can show 'top impacted holdings' without refetching."""
+    fake_active_portfolio.set({"SPY": {"shares": 100}, "BND": {"shares": 100}})
+    resp = test_client.post("/api/v1/risk/scenarios", json={}, headers=_auth(mint_token))
+    assert resp.status_code == 200, resp.json()
+    shocks = {round(p["shock_pct"], 2): p for p in resp.json()["data"]["scenarios"]}
+    crash = shocks[-0.30]
+    assert crash["asset_losses"], "expected per-asset losses on each scenario point"
+    tickers = {a["ticker"] for a in crash["asset_losses"]}
+    assert {"SPY", "BND"} <= tickers
+    # fake engine: every asset moves with the shock (beta 1).
+    assert all(a["loss_pct"] == pytest.approx(-0.30, abs=1e-6) for a in crash["asset_losses"])
+    # ranked most-impacted first (ascending loss_pct = most negative first).
+    losses = [a["loss_pct"] for a in crash["asset_losses"]]
+    assert losses == sorted(losses)

@@ -115,6 +115,49 @@ const SAMPLE_REPORT = {
   meta: { request_id: "r-report" },
 };
 
+const SAMPLE_SCENARIOS = {
+  data: {
+    total_value: 100000,
+    scenarios: [
+      { shock_pct: -0.3, pnl_pct: -0.28, portfolio_value: 72000, asset_losses: [{ ticker: "SPY", loss_pct: -0.3 }, { ticker: "BND", loss_pct: -0.06 }] },
+      { shock_pct: -0.2, pnl_pct: -0.19, portfolio_value: 81000, asset_losses: [{ ticker: "SPY", loss_pct: -0.2 }, { ticker: "BND", loss_pct: -0.04 }] },
+      { shock_pct: -0.1, pnl_pct: -0.095, portfolio_value: 90500, asset_losses: [{ ticker: "SPY", loss_pct: -0.1 }, { ticker: "BND", loss_pct: -0.02 }] },
+      { shock_pct: -0.05, pnl_pct: -0.047, portfolio_value: 95300, asset_losses: [{ ticker: "SPY", loss_pct: -0.05 }, { ticker: "BND", loss_pct: -0.01 }] },
+      { shock_pct: 0, pnl_pct: 0, portfolio_value: 100000, asset_losses: [] },
+    ],
+  },
+  error: null,
+  meta: { request_id: "r-scen" },
+};
+
+const SAMPLE_EXPLAIN = {
+  data: {
+    severity: "elevated",
+    headline: "Concentration in SPY is your main risk.",
+    summary_bullets: ["SPY drives 60% of portfolio VaR."],
+    primary_driver: "Concentration in SPY (60% of portfolio VaR)",
+    watch_items: [],
+    suggested_actions: [],
+    caveats: ["Educational, not financial advice."],
+    ai_generated: false,
+  },
+  error: null,
+  meta: { request_id: "r-explain" },
+};
+
+/** A fetch spy that routes by URL so the report page's several parallel calls
+ * (portfolios, report, scenarios, explain) each get the right response. */
+function routedFetch() {
+  return vi.spyOn(globalThis, "fetch").mockImplementation((input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("/portfolios/me")) return Promise.resolve(mockJson(PORTFOLIO_LIST));
+    if (url.includes("report_from_active")) return Promise.resolve(mockJson(SAMPLE_REPORT));
+    if (url.includes("/risk/scenarios")) return Promise.resolve(mockJson(SAMPLE_SCENARIOS));
+    if (url.includes("/risk/explain")) return Promise.resolve(mockJson(SAMPLE_EXPLAIN));
+    return Promise.resolve(mockJson({ data: null, error: { code: "unexpected", message: url }, meta: {} }, { status: 500 }));
+  });
+}
+
 afterEach(() => {
   vi.clearAllMocks();
   vi.restoreAllMocks();
@@ -151,10 +194,7 @@ describe("PortfolioRiskPage", () => {
 
   it("renders the full report on a successful Run", async () => {
     authed();
-    const fetchSpy = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(mockJson(PORTFOLIO_LIST))
-      .mockResolvedValueOnce(mockJson(SAMPLE_REPORT));
+    const fetchSpy = routedFetch();
 
     const user = userEvent.setup();
     renderWithQuery(<PortfolioRiskPage />);
@@ -190,6 +230,35 @@ describe("PortfolioRiskPage", () => {
     const headers = init.headers as Record<string, string>;
     expect(headers.Authorization).toBe("Bearer jwt-here");
     expect(init.method).toBe("POST");
+  });
+
+  it("scenario explorer switches shocks WITHOUT refetching", async () => {
+    authed();
+    const fetchSpy = routedFetch();
+
+    const user = userEvent.setup();
+    renderWithQuery(<PortfolioRiskPage />);
+    await user.click(
+      await screen.findByRole("button", { name: /^run report$/i }),
+    );
+
+    // Default −10% shock → its top-impacted holding shows.
+    expect(await screen.findByText(/scenario explorer/i)).toBeInTheDocument();
+    const scenarioCallsBefore = fetchSpy.mock.calls.filter((c) =>
+      String(c[0]).includes("/risk/scenarios"),
+    ).length;
+    expect(scenarioCallsBefore).toBe(1); // fetched once, eagerly
+
+    // Switch to the −30% button.
+    await user.click(screen.getByRole("button", { name: "-30.00%" }));
+    // Projected P&L for −30% (pnl_pct −0.28) appears.
+    expect(await screen.findByText("-28.00%")).toBeInTheDocument();
+
+    // No new scenarios fetch — selection is pure client state.
+    const scenarioCallsAfter = fetchSpy.mock.calls.filter((c) =>
+      String(c[0]).includes("/risk/scenarios"),
+    ).length;
+    expect(scenarioCallsAfter).toBe(1);
   });
 
   it("renders the no_active_portfolio specific copy", async () => {

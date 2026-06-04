@@ -10,6 +10,7 @@
  * (see app/page.tsx).
  */
 
+import { useMemo } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,12 +22,20 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MarketRegime } from "@/components/market-regime";
+import { ScoreGauge } from "@/components/score-gauge";
+import { RiskDiagnosis } from "@/components/risk-diagnosis";
 import { track } from "@/lib/analytics";
 import { isNoPortfolioError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { useBillingMe, useLastSnapshot, useScoreActivePortfolio } from "@/lib/queries";
+import {
+  useBillingMe,
+  useLastSnapshot,
+  useRiskExplain,
+  useScoreActivePortfolio,
+} from "@/lib/queries";
 import type { LastSnapshot } from "@/lib/queries";
 import { useRunOncePerUser } from "@/lib/use-run-once-per-user";
+import { explainInputFromScore } from "@/lib/risk-explain-input";
 import type { ScoreResponse } from "@/lib/schemas";
 
 const COPILOT_PROMPTS = [
@@ -51,6 +60,14 @@ export function Dashboard() {
       .catch(() => {}); // empty-state / errors are surfaced in the UI, not analytics
   });
 
+  // AI diagnosis from numbers we already have (auth-gated, cached per-input).
+  const snapshot = lastSnapshot.data?.snapshot ?? null;
+  const explainInput = useMemo(
+    () => (score.data ? explainInputFromScore(score.data, snapshot) : null),
+    [score.data, snapshot],
+  );
+  const explain = useRiskExplain(explainInput);
+
   const greeting = user?.email ? user.email.split("@")[0] : "there";
 
   return (
@@ -73,6 +90,7 @@ export function Dashboard() {
         <>
           <ChangeSinceLastVisit current={score.data} prev={lastSnapshot.data?.snapshot} />
           <ScoreHero score={score.data} />
+          <RiskDiagnosis explain={explain.data} loading={explain.isLoading} source="score" />
         </>
       )}
 
@@ -150,30 +168,33 @@ function ScoreHero({ score }: { score: ScoreResponse }) {
   return (
     <div className="space-y-4">
       <Card>
-        <CardContent className="flex flex-col gap-4 py-6 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-widest text-muted-foreground">
-              Portfolio Health Score
-            </p>
-            <div className="flex items-baseline gap-2">
-              <span className={`text-5xl font-semibold tabular-nums ${tone.text}`}>
-                {Math.round(score.overall_score)}
-              </span>
-              <span className="text-lg text-muted-foreground">/ 1000</span>
+        <CardContent className="space-y-4 py-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground">
+                Portfolio Health Score
+              </p>
+              <div className="flex items-baseline gap-2">
+                <span className={`text-5xl font-semibold tabular-nums ${tone.text}`}>
+                  {Math.round(score.overall_score)}
+                </span>
+                <span className="text-lg text-muted-foreground">/ 1000</span>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Link href="/risk">
+                <Button variant="outline" size="sm">
+                  Full risk report
+                </Button>
+              </Link>
+              <Link href="/scenarios">
+                <Button variant="outline" size="sm">
+                  Run scenarios
+                </Button>
+              </Link>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Link href="/risk">
-              <Button variant="outline" size="sm">
-                Full risk report
-              </Button>
-            </Link>
-            <Link href="/scenarios">
-              <Button variant="outline" size="sm">
-                Run scenarios
-              </Button>
-            </Link>
-          </div>
+          <ScoreGauge score={score.overall_score} />
         </CardContent>
       </Card>
 

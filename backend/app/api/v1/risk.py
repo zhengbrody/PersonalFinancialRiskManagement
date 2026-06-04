@@ -49,6 +49,7 @@ from ...schemas.risk import (
     ScoreResponse,
     StressAssetLoss,
 )
+from ...schemas.risk_explain import RiskExplainInput
 
 router = APIRouter(prefix="/api/v1/risk", tags=["risk"])
 
@@ -990,19 +991,31 @@ def scenarios_endpoint(
     points: list[ScenarioPoint] = []
     for shock in _SCENARIO_SHOCKS:
         try:
-            # _stress_test → signed equity-book P&L (Σ wᵢ·βᵢ·shock); scale to
-            # the net-equity (leverage-aware) return.
-            port_pnl, _assets = engine._stress_test(returns, w, market_shock=shock)
+            # _stress_test → signed equity-book P&L (Σ wᵢ·βᵢ·shock) + the
+            # per-asset signed return (βᵢ·shock). Scale the PORTFOLIO pnl to
+            # the net-equity (leverage-aware) return; per-asset moves are the
+            # asset's own price change and are NOT leverage-scaled.
+            port_pnl, asset_losses = engine._stress_test(returns, w, market_shock=shock)
             pnl = float(port_pnl) * risk_scale
         except Exception:  # noqa: BLE001 - a single bad shock shouldn't sink the sweep
             continue
         if not np.isfinite(pnl):
             continue
+        # Most-impacted (most negative) first, top 8 kept for the explorer.
+        ranked = sorted(
+            (
+                StressAssetLoss(ticker=str(t), loss_pct=float(loss))
+                for t, loss in (asset_losses or {}).items()
+                if np.isfinite(loss)
+            ),
+            key=lambda r: r.loss_pct,
+        )[:8]
         points.append(
             ScenarioPoint(
                 shock_pct=float(shock),
                 pnl_pct=pnl,
                 portfolio_value=float(net_equity * (1.0 + pnl)),
+                asset_losses=ranked,
             )
         )
 
@@ -1010,4 +1023,69 @@ def scenarios_endpoint(
         raise server_error("Scenario simulation produced no usable points.")
 
     out = ScenariosOut(total_value=float(net_equity), scenarios=points)
+    return ok(out.model_dump(), request=request, started_at=started)
+
+
+# ── AI risk diagnosis (structured, deterministic-first) ────────────────
+# Turns ALREADY-COMPUTED numbers (the client passes back what it fetched from
+# /score_from_active + /report_from_active) into a structured plain-English
+# diagnosis. The LLM only rephrases the deterministic skeleton — severity +
+# primary_driver are computed in Python and never invented. Any failure (no
+# key / quota / bad JSON) falls back to a deterministic template, so the page
+# always renders. Per the owner decision this is FREE (no credit gate); we
+# still record the actual cost for the owner usage dashboard.
+
+_EXPLAIN_MODEL = "claude-haiku-4-5-20251001"
+
+
+def _record_explain_cost(user_id: str, body: RiskExplainInput, out) -> None:
+    """Log the actual token cost of a diagnosis (visibility only — not gated).
+    Never raises."""
+    try:
+        import json
+
+        from libs.billing.costs import estimate_cost_usd, estimate_tokens
+        from libs.billing.usage import record_event
+
+        tokens_in = estimate_tokens(json.dumps(body.model_dump(), default=str)) + 900
+        tokens_out = estimate_tokens(json.dumps(out.model_dump(), default=str))
+        cost = estimate_cost_usd(
+            "anthropic", _EXPLAIN_MODEL, tokens_in=tokens_in, tokens_out=tokens_out
+        )
+        record_event(
+            user_id,
+            "risk_explain",
+            provider="anthropic",
+            model=_EXPLAIN_MODEL,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            cost_usd=cost,
+        )
+    except Exception:  # noqa: BLE001
+        _log.warning("risk.explain.cost_record_failed")
+
+
+@router.post(
+    "/explain",
+    summary="Structured AI risk diagnosis over already-computed metrics",
+    response_model=None,
+)
+def explain_endpoint(
+    body: RiskExplainInput,
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    started = time.perf_counter()
+
+    from ...services import risk_explain
+    from ...services.llm_client import get_llm_callable
+
+    # with_tools=False → plain Haiku/Sonnet by size; explain uses small
+    # max_tokens so it routes to Haiku. None → deterministic template.
+    llm = get_llm_callable(with_tools=False)
+    out = risk_explain.explain(body, llm_callable=llm)
+
+    if out.ai_generated:
+        _record_explain_cost(user.id, body, out)
+
     return ok(out.model_dump(), request=request, started_at=started)

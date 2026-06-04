@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,12 +12,26 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs } from "@/components/ui/tabs";
+import { ScoreGauge, scoreBand } from "@/components/score-gauge";
+import { RiskDiagnosis, ActionCards } from "@/components/risk-diagnosis";
+import { ScoreDrivers } from "@/components/score-drivers";
+import { track } from "@/lib/analytics";
 import { ApiError, apiFetch, isNoPortfolioError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { useScoreActivePortfolio } from "@/lib/queries";
+import { useLastSnapshot, useRiskExplain, useScoreActivePortfolio } from "@/lib/queries";
+import type { LastSnapshot } from "@/lib/queries";
 import { useRunOncePerUser } from "@/lib/use-run-once-per-user";
+import { explainInputFromScore } from "@/lib/risk-explain-input";
 import { scoreResponseSchema } from "@/lib/schemas";
 import type { Holding, ScoreRequest, ScoreResponse } from "@/lib/schemas";
+
+const COCKPIT_TABS = [
+  { value: "overview", label: "Overview" },
+  { value: "drivers", label: "Drivers" },
+  { value: "changed", label: "What Changed" },
+  { value: "actions", label: "Actions" },
+];
 
 type HoldingRow = { ticker: string; market_value: string };
 
@@ -293,51 +307,83 @@ function ErrorPanel({ error }: { error: ApiError }) {
 }
 
 function ResultPanel({ result }: { result: ScoreResponse }) {
-  const dims = Object.values(result.dimensions);
+  const [tab, setTab] = useState("overview");
+  const lastSnapshot = useLastSnapshot();
+  const snapshot = lastSnapshot.data?.snapshot ?? null;
+
+  // Build the explain input from numbers we ALREADY have — memoised so the
+  // query key is stable across tab switches (no re-call). The diagnosis query
+  // is auth-gated, so it's a no-op for the anonymous public sandbox.
+  const explainInput = useMemo(
+    () => explainInputFromScore(result, snapshot),
+    [result, snapshot],
+  );
+  const explain = useRiskExplain(explainInput);
+
+  const band = scoreBand(result.overall_score);
+
+  return (
+    <div className="space-y-4">
+      {/* ── hero: score + gauge (deterministic, paints first) ───────── */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle>Portfolio Health Score</CardTitle>
+          <CardDescription>0–1000 · MindMarket Portfolio Health</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="flex items-baseline gap-3">
+            <span className="font-mono text-6xl font-semibold tracking-tight text-primary">
+              {result.overall_score}
+            </span>
+            <span className="text-lg text-muted-foreground">/ 1000</span>
+            <span className={`text-sm font-semibold uppercase tracking-wide ${band.text}`}>
+              {band.label}
+            </span>
+          </div>
+          <ScoreGauge score={result.overall_score} />
+        </CardContent>
+      </Card>
+
+      <Tabs
+        items={COCKPIT_TABS}
+        value={tab}
+        onValueChange={(v) => {
+          setTab(v);
+          track("risk_tab_changed", { tab: v, source: "score" });
+        }}
+      />
+
+      {tab === "overview" && (
+        <div className="space-y-4">
+          <RiskDiagnosis explain={explain.data} loading={explain.isLoading} source="score" />
+          <MetricsCard result={result} />
+        </div>
+      )}
+      {tab === "drivers" && <ScoreDrivers score={result} />}
+      {tab === "changed" && <WhatChanged current={result} prev={snapshot} />}
+      {tab === "actions" && <ActionCards explain={explain.data} loading={explain.isLoading} />}
+    </div>
+  );
+}
+
+function MetricsCard({ result }: { result: ScoreResponse }) {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Overall score</CardTitle>
-        <CardDescription>0–1000 · MindMarket Portfolio Health</CardDescription>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Metrics</CardTitle>
+        <CardDescription>The figures behind the score</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="flex items-baseline gap-3">
-          <span className="font-mono text-6xl font-semibold tracking-tight text-primary">
-            {result.overall_score}
-          </span>
-          <span className="text-sm text-muted-foreground">
-            risk pref {result.risk_preference}
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-          {dims.map((d) => (
-            <div
-              key={d.name}
-              className="rounded-lg border border-border bg-muted/30 p-3"
-            >
-              <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                {d.name}
-              </div>
-              <div className="mt-1 font-mono text-2xl">{Math.round(d.score)}</div>
-              <div className="mt-1 text-xs text-muted-foreground">{d.status}</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="space-y-2">
-          <h3 className="text-sm font-medium">Metrics</h3>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm md:grid-cols-3">
-            <MetricRow label="Annual return" value={fmtPct(result.metrics.annual_return)} />
-            <MetricRow label="Annual vol" value={fmtPct(result.metrics.annual_volatility)} />
-            <MetricRow label="Sharpe" value={fmtNum(result.metrics.sharpe_ratio, 2)} />
-            <MetricRow label="Max DD" value={fmtPct(result.metrics.max_drawdown)} />
-            <MetricRow label="VaR 95 (daily)" value={fmtPct(result.metrics.var_95_daily)} />
-            <MetricRow label="CVaR 95 (daily)" value={fmtPct(result.metrics.cvar_95_daily)} />
-            <MetricRow label="Beta" value={fmtNum(result.metrics.beta_to_benchmark, 2)} />
-            <MetricRow label="Total value" value={fmtUSD(result.metrics.total_value)} />
-            <MetricRow label="Observations" value={String(result.metrics.observations ?? "—")} />
-          </div>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm md:grid-cols-3">
+          <MetricRow label="Annual return" value={fmtPct(result.metrics.annual_return)} />
+          <MetricRow label="Annual vol" value={fmtPct(result.metrics.annual_volatility)} />
+          <MetricRow label="Sharpe" value={fmtNum(result.metrics.sharpe_ratio, 2)} />
+          <MetricRow label="Max DD" value={fmtPct(result.metrics.max_drawdown)} />
+          <MetricRow label="VaR 95 (daily)" value={fmtPct(result.metrics.var_95_daily)} />
+          <MetricRow label="CVaR 95 (daily)" value={fmtPct(result.metrics.cvar_95_daily)} />
+          <MetricRow label="Beta" value={fmtNum(result.metrics.beta_to_benchmark, 2)} />
+          <MetricRow label="Total value" value={fmtUSD(result.metrics.total_value)} />
+          <MetricRow label="Observations" value={String(result.metrics.observations ?? "—")} />
         </div>
 
         {result.metrics.data_quality_notes.length > 0 && (
@@ -350,6 +396,96 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
             </ul>
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function WhatChanged({
+  current,
+  prev,
+}: {
+  current: ScoreResponse;
+  prev: LastSnapshot["snapshot"] | null;
+}) {
+  if (!prev || prev.overall_score == null) {
+    return (
+      <Card>
+        <CardContent className="py-6 text-sm text-muted-foreground">
+          No earlier snapshot yet — we save one each time you score, so your
+          first change will show up on your next visit.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const now = Math.round(current.overall_score);
+  const was = Math.round(prev.overall_score);
+  const dScore = now - was;
+  const tone =
+    dScore > 0
+      ? "text-emerald-600 dark:text-emerald-400"
+      : dScore < 0
+        ? "text-amber-600 dark:text-amber-400"
+        : "text-muted-foreground";
+  const sign = dScore > 0 ? "+" : "";
+
+  const rows: { label: string; was: string; now: string }[] = [
+    {
+      label: "Health score",
+      was: String(was),
+      now: String(now),
+    },
+    {
+      label: "Annual volatility",
+      was: fmtPct(prev.annual_volatility),
+      now: fmtPct(current.metrics.annual_volatility),
+    },
+    {
+      label: "Sharpe ratio",
+      was: fmtNum(prev.sharpe_ratio, 2),
+      now: fmtNum(current.metrics.sharpe_ratio, 2),
+    },
+    {
+      label: "Max drawdown",
+      was: fmtPct(prev.max_drawdown),
+      now: fmtPct(current.metrics.max_drawdown),
+    },
+  ];
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">
+          Since {prev.as_of ? new Date(prev.as_of).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "last snapshot"}
+        </CardTitle>
+        <CardDescription>
+          Health score{" "}
+          <span className={`font-medium ${tone}`}>
+            {sign}
+            {dScore}
+          </span>
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <th className="py-1 font-medium">Metric</th>
+              <th className="py-1 text-right font-medium">Then</th>
+              <th className="py-1 text-right font-medium">Now</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.label} className="border-t border-border/40">
+                <td className="py-1.5 text-muted-foreground">{r.label}</td>
+                <td className="py-1.5 text-right font-mono">{r.was}</td>
+                <td className="py-1.5 text-right font-mono">{r.now}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </CardContent>
     </Card>
   );

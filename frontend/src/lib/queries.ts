@@ -766,6 +766,9 @@ const scenarioPointSchema = z.looseObject({
   shock_pct: z.number(),
   pnl_pct: z.number(),
   portfolio_value: z.number(),
+  // Per-holding signed return under this shock, most-impacted first (optional —
+  // older backends omit it). Drives the Scenario Explorer's "top impacted".
+  asset_losses: z.array(stressAssetLossSchema).default([]),
 });
 export const scenariosSchema = z.looseObject({
   total_value: z.number(),
@@ -829,6 +832,92 @@ export function useLastSnapshot() {
         schema: lastSnapshotSchema,
       }),
     staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+}
+
+// ── AI risk diagnosis (structured, deterministic-first) ─────────────
+// The page passes back the numbers it ALREADY fetched (score / report); the
+// backend turns them into a plain-English diagnosis. severity + primary_driver
+// are computed deterministically server-side and never invented by the LLM;
+// the whole thing degrades to a deterministic template if the LLM is
+// unavailable. Free (not credit-gated). Cached per-input so tab switches and
+// re-views don't re-call.
+
+export type ExplainDimensionInput = {
+  name: string;
+  score?: number | null;
+  status?: string;
+};
+
+export type RiskExplainInput = {
+  source: "score" | "risk";
+  overall_score?: number | null;
+  dimensions?: Record<string, ExplainDimensionInput>;
+  metrics?: {
+    annual_return?: number | null;
+    annual_volatility?: number | null;
+    sharpe_ratio?: number | null;
+    max_drawdown?: number | null;
+    var_95_daily?: number | null;
+    cvar_95_daily?: number | null;
+    beta_to_benchmark?: number | null;
+    total_value?: number | null;
+    cash_weight?: number | null;
+  };
+  top_component_var?: { ticker: string; pct: number }[];
+  factor_betas?: Record<string, number>;
+  stress_loss?: number | null;
+  stress_market_shock?: number | null;
+  liquidity_outliers?: { ticker: string; days_to_liquidate?: number | null }[];
+  snapshot_delta?: {
+    as_of?: string | null;
+    prev_overall_score?: number | null;
+    prev_annual_volatility?: number | null;
+    prev_sharpe_ratio?: number | null;
+  } | null;
+};
+
+export const suggestedActionSchema = z.looseObject({
+  reason: z.string(),
+  evidence: z.string(),
+  next_step: z.string(),
+  disclaimer: z.string().default("Educational, not financial advice."),
+});
+export type SuggestedAction = z.infer<typeof suggestedActionSchema>;
+
+export const riskExplainSchema = z.looseObject({
+  severity: z.enum(["low", "moderate", "elevated", "high"]),
+  headline: z.string(),
+  summary_bullets: z.array(z.string()),
+  primary_driver: z.string(),
+  watch_items: z.array(z.string()),
+  suggested_actions: z.array(suggestedActionSchema),
+  caveats: z.array(z.string()),
+  ai_generated: z.boolean(),
+});
+export type RiskExplain = z.infer<typeof riskExplainSchema>;
+export type Severity = RiskExplain["severity"];
+
+/**
+ * AI risk diagnosis over already-computed numbers. A query (not a mutation) so
+ * it's cached + deduped per-input: switching tabs or revisiting the page reuses
+ * the result instead of re-calling. `enabled` only once `input` is built, so
+ * the deterministic metrics paint first and this fills in second.
+ */
+export function useRiskExplain(input: RiskExplainInput | null) {
+  const { accessToken, user } = useAuth();
+  return useQuery<RiskExplain>({
+    queryKey: ["risk", "explain", user?.id ?? null, input ? JSON.stringify(input) : null],
+    enabled: Boolean(accessToken && input),
+    queryFn: () =>
+      apiFetch<RiskExplain>("/api/v1/risk/explain", {
+        method: "POST",
+        body: input!,
+        authToken: accessToken!,
+        schema: riskExplainSchema,
+      }),
+    staleTime: 30 * 60 * 1000,
     retry: false,
   });
 }

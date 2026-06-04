@@ -133,6 +133,11 @@ class ScenarioPoint(BaseModel):
     shock_pct: float  # e.g. -0.30 = market −30%
     pnl_pct: float  # signed portfolio P&L fraction (leverage-scaled)
     portfolio_value: float  # projected $ value after the move
+    # Per-holding signed return under this shock (βᵢ·shock), most-impacted
+    # first, top-N kept. Lets the Scenario Explorer show "top impacted
+    # holdings" for the selected shock with no recompute. Optional → older
+    # clients ignore it.
+    asset_losses: list[StressAssetLoss] = Field(default_factory=list)
 
 
 class ScenariosOut(BaseModel):
