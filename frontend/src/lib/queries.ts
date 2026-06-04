@@ -1022,3 +1022,37 @@ export function useInstitution(cik: string | null) {
     retry: false,
   });
 }
+
+// ── market movers + sectors (public) ────────────────────────────────
+const sectorRowSchema = z.looseObject({
+  sector: z.string(),
+  ticker: z.string(),
+  change_pct: z.number().nullish(),
+  ytd_return: z.number().nullish(),
+});
+const moverRowSchema = z.looseObject({
+  ticker: z.string(),
+  name: z.string(),
+  change_pct: z.number().nullish(),
+  close: z.number().nullish(),
+  avg_volume_ratio: z.number().nullish(),
+});
+export const moversSchema = z.looseObject({
+  scan_date: z.string().nullish(),
+  sectors: z.array(sectorRowSchema),
+  top_gainers: z.array(moverRowSchema),
+  top_losers: z.array(moverRowSchema),
+  unusual_volume: z.array(moverRowSchema),
+});
+export type Movers = z.infer<typeof moversSchema>;
+export type MoverRow = z.infer<typeof moverRowSchema>;
+export type SectorRow = z.infer<typeof sectorRowSchema>;
+
+/** Public sector performance + top gainers/losers. Fail-soft server-side. */
+export function useMarketMovers() {
+  return useQuery<Movers>({
+    queryKey: ["macro", "movers"],
+    queryFn: () => apiFetch<Movers>("/api/v1/macro/movers", { schema: moversSchema }),
+    staleTime: 10 * 60 * 1000,
+  });
+}
