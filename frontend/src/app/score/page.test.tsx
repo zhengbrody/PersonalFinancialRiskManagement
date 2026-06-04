@@ -71,16 +71,16 @@ describe("ScorePage", () => {
           data_quality_notes: ["returns matrix synthesised for testing"],
         },
         dimensions: {
-          risk_match: { name: "Risk Match", score: 720, status: "good", detail: "" },
+          risk_match: { name: "Risk Match", score: 7.2, status: "good", detail: "beta is balanced" },
           risk_adjusted_return: {
             name: "Risk-Adjusted Return",
-            score: 690,
+            score: 6.9,
             status: "good",
             detail: "",
           },
           downside_protection: {
             name: "Downside Protection",
-            score: 820,
+            score: 8.2,
             status: "strong",
             detail: "",
           },
@@ -95,15 +95,21 @@ describe("ScorePage", () => {
 
     await user.click(screen.getByRole("button", { name: /run score/i }));
 
-    // Final result is asserted via `findBy*` which waits for the
-    // post-fetch render — no manual `act` needed.
+    // The score hero + Overview (metrics) paint first.
     expect(await screen.findByText("712")).toBeInTheDocument();
-    expect(screen.getByText("Risk Match")).toBeInTheDocument();
-    expect(screen.getByText("Risk-Adjusted Return")).toBeInTheDocument();
-    expect(screen.getByText("Downside Protection")).toBeInTheDocument();
     expect(
       screen.getByText(/returns matrix synthesised for testing/i),
     ).toBeInTheDocument();
+
+    // Dimension driver cards live behind the Drivers tab now.
+    await user.click(screen.getByRole("tab", { name: /drivers/i }));
+    expect(await screen.findByText("Risk Match")).toBeInTheDocument();
+    expect(screen.getByText("Risk-Adjusted Return")).toBeInTheDocument();
+    expect(screen.getByText("Downside Protection")).toBeInTheDocument();
+
+    // What Changed tab → no prior snapshot (anon) → friendly empty message.
+    await user.click(screen.getByRole("tab", { name: /what changed/i }));
+    expect(await screen.findByText(/no earlier snapshot yet/i)).toBeInTheDocument();
   });
 
   it("renders the error panel when the backend rejects", async () => {
