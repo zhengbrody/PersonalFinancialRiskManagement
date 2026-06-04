@@ -31,6 +31,7 @@ const PORTFOLIO_ITEMS: NavItem[] = [
 const RESEARCH_ITEMS: NavItem[] = [
   { href: "/research", label: "Stocks" },
   { href: "/markets", label: "Markets" },
+  { href: "/institutions", label: "Smart money" },
 ];
 
 /** Account-menu links, shared by the desktop AccountMenu + the mobile menu. */

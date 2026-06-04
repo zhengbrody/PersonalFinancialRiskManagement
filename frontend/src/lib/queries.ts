@@ -921,3 +921,104 @@ export function useRiskExplain(input: RiskExplainInput | null) {
     retry: false,
   });
 }
+
+// ── institutions: SEC 13F smart money ───────────────────────────────
+export const smartMoneySignalSchema = z.looseObject({
+  ticker: z.string(),
+  num_institutions: z.number(),
+  crowding_score: z.number(),
+  top_holders: z.array(z.string()),
+  signal: z.string(),
+});
+export type SmartMoneySignal = z.infer<typeof smartMoneySignalSchema>;
+export const smartMoneySchema = z.looseObject({
+  signals: z.array(smartMoneySignalSchema),
+});
+
+const institutionRowSchema = z.looseObject({ name: z.string(), cik: z.string() });
+export const topInstitutionsSchema = z.looseObject({
+  institutions: z.array(institutionRowSchema),
+});
+export type InstitutionRow = z.infer<typeof institutionRowSchema>;
+
+const instHoldingSchema = z.looseObject({
+  ticker: z.string(),
+  name: z.string(),
+  shares: z.number().nullable(),
+  value: z.number().nullable(),
+  pct_of_portfolio: z.number().nullable(),
+});
+const instChangeRowSchema = z.looseObject({
+  ticker: z.string(),
+  name: z.string(),
+  shares: z.number().nullish(),
+  value: z.number().nullish(),
+  prev_shares: z.number().nullish(),
+  change_pct: z.number().nullish(),
+});
+export const institutionDetailSchema = z.looseObject({
+  cik: z.string(),
+  name: z.string().nullable(),
+  holdings: z.array(instHoldingSchema),
+  changes: z.looseObject({
+    latest_filing_date: z.string().nullish(),
+    previous_filing_date: z.string().nullish(),
+    new_positions: z.array(instChangeRowSchema),
+    increased: z.array(instChangeRowSchema),
+    decreased: z.array(instChangeRowSchema),
+    exited: z.array(instChangeRowSchema),
+    summary: z.record(z.string(), z.unknown()),
+  }),
+});
+export type InstitutionDetail = z.infer<typeof institutionDetailSchema>;
+export type InstChangeRow = z.infer<typeof instChangeRowSchema>;
+export type InstHolding = z.infer<typeof instHoldingSchema>;
+
+/** Institutional-conviction signals for the user's active holdings. Slow on a
+ * cold SEC cache → long staleTime; fail-soft to {signals:[]} server-side. */
+export function useSmartMoney() {
+  const { accessToken, user } = useAuth();
+  return useQuery({
+    queryKey: ["institutions", "smart_money", user?.id ?? null],
+    enabled: Boolean(accessToken),
+    queryFn: () =>
+      apiFetch("/api/v1/institutions/smart_money", {
+        authToken: accessToken!,
+        schema: smartMoneySchema,
+      }),
+    staleTime: 30 * 60 * 1000,
+    retry: false,
+  });
+}
+
+/** The ~30 most-watched 13F filers (for the deep-dive picker). */
+export function useTopInstitutions() {
+  const { accessToken } = useAuth();
+  return useQuery({
+    queryKey: ["institutions", "top"],
+    enabled: Boolean(accessToken),
+    queryFn: () =>
+      apiFetch("/api/v1/institutions/top", {
+        authToken: accessToken!,
+        schema: topInstitutionsSchema,
+      }),
+    staleTime: 60 * 60 * 1000,
+    retry: false,
+  });
+}
+
+/** A fund's top holdings + QoQ changes. Enabled only when a CIK is picked. */
+export function useInstitution(cik: string | null) {
+  const { accessToken } = useAuth();
+  return useQuery<InstitutionDetail>({
+    queryKey: ["institutions", "detail", cik],
+    enabled: Boolean(accessToken && cik),
+    queryFn: () =>
+      apiFetch<InstitutionDetail>(`/api/v1/institutions/${cik}`, {
+        authToken: accessToken!,
+        schema: institutionDetailSchema,
+      }),
+    staleTime: 30 * 60 * 1000,
+    retry: false,
+  });
+}
