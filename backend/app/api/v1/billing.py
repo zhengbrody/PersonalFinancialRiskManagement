@@ -171,6 +171,31 @@ def billing_admin_usage(request: Request, user: AuthedUser = Depends(require_use
     return ok(summary, request=request, started_at=started)
 
 
+# ── GET /admin/status — owner-only integration diagnostics ─────────
+
+
+@router.get("/admin/status", summary="Owner-only: integration config + live checks")
+def billing_admin_status(
+    request: Request,
+    live: bool = False,
+    user: AuthedUser = Depends(require_user),
+):
+    """Integration config presence (instant) + optional live key-validation
+    checks (``?live=true``). Owner only (403 otherwise). Never returns secret
+    values — only present/missing + state."""
+    started = time.perf_counter()
+
+    from libs.admin.status import is_owner_email
+
+    if not is_owner_email(user.email):
+        raise APIError(status=403, code="forbidden", message="Owner only.")
+
+    from ...services import admin_status
+
+    data = admin_status.system_status(live=live)
+    return ok(data, request=request, started_at=started)
+
+
 # ── POST /checkout_session — start a paid plan ─────────────────────
 
 

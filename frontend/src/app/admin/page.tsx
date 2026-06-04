@@ -9,8 +9,9 @@
  * 403s for non-owners; this page surfaces that as a friendly notice.
  */
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -21,12 +22,15 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { useAdminUsage } from "@/lib/queries";
+import { useAdminStatus, useAdminUsage, type AdminStatus } from "@/lib/queries";
+import { cn } from "@/lib/utils";
 
 export default function AdminPage() {
   const router = useRouter();
   const { user, loading: authLoading, configured } = useAuth();
   const usage = useAdminUsage(Boolean(user));
+  const [liveChecks, setLiveChecks] = useState(false);
+  const status = useAdminStatus(Boolean(user), liveChecks);
 
   useEffect(() => {
     if (!configured) return;
@@ -113,7 +117,78 @@ export default function AdminPage() {
           />
         </CardContent>
       </Card>
+
+      <SystemStatus
+        data={status.data}
+        loading={status.isLoading}
+        live={liveChecks}
+        onRunLive={() => setLiveChecks(true)}
+      />
     </div>
+  );
+}
+
+const STATE_TONE: Record<string, string> = {
+  Connected: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+  Configured: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+  Missing: "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30",
+  Error: "bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30",
+};
+
+function SystemStatus({
+  data,
+  loading,
+  live,
+  onRunLive,
+}: {
+  data: AdminStatus | undefined;
+  loading: boolean;
+  live: boolean;
+  onRunLive: () => void;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <CardTitle className="text-base">System status</CardTitle>
+            <CardDescription>
+              Server-side integration keys{live ? " · live-validated" : " · presence only"}.
+            </CardDescription>
+          </div>
+          <Button size="sm" variant="outline" disabled={live && loading} onClick={onRunLive}>
+            {live ? (loading ? "Checking…" : "Re-check live") : "Run live checks"}
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {loading && !data && (
+          <>
+            <Skeleton className="h-9" />
+            <Skeleton className="h-9" />
+          </>
+        )}
+        {data?.integrations.map((i) => (
+          <div
+            key={i.name}
+            className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/20 px-3 py-2"
+          >
+            <span className="text-sm font-medium">{i.name}</span>
+            <div className="flex items-center gap-3">
+              <span className="hidden text-xs text-muted-foreground sm:inline">{i.detail}</span>
+              <span
+                className={cn(
+                  "rounded-full border px-2 py-0.5 text-xs font-semibold",
+                  STATE_TONE[i.state] ?? "border-border text-muted-foreground",
+                )}
+              >
+                {i.state}
+              </span>
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
   );
 }
 
