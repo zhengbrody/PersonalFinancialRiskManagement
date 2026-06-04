@@ -8,12 +8,11 @@ already disk-caches 1h).
 
 from __future__ import annotations
 
-import logging
 import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-_logger = logging.getLogger(__name__)
+from ._common import safe
 
 # Movers update intraday; ~10 min staleness is invisible and cheap on yfinance.
 _CACHE_TTL_SECONDS = 600
@@ -50,12 +49,9 @@ def reset_cache() -> None:
     _cache.clear()
 
 
-def _safe(label: str, fn, default):
-    try:
-        return fn()
-    except Exception as exc:  # pragma: no cover - upstream variability
-        _logger.warning("movers.%s.failed err=%s", label, type(exc).__name__)
-        return default
+def _safe(label, fn, default):
+    """Back-compat shim → shared ``safe`` (keeps call sites unchanged)."""
+    return safe(f"movers.{label}", fn, default)
 
 
 def _f(v) -> Optional[float]:

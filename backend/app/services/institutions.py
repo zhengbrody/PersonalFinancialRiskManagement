@@ -10,11 +10,10 @@ EDGAR from refresh storms.
 
 from __future__ import annotations
 
-import logging
 import time
 from typing import Any
 
-_logger = logging.getLogger(__name__)
+from ._common import safe
 
 # Signals for a given ticker set move only when a new 13F is filed (quarterly),
 # so a few hours of server-side staleness is invisible and keeps EDGAR calm.
@@ -27,12 +26,9 @@ def reset_cache() -> None:
     _cache.clear()
 
 
-def _safe(label: str, fn, default):
-    try:
-        return fn()
-    except Exception as exc:  # pragma: no cover - SEC/network variability
-        _logger.warning("institutions.%s.failed err=%s", label, type(exc).__name__)
-        return default
+def _safe(label, fn, default):
+    """Back-compat shim → shared ``safe`` (kept so call sites read unchanged)."""
+    return safe(f"institutions.{label}", fn, default)
 
 
 def smart_money_signals(tickers: list[str]) -> list[dict]:

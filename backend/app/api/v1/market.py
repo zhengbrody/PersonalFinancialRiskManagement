@@ -38,7 +38,7 @@ def _record_sentiment_cost(user_id: str, sentiments: list) -> None:
     """Log the actual token cost of a sentiment scan (Haiku × N tickers).
     Never raises."""
     try:
-        import json as _json
+        import json
 
         from libs.billing.costs import estimate_cost_usd, estimate_tokens
         from libs.billing.usage import record_event
@@ -46,7 +46,7 @@ def _record_sentiment_cost(user_id: str, sentiments: list) -> None:
         # Rough: a short prompt+verdict per scored ticker.
         scored = [s for s in sentiments if s.get("headline_count")]
         tokens_in = 300 * max(1, len(scored))
-        tokens_out = estimate_tokens(_json.dumps(sentiments, default=str))
+        tokens_out = estimate_tokens(json.dumps(sentiments, default=str))
         cost = estimate_cost_usd(
             "anthropic", _SENTIMENT_MODEL, tokens_in=tokens_in, tokens_out=tokens_out
         )
@@ -113,15 +113,9 @@ def portfolio_sentiment(request: Request, user: AuthedUser = Depends(require_use
     started = time.perf_counter()
 
     # Active tickers (fail-soft — empty portfolio → no work, not a 422).
-    try:
-        from libs.auth.active_portfolio import get_active_holdings
+    from ...services._common import active_tickers
 
-        holdings = get_active_holdings(access_token=user.access_token) or {}
-        tickers = [str(t).upper() for t in holdings.keys()]
-    except Exception as exc:  # noqa: BLE001
-        _logger.warning("market.sentiment.active_failed err=%s", type(exc).__name__)
-        tickers = []
-
+    tickers = active_tickers(user.access_token)
     if not tickers:
         return ok(
             SentimentResponse(sentiments=[], ai_generated=False).model_dump(),

@@ -23,6 +23,7 @@ import {
   useInstitution,
   useSmartMoney,
   useTopInstitutions,
+  type InstitutionChanges,
   type InstChangeRow,
   type InstHolding,
   type SmartMoneySignal,
@@ -177,7 +178,7 @@ export function InstitutionDeepDive() {
   );
 }
 
-function ChangeChips({ changes }: { changes: InstitutionDetailChanges }) {
+function ChangeChips({ changes }: { changes: InstitutionChanges }) {
   const groups: { label: string; rows: InstChangeRow[]; tone: string }[] = [
     { label: "New", rows: changes.new_positions, tone: "text-emerald-600 dark:text-emerald-400" },
     { label: "Added", rows: changes.increased, tone: "text-emerald-600 dark:text-emerald-400" },
@@ -207,10 +208,6 @@ function ChangeChips({ changes }: { changes: InstitutionDetailChanges }) {
     </div>
   );
 }
-
-type InstitutionDetailChanges = NonNullable<
-  ReturnType<typeof useInstitution>["data"]
->["changes"];
 
 function fmtUsdCompact(v: number): string {
   if (v >= 1e9) return `$${(v / 1e9).toFixed(1)}B`;

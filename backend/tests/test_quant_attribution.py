@@ -21,10 +21,10 @@ def fake_attr(monkeypatch):
     monkeypatch.setattr(
         qa, "_resolve_active_holdings", lambda user: {"AAPL": {"shares": 10}, "MSFT": {"shares": 5}}
     )
-    monkeypatch.setattr(qa, "_static_weights", lambda holdings, tickers: {"AAPL": 0.6, "MSFT": 0.4})
 
     from backend.app.services import market_data as md
 
+    # weights are now derived from this frame's latest row (single fetch).
     frame = pd.DataFrame({"AAPL": [1.0, 1.1, 1.2], "MSFT": [2.0, 2.1, 2.2], "SPY": [3.0, 3.1, 3.2]})
     monkeypatch.setattr(md, "get_price_history", lambda tickers, *, days=730, **k: frame)
 
