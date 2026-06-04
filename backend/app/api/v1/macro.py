@@ -15,19 +15,22 @@ from fastapi import APIRouter, Query, Request
 
 from ...core.responses import ok, server_error, unprocessable
 from ...schemas.macro import (
+    MoverRowOut,
+    MoversResponse,
     RegimeDetailResponse,
     RegimeFearGreedOut,
     RegimeHistoryPointOut,
     RegimeResponse,
     RegimeVixOut,
     RegimeYieldCurveOut,
+    SectorRowOut,
     SeriesBatchResponse,
     SeriesPointOut,
     SeriesResultOut,
     YieldCurvePointOut,
     YieldCurveResponse,
 )
-from ...services import macro_data, market_regime, regime_detail
+from ...services import macro_data, market_movers, market_regime, regime_detail
 
 router = APIRouter(prefix="/api/v1/macro", tags=["macro"])
 
@@ -150,5 +153,40 @@ def get_regime_detail_endpoint(request: Request):
         trend_regime=d.trend_regime,
         vol_regime=d.vol_regime,
         history=[RegimeHistoryPointOut(date=p.date, regime=p.regime) for p in d.history],
+    )
+    return ok(payload.model_dump(), request=request, started_at=started)
+
+
+@router.get("/movers", summary="Sector performance + today's top gainers/losers")
+def get_movers_endpoint(request: Request):
+    """Sector ETF performance + S&P-500 top gainers/losers/unusual-volume.
+    Public, free (yfinance). Fail-soft: any leg may be empty if its upstream is
+    down — always a 200, never blocks the /markets page."""
+    started = time.perf_counter()
+    snap = market_movers.get_movers()
+
+    def _movers(rows):
+        return [
+            MoverRowOut(
+                ticker=m.ticker,
+                name=m.name,
+                change_pct=m.change_pct,
+                close=m.close,
+                avg_volume_ratio=m.avg_volume_ratio,
+            )
+            for m in rows
+        ]
+
+    payload = MoversResponse(
+        scan_date=snap.scan_date,
+        sectors=[
+            SectorRowOut(
+                sector=s.sector, ticker=s.ticker, change_pct=s.change_pct, ytd_return=s.ytd_return
+            )
+            for s in snap.sectors
+        ],
+        top_gainers=_movers(snap.top_gainers),
+        top_losers=_movers(snap.top_losers),
+        unusual_volume=_movers(snap.unusual_volume),
     )
     return ok(payload.model_dump(), request=request, started_at=started)

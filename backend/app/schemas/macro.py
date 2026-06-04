@@ -89,3 +89,32 @@ class RegimeDetailResponse(BaseModel):
     trend_regime: Optional[str] = None
     vol_regime: Optional[str] = None
     history: list[RegimeHistoryPointOut] = Field(default_factory=list)
+
+
+# ── /api/v1/macro/movers (sector performance + top gainers/losers) ──
+
+
+class SectorRowOut(BaseModel):
+    sector: str
+    ticker: str
+    change_pct: Optional[float] = None
+    ytd_return: Optional[float] = None
+
+
+class MoverRowOut(BaseModel):
+    ticker: str
+    name: str = ""
+    change_pct: Optional[float] = None
+    close: Optional[float] = None
+    avg_volume_ratio: Optional[float] = None
+
+
+class MoversResponse(BaseModel):
+    """Payload for ``GET /api/v1/macro/movers``. Public, fail-soft — any leg
+    may be empty if its upstream is down."""
+
+    scan_date: Optional[str] = None
+    sectors: list[SectorRowOut] = Field(default_factory=list)
+    top_gainers: list[MoverRowOut] = Field(default_factory=list)
+    top_losers: list[MoverRowOut] = Field(default_factory=list)
+    unusual_volume: list[MoverRowOut] = Field(default_factory=list)
