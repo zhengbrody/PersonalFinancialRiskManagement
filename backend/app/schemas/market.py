@@ -25,3 +25,20 @@ class PricesResponse(BaseModel):
             "couldn't resolve."
         ),
     )
+
+
+class SentimentRow(BaseModel):
+    """One holding's AI sentiment over its recent headlines."""
+
+    ticker: str
+    score: int = Field(..., ge=0, le=100, description="0 bearish · 50 neutral · 100 bullish")
+    label: str
+    narrative: str = ""
+    headline_count: int = 0
+
+
+class SentimentResponse(BaseModel):
+    """Payload for ``POST /api/v1/market/sentiment``."""
+
+    sentiments: list[SentimentRow] = Field(default_factory=list)
+    ai_generated: bool = False

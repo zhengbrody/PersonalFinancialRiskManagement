@@ -48,7 +48,7 @@ describe("MarketMovers", () => {
       mockJson({
         data: { scan_date: null, sectors: [], top_gainers: [], top_losers: [], unusual_volume: [] },
         error: null,
-        meta: {},
+        meta: { request_id: "r" },
       }),
     );
     renderWithQuery(<MarketMovers />);

@@ -118,3 +118,18 @@ class MoversResponse(BaseModel):
     top_gainers: list[MoverRowOut] = Field(default_factory=list)
     top_losers: list[MoverRowOut] = Field(default_factory=list)
     unusual_volume: list[MoverRowOut] = Field(default_factory=list)
+
+
+# ── /api/v1/macro/news (free macro headlines) ──
+
+
+class NewsItemOut(BaseModel):
+    source: Optional[str] = None
+    title: str
+    link: Optional[str] = None
+    published: Optional[str] = None
+    summary: Optional[str] = None
+
+
+class NewsResponse(BaseModel):
+    items: list[NewsItemOut] = Field(default_factory=list)
