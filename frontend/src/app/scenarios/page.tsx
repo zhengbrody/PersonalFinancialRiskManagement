@@ -39,10 +39,12 @@ import { useAuth } from "@/lib/auth-context";
 import { useRunOncePerUser } from "@/lib/use-run-once-per-user";
 import {
   useEfficientFrontier,
+  useHistoricalScenarios,
   useScenarios,
   type EfficientFrontier,
   type Scenarios,
 } from "@/lib/queries";
+import { HistoricalScenarios } from "@/components/historical-scenarios";
 
 const AXIS = "hsl(var(--muted-foreground))";
 const GRID = "hsl(var(--border))";
@@ -52,16 +54,18 @@ export default function ScenariosPage() {
   const { user, loading: authLoading, configured } = useAuth();
   const frontier = useEfficientFrontier();
   const scenarios = useScenarios();
+  const historical = useHistoricalScenarios();
 
   useEffect(() => {
     if (!configured) return;
     if (!authLoading && !user) router.replace("/login");
   }, [user, authLoading, configured, router]);
 
-  // Run both reads once per signed-in user (survives token refresh; see hook).
+  // Run the reads once per signed-in user (survives token refresh; see hook).
   useRunOncePerUser(user?.id, () => {
     frontier.mutate();
     scenarios.mutate();
+    historical.mutate();
   });
 
   if (!configured || authLoading || !user) return <PageSkeleton />;
@@ -90,6 +94,11 @@ export default function ScenariosPage() {
       >
         {(data) => <FrontierView data={data} />}
       </SweepCard>
+
+      <HistoricalScenarios
+        data={historical.data}
+        loading={historical.isPending || historical.isIdle}
+      />
     </div>
   );
 }

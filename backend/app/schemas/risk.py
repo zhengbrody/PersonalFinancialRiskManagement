@@ -251,3 +251,21 @@ class BenchmarkRow(BaseModel):
 class BenchmarksOut(BaseModel):
     as_of: Optional[str] = None
     benchmarks: list[BenchmarkRow] = Field(default_factory=list)
+
+
+# ── /api/v1/risk/historical_scenarios ──────────────────────────────
+
+
+class HistoricalScenarioRow(BaseModel):
+    label: str
+    start: str
+    end: str
+    portfolio_return: Optional[float] = None
+    market_return: Optional[float] = None
+    max_drawdown: Optional[float] = None
+    coverage: Optional[float] = None  # share of weight with data in the window
+    recovery_days: Optional[int] = None  # trading days to claw back; None = not yet
+
+
+class HistoricalScenariosOut(BaseModel):
+    scenarios: list[HistoricalScenarioRow] = Field(default_factory=list)
