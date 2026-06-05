@@ -125,3 +125,50 @@ def test_get_price_history_returns_empty_when_no_ticker_resolves(monkeypatch):
 
     frame = get_price_history(["XYZ"], days=30, cache_provider=_FakeCache())
     assert frame.empty
+
+
+# ── intraday overlay for get_latest_prices (the live quote) ─────────
+
+
+def test_get_latest_prices_overlays_intraday(monkeypatch):
+    """When an intraday quote exists, it wins over the daily close + carries
+    today's date."""
+    from backend.app.services import market_data as md
+
+    idx = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=5)
+    frame = pd.DataFrame({"SPY": [500, 501, 502, 503, 504.0]}, index=idx)
+    monkeypatch.setattr(md, "get_price_history", lambda tickers, **k: frame)
+    monkeypatch.setattr(md, "_intraday_quotes", lambda tickers: {"SPY": (754.24, "2026-06-05")})
+
+    rows = md.get_latest_prices(["SPY"])
+    assert len(rows) == 1
+    assert rows[0].ticker == "SPY"
+    assert rows[0].price == 754.24  # intraday, not the 504 daily close
+    assert rows[0].as_of == "2026-06-05"
+
+
+def test_get_latest_prices_falls_back_to_daily_close(monkeypatch):
+    """No intraday (off-hours / rate-limited) → the daily close, never empty."""
+    from backend.app.services import market_data as md
+
+    idx = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=3)
+    frame = pd.DataFrame({"SPY": [500, 501, 502.0]}, index=idx)
+    monkeypatch.setattr(md, "get_price_history", lambda tickers, **k: frame)
+    monkeypatch.setattr(md, "_intraday_quotes", lambda tickers: {})
+
+    rows = md.get_latest_prices(["SPY"])
+    assert rows[0].price == 502.0
+
+
+def test_intraday_quotes_fail_soft(monkeypatch):
+    """A throwing yfinance download → {} (never raises)."""
+    from backend.app.services import market_data as md
+
+    md.reset_quote_cache()
+
+    class _Boom:
+        def download(self, *a, **k):
+            raise RuntimeError("rate limited")
+
+    monkeypatch.setitem(__import__("sys").modules, "yfinance", _Boom())
+    assert md._intraday_quotes(["SPY"]) == {}
