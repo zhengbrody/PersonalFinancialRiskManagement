@@ -42,6 +42,26 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+/** Route by URL: the form now fetches /market/prices for the implied-P&L hint,
+ * so tests must answer that too and not let it consume the create mock. */
+function routeFetch(portfolio: { body: unknown; status?: number }) {
+  return vi.spyOn(globalThis, "fetch").mockImplementation((input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("/market/prices"))
+      return Promise.resolve(json({ data: { prices: [], requested: [] }, error: null, meta: { request_id: "p" } }));
+    if (url.includes("/api/v1/portfolios"))
+      return Promise.resolve(json(portfolio.body, portfolio.status ?? 200));
+    return Promise.resolve(json({ data: {}, error: null, meta: { request_id: "x" } }));
+  });
+}
+
 describe("NewPortfolioPage", () => {
   it("redirects to /login when signed out", () => {
     useAuthMock.mockReturnValue({
@@ -59,27 +79,24 @@ describe("NewPortfolioPage", () => {
 
   it("posts to /api/v1/portfolios with the form values + bearer token", async () => {
     authed();
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          data: {
-            id: "p-new",
-            user_id: "u-1",
-            name: "Beta",
-            holdings: { SPY: { shares: 10 } },
-            margin_loan: 0,
-            contributed_capital: 0,
-            cash_balance: 0,
-            is_default: false,
-            created_at: null,
-            updated_at: null,
-          },
-          error: null,
-          meta: { request_id: "r" },
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      ),
-    );
+    const fetchSpy = routeFetch({
+      body: {
+        data: {
+          id: "p-new",
+          user_id: "u-1",
+          name: "Beta",
+          holdings: { SPY: { shares: 10 } },
+          margin_loan: 0,
+          contributed_capital: 0,
+          cash_balance: 0,
+          is_default: false,
+          created_at: null,
+          updated_at: null,
+        },
+        error: null,
+        meta: { request_id: "r" },
+      },
+    });
 
     const user = userEvent.setup();
     renderWithQuery(<NewPortfolioPage />);
@@ -94,9 +111,14 @@ describe("NewPortfolioPage", () => {
       screen.getByRole("button", { name: /create portfolio/i }),
     );
 
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
-    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    expect(String(url)).toMatch(/\/api\/v1\/portfolios$/);
+    const createCall = await waitFor(() => {
+      const c = fetchSpy.mock.calls.find(
+        (call) => String(call[0]).match(/\/api\/v1\/portfolios$/) && (call[1] as RequestInit)?.method === "POST",
+      );
+      expect(c).toBeDefined();
+      return c!;
+    });
+    const init = createCall[1] as RequestInit;
     expect(init.method).toBe("POST");
     const body = JSON.parse(init.body as string);
     expect(body.name).toBe("Beta");
@@ -111,16 +133,14 @@ describe("NewPortfolioPage", () => {
 
   it("surfaces an envelope error inline without redirect", async () => {
     authed();
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          data: null,
-          error: { code: "portfolio_create_failed", message: "RLS blocked." },
-          meta: { request_id: "r" },
-        }),
-        { status: 422, headers: { "Content-Type": "application/json" } },
-      ),
-    );
+    routeFetch({
+      body: {
+        data: null,
+        error: { code: "portfolio_create_failed", message: "RLS blocked." },
+        meta: { request_id: "r" },
+      },
+      status: 422,
+    });
 
     const user = userEvent.setup();
     renderWithQuery(<NewPortfolioPage />);

@@ -10,11 +10,12 @@
  * never reports `NaN` during typing.
  */
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { track } from "@/lib/analytics";
 import { parseHoldingsCsv } from "@/lib/parse-holdings-csv";
+import { useMarketPrices } from "@/lib/queries";
 import type {
   PortfolioCreateInput,
   PortfolioHoldingInput,
@@ -95,6 +96,18 @@ export function PortfolioForm({
   const [values, setValues] = useState<PortfolioFormValues>(initial);
   const [csvNote, setCsvNote] = useState<{ ok: boolean; text: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Live prices for the entered tickers → show implied market value / P&L per
+  // row, so a wrong avg cost (e.g. a current price imported as cost) is obvious
+  // at entry time. Public endpoint, keyed only on the ticker set.
+  const prices = useMarketPrices(values.rows.map((r) => r.ticker));
+  const priceMap = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const p of prices.data?.prices ?? []) m[p.ticker.toUpperCase()] = p.price;
+    return m;
+  }, [prices.data]);
+  const priceOf = (ticker: string): number | undefined =>
+    priceMap[ticker.trim().toUpperCase()];
 
   async function onCsvFile(file: File | undefined) {
     if (!file) return;
@@ -210,44 +223,44 @@ export function PortfolioForm({
         </p>
         <div className="space-y-2">
           {values.rows.map((row, i) => (
-            <div
-              key={i}
-              className="flex flex-wrap items-center gap-2 sm:grid sm:grid-cols-[1fr_1fr_1fr_auto]"
-            >
-              <Input
-                aria-label={`Ticker ${i + 1}`}
-                placeholder="SPY"
-                className="min-w-[5rem] flex-1 font-mono"
-                value={row.ticker}
-                onChange={(e) => updateRow(i, { ticker: e.target.value })}
-              />
-              <Input
-                aria-label={`Shares ${i + 1}`}
-                type="number"
-                step="any"
-                placeholder="shares"
-                className="min-w-[5rem] flex-1 font-mono"
-                value={row.shares}
-                onChange={(e) => updateRow(i, { shares: e.target.value })}
-              />
-              <Input
-                aria-label={`Avg cost ${i + 1}`}
-                type="number"
-                step="any"
-                placeholder="avg cost"
-                className="min-w-[5rem] flex-1 font-mono"
-                value={row.avg_cost}
-                onChange={(e) => updateRow(i, { avg_cost: e.target.value })}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                aria-label={`Remove row ${i + 1}`}
-                onClick={() => removeRow(i)}
-              >
-                ×
-              </Button>
+            <div key={i} className="space-y-0.5">
+              <div className="flex flex-wrap items-center gap-2 sm:grid sm:grid-cols-[1fr_1fr_1fr_auto]">
+                <Input
+                  aria-label={`Ticker ${i + 1}`}
+                  placeholder="SPY"
+                  className="min-w-[5rem] flex-1 font-mono"
+                  value={row.ticker}
+                  onChange={(e) => updateRow(i, { ticker: e.target.value })}
+                />
+                <Input
+                  aria-label={`Shares ${i + 1}`}
+                  type="number"
+                  step="any"
+                  placeholder="shares"
+                  className="min-w-[5rem] flex-1 font-mono"
+                  value={row.shares}
+                  onChange={(e) => updateRow(i, { shares: e.target.value })}
+                />
+                <Input
+                  aria-label={`Avg cost ${i + 1}`}
+                  type="number"
+                  step="any"
+                  placeholder="avg cost"
+                  className="min-w-[5rem] flex-1 font-mono"
+                  value={row.avg_cost}
+                  onChange={(e) => updateRow(i, { avg_cost: e.target.value })}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Remove row ${i + 1}`}
+                  onClick={() => removeRow(i)}
+                >
+                  ×
+                </Button>
+              </div>
+              <ImpliedPnl row={row} price={priceOf(row.ticker)} />
             </div>
           ))}
         </div>
@@ -330,4 +343,46 @@ function CapitalInput({
       />
     </div>
   );
+}
+
+/**
+ * Implied market value + unrealized P&L for one row, from the live price. Shown
+ * the moment a ticker+shares (and optional avg cost) are entered, so a wrong
+ * cost basis is visible immediately. Amber when the implied P&L is large
+ * (|≥40%|) — a gentle "double-check the avg cost" nudge — but the figure is
+ * always shown so even a small-but-wrong loss (the SGOV case) is caught.
+ */
+function ImpliedPnl({ row, price }: { row: Row; price: number | undefined }) {
+  const shares = Number(row.shares);
+  if (!price || !Number.isFinite(shares) || shares <= 0) return null;
+
+  const mv = shares * price;
+  const avg = Number(row.avg_cost);
+  const hasAvg = Number.isFinite(avg) && avg > 0;
+  const pnl = hasAvg ? shares * (price - avg) : null;
+  const pct = hasAvg && avg > 0 ? (price - avg) / avg : null;
+  const big = pct != null && Math.abs(pct) >= 0.4;
+
+  return (
+    <p
+      className={`pl-1 text-[11px] ${
+        big ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"
+      }`}
+    >
+      ≈ {usd(mv)} at ${price.toFixed(2)}
+      {pnl != null && (
+        <>
+          {" · "}
+          P&amp;L {pnl >= 0 ? "+" : "−"}
+          {usd(Math.abs(pnl))}
+          {pct != null && ` (${(pct * 100).toFixed(1)}%)`}
+        </>
+      )}
+      {big && " — double-check the avg cost"}
+    </p>
+  );
+}
+
+function usd(v: number): string {
+  return `$${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
