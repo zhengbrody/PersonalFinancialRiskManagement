@@ -12,6 +12,8 @@ suite stays hermetic + fast."""
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -71,11 +73,15 @@ def fake_price_history(monkeypatch):
     class _Stub:
         def __init__(self) -> None:
             self.frame: pd.DataFrame = pd.DataFrame()
+            self.current_prices: dict[str, float] = {}
             self.calls: list[list[str]] = []
             self.raise_on_call: Exception | None = None
 
         def set(self, frame: pd.DataFrame) -> None:
             self.frame = frame
+
+        def set_current_prices(self, prices: dict[str, float]) -> None:
+            self.current_prices = prices
 
         def raise_with(self, exc: Exception) -> None:
             self.raise_on_call = exc
@@ -87,10 +93,28 @@ def fake_price_history(monkeypatch):
             cols = [t for t in tickers if t in self.frame.columns]
             return self.frame[cols] if cols else pd.DataFrame()
 
+        def latest(self, tickers, *, cache_provider=None):
+            rows = []
+            for t in tickers:
+                if t not in self.frame.columns:
+                    continue
+                series = self.frame[t].dropna()
+                if series.empty:
+                    continue
+                rows.append(
+                    SimpleNamespace(
+                        ticker=t,
+                        price=float(self.current_prices.get(t, series.iloc[-1])),
+                        as_of=pd.Timestamp(series.index[-1]).strftime("%Y-%m-%d"),
+                    )
+                )
+            return rows
+
     stub = _Stub()
     from backend.app.services import market_data as md
 
     monkeypatch.setattr(md, "get_price_history", stub)
+    monkeypatch.setattr(md, "get_latest_prices", stub.latest)
     return stub
 
 
@@ -239,6 +263,27 @@ def test_happy_path_returns_complete_score_envelope(
     # The caller's JWT was forwarded to the active-portfolio resolver
     # so Supabase RLS applied. Same security contract as /portfolios/me.
     assert fake_active_portfolio.calls == [token]
+
+
+def test_account_value_metrics_use_current_prices_for_today_pnl():
+    """Daily P&L must use the current/last price vs previous close, not the
+    stale daily close that backs the risk engine."""
+    from backend.app.api.v1.risk import _account_value_metrics
+
+    idx = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=2)
+    price_frame = pd.DataFrame({"SPY": [100.0, 110.0]}, index=idx)
+    metrics = _account_value_metrics(
+        holdings={"SPY": {"shares": 10}},
+        price_frame=price_frame,
+        cash_balance=0.0,
+        margin_loan=0.0,
+        contributed_capital=1000.0,
+        current_prices={"SPY": 95.0},
+    )
+
+    assert metrics["total_value"] == pytest.approx(950.0)
+    assert metrics["daily_pnl"] == pytest.approx(-50.0)
+    assert metrics["daily_return"] == pytest.approx(-50.0 / 1000.0)
 
 
 def test_account_value_metrics_do_not_turn_new_positions_into_daily_pnl():

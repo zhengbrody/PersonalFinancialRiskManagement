@@ -292,14 +292,16 @@ def _account_value_metrics(
     cash_balance: float,
     margin_loan: float,
     contributed_capital: float,
+    current_prices: dict[str, float] | None = None,
 ) -> dict[str, float | None]:
     """Deterministic account-value arithmetic for the product UI.
 
     This restores the legacy "today's floating P&L" UX without touching the
-    quant engine: daily P&L is shares × (latest close − previous close), cash and
-    margin are treated as static over the day, and total return is only computed
-    when the user supplied contributed capital.
+    quant engine: daily P&L is shares × (current/last price − previous close),
+    cash and margin are treated as static over the day, and total return is only
+    computed when the user supplied contributed capital.
     """
+    current_prices = current_prices or {}
 
     latest_equity = 0.0
     comparable_latest_equity = 0.0
@@ -318,14 +320,15 @@ def _account_value_metrics(
         latest = _finite_float(series.iloc[-1])
         if latest is None or latest <= 0:
             continue
-        latest_equity += shares * latest
+        current = _finite_float(current_prices.get(str(tk).upper())) or latest
+        latest_equity += shares * current
         if len(series) >= 2:
             prev = _finite_float(series.iloc[-2])
             if prev is not None and prev > 0:
-                comparable_latest_equity += shares * latest
+                comparable_latest_equity += shares * current
                 comparable_previous_equity += shares * prev
                 continue
-        noncomparable_equity += shares * latest
+        noncomparable_equity += shares * current
 
     cash = max(0.0, float(cash_balance or 0.0))
     loan = max(0.0, float(margin_loan or 0.0))
@@ -359,6 +362,27 @@ def _account_value_metrics(
         "total_pnl": round(total_pnl, 2) if total_pnl is not None else None,
         "total_return": total_return,
     }
+
+
+def _current_price_map(tickers: list[str], market_data) -> dict[str, float]:
+    """Best-effort current/last prices for account-value display.
+
+    This intentionally does not feed the quant engine; risk metrics remain
+    daily-close based. If intraday quotes are unavailable, market_data falls
+    back to the daily close and this helper fails soft to `{}`.
+    """
+    try:
+        rows = market_data.get_latest_prices(tickers)
+    except Exception as exc:  # pragma: no cover - defensive/network
+        _log.warning("risk.current_prices_failed reason=%s", type(exc).__name__)
+        return {}
+    out: dict[str, float] = {}
+    for row in rows or []:
+        ticker = str(getattr(row, "ticker", "") or "").upper()
+        price = _finite_float(getattr(row, "price", None))
+        if ticker and price is not None and price > 0:
+            out[ticker] = price
+    return out
 
 
 @router.post(
@@ -529,6 +553,7 @@ def score_from_active_endpoint(
         cash_balance=cash_balance,
         margin_loan=margin_loan,
         contributed_capital=contributed_capital,
+        current_prices=_current_price_map(tickers, market_data),
     )
 
     # Record a daily snapshot (deduped, fail-soft) so the dashboard can show a
@@ -967,6 +992,7 @@ def report_from_active_endpoint(
         cash_balance=cash_balance,
         margin_loan=margin_loan,
         contributed_capital=contributed_capital,
+        current_prices=_current_price_map(tickers, market_data),
     )
 
     # DataProvider expects the original holdings dict (with shares etc.)

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any, Optional
 
 import pandas as pd
@@ -48,10 +49,14 @@ def fake_price_history(monkeypatch):
     class _Stub:
         def __init__(self) -> None:
             self.frame: pd.DataFrame = pd.DataFrame()
+            self.current_prices: dict[str, float] = {}
             self.raise_on_call: Exception | None = None
 
         def set(self, frame: pd.DataFrame) -> None:
             self.frame = frame
+
+        def set_current_prices(self, prices: dict[str, float]) -> None:
+            self.current_prices = prices
 
         def raise_with(self, exc: Exception) -> None:
             self.raise_on_call = exc
@@ -62,10 +67,28 @@ def fake_price_history(monkeypatch):
             cols = [t for t in tickers if t in self.frame.columns]
             return self.frame[cols] if cols else pd.DataFrame()
 
+        def latest(self, tickers, *, cache_provider=None):
+            rows = []
+            for t in tickers:
+                if t not in self.frame.columns:
+                    continue
+                series = self.frame[t].dropna()
+                if series.empty:
+                    continue
+                rows.append(
+                    SimpleNamespace(
+                        ticker=t,
+                        price=float(self.current_prices.get(t, series.iloc[-1])),
+                        as_of=pd.Timestamp(series.index[-1]).strftime("%Y-%m-%d"),
+                    )
+                )
+            return rows
+
     stub = _Stub()
     from backend.app.services import market_data as md
 
     monkeypatch.setattr(md, "get_price_history", stub)
+    monkeypatch.setattr(md, "get_latest_prices", stub.latest)
     return stub
 
 
