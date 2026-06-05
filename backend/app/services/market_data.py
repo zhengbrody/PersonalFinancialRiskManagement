@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import timedelta
@@ -32,6 +33,68 @@ from typing import Iterable, Optional
 import pandas as pd
 
 _logger = logging.getLogger(__name__)
+
+# Intraday quote cache: the daily-close path is 24h-file-cached (right for the
+# risk math, stale for a live quote). For the /market/prices DISPLAY price we
+# overlay a ~15-min-delayed intraday last price from free yfinance, with a tiny
+# in-process TTL so a volatile-session refresh storm doesn't get us rate-limited.
+_QUOTE_TTL_SECONDS = 90
+_quote_cache: dict[str, tuple[float, dict[str, tuple[float, str]]]] = {}
+
+
+def reset_quote_cache() -> None:
+    """Test hook."""
+    _quote_cache.clear()
+
+
+def _intraday_quotes(tickers: list[str]) -> dict[str, tuple[float, str]]:
+    """Best-effort intraday last price per ticker → ``{ticker: (price, as_of)}``.
+
+    One batched 1-minute download; fail-soft to ``{}`` (off-hours, rate limit,
+    delisted) so callers fall back to the daily close. Cached ~90s."""
+    if not tickers:
+        return {}
+    key = ",".join(sorted(tickers))
+    hit = _quote_cache.get(key)
+    if hit is not None and hit[0] > time.monotonic():
+        return hit[1]
+
+    out: dict[str, tuple[float, str]] = {}
+    try:
+        import yfinance as yf
+
+        raw = yf.download(
+            tickers,
+            period="1d",
+            interval="1m",
+            progress=False,
+            threads=True,
+            auto_adjust=False,
+        )
+        if raw is not None and not raw.empty and "Close" in raw.columns:
+            close = raw["Close"]
+            if isinstance(close, pd.Series):  # single ticker
+                s = close.dropna()
+                if not s.empty:
+                    out[tickers[0]] = (
+                        float(s.iloc[-1]),
+                        pd.Timestamp(s.index[-1]).strftime("%Y-%m-%d"),
+                    )
+            else:  # multi-ticker → columns are tickers
+                for col in close.columns:
+                    s = close[col].dropna()
+                    if not s.empty:
+                        out[str(col)] = (
+                            float(s.iloc[-1]),
+                            pd.Timestamp(s.index[-1]).strftime("%Y-%m-%d"),
+                        )
+    except Exception as exc:  # pragma: no cover - network/shape variability
+        _logger.warning("market_data.intraday_failed err=%s", type(exc).__name__)
+        out = {}
+
+    _quote_cache[key] = (time.monotonic() + _QUOTE_TTL_SECONDS, out)
+    return out
+
 
 # Ticker validation — uppercase letters / digits, a few common punctuation
 # chars that show up in real symbols (BRK.B, ^TNX, CL=F, BTC-USD). Anything
@@ -170,25 +233,33 @@ def get_latest_prices(
 ) -> list[LatestPrice]:
     """Return the most recent close + its date for each ticker.
 
-    Backed by the same history fetch (30-day window — enough to find
-    the latest bar even across weekends + holidays) so a hot
-    /market/prices request piggy-backs on the same file cache as
-    /score_from_active.
+    A ~15-min-delayed intraday last price is overlaid on top of the daily close
+    (the 30-day file-cached window) so the DISPLAYED quote tracks the session;
+    if the intraday fetch is unavailable (off-hours, rate-limited) we fall back
+    to the daily close, so this never fails. Risk math still uses daily closes
+    via ``get_price_history`` — only this display endpoint goes intraday.
     """
     frame = get_price_history(tickers, days=30, cache_provider=cache_provider)
     if frame.empty:
         return []
+
+    intraday = _intraday_quotes([str(t) for t in frame.columns])
+
     out: list[LatestPrice] = []
     for ticker in frame.columns:
+        tk = str(ticker)
+        fresh = intraday.get(tk)
+        if fresh is not None:
+            out.append(LatestPrice(ticker=tk, price=fresh[0], as_of=fresh[1]))
+            continue
         series = frame[ticker].dropna()
         if series.empty:
             continue
-        last_idx = series.index[-1]
         out.append(
             LatestPrice(
-                ticker=str(ticker),
+                ticker=tk,
                 price=float(series.iloc[-1]),
-                as_of=pd.Timestamp(last_idx).strftime("%Y-%m-%d"),
+                as_of=pd.Timestamp(series.index[-1]).strftime("%Y-%m-%d"),
             )
         )
     return out
