@@ -39,4 +39,25 @@ describe("parseHoldingsCsv", () => {
     expect(parseHoldingsCsv("").warning).toBeTruthy();
     expect(parseHoldingsCsv("Ticker,Shares\nFOO,abc").warning).toBeTruthy();
   });
+
+  it("does NOT use a current/last price column as avg cost (the SGOV phantom-loss bug)", () => {
+    // A broker export with a Last Price column but no real cost column → avg
+    // cost must stay blank (unknown), never the market price.
+    const csv = ["Symbol,Quantity,Last Price", "SGOV,110,100.41"].join("\n");
+    const { rows } = parseHoldingsCsv(csv);
+    expect(rows).toEqual([{ ticker: "SGOV", shares: "110", avg_cost: "" }]);
+  });
+
+  it("derives per-share avg cost from a TOTAL cost-basis column ÷ shares", () => {
+    const csv = ["Symbol,Quantity,Cost Basis", "SGOV,110,11045.50"].join("\n");
+    const { rows } = parseHoldingsCsv(csv);
+    expect(rows[0].ticker).toBe("SGOV");
+    expect(Number(rows[0].avg_cost)).toBeCloseTo(100.41, 1); // 11045.50 / 110
+  });
+
+  it("prefers a per-share cost column over a total cost-basis column", () => {
+    const csv = ["Symbol,Quantity,Cost Basis,Avg Cost", "SGOV,110,11045,100.41"].join("\n");
+    const { rows } = parseHoldingsCsv(csv);
+    expect(rows[0].avg_cost).toBe("100.41"); // the per-share, not total/shares
+  });
 });
