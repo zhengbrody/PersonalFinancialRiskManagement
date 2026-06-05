@@ -1222,6 +1222,38 @@ export function useHistoricalScenarios() {
   });
 }
 
+// ── latest prices (public) — for the holdings-form sanity check ─────
+const priceRowSchema = z.looseObject({
+  ticker: z.string(),
+  price: z.number(),
+  as_of: z.string(),
+});
+export const marketPricesSchema = z.looseObject({
+  prices: z.array(priceRowSchema),
+  requested: z.array(z.string()),
+});
+export type MarketPrices = z.infer<typeof marketPricesSchema>;
+
+/** Latest close per ticker (public). Keyed only on the ticker SET so editing
+ * other fields doesn't refetch. Used to show implied market value / P&L as the
+ * user types a portfolio, catching wrong cost-basis entries at the source. */
+export function useMarketPrices(tickers: string[]) {
+  const key = Array.from(
+    new Set(tickers.map((t) => t.trim().toUpperCase()).filter(Boolean)),
+  ).sort();
+  return useQuery<MarketPrices>({
+    queryKey: ["market", "prices", key.join(",")],
+    enabled: key.length > 0,
+    queryFn: () =>
+      apiFetch<MarketPrices>(
+        `/api/v1/market/prices?tickers=${encodeURIComponent(key.join(","))}`,
+        { schema: marketPricesSchema },
+      ),
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  });
+}
+
 /** Public reference stats (S&P 500 + 60/40) for "vs what?" context. */
 export function useBenchmarks() {
   return useQuery<Benchmarks>({
