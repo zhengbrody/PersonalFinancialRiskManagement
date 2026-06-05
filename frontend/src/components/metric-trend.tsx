@@ -45,6 +45,15 @@ export function MetricTrend({
       ? (v: number) => String(Math.round(v))
       : (v: number) => `${(v * 100).toFixed(1)}%`;
 
+  // Snapshots are days apart → label by month+day (e.g. "May 28"), not the
+  // chart's default month+year ("May 26" = May 2026, which looked like a day).
+  const fmtDay = (iso: string) => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime())
+      ? iso
+      : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  };
+
   return (
     <Card>
       <CardHeader className="pb-1">
@@ -52,7 +61,14 @@ export function MetricTrend({
         {description && <CardDescription>{description}</CardDescription>}
       </CardHeader>
       <CardContent className="p-4 pt-2">
-        <TimeSeriesChart data={points} variant="line" height={160} valueFormatter={fmt} ariaLabel={title} />
+        <TimeSeriesChart
+          data={points}
+          variant="line"
+          height={160}
+          valueFormatter={fmt}
+          dateFormatter={fmtDay}
+          ariaLabel={title}
+        />
       </CardContent>
     </Card>
   );

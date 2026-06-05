@@ -41,6 +41,13 @@ export type TimeSeriesChartProps = {
   height?: number;
   /** Formats the Y axis + tooltip value (e.g. percent or currency). */
   valueFormatter?: (value: number) => string;
+  /**
+   * Formats the X-axis + tooltip date. Default is "Mon 'YY" — right for a
+   * multi-year series (the backtest). For a short, day-by-day series (e.g. the
+   * snapshot trends) pass a day-granular formatter so points don't collapse to
+   * the same month label.
+   */
+  dateFormatter?: (value: string) => string;
   /** Accessible label for the chart region. */
   ariaLabel?: string;
 };
@@ -49,7 +56,7 @@ const AXIS_COLOR = "hsl(var(--muted-foreground))";
 const GRID_COLOR = "hsl(var(--border))";
 
 function formatDateTick(value: string): string {
-  // ISO date → "Mon 'YY" for a calm, readable axis.
+  // ISO date → "Mon 'YY" for a calm, readable axis (years-long series).
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
   return d.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
@@ -63,8 +70,10 @@ type TooltipRenderProps = {
 
 function ChartTooltip({
   valueFormatter,
+  dateFormatter,
 }: {
   valueFormatter: (value: number) => string;
+  dateFormatter: (value: string) => string;
 }) {
   // recharts injects active/payload/label as props at render time.
   return function Render(props: TooltipRenderProps) {
@@ -74,7 +83,7 @@ function ChartTooltip({
     if (typeof raw !== "number") return null;
     return (
       <div className="rounded-md border border-border bg-card px-3 py-2 text-xs shadow-sm">
-        <p className="text-muted-foreground">{formatDateTick(String(label))}</p>
+        <p className="text-muted-foreground">{dateFormatter(String(label))}</p>
         <p className="font-mono font-medium text-foreground">
           {valueFormatter(raw)}
         </p>
@@ -89,10 +98,11 @@ export function TimeSeriesChart({
   color = "hsl(var(--primary))",
   height = 280,
   valueFormatter = (v) => v.toLocaleString(),
+  dateFormatter = formatDateTick,
   ariaLabel,
 }: TimeSeriesChartProps) {
   const gradientId = `chart-fill-${variant}`;
-  const Tip = ChartTooltip({ valueFormatter });
+  const Tip = ChartTooltip({ valueFormatter, dateFormatter });
 
   return (
     <div
@@ -113,7 +123,7 @@ export function TimeSeriesChart({
             <CartesianGrid stroke={GRID_COLOR} strokeDasharray="3 3" vertical={false} />
             <XAxis
               dataKey="date"
-              tickFormatter={formatDateTick}
+              tickFormatter={dateFormatter}
               stroke={AXIS_COLOR}
               tick={{ fontSize: 11, fill: AXIS_COLOR }}
               minTickGap={32}
@@ -143,7 +153,7 @@ export function TimeSeriesChart({
             <CartesianGrid stroke={GRID_COLOR} strokeDasharray="3 3" vertical={false} />
             <XAxis
               dataKey="date"
-              tickFormatter={formatDateTick}
+              tickFormatter={dateFormatter}
               stroke={AXIS_COLOR}
               tick={{ fontSize: 11, fill: AXIS_COLOR }}
               minTickGap={32}
