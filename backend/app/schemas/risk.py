@@ -159,7 +159,13 @@ class ReportFromActiveRequest(BaseModel):
 
     risk_preference: int = Field(default=3, ge=1, le=5)
     risk_free_rate: float = Field(default=0.045, ge=0.0, le=0.20)
-    history_days: int = Field(default=730, ge=180, le=2520)
+    # Aligned with ScoreFromActiveRequest (365) so the Health Score and Risk
+    # Report read the SAME 1-year window — the only avoidable source of
+    # divergence between them. (Any residual difference is methodological: the
+    # report uses EWMA covariance + Monte-Carlo VaR, the score simple std +
+    # historical VaR — two intentional lenses on the same data.) 252 trading
+    # days is ample for the 6-factor regression + stress.
+    history_days: int = Field(default=365, ge=180, le=2520)
     market_shock: float = Field(
         default=-0.10,
         ge=-0.50,
