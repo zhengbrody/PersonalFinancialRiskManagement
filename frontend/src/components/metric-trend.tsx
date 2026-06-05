@@ -19,7 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { TimeSeriesChart } from "@/components/ui/chart-line";
 import { useSnapshotHistory, type SnapshotPoint } from "@/lib/queries";
 
-type Kind = "score" | "pct";
+type Kind = "score" | "pct" | "usd";
 
 export function MetricTrend({
   metric,
@@ -43,7 +43,9 @@ export function MetricTrend({
   const fmt =
     kind === "score"
       ? (v: number) => String(Math.round(v))
-      : (v: number) => `${(v * 100).toFixed(1)}%`;
+      : kind === "usd"
+        ? (v: number) => `$${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+        : (v: number) => `${(v * 100).toFixed(1)}%`;
 
   // Snapshots are days apart → label by month+day (e.g. "May 28"), not the
   // chart's default month+year ("May 26" = May 2026, which looked like a day).

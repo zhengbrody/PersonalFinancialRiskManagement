@@ -47,7 +47,7 @@ def fake_capital(monkeypatch):
     leverage/cash math without a real Supabase row. Defaults to a
     no-margin, no-cash account (scale = 1.0)."""
 
-    state = {"cash_balance": 0.0, "margin_loan": 0.0}
+    state = {"cash_balance": 0.0, "margin_loan": 0.0, "contributed_capital": 0.0}
     import libs.auth.active_portfolio as ap
 
     monkeypatch.setattr(
@@ -55,7 +55,7 @@ def fake_capital(monkeypatch):
         "get_active_capital_inputs",
         lambda access_token=None: {
             "cash_balance": state["cash_balance"],
-            "contributed_capital": 0.0,
+            "contributed_capital": state["contributed_capital"],
         },
     )
     monkeypatch.setattr(
@@ -188,8 +188,11 @@ def test_legacy_asset_type_does_not_500(
 
 
 def test_happy_path_returns_complete_score_envelope(
-    test_client, mint_token, fake_active_portfolio, fake_price_history
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_capital
 ):
+    fake_capital["cash_balance"] = 1000.0
+    fake_capital["margin_loan"] = 250.0
+    fake_capital["contributed_capital"] = 40000.0
     fake_active_portfolio.set(
         {
             "SPY": {"shares": 100, "avg_cost": 400.0},
@@ -217,9 +220,52 @@ def test_happy_path_returns_complete_score_envelope(
     notes = data["metrics"]["data_quality_notes"]
     assert not any("synthesised" in n for n in notes)
 
+    latest_equity = 100 * float(fake_price_history.frame["SPY"].dropna().iloc[-1]) + 50 * float(
+        fake_price_history.frame["BND"].dropna().iloc[-1]
+    )
+    previous_equity = 100 * float(fake_price_history.frame["SPY"].dropna().iloc[-2]) + 50 * float(
+        fake_price_history.frame["BND"].dropna().iloc[-2]
+    )
+    expected_net = latest_equity + 1000.0 - 250.0
+    expected_daily_pnl = latest_equity - previous_equity
+    expected_daily_return = expected_daily_pnl / (previous_equity + 1000.0 - 250.0)
+    assert data["metrics"]["total_value"] == pytest.approx(latest_equity + 1000.0, abs=0.01)
+    assert data["metrics"]["net_equity"] == pytest.approx(expected_net, abs=0.01)
+    assert data["metrics"]["daily_pnl"] == pytest.approx(expected_daily_pnl, abs=0.01)
+    assert data["metrics"]["daily_return"] == pytest.approx(expected_daily_return)
+    assert data["metrics"]["total_pnl"] == pytest.approx(expected_net - 40000.0, abs=0.01)
+    assert data["metrics"]["total_return"] == pytest.approx((expected_net - 40000.0) / 40000.0)
+
     # The caller's JWT was forwarded to the active-portfolio resolver
     # so Supabase RLS applied. Same security contract as /portfolios/me.
     assert fake_active_portfolio.calls == [token]
+
+
+def test_account_value_metrics_do_not_turn_new_positions_into_daily_pnl():
+    """Positions without a prior close should contribute to current value, but
+    not become artificial day-over-day gains."""
+    from backend.app.api.v1.risk import _account_value_metrics
+
+    idx = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=2)
+    price_frame = pd.DataFrame(
+        {
+            "SPY": [100.0, 110.0],
+            "NEW": [None, 50.0],
+        },
+        index=idx,
+    )
+    metrics = _account_value_metrics(
+        holdings={"SPY": {"shares": 10}, "NEW": {"shares": 10}},
+        price_frame=price_frame,
+        cash_balance=0.0,
+        margin_loan=0.0,
+        contributed_capital=1000.0,
+    )
+
+    assert metrics["total_value"] == pytest.approx(1600.0)
+    assert metrics["daily_pnl"] == pytest.approx(100.0)
+    assert metrics["daily_return"] == pytest.approx(100.0 / 1500.0)
+    assert metrics["total_pnl"] == pytest.approx(600.0)
 
 
 def _run_score(test_client, token, fake_active_portfolio, fake_price_history, holdings):

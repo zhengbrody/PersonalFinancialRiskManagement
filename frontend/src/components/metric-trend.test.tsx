@@ -12,9 +12,18 @@ vi.mock("@/lib/auth-context", () => ({
 }));
 // Stub the recharts wrapper (needs a sized parent jsdom lacks).
 vi.mock("@/components/ui/chart-line", () => ({
-  TimeSeriesChart: ({ data, ariaLabel }: { data: unknown[]; ariaLabel?: string }) => (
+  TimeSeriesChart: ({
+    data,
+    ariaLabel,
+    valueFormatter,
+  }: {
+    data: Array<{ value: number }>;
+    ariaLabel?: string;
+    valueFormatter?: (value: number) => string;
+  }) => (
     <div data-testid="trend-chart" aria-label={ariaLabel}>
       {data.length} pts
+      {valueFormatter ? ` · ${valueFormatter(data[0]?.value ?? 0)}` : null}
     </div>
   ),
 }));
@@ -52,5 +61,17 @@ describe("MetricTrend", () => {
     );
     await new Promise((r) => setTimeout(r, 20));
     expect(container.querySelector('[data-testid="trend-chart"]')).toBeNull();
+  });
+
+  it("formats net-equity history as dollars", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      mockJson([
+        { as_of: "2026-05-20", net_equity: 52000 },
+        { as_of: "2026-05-28", net_equity: 54500 },
+      ]),
+    );
+    renderWithQuery(<MetricTrend metric="net_equity" title="Total value over time" kind="usd" />);
+    expect(await screen.findByText(/Total value over time/)).toBeInTheDocument();
+    expect(screen.getByTestId("trend-chart")).toHaveTextContent("$52,000");
   });
 });

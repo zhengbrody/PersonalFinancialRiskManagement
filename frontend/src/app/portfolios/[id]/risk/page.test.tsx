@@ -80,6 +80,15 @@ const SAMPLE_REPORT = {
     var_99: 0.018,
     cvar_95: 0.017,
     risk_free_rate: 0.045,
+    total_value: 52000,
+    net_equity: 51000,
+    cash_balance: 1000,
+    margin_loan: 2000,
+    contributed_capital: 40000,
+    daily_pnl: 450,
+    daily_return: 0.0089,
+    total_pnl: 11000,
+    total_return: 0.275,
     betas: { SPY: 0.96 },
     factor_betas: [
       {
@@ -145,6 +154,37 @@ const SAMPLE_EXPLAIN = {
   meta: { request_id: "r-explain" },
 };
 
+const SAMPLE_SNAPSHOT_HISTORY = {
+  data: {
+    snapshots: [
+      { as_of: "2026-05-20", overall_score: 540, net_equity: 48000 },
+      { as_of: "2026-05-28", overall_score: 612, net_equity: 51000 },
+    ],
+  },
+  error: null,
+  meta: { request_id: "r-hist" },
+};
+
+const SAMPLE_VAR_BACKTEST = {
+  data: {
+    n_days: 252,
+    mean_daily: 0.0004,
+    vol_daily: 0.01,
+    var_95: 0.015,
+    var_99: 0.025,
+    hist_var_95: 0.016,
+    hist_var_99: 0.026,
+    breaches_95: 10,
+    expected_95: 12.6,
+    breaches_99: 3,
+    expected_99: 2.52,
+    worst_day: -0.04,
+    histogram: [],
+  },
+  error: null,
+  meta: { request_id: "r-var" },
+};
+
 /** A fetch spy that routes by URL so the report page's several parallel calls
  * (portfolios, report, scenarios, explain) each get the right response. */
 function routedFetch() {
@@ -154,6 +194,8 @@ function routedFetch() {
     if (url.includes("report_from_active")) return Promise.resolve(mockJson(SAMPLE_REPORT));
     if (url.includes("/risk/scenarios")) return Promise.resolve(mockJson(SAMPLE_SCENARIOS));
     if (url.includes("/risk/explain")) return Promise.resolve(mockJson(SAMPLE_EXPLAIN));
+    if (url.includes("/risk/snapshot_history")) return Promise.resolve(mockJson(SAMPLE_SNAPSHOT_HISTORY));
+    if (url.includes("/risk/var_backtest")) return Promise.resolve(mockJson(SAMPLE_VAR_BACKTEST));
     return Promise.resolve(mockJson({ data: null, error: { code: "unexpected", message: url }, meta: {} }, { status: 500 }));
   });
 }
@@ -207,6 +249,8 @@ describe("PortfolioRiskPage", () => {
     expect(await screen.findByText("1.20%")).toBeInTheDocument(); // var_95
     expect(screen.getByText("1.70%")).toBeInTheDocument(); // cvar_95
     expect(screen.getByText("0.50")).toBeInTheDocument(); // sharpe
+    expect(screen.getByText("$51,000")).toBeInTheDocument(); // net equity
+    expect(screen.getByText("+$450")).toBeInTheDocument(); // today P&L
 
     // Factor betas table rows.
     expect(screen.getByText("1.020")).toBeInTheDocument();

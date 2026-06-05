@@ -91,6 +91,14 @@ def _serialize_score(score) -> ScoreResponse:
         cvar_95_daily=metrics_dict.get("cvar_95_daily"),
         beta_to_benchmark=metrics_dict.get("beta_to_benchmark"),
         total_value=metrics_dict.get("total_value"),
+        net_equity=metrics_dict.get("net_equity"),
+        cash_balance=metrics_dict.get("cash_balance"),
+        margin_loan=metrics_dict.get("margin_loan"),
+        contributed_capital=metrics_dict.get("contributed_capital"),
+        daily_pnl=metrics_dict.get("daily_pnl"),
+        daily_return=metrics_dict.get("daily_return"),
+        total_pnl=metrics_dict.get("total_pnl"),
+        total_return=metrics_dict.get("total_return"),
         cash_weight=metrics_dict.get("cash_weight"),
         data_coverage=metrics_dict.get("data_coverage"),
         observations=metrics_dict.get("observations"),
@@ -269,6 +277,90 @@ def score_portfolio_endpoint(body: ScoreRequest, request: Request):
 # ── /score_from_active ─────────────────────────────────────────────
 
 
+def _finite_float(v) -> float | None:
+    try:
+        f = float(v)
+    except Exception:
+        return None
+    return f if np.isfinite(f) else None
+
+
+def _account_value_metrics(
+    *,
+    holdings: dict,
+    price_frame: pd.DataFrame,
+    cash_balance: float,
+    margin_loan: float,
+    contributed_capital: float,
+) -> dict[str, float | None]:
+    """Deterministic account-value arithmetic for the product UI.
+
+    This restores the legacy "today's floating P&L" UX without touching the
+    quant engine: daily P&L is shares × (latest close − previous close), cash and
+    margin are treated as static over the day, and total return is only computed
+    when the user supplied contributed capital.
+    """
+
+    latest_equity = 0.0
+    comparable_latest_equity = 0.0
+    comparable_previous_equity = 0.0
+    noncomparable_equity = 0.0
+
+    for tk, h in (holdings or {}).items():
+        if tk not in price_frame.columns:
+            continue
+        series = price_frame[tk].dropna()
+        if series.empty:
+            continue
+        shares = _finite_float((h or {}).get("shares")) or 0.0
+        if shares <= 0:
+            continue
+        latest = _finite_float(series.iloc[-1])
+        if latest is None or latest <= 0:
+            continue
+        latest_equity += shares * latest
+        if len(series) >= 2:
+            prev = _finite_float(series.iloc[-2])
+            if prev is not None and prev > 0:
+                comparable_latest_equity += shares * latest
+                comparable_previous_equity += shares * prev
+                continue
+        noncomparable_equity += shares * latest
+
+    cash = max(0.0, float(cash_balance or 0.0))
+    loan = max(0.0, float(margin_loan or 0.0))
+    contributed = max(0.0, float(contributed_capital or 0.0))
+    total_value = latest_equity + cash
+    net_equity = total_value - loan
+
+    daily_pnl = None
+    daily_return = None
+    if comparable_previous_equity > 0:
+        # New/unpriced-yesterday positions should not become artificial
+        # "daily gains"; carry them at latest value in the prior denominator.
+        prior_net_equity = comparable_previous_equity + noncomparable_equity + cash - loan
+        daily_pnl = comparable_latest_equity - comparable_previous_equity
+        daily_return = daily_pnl / prior_net_equity if prior_net_equity > 0 else None
+
+    total_pnl = None
+    total_return = None
+    if contributed > 0:
+        total_pnl = net_equity - contributed
+        total_return = total_pnl / contributed
+
+    return {
+        "total_value": round(total_value, 2),
+        "net_equity": round(net_equity, 2),
+        "cash_balance": round(cash, 2),
+        "margin_loan": round(loan, 2),
+        "contributed_capital": round(contributed, 2) if contributed > 0 else None,
+        "daily_pnl": round(daily_pnl, 2) if daily_pnl is not None else None,
+        "daily_return": daily_return,
+        "total_pnl": round(total_pnl, 2) if total_pnl is not None else None,
+        "total_return": total_return,
+    }
+
+
 @router.post(
     "/score_from_active",
     summary="Score the authed user's active portfolio using real market data",
@@ -393,7 +485,7 @@ def score_from_active_endpoint(
     # A capital-fetch hiccup must not fail the score — degrade to the
     # unlevered, cash-free book it computed before.
     equity_value = float(sum(p.market_value for p in positions_input))
-    cash_balance, margin_loan = _resolve_cash_and_margin(user)
+    cash_balance, margin_loan, contributed_capital = _resolve_cash_and_margin(user)
 
     if cash_balance > 0:
         positions_input.append(
@@ -431,6 +523,14 @@ def score_from_active_endpoint(
     except Exception as exc:
         raise unprocessable(f"Score computation failed: {exc}") from exc
 
+    account_metrics = _account_value_metrics(
+        holdings=holdings,
+        price_frame=price_frame,
+        cash_balance=cash_balance,
+        margin_loan=margin_loan,
+        contributed_capital=contributed_capital,
+    )
+
     # Record a daily snapshot (deduped, fail-soft) so the dashboard can show a
     # "what changed since your last visit" delta. Never blocks the score.
     from ...services import snapshots
@@ -449,10 +549,19 @@ def score_from_active_endpoint(
         score=score,
         cash_balance=cash_balance,
         margin_loan=margin_loan,
+        contributed_capital=contributed_capital,
+        extra_metrics=account_metrics,
         top_positions=top_positions,
     )
 
     response = _serialize_score(score)
+    response = response.model_copy(
+        update={
+            "metrics": response.metrics.model_copy(
+                update={k: v for k, v in account_metrics.items() if v is not None}
+            )
+        }
+    )
     return ok(response.model_dump(), request=request, started_at=started)
 
 
@@ -478,6 +587,11 @@ def last_snapshot_endpoint(request: Request, user: AuthedUser = Depends(require_
             "sharpe_ratio": rm.get("sharpe_ratio"),
             "max_drawdown": rm.get("max_drawdown"),
             "net_equity": snap.get("net_equity"),
+            "daily_pnl": rm.get("daily_pnl"),
+            "daily_return": rm.get("daily_return"),
+            "total_pnl": rm.get("total_pnl"),
+            "total_return": rm.get("total_return"),
+            "contributed_capital": snap.get("contributed_capital"),
         }
     return ok({"snapshot": out}, request=request, started_at=started)
 
@@ -534,10 +648,10 @@ def _resolve_active_or_raise(user: AuthedUser) -> dict:
 _MAX_LEVERAGE = 10.0
 
 
-def _resolve_cash_and_margin(user: AuthedUser) -> tuple[float, float]:
-    """Return ``(cash_balance, margin_loan)`` for the caller's active
-    portfolio, token-scoped. Fails SOFT: any error (Supabase blip, schema
-    drift) degrades to ``(0.0, 0.0)`` so a capital-fetch hiccup never
+def _resolve_cash_and_margin(user: AuthedUser) -> tuple[float, float, float]:
+    """Return ``(cash_balance, margin_loan, contributed_capital)`` for the
+    caller's active portfolio, token-scoped. Fails SOFT: any error (Supabase
+    blip, schema drift) degrades to zero capital context so a fetch hiccup never
     takes down the score/report — the book just reads as cash-free and
     unlevered, exactly as it did before this was wired in."""
     try:
@@ -548,11 +662,12 @@ def _resolve_cash_and_margin(user: AuthedUser) -> tuple[float, float]:
 
         cap = get_active_capital_inputs(access_token=user.access_token) or {}
         cash = float(cap.get("cash_balance") or 0.0)
+        contributed = float(cap.get("contributed_capital") or 0.0)
         margin = float(get_active_margin_loan(access_token=user.access_token) or 0.0)
-        return (max(0.0, cash), max(0.0, margin))
+        return (max(0.0, cash), max(0.0, margin), max(0.0, contributed))
     except Exception as exc:  # pragma: no cover - defensive
         _log.warning("risk.capital_fetch_failed reason=%s", type(exc).__name__)
-        return (0.0, 0.0)
+        return (0.0, 0.0, 0.0)
 
 
 def _leverage_factor(*, gross_assets: float, margin_loan: float) -> float:
@@ -659,7 +774,11 @@ def _df_or_none_to_rows(df, *, value_col: str = None) -> list[dict]:
 
 
 def _serialize_report(
-    report, market_values: dict[str, float], *, risk_scale: float = 1.0
+    report,
+    market_values: dict[str, float],
+    *,
+    risk_scale: float = 1.0,
+    account_metrics: dict[str, float | None] | None = None,
 ) -> RiskReportOut:
     """Project the engine's ``RiskReport`` dataclass into the
     JSON-safe response model. The heavy matrices (cov, corr, MC sim
@@ -759,6 +878,15 @@ def _serialize_report(
         var_99=_scaled(report.var_99),
         cvar_95=_scaled(report.cvar_95),
         risk_free_rate=rf,
+        total_value=(account_metrics or {}).get("total_value"),
+        net_equity=(account_metrics or {}).get("net_equity"),
+        cash_balance=(account_metrics or {}).get("cash_balance"),
+        margin_loan=(account_metrics or {}).get("margin_loan"),
+        contributed_capital=(account_metrics or {}).get("contributed_capital"),
+        daily_pnl=(account_metrics or {}).get("daily_pnl"),
+        daily_return=(account_metrics or {}).get("daily_return"),
+        total_pnl=(account_metrics or {}).get("total_pnl"),
+        total_return=(account_metrics or {}).get("total_return"),
         betas={k: float(v) for k, v in (report.betas or {}).items() if _finite(v) is not None},
         factor_betas=factor_betas,
         component_var_pct=component_var,
@@ -829,9 +957,16 @@ def report_from_active_endpoint(
     # scalar>1). Algebraically identical to the cash-position + leverage
     # path /score_from_active uses, so the two endpoints now agree.
     equity_value = float(sum(market_values.values()))
-    cash_balance, margin_loan = _resolve_cash_and_margin(user)
+    cash_balance, margin_loan, contributed_capital = _resolve_cash_and_margin(user)
     risk_scale = _equity_risk_scale(
         equity_value=equity_value, cash_balance=cash_balance, margin_loan=margin_loan
+    )
+    account_metrics = _account_value_metrics(
+        holdings=holdings,
+        price_frame=price_frame,
+        cash_balance=cash_balance,
+        margin_loan=margin_loan,
+        contributed_capital=contributed_capital,
     )
 
     # DataProvider expects the original holdings dict (with shares etc.)
@@ -857,7 +992,12 @@ def report_from_active_endpoint(
         # raw exception text to the client.
         raise server_error("Risk report computation failed.", reason=type(exc).__name__) from exc
 
-    out = _serialize_report(report, market_values, risk_scale=risk_scale)
+    out = _serialize_report(
+        report,
+        market_values,
+        risk_scale=risk_scale,
+        account_metrics=account_metrics,
+    )
     return ok(out.model_dump(), request=request, started_at=started)
 
 
@@ -903,7 +1043,7 @@ def _build_active_engine(user: AuthedUser, body: ReportFromActiveRequest):
         )
 
     equity_value = float(sum(market_values.values()))
-    cash_balance, margin_loan = _resolve_cash_and_margin(user)
+    cash_balance, margin_loan, _contributed_capital = _resolve_cash_and_margin(user)
     risk_scale = _equity_risk_scale(
         equity_value=equity_value, cash_balance=cash_balance, margin_loan=margin_loan
     )

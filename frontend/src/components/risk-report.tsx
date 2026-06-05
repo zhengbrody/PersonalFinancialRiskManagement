@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { HorizontalBarChart, type BarDatum } from "@/components/ui/bar-chart";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { RiskDiagnosis } from "@/components/risk-diagnosis";
+import { PortfolioValueSummary } from "@/components/portfolio-value-summary";
 import { BenchmarkContext } from "@/components/benchmark-context";
 import { DataProvenance } from "@/components/data-provenance";
 import { VarBacktest } from "@/components/var-backtest";
@@ -72,8 +73,15 @@ export function ReportSections({ report }: { report: RiskReport }) {
         source="risk"
         title="Executive summary"
       />
+      <PortfolioValueSummary metrics={report} />
       <KpiGrid report={report} />
       <BenchmarkContext mine={report} />
+      <MetricTrend
+        metric="net_equity"
+        title="Total value over time"
+        description="Net equity snapshots saved from your Health Score runs."
+        kind="usd"
+      />
       <MetricTrend
         metric="annual_volatility"
         title="Your volatility over time"

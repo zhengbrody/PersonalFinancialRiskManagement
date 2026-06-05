@@ -16,6 +16,7 @@ import { Tabs } from "@/components/ui/tabs";
 import { ScoreGauge, scoreBand } from "@/components/score-gauge";
 import { RiskDiagnosis, ActionCards } from "@/components/risk-diagnosis";
 import { ScoreDrivers } from "@/components/score-drivers";
+import { PortfolioValueSummary } from "@/components/portfolio-value-summary";
 import { BenchmarkContext } from "@/components/benchmark-context";
 import { DataProvenance } from "@/components/data-provenance";
 import { MetricTrend } from "@/components/metric-trend";
@@ -359,6 +360,7 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
       {tab === "overview" && (
         <div className="space-y-4">
           <RiskDiagnosis explain={explain.data} loading={explain.isLoading} source="score" />
+          <PortfolioValueSummary metrics={result.metrics} />
           <BenchmarkContext mine={result.metrics} />
           <MetricsCard result={result} />
         </div>
@@ -366,6 +368,12 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
       {tab === "drivers" && <ScoreDrivers score={result} />}
       {tab === "changed" && (
         <div className="space-y-4">
+          <MetricTrend
+            metric="net_equity"
+            title="Total value over time"
+            description="Net equity snapshots from each saved score."
+            kind="usd"
+          />
           <MetricTrend
             metric="overall_score"
             title="Health score over time"
@@ -396,7 +404,19 @@ function MetricsCard({ result }: { result: ScoreResponse }) {
           <MetricRow label="VaR 95 (daily)" value={fmtPct(result.metrics.var_95_daily)} />
           <MetricRow label="CVaR 95 (daily)" value={fmtPct(result.metrics.cvar_95_daily)} />
           <MetricRow label="Beta" value={fmtNum(result.metrics.beta_to_benchmark, 2)} />
-          <MetricRow label="Total value" value={fmtUSD(result.metrics.total_value)} />
+          <MetricRow label="Gross value" value={fmtUSD(result.metrics.total_value)} />
+          <MetricRow
+            label="Net equity"
+            value={fmtUSD(result.metrics.net_equity ?? result.metrics.total_value)}
+          />
+          <MetricRow
+            label="Today"
+            value={fmtMoneyPct(result.metrics.daily_pnl, result.metrics.daily_return)}
+          />
+          <MetricRow
+            label="Total return"
+            value={fmtMoneyPct(result.metrics.total_pnl, result.metrics.total_return)}
+          />
           <MetricRow label="Observations" value={String(result.metrics.observations ?? "—")} />
         </div>
 
@@ -451,6 +471,21 @@ function WhatChanged({
   const sign = dScore > 0 ? "+" : "";
 
   const rows: { label: string; was: string; now: string }[] = [
+    {
+      label: "Net equity",
+      was: fmtUSD(prev.net_equity),
+      now: fmtUSD(current.metrics.net_equity ?? current.metrics.total_value),
+    },
+    {
+      label: "Today P&L",
+      was: fmtSignedUSD(prev.daily_pnl),
+      now: fmtSignedUSD(current.metrics.daily_pnl),
+    },
+    {
+      label: "Total return",
+      was: fmtSignedPct(prev.total_return),
+      now: fmtSignedPct(current.metrics.total_return),
+    },
     {
       label: "Health score",
       was: String(was),
@@ -533,4 +568,30 @@ function fmtNum(v: number | null | undefined, dp = 2): string {
 function fmtUSD(v: number | null | undefined): string {
   if (v === null || v === undefined || Number.isNaN(v)) return "—";
   return `$${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+}
+
+function fmtSignedUSD(v: number | null | undefined): string {
+  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  const sign = v > 0 ? "+" : "";
+  return `${sign}${v < 0 ? "-" : ""}$${Math.abs(v).toLocaleString(undefined, {
+    maximumFractionDigits: 0,
+  })}`;
+}
+
+function fmtSignedPct(v: number | null | undefined): string {
+  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  const sign = v > 0 ? "+" : "";
+  return `${sign}${(v * 100).toFixed(2)}%`;
+}
+
+function fmtMoneyPct(
+  money: number | null | undefined,
+  pct: number | null | undefined,
+): string {
+  const a = fmtSignedUSD(money);
+  const b = fmtSignedPct(pct);
+  if (a === "—" && b === "—") return "—";
+  if (b === "—") return a;
+  if (a === "—") return b;
+  return `${a} (${b})`;
 }

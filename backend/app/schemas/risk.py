@@ -89,6 +89,18 @@ class RiskReportOut(BaseModel):
     cvar_95: Optional[float] = None
     risk_free_rate: Optional[float] = None
 
+    # Account-value context. These are not model-estimated risk metrics; they are
+    # deterministic account arithmetic from latest/previous closes + cash/margin.
+    total_value: Optional[float] = None  # gross assets before margin loan
+    net_equity: Optional[float] = None  # gross assets - margin loan
+    cash_balance: Optional[float] = None
+    margin_loan: Optional[float] = None
+    contributed_capital: Optional[float] = None
+    daily_pnl: Optional[float] = None
+    daily_return: Optional[float] = None
+    total_pnl: Optional[float] = None
+    total_return: Optional[float] = None
+
     # Beta vs the configured benchmark (e.g. {"SPY": 1.02}).
     betas: dict[str, float] = Field(default_factory=dict)
     # Factor attribution table (SPY/QQQ/GLD/TLT/IWM/VTV).
@@ -229,6 +241,14 @@ class PortfolioMetricsOut(BaseModel):
     cvar_95_daily: Optional[float] = None
     beta_to_benchmark: Optional[float] = None
     total_value: Optional[float] = None
+    net_equity: Optional[float] = None
+    cash_balance: Optional[float] = None
+    margin_loan: Optional[float] = None
+    contributed_capital: Optional[float] = None
+    daily_pnl: Optional[float] = None
+    daily_return: Optional[float] = None
+    total_pnl: Optional[float] = None
+    total_return: Optional[float] = None
     cash_weight: Optional[float] = None
     data_coverage: Optional[float] = None
     observations: Optional[int] = None

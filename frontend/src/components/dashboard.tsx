@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MarketRegime } from "@/components/market-regime";
+import { PortfolioValueSummary } from "@/components/portfolio-value-summary";
 import { ScoreGauge } from "@/components/score-gauge";
 import { RiskDiagnosis } from "@/components/risk-diagnosis";
 import { track } from "@/lib/analytics";
@@ -89,6 +90,7 @@ export function Dashboard() {
         <>
           <ChangeSinceLastVisit current={score.data} prev={lastSnapshot.data?.snapshot} />
           <ScoreHero score={score.data} />
+          <PortfolioValueSummary metrics={score.data.metrics} />
           <RiskDiagnosis explain={explain.data} loading={explain.isLoading} source="score" />
         </>
       )}
@@ -117,6 +119,8 @@ function ChangeSinceLastVisit({
   const dScore = now - was;
   const curVol = current.metrics.annual_volatility;
   const prevVol = prev.annual_volatility;
+  const curValue = current.metrics.net_equity ?? current.metrics.total_value;
+  const prevValue = prev.net_equity;
 
   // No meaningful change to report.
   if (dScore === 0 && (curVol == null || prevVol == null)) return null;
@@ -145,6 +149,11 @@ function ChangeSinceLastVisit({
       {curVol != null && prevVol != null && (
         <span className="text-muted-foreground">
           · Volatility {(prevVol * 100).toFixed(1)}% → {(curVol * 100).toFixed(1)}%
+        </span>
+      )}
+      {curValue != null && prevValue != null && (
+        <span className="text-muted-foreground">
+          · Value {fmtUSD(prevValue)} → {fmtUSD(curValue)}
         </span>
       )}
     </div>
@@ -382,4 +391,8 @@ function statusTone(status: string): string {
   if (s.includes("weak") || s.includes("poor") || s.includes("high risk"))
     return "text-red-600 dark:text-red-400";
   return "text-amber-600 dark:text-amber-400";
+}
+
+function fmtUSD(v: number): string {
+  return `$${v.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }

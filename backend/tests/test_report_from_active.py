@@ -137,7 +137,7 @@ def fake_engine(monkeypatch):
 @pytest.fixture
 def fake_capital(monkeypatch):
     """Token-scoped cash + margin getters; defaults to none (scale=1.0)."""
-    state = {"cash_balance": 0.0, "margin_loan": 0.0}
+    state = {"cash_balance": 0.0, "margin_loan": 0.0, "contributed_capital": 0.0}
     import libs.auth.active_portfolio as ap
 
     monkeypatch.setattr(
@@ -145,7 +145,7 @@ def fake_capital(monkeypatch):
         "get_active_capital_inputs",
         lambda access_token=None: {
             "cash_balance": state["cash_balance"],
-            "contributed_capital": 0.0,
+            "contributed_capital": state["contributed_capital"],
         },
     )
     monkeypatch.setattr(
@@ -221,7 +221,11 @@ def test_happy_path_returns_full_report(
     fake_active_portfolio,
     fake_price_history,
     fake_engine,
+    fake_capital,
 ):
+    fake_capital["cash_balance"] = 1000.0
+    fake_capital["margin_loan"] = 250.0
+    fake_capital["contributed_capital"] = 40000.0
     fake_active_portfolio.set(
         {
             "SPY": {"shares": 100, "avg_cost": 400.0},
@@ -264,10 +268,30 @@ def test_happy_path_returns_full_report(
     assert body["error"] is None
     data = body["data"]
 
-    # KPI block.
-    assert data["var_95"] == pytest.approx(0.012)
-    assert data["cvar_95"] == pytest.approx(0.017)
+    latest_equity = 100 * float(fake_price_history.frame["SPY"].dropna().iloc[-1]) + 50 * float(
+        fake_price_history.frame["BND"].dropna().iloc[-1]
+    )
+    previous_equity = 100 * float(fake_price_history.frame["SPY"].dropna().iloc[-2]) + 50 * float(
+        fake_price_history.frame["BND"].dropna().iloc[-2]
+    )
+    expected_net = latest_equity + 1000.0 - 250.0
+    expected_scale = latest_equity / expected_net
+    expected_daily_pnl = latest_equity - previous_equity
+
+    # KPI block. Cash dilutes and margin levers equity risk, so the
+    # magnitude metrics use the investor's net-equity scale.
+    assert data["var_95"] == pytest.approx(0.012 * expected_scale)
+    assert data["cvar_95"] == pytest.approx(0.017 * expected_scale)
     assert data["sharpe_ratio"] == pytest.approx(0.5)
+
+    assert data["total_value"] == pytest.approx(latest_equity + 1000.0, abs=0.01)
+    assert data["net_equity"] == pytest.approx(expected_net, abs=0.01)
+    assert data["daily_pnl"] == pytest.approx(expected_daily_pnl, abs=0.01)
+    assert data["daily_return"] == pytest.approx(
+        expected_daily_pnl / (previous_equity + 1000.0 - 250.0)
+    )
+    assert data["total_pnl"] == pytest.approx(expected_net - 40000.0, abs=0.01)
+    assert data["total_return"] == pytest.approx((expected_net - 40000.0) / 40000.0)
 
     # Tables made it through serialisation.
     assert [r["factor"] for r in data["factor_betas"]] == ["SPY", "QQQ"]
@@ -276,7 +300,7 @@ def test_happy_path_returns_full_report(
     assert cvar_by_ticker == {"SPY": pytest.approx(0.6), "BND": pytest.approx(0.4)}
 
     # Stress block.
-    assert data["stress_loss"] == pytest.approx(0.09)
+    assert data["stress_loss"] == pytest.approx(0.09 * expected_scale)
     assert data["stress_market_shock"] == pytest.approx(-0.10)
     stress_by_ticker = {r["ticker"]: r["loss_pct"] for r in data["stress_asset_losses"]}
     assert stress_by_ticker == {"SPY": pytest.approx(0.10), "BND": pytest.approx(0.02)}

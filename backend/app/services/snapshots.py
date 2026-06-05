@@ -49,6 +49,7 @@ def record_snapshot(
     cash_balance: float = 0.0,
     margin_loan: float = 0.0,
     contributed_capital: float = 0.0,
+    extra_metrics: Optional[dict[str, Any]] = None,
     top_positions: Optional[list[dict]] = None,
     source: str = "score",
 ) -> None:
@@ -69,12 +70,43 @@ def record_snapshot(
             return
 
         m = score.metrics
-        equity = _finite(getattr(m, "total_value", None)) or 0.0
         cash = max(0.0, float(cash_balance or 0.0))
         loan = max(0.0, float(margin_loan or 0.0))
-        gross = equity + cash
-        net_equity = gross - loan
+        extra = extra_metrics or {}
+        # On active scores the engine's total_value already includes a CASH
+        # position when cash_balance > 0. Prefer the explicit account metric so
+        # snapshots don't double-count cash.
+        gross = _finite(extra.get("total_value"))
+        if gross is None:
+            gross = (_finite(getattr(m, "total_value", None)) or 0.0) + cash
+        net_equity = _finite(extra.get("net_equity"))
+        if net_equity is None:
+            net_equity = gross - loan
         leverage = (gross / net_equity) if net_equity > 0 else None
+
+        risk_metrics = {
+            "overall_score": int(score.overall_score),
+            "annual_return": _finite(m.annual_return),
+            "annual_volatility": _finite(m.annual_volatility),
+            "sharpe_ratio": _finite(m.sharpe_ratio),
+            "max_drawdown": _finite(m.max_drawdown),
+            "var_95_daily": _finite(m.var_95_daily),
+            "beta_to_benchmark": _finite(m.beta_to_benchmark),
+        }
+        for key in (
+            "daily_pnl",
+            "daily_return",
+            "total_pnl",
+            "total_return",
+            "total_value",
+            "net_equity",
+            "cash_balance",
+            "margin_loan",
+            "contributed_capital",
+        ):
+            val = _finite((extra_metrics or {}).get(key))
+            if val is not None:
+                risk_metrics[key] = val
 
         sb.table("portfolio_snapshots").insert(
             {
@@ -85,15 +117,7 @@ def record_snapshot(
                 "margin_loan": round(loan, 2),
                 "contributed_capital": round(float(contributed_capital or 0.0), 2),
                 "leverage": round(leverage, 4) if leverage is not None else None,
-                "risk_metrics": {
-                    "overall_score": int(score.overall_score),
-                    "annual_return": _finite(m.annual_return),
-                    "annual_volatility": _finite(m.annual_volatility),
-                    "sharpe_ratio": _finite(m.sharpe_ratio),
-                    "max_drawdown": _finite(m.max_drawdown),
-                    "var_95_daily": _finite(m.var_95_daily),
-                    "beta_to_benchmark": _finite(m.beta_to_benchmark),
-                },
+                "risk_metrics": risk_metrics,
                 "top_positions": (top_positions or [])[:10],
             }
         ).execute()
@@ -111,7 +135,7 @@ def get_previous_snapshot(access_token: Optional[str]) -> Optional[dict]:
         sb = _client(access_token)
         resp = (
             sb.table("portfolio_snapshots")
-            .select("created_at,risk_metrics,net_equity,leverage")
+            .select("created_at,risk_metrics,net_equity,leverage,contributed_capital")
             .lt("created_at", _iso_hours_ago(_SNAPSHOT_MIN_GAP_HOURS))
             .order("created_at", desc=True)
             .limit(1)
@@ -134,7 +158,7 @@ def get_snapshot_history(access_token: Optional[str], *, limit: int = 90) -> lis
         sb = _client(access_token)
         resp = (
             sb.table("portfolio_snapshots")
-            .select("created_at,risk_metrics,net_equity")
+            .select("created_at,risk_metrics,net_equity,contributed_capital")
             .order("created_at", desc=True)
             .limit(max(1, min(limit, 365)))
             .execute()
@@ -152,6 +176,11 @@ def get_snapshot_history(access_token: Optional[str], *, limit: int = 90) -> lis
                     "sharpe_ratio": _finite(m.get("sharpe_ratio")),
                     "max_drawdown": _finite(m.get("max_drawdown")),
                     "net_equity": _finite(r.get("net_equity")),
+                    "daily_pnl": _finite(m.get("daily_pnl")),
+                    "daily_return": _finite(m.get("daily_return")),
+                    "total_pnl": _finite(m.get("total_pnl")),
+                    "total_return": _finite(m.get("total_return")),
+                    "contributed_capital": _finite(r.get("contributed_capital")),
                 }
             )
         return out

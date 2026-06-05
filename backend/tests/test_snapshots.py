@@ -42,6 +42,10 @@ def test_last_snapshot_serializes_prior_row(test_client, mint_token, fake_prev):
             "var_95_daily": 0.021,
             "sharpe_ratio": 0.9,
             "max_drawdown": -0.12,
+            "daily_pnl": 1250.0,
+            "daily_return": 0.0133,
+            "total_pnl": 5000.0,
+            "total_return": 0.0556,
         },
     }
     resp = test_client.get(
@@ -53,6 +57,10 @@ def test_last_snapshot_serializes_prior_row(test_client, mint_token, fake_prev):
     assert snap["annual_volatility"] == 0.16
     assert snap["as_of"] == "2026-05-28T00:00:00+00:00"
     assert snap["net_equity"] == 95000.0
+    assert snap["daily_pnl"] == 1250.0
+    assert snap["daily_return"] == 0.0133
+    assert snap["total_pnl"] == 5000.0
+    assert snap["total_return"] == 0.0556
 
 
 @pytest.fixture
@@ -87,6 +95,7 @@ def test_snapshot_history_serializes(test_client, mint_token, fake_history):
             "sharpe_ratio": 0.3,
             "max_drawdown": -0.2,
             "net_equity": 90000.0,
+            "total_return": -0.1,
         },
         {
             "as_of": "2026-05-28T00:00:00+00:00",
@@ -96,6 +105,7 @@ def test_snapshot_history_serializes(test_client, mint_token, fake_history):
             "sharpe_ratio": 0.9,
             "max_drawdown": -0.12,
             "net_equity": 95000.0,
+            "total_return": -0.05,
         },
     ]
     resp = test_client.get(
@@ -105,3 +115,4 @@ def test_snapshot_history_serializes(test_client, mint_token, fake_history):
     snaps = resp.json()["data"]["snapshots"]
     assert len(snaps) == 2
     assert snaps[0]["overall_score"] == 540 and snaps[-1]["overall_score"] == 612
+    assert snaps[0]["total_return"] == -0.1 and snaps[-1]["total_return"] == -0.05
