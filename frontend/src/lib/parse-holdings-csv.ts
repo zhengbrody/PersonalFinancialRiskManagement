@@ -12,18 +12,27 @@ export type ParsedHolding = { ticker: string; shares: string; avg_cost: string }
 
 const TICKER_HEADERS = ["ticker", "symbol"];
 const SHARES_HEADERS = ["shares", "quantity", "qty", "share", "units"];
-const COST_HEADERS = [
+// PER-SHARE average cost. Deliberately specific — we do NOT match a bare
+// "price" (that's usually the *current/last* price, not cost) or a bare "cost"
+// (often the *total* cost basis), because using either as the per-share avg
+// silently fabricates a wrong P&L. Better to leave avg cost blank (→ treated as
+// unknown + excluded from P&L) than to record a wrong number.
+const PER_SHARE_COST_HEADERS = [
+  "average cost basis", // Fidelity (per share)
+  "avg cost basis",
   "avg cost",
   "average cost",
-  "average cost basis",
-  "cost basis",
   "cost/share",
   "cost per share",
+  "unit cost",
+  "price paid", // Schwab
   "purchase price",
   "avg price",
-  "price",
-  "cost",
+  "average price",
 ];
+// TOTAL cost basis columns — only usable when we also know the share count,
+// then per-share = total / shares.
+const TOTAL_COST_HEADERS = ["cost basis", "total cost", "book cost"];
 
 /** Split one CSV line, honouring double-quoted fields with embedded commas. */
 function splitCsvLine(line: string): string[] {
@@ -86,7 +95,9 @@ export function parseHoldingsCsv(text: string): {
   const header = splitCsvLine(lines[0]).map((h) => h.toLowerCase());
   let tickerCol = findCol(header, TICKER_HEADERS);
   let sharesCol = findCol(header, SHARES_HEADERS);
-  let costCol = findCol(header, COST_HEADERS);
+  let perShareCol = findCol(header, PER_SHARE_COST_HEADERS);
+  // Only fall back to a TOTAL-cost column when there's no per-share column.
+  let totalCostCol = perShareCol >= 0 ? -1 : findCol(header, TOTAL_COST_HEADERS);
 
   let dataLines = lines;
   if (tickerCol >= 0 || sharesCol >= 0) {
@@ -95,10 +106,11 @@ export function parseHoldingsCsv(text: string): {
     if (tickerCol < 0) tickerCol = 0;
     if (sharesCol < 0) sharesCol = 1;
   } else {
-    // No header detected → assume positional: ticker, shares, [cost].
+    // No header detected → assume positional: ticker, shares, [per-share cost].
     tickerCol = 0;
     sharesCol = 1;
-    costCol = 2;
+    perShareCol = 2;
+    totalCostCol = -1;
   }
 
   const rows: ParsedHolding[] = [];
@@ -109,11 +121,22 @@ export function parseHoldingsCsv(text: string): {
       .replace(/[^A-Z0-9.\-]/g, "");
     const shares = cleanNumber(cells[sharesCol] ?? "");
     if (!ticker || !Number.isFinite(shares) || shares <= 0) continue;
-    const cost = costCol >= 0 ? cleanNumber(cells[costCol] ?? "") : NaN;
+
+    // Per-share avg cost wins; otherwise derive it from a total cost basis ÷
+    // shares. If neither is clean, leave it blank (= unknown → excluded from
+    // P&L) rather than risk recording a wrong cost.
+    let avgCost = NaN;
+    if (perShareCol >= 0) {
+      avgCost = cleanNumber(cells[perShareCol] ?? "");
+    } else if (totalCostCol >= 0) {
+      const total = cleanNumber(cells[totalCostCol] ?? "");
+      if (Number.isFinite(total) && total > 0 && shares > 0) avgCost = total / shares;
+    }
+
     rows.push({
       ticker,
       shares: String(shares),
-      avg_cost: Number.isFinite(cost) && cost > 0 ? String(cost) : "",
+      avg_cost: Number.isFinite(avgCost) && avgCost > 0 ? String(avgCost) : "",
     });
   }
 
