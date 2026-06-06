@@ -18,6 +18,8 @@ STATIC_ROUTES = {
     "/robinhood-margin-risk": "robinhood-margin-risk.html",
 }
 
+NEXT_PUBLIC_ROUTES = {"/score", "/markets", "/pricing"}
+
 
 def _sitemap_paths() -> set[str]:
     tree = ElementTree.parse(SEO_DIR / "sitemap.xml")
@@ -35,7 +37,8 @@ def test_sitemap_contains_growth_routes():
     paths = _sitemap_paths()
 
     assert "/" in paths
-    assert "/Legal" in paths
+    for route in NEXT_PUBLIC_ROUTES:
+        assert route in paths
     for route in STATIC_ROUTES:
         assert route in paths
 
@@ -66,4 +69,7 @@ def test_robots_points_to_sitemap():
 
     assert "User-agent: *" in robots
     assert "Allow: /" in robots
+    assert "Disallow: /portfolios" in robots
+    assert "Disallow: /login" in robots
+    assert "Disallow: /research" in robots
     assert "Sitemap: https://mindmarket.app/sitemap.xml" in robots
