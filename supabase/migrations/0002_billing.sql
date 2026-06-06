@@ -126,9 +126,15 @@ create index if not exists usage_events_user_month_idx
 -- ─────────────────────────────────────────────────────────────────
 -- 4. monthly_usage — aggregate view (read-side)
 -- ─────────────────────────────────────────────────────────────────
--- Per user per kind per calendar month. Used by quota checks. Views
--- inherit RLS from underlying tables, so we don't need separate policies.
-create or replace view public.monthly_usage as
+-- Per user per kind per calendar month. Used by quota checks.
+--
+-- SECURITY NOTE:
+-- Postgres views run with definer privileges by default. Supabase's security
+-- advisor flags that on public views because it can bypass caller-scoped RLS.
+-- `security_invoker = true` makes this view execute as the caller, so the
+-- underlying usage_events RLS policies remain the access boundary.
+create or replace view public.monthly_usage
+with (security_invoker = true) as
 select
     user_id,
     kind,
