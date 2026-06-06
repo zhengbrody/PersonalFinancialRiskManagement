@@ -47,9 +47,13 @@ def fake_billing(monkeypatch):
         "sub_raise": None,
     }
 
-    def _get_user_plan(user_id: str) -> str:
+    def _get_user_plan(user_id: str, **kwargs) -> str:
         if state["plan_raise"]:
             raise state["plan_raise"]
+        from libs.admin.status import is_owner_email
+
+        if is_owner_email(kwargs.get("email")):
+            return "owner"
         return state["plan"]
 
     def _get_subscription_record(user_id: str):
@@ -132,6 +136,22 @@ def test_billing_me_free_tier_when_no_subscription(test_client, mint_token, fake
     data = resp.json()["data"]
     assert data["plan"] == "free"
     assert data["subscription"] is None
+
+
+def test_billing_me_returns_owner_plan_from_jwt_email(
+    test_client, mint_token, fake_billing, monkeypatch
+):
+    monkeypatch.setenv("MINDMARKET_OWNER_EMAILS", "owner@mindmarket.test")
+    fake_billing["plan"] = "free"
+
+    resp = test_client.get(
+        "/api/v1/billing/me",
+        headers={"Authorization": f"Bearer {mint_token(email='owner@mindmarket.test')}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["plan"] == "owner"
+    assert data["credits"]["unlimited"] is True
 
 
 def test_billing_me_falls_back_to_free_on_plan_lookup_failure(

@@ -35,6 +35,15 @@ def test_get_credit_status_owner_unlimited(monkeypatch):
     assert st["credits_remaining"] is None
 
 
+def test_get_credit_status_owner_from_fastapi_email(monkeypatch):
+    monkeypatch.setenv("MINDMARKET_OWNER_EMAILS", "owner@mindmarket.test")
+    monkeypatch.setattr(usage, "is_owner_user", lambda user_id: False)
+    st = usage.get_credit_status("u", email="owner@mindmarket.test")
+    assert st["plan"] == "owner"
+    assert st["unlimited"] is True
+    assert st["credits_remaining"] is None
+
+
 def test_check_credits_over_budget_raises(monkeypatch):
     monkeypatch.setattr(usage, "get_user_plan", lambda u: "basic")
     monkeypatch.setattr(usage, "get_user_cost_since", lambda u, s: 2.99)
@@ -61,6 +70,15 @@ def test_check_credits_owner_skips_budget(monkeypatch):
     monkeypatch.setattr(usage, "get_user_plan", lambda u: "owner")
     monkeypatch.setattr(usage, "check_spend_limit", lambda u, **k: {})
     usage.check_credits("u", estimated_cost_usd=99.0)  # no raise
+
+
+def test_check_credits_owner_from_fastapi_email_skips_budget(monkeypatch):
+    monkeypatch.setenv("MINDMARKET_OWNER_EMAILS", "owner@mindmarket.test")
+    monkeypatch.setattr(usage, "is_owner_user", lambda user_id: False)
+    seen = {}
+    monkeypatch.setattr(usage, "check_spend_limit", lambda user_id, **kwargs: seen.update(kwargs))
+    usage.check_credits("u", email="owner@mindmarket.test", estimated_cost_usd=99.0)
+    assert seen["email"] == "owner@mindmarket.test"
 
 
 class _FakeQuery:

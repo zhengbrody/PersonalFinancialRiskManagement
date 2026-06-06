@@ -83,8 +83,8 @@ def fake_quota(monkeypatch):
         def deny(self) -> None:
             self.denied = True
 
-        def __call__(self, user_id, *, estimated_cost_usd=0.0):
-            self.calls.append((user_id, estimated_cost_usd))
+        def __call__(self, user_id, *, email=None, estimated_cost_usd=0.0):
+            self.calls.append((user_id, estimated_cost_usd, email))
             if self.denied:
                 raise usage.QuotaExceeded(
                     kind="credits", plan="free", used=25, limit=25, message="Out of AI credits."

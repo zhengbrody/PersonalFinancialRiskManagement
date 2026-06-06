@@ -109,9 +109,9 @@ def get_user_cost_since(user_id: str, since_iso: str) -> float:
         return float("inf")
 
 
-def get_credit_status(user_id: str) -> dict[str, Any]:
+def get_credit_status(user_id: str, *, email: str | None = None) -> dict[str, Any]:
     """Monthly credit balance for the UI. Owner/unlimited → unlimited=True."""
-    plan = get_user_plan(user_id)
+    plan = get_user_plan(user_id, email=email) if email is not None else get_user_plan(user_id)
     budget = PLAN_MONTHLY_BUDGET_USD.get(plan)
     label = PLAN_PRICING.get(plan, {}).get("label", plan)
     if budget is None:
@@ -143,7 +143,12 @@ def get_credit_status(user_id: str) -> dict[str, Any]:
     }
 
 
-def check_credits(user_id: str, *, estimated_cost_usd: float = 0.0) -> dict[str, Any]:
+def check_credits(
+    user_id: str,
+    *,
+    email: str | None = None,
+    estimated_cost_usd: float = 0.0,
+) -> dict[str, Any]:
     """Primary AI gate: raise ``QuotaExceeded`` if this month's spend +
     the estimated cost of THIS call would exceed the plan's credit budget.
 
@@ -151,15 +156,18 @@ def check_credits(user_id: str, *, estimated_cost_usd: float = 0.0) -> dict[str,
     paying user out — a single call costs cents). Owner/unlimited plans skip
     the budget but still honour the global daily/monthly spend backstop.
     """
-    plan = get_user_plan(user_id)
+    plan = get_user_plan(user_id, email=email) if email is not None else get_user_plan(user_id)
     budget = PLAN_MONTHLY_BUDGET_USD.get(plan)
     if budget is None:
-        check_spend_limit(user_id, estimated_cost_usd=estimated_cost_usd)
-        return get_credit_status(user_id)
+        if email is not None:
+            check_spend_limit(user_id, email=email, estimated_cost_usd=estimated_cost_usd)
+        else:
+            check_spend_limit(user_id, estimated_cost_usd=estimated_cost_usd)
+        return get_credit_status(user_id, email=email)
 
     used_usd = get_user_cost_since(user_id, _start_of_month_iso())
     if used_usd == float("inf"):  # read failed → fail-open
-        return get_credit_status(user_id)
+        return get_credit_status(user_id, email=email)
 
     est = max(0.0, float(estimated_cost_usd or 0.0))
     if used_usd + est > budget:
@@ -176,8 +184,11 @@ def check_credits(user_id: str, *, estimated_cost_usd: float = 0.0) -> dict[str,
             ),
         )
     # Global owner-configured spend backstop still applies.
-    check_spend_limit(user_id, estimated_cost_usd=est)
-    return get_credit_status(user_id)
+    if email is not None:
+        check_spend_limit(user_id, email=email, estimated_cost_usd=est)
+    else:
+        check_spend_limit(user_id, estimated_cost_usd=est)
+    return get_credit_status(user_id, email=email)
 
 
 class QuotaExceeded(RuntimeError):
@@ -291,13 +302,31 @@ def is_owner_user(user_id: str) -> bool:
         return False
 
 
+def is_owner_identity(user_id: str, email: str | None = None) -> bool:
+    """True for either the legacy Streamlit session owner or a FastAPI JWT owner.
+
+    Streamlit routes only know the session user. FastAPI routes already have a
+    verified JWT email, so pass it explicitly to keep owner billing/quota
+    behavior consistent across both stacks.
+    """
+    if email:
+        try:
+            from libs.admin.status import is_owner_email
+
+            if is_owner_email(email):
+                return True
+        except Exception:
+            pass
+    return is_owner_user(user_id)
+
+
 # ── Public API ───────────────────────────────────────────────────
 
 
-def get_user_plan(user_id: str) -> str:
+def get_user_plan(user_id: str, *, email: str | None = None) -> str:
     """Return the user's current plan name. Defaults to 'free' on any
     DB failure — fail-closed for billing means free is the safe path."""
-    if is_owner_user(user_id):
+    if is_owner_identity(user_id, email):
         return "owner"
     try:
         resp = _client().table("profiles").select("plan").eq("user_id", user_id).limit(1).execute()
@@ -389,9 +418,14 @@ def get_spend_status(user_id: str, *, estimated_cost_usd: float = 0.0) -> dict[s
     }
 
 
-def check_spend_limit(user_id: str, *, estimated_cost_usd: float = 0.0) -> dict[str, Any]:
+def check_spend_limit(
+    user_id: str,
+    *,
+    email: str | None = None,
+    estimated_cost_usd: float = 0.0,
+) -> dict[str, Any]:
     """Raise if the next AI/data-provider call would exceed spend limits."""
-    if is_owner_user(user_id):
+    if is_owner_identity(user_id, email):
         return get_spend_status(user_id, estimated_cost_usd=estimated_cost_usd)
 
     status = get_spend_status(user_id, estimated_cost_usd=estimated_cost_usd)
@@ -432,7 +466,7 @@ def get_used_this_month(user_id: str, kind: str) -> int:
         return 999_999
 
 
-def get_quota_status(user_id: str) -> dict[str, Any]:
+def get_quota_status(user_id: str, *, email: str | None = None) -> dict[str, Any]:
     """Return a dict suitable for direct rendering in the sidebar.
 
     Shape:
@@ -445,7 +479,7 @@ def get_quota_status(user_id: str) -> dict[str, Any]:
         },
       }
     """
-    plan = get_user_plan(user_id)
+    plan = get_user_plan(user_id, email=email) if email is not None else get_user_plan(user_id)
     out: dict[str, Any] = {
         "plan": plan,
         "label": PLAN_PRICING[plan]["label"],
@@ -482,9 +516,9 @@ def get_admin_usage(*, since_iso: Optional[str] = None) -> dict[str, Any]:
     """
     since = since_iso or _start_of_month_iso()
     try:
+        sb, _ = _cost_client()
         resp = (
-            _client()
-            .table("usage_events")
+            sb.table("usage_events")
             .select("user_id,kind,tokens_in,tokens_out,cost_usd,created_at")
             .gte("created_at", since)
             .limit(50_000)
@@ -575,6 +609,7 @@ def check_quota(
     user_id: str,
     kind: str,
     *,
+    email: str | None = None,
     estimated_cost_usd: float = 0.0,
 ) -> dict[str, Any]:
     """Check quota without recording an event.
@@ -583,11 +618,14 @@ def check_quota(
     operation finishes. This avoids pre-recording a "successful" event for a
     provider call that later fails.
     """
-    plan = get_user_plan(user_id)
+    plan = get_user_plan(user_id, email=email) if email is not None else get_user_plan(user_id)
     limit = PLAN_LIMITS.get(plan, {}).get(kind)
 
     if limit is None:
-        check_spend_limit(user_id, estimated_cost_usd=estimated_cost_usd)
+        if email is not None:
+            check_spend_limit(user_id, email=email, estimated_cost_usd=estimated_cost_usd)
+        else:
+            check_spend_limit(user_id, estimated_cost_usd=estimated_cost_usd)
         return {
             "plan": plan,
             "used": get_used_this_month(user_id, kind),
@@ -599,7 +637,10 @@ def check_quota(
     used = get_used_this_month(user_id, kind)
     if used >= limit:
         raise QuotaExceeded(kind=kind, plan=plan, used=used, limit=limit)
-    check_spend_limit(user_id, estimated_cost_usd=estimated_cost_usd)
+    if email is not None:
+        check_spend_limit(user_id, email=email, estimated_cost_usd=estimated_cost_usd)
+    else:
+        check_spend_limit(user_id, estimated_cost_usd=estimated_cost_usd)
     return {
         "plan": plan,
         "used": used,
@@ -613,6 +654,7 @@ def check_and_consume(
     user_id: str,
     kind: str,
     *,
+    email: str | None = None,
     provider: Optional[str] = None,
     model: Optional[str] = None,
     tokens_in: int = 0,
@@ -638,7 +680,7 @@ def check_and_consume(
     NB: there's a small race window between the count and the insert.
     See module docstring.
     """
-    check_quota(user_id, kind, estimated_cost_usd=cost_usd)
+    check_quota(user_id, kind, email=email, estimated_cost_usd=cost_usd)
 
     record_event(
         user_id,
@@ -650,4 +692,4 @@ def check_and_consume(
         cost_usd=cost_usd,
         metadata=metadata,
     )
-    return get_quota_status(user_id)
+    return get_quota_status(user_id, email=email)

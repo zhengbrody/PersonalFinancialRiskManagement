@@ -151,7 +151,7 @@ def equity_analyze(
     from libs.billing.usage import ESTIMATED_COST_USD, QuotaExceeded, check_credits
 
     try:
-        check_credits(user.id, estimated_cost_usd=ESTIMATED_COST_USD["analysis"])
+        check_credits(user.id, email=user.email, estimated_cost_usd=ESTIMATED_COST_USD["analysis"])
     except QuotaExceeded as exc:
         raise too_many_requests(str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - fail-open on metering blip

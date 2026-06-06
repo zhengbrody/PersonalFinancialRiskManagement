@@ -104,6 +104,7 @@ def billing_me(request: Request, user: AuthedUser = Depends(require_user)):
     the pricing table without a second round-trip."""
     started = time.perf_counter()
     try:
+        from libs.admin.status import is_owner_email
         from libs.billing.usage import get_subscription_record, get_user_plan
     except Exception as exc:  # pragma: no cover - import guard
         raise APIError(
@@ -113,11 +114,15 @@ def billing_me(request: Request, user: AuthedUser = Depends(require_user)):
             details={"reason": str(exc)},
         ) from exc
 
-    try:
-        plan = get_user_plan(user.id)
-    except Exception as exc:
-        _logger.warning("billing.plan_lookup_failed user=%s err=%s", user.id, exc)
-        plan = "free"
+    is_owner = is_owner_email(user.email)
+    if is_owner:
+        plan = "owner"
+    else:
+        try:
+            plan = get_user_plan(user.id, email=user.email)
+        except Exception as exc:
+            _logger.warning("billing.plan_lookup_failed user=%s err=%s", user.id, exc)
+            plan = "free"
 
     subscription_row: SubscriptionOut | None = None
     try:
@@ -131,7 +136,7 @@ def billing_me(request: Request, user: AuthedUser = Depends(require_user)):
     try:
         from libs.billing.usage import get_credit_status
 
-        credits = get_credit_status(user.id)
+        credits = get_credit_status(user.id, email=user.email)
     except Exception as exc:  # noqa: BLE001 - credits are display-only here
         _logger.warning("billing.credit_status_failed user=%s err=%s", user.id, exc)
 
