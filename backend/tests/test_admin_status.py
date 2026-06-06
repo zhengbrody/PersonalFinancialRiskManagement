@@ -41,6 +41,9 @@ def test_status_config_only_for_owner(test_client, mint_token, as_owner):
     assert {"Claude (Anthropic)", "Supabase", "Stripe"} <= names
     claude = next(i for i in data["integrations"] if i["name"] == "Claude (Anthropic)")
     assert claude["configured"] is True  # ANTHROPIC_API_KEY set by the fixture
+    sentry = next(i for i in data["integrations"] if i["name"] == "Sentry")
+    assert sentry["configured"] is True  # backend has a default DSN, env-overridable
+    assert "SENTRY_DSN" not in sentry["detail"]
     # No secret values leak — only state/detail strings.
     assert "sk-ant-test" not in resp.text
 

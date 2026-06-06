@@ -72,12 +72,19 @@ services:
       - MINDMARKET_ALLOWED_ORIGINS=${MINDMARKET_ALLOWED_ORIGINS:-}
       - MINDMARKET_OWNER_EMAIL=${MINDMARKET_OWNER_EMAIL:-}
       - MINDMARKET_OWNER_EMAILS=${MINDMARKET_OWNER_EMAILS:-}
+      - MINDMARKET_APP_URL=${MINDMARKET_APP_URL:-}
       - SUPABASE_URL=${SUPABASE_URL:-}
       - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-}
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
-      # Anthropic key used later by the LLM-backed equity tool; safe
-      # to ship now even though Phase-1 /deep_analysis returns the
-      # placeholder.
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
+      - FMP_API_KEY=${FMP_API_KEY:-}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_BASIC_PRICE_ID=${STRIPE_BASIC_PRICE_ID:-}
+      - STRIPE_PRO_PRICE_ID=${STRIPE_PRO_PRICE_ID:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+      # Anthropic key powers Copilot and AI-backed analysis; optional
+      # by design because deterministic fallbacks keep the app usable.
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     healthcheck:
       test: ["CMD", "python", "-c",

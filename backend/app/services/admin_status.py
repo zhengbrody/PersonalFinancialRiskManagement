@@ -9,7 +9,7 @@ fires them on a button), since they cost latency.
 
 from __future__ import annotations
 
-from libs.admin.status import configured_status, live_check
+from libs.admin.status import IntegrationStatus, configured_status, live_check
 
 # (display name, required env keys). FMP is optional (dossier degrades to free
 # yfinance); the rest are core.
@@ -52,6 +52,31 @@ _LIVE_CHECKS = {
 }
 
 
+def _sentry_status() -> IntegrationStatus:
+    """Sentry is configured from Settings, not env presence alone.
+
+    The backend bakes a public DSN default and lets ``SENTRY_DSN`` override it.
+    Reporting "Missing: SENTRY_DSN" when the default DSN is active is therefore
+    misleading: what matters to operators is whether the running app has a DSN.
+    """
+    from ..core.config import get_settings
+
+    dsn = get_settings().sentry_dsn
+    if not dsn:
+        return IntegrationStatus(
+            name="Sentry",
+            state="Missing",
+            detail="Missing: SENTRY_DSN or backend default DSN.",
+            configured=False,
+        )
+    return IntegrationStatus(
+        name="Sentry",
+        state="Configured",
+        detail="Backend Sentry DSN is configured.",
+        configured=True,
+    )
+
+
 def system_status(*, live: bool = False) -> dict:
     """Return ``{integrations: [{name, state, detail, configured}], live}``.
 
@@ -60,8 +85,11 @@ def system_status(*, live: bool = False) -> dict:
     an ``Error`` state (never raises)."""
     rows = []
     for name, keys in _INTEGRATIONS:
-        check = _LIVE_CHECKS.get(name) if live else None
-        st = live_check(name, check, keys) if check else configured_status(name, keys)
+        if name == "Sentry":
+            st = _sentry_status()
+        else:
+            check = _LIVE_CHECKS.get(name) if live else None
+            st = live_check(name, check, keys) if check else configured_status(name, keys)
         rows.append(
             {"name": st.name, "state": st.state, "detail": st.detail, "configured": st.configured}
         )
