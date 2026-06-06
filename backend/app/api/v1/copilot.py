@@ -23,6 +23,7 @@ from fastapi.responses import StreamingResponse
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import APIError, ok, too_many_requests
 from ...schemas.copilot import ChatRequest, ChatResponse
+from ...schemas.copilot2 import CopilotAskRequest
 from ...services import copilot_context
 from ...services.llm_client import get_answer_streamer, get_llm_callable
 
@@ -136,6 +137,65 @@ def copilot_chat_endpoint(
 
     payload = ChatResponse(**resp.model_dump()).model_dump()
     return ok(payload, request=request, started_at=started)
+
+
+@router.post(
+    "/ask",
+    summary="Copilot 2.0 — intent-routed, evidence-grounded answer",
+    response_model=None,
+)
+def copilot_ask_endpoint(
+    body: CopilotAskRequest,
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    """Copilot 2.0: classify the message into one of 8 intents, gather
+    deterministic evidence (ticker FactPacks, portfolio score, macro regime,
+    fee/tax scans, metric glossary), then synthesize ONE answer in the fixed
+    five-section format using only that evidence.
+
+    Unlike ``/chat`` this does NOT require an active portfolio — ticker /
+    compare / macro / explain intents answer with no holdings. Evidence
+    gathering is fail-soft (a dead provider just thins the evidence).
+    Credit-gated (LLM); fail-open on a metering blip; data-only without a key.
+    """
+    started = time.perf_counter()
+
+    from libs.billing.usage import ESTIMATED_COST_USD, QuotaExceeded, check_credits
+
+    try:
+        check_credits(user.id, email=user.email, estimated_cost_usd=ESTIMATED_COST_USD["chat"])
+    except QuotaExceeded as exc:
+        raise too_many_requests(str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - fail-open on metering blip
+        _log.warning("copilot.ask.credit_check_failed reason=%s", type(exc).__name__)
+
+    from ...services import copilot_router
+
+    llm = get_llm_callable(with_tools=False)
+    result = copilot_router.answer(body.message, user=user, llm_callable=llm)
+
+    if llm is not None and not result.data_only:
+        _record_ask_cost(user.id, result, started)
+
+    return ok(result.model_dump(), request=request, started_at=started)
+
+
+def _record_ask_cost(user_id: str, result, started: float) -> None:
+    from libs.billing.costs import estimate_tokens
+
+    from ...services.ai_telemetry import input_hash, record_ai_call
+
+    ev_text = "\n".join(f"{e.label}:{e.value}" for e in result.evidence)
+    record_ai_call(
+        user_id,
+        "chat",
+        model=_CHAT_MODEL,
+        tokens_in=estimate_tokens(ev_text) + 600,
+        tokens_out=estimate_tokens(result.answer_markdown or ""),
+        latency_ms=(time.perf_counter() - started) * 1000,
+        input_hash=input_hash(result.intent + "|" + ev_text),
+    )
 
 
 @router.post(
