@@ -78,7 +78,7 @@ function PricingPageInner() {
           ? err.code === "billing_not_configured"
             ? "Billing is not enabled on this build."
             : err.code === "email_required"
-              ? "Sign in with email + password before subscribing."
+              ? "Sign in with an account that has an email address before subscribing."
               : err.message
           : (err as Error)?.message ?? "Could not start checkout.";
       setError(msg);

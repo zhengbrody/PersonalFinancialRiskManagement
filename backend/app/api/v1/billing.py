@@ -220,12 +220,12 @@ def create_checkout_session_endpoint(
     started = time.perf_counter()
     if not user.email:
         # Stripe Checkout requires an email; Supabase JWTs always carry
-        # one for password users, but PKCE/magic-link tokens can omit
-        # it. Tell the frontend explicitly.
+        # one for password and Google users, but some OAuth/magic-link
+        # tokens can omit it. Tell the frontend explicitly.
         raise APIError(
             status=422,
             code="email_required",
-            message="Sign in with email + password to subscribe.",
+            message="Sign in with an account that has an email address to subscribe.",
         )
 
     try:

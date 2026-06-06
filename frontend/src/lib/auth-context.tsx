@@ -53,6 +53,13 @@ export type AuthState = {
     email: string,
     password: string,
   ) => Promise<{ needsConfirmation: boolean }>;
+  /**
+   * Start Google OAuth sign-in/sign-up.
+   *
+   * Supabase handles account creation when the Google identity is new,
+   * then redirects back to the app with a browser session.
+   */
+  signInWithGoogle: () => Promise<void>;
   /** Sign the current user out. No-op when already signed out. */
   signOut: () => Promise<void>;
 };
@@ -132,6 +139,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [supabase],
   );
 
+  const signInWithGoogle = useCallback(async () => {
+    if (!supabase) {
+      throw new Error("Google sign-in is not configured on this build.");
+    }
+    const origin =
+      typeof window === "undefined" ? undefined : window.location.origin;
+    const redirectTo = origin ? `${origin}/portfolios` : undefined;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: redirectTo ? { redirectTo } : undefined,
+    });
+    if (error) {
+      throw new Error(error.message);
+    }
+  }, [supabase]);
+
   const signOut = useCallback(async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
@@ -151,9 +174,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       configured,
       signIn,
       signUp,
+      signInWithGoogle,
       signOut,
     }),
-    [session, loading, configured, signIn, signUp, signOut],
+    [session, loading, configured, signIn, signUp, signInWithGoogle, signOut],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -21,6 +21,8 @@ const fakeClient = {
     getSession: vi.fn(),
     onAuthStateChange: vi.fn(),
     signInWithPassword: vi.fn(),
+    signInWithOAuth: vi.fn(),
+    signUp: vi.fn(),
     signOut: vi.fn(),
   },
 };
@@ -32,7 +34,15 @@ vi.mock("./supabase", () => ({
 import { AuthProvider, useAuth } from "./auth-context";
 
 function Probe() {
-  const { user, accessToken, loading, configured, signIn, signOut } = useAuth();
+  const {
+    user,
+    accessToken,
+    loading,
+    configured,
+    signIn,
+    signInWithGoogle,
+    signOut,
+  } = useAuth();
   return (
     <div>
       <span data-testid="loading">{String(loading)}</span>
@@ -40,6 +50,7 @@ function Probe() {
       <span data-testid="user">{user?.email ?? "anon"}</span>
       <span data-testid="token">{accessToken ?? "none"}</span>
       <button onClick={() => signIn("owner@mindmarket.test", "pw")}>sign-in</button>
+      <button onClick={() => signInWithGoogle()}>google</button>
       <button onClick={() => signOut()}>sign-out</button>
     </div>
   );
@@ -49,6 +60,8 @@ beforeEach(() => {
   fakeClient.auth.getSession.mockReset();
   fakeClient.auth.onAuthStateChange.mockReset();
   fakeClient.auth.signInWithPassword.mockReset();
+  fakeClient.auth.signInWithOAuth.mockReset();
+  fakeClient.auth.signUp.mockReset();
   fakeClient.auth.signOut.mockReset();
 });
 
@@ -159,6 +172,33 @@ describe("AuthProvider", () => {
     expect(fakeClient.auth.signInWithPassword).toHaveBeenCalledWith({
       email: "owner@mindmarket.test",
       password: "pw",
+    });
+  });
+
+  it("signInWithGoogle starts the Supabase Google OAuth flow", async () => {
+    fakeClient.auth.getSession.mockResolvedValueOnce({ data: { session: null } });
+    fakeClient.auth.onAuthStateChange.mockReturnValueOnce({
+      data: { subscription: { unsubscribe: vi.fn() } },
+    });
+    fakeClient.auth.signInWithOAuth.mockResolvedValueOnce({ error: null });
+
+    renderWithQuery(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("loading").textContent).toBe("false"),
+    );
+
+    const user = userEvent.setup();
+    await user.click(screen.getByText("google"));
+
+    expect(fakeClient.auth.signInWithOAuth).toHaveBeenCalledWith({
+      provider: "google",
+      options: {
+        redirectTo: expect.stringContaining("/portfolios"),
+      },
     });
   });
 

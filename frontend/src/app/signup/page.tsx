@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Email + password sign-up against Supabase.
+ * Google-first sign-up against Supabase, with email + password fallback.
  *
  * On success:
  *   * If Supabase project has email confirmation ON → show "check your
@@ -9,9 +9,6 @@
  *   * If auto-confirm is on → session is attached immediately, redirect
  *     to /portfolios.
  *
- * Phase 6 scope: email + password only. Google OAuth lands in a
- * later phase once the Supabase redirect URL is wired to the
- * production hostname.
  */
 
 import { useEffect, useState } from "react";
@@ -33,11 +30,18 @@ const POST_SIGNUP_REDIRECT = "/portfolios";
 
 export default function SignupPage() {
   const router = useRouter();
-  const { user, configured, loading: authLoading, signUp } = useAuth();
+  const {
+    user,
+    configured,
+    loading: authLoading,
+    signUp,
+    signInWithGoogle,
+  } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [oauthSubmitting, setOauthSubmitting] = useState(false);
   const [confirmationSent, setConfirmationSent] = useState(false);
 
   useEffect(() => {
@@ -61,9 +65,22 @@ export default function SignupPage() {
       }
       router.replace(POST_SIGNUP_REDIRECT);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign-up failed.");
+      setError(formatSignupError(err));
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function onGoogle() {
+    if (!configured) return;
+    setError(null);
+    setOauthSubmitting(true);
+    try {
+      track("signup_oauth_started", { provider: "google" });
+      await signInWithGoogle();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Google sign-up failed.");
+      setOauthSubmitting(false);
     }
   }
 
@@ -101,7 +118,27 @@ export default function SignupPage() {
               </p>
             </div>
           ) : (
-            <form onSubmit={onSubmit} className="space-y-4">
+            <div className="space-y-5">
+              <Button
+                type="button"
+                className="w-full"
+                variant="outline"
+                disabled={oauthSubmitting || submitting || authLoading}
+                onClick={onGoogle}
+              >
+                <span aria-hidden="true" className="font-semibold">
+                  G
+                </span>
+                {oauthSubmitting ? "Opening Google…" : "Continue with Google"}
+              </Button>
+
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span className="h-px flex-1 bg-border" />
+                <span>Email fallback</span>
+                <span className="h-px flex-1 bg-border" />
+              </div>
+
+              <form onSubmit={onSubmit} className="space-y-4">
               <div className="space-y-2">
                 <label
                   htmlFor="email"
@@ -135,7 +172,8 @@ export default function SignupPage() {
                   onChange={(e) => setPassword(e.target.value)}
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  At least 8 characters.
+                  At least 8 characters. Password-manager generated passwords
+                  are supported when the Supabase policy allows them.
                 </p>
               </div>
               {error && (
@@ -151,9 +189,21 @@ export default function SignupPage() {
                 {submitting ? "Creating account…" : "Create account"}
               </Button>
             </form>
+            </div>
           )}
         </CardContent>
       </Card>
     </div>
   );
+}
+
+function formatSignupError(err: unknown): string {
+  const message = err instanceof Error ? err.message : "Sign-up failed.";
+  if (/password should contain|password.*character of each/i.test(message)) {
+    return (
+      "This password was rejected by the current Supabase password policy. " +
+      "Use Google sign-up, or try a password with at least 8 characters while we relax the policy."
+    );
+  }
+  return message;
 }

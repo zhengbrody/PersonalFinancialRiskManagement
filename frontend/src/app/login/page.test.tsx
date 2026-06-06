@@ -5,6 +5,7 @@
  *   1. Supabase env unset → the form is hidden, setup notice shown.
  *   2. signIn() resolves → we navigate to /portfolios.
  *   3. signIn() rejects → the error message renders in an alert.
+ *   4. Google OAuth starts from the primary CTA.
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -35,6 +36,7 @@ describe("LoginPage", () => {
       loading: false,
       configured: false,
       signIn: vi.fn(),
+      signInWithGoogle: vi.fn(),
       signOut: vi.fn(),
     });
 
@@ -53,6 +55,7 @@ describe("LoginPage", () => {
       loading: false,
       configured: true,
       signIn,
+      signInWithGoogle: vi.fn(),
       signOut: vi.fn(),
     });
 
@@ -75,6 +78,7 @@ describe("LoginPage", () => {
       loading: false,
       configured: true,
       signIn,
+      signInWithGoogle: vi.fn(),
       signOut: vi.fn(),
     });
 
@@ -87,5 +91,24 @@ describe("LoginPage", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/invalid login credentials/i);
     expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it("starts Google OAuth from the primary CTA", async () => {
+    const signInWithGoogle = vi.fn().mockResolvedValue(undefined);
+    useAuthMock.mockReturnValue({
+      user: null,
+      accessToken: null,
+      loading: false,
+      configured: true,
+      signIn: vi.fn(),
+      signInWithGoogle,
+      signOut: vi.fn(),
+    });
+
+    const user = userEvent.setup();
+    render(<LoginPage />);
+    await user.click(screen.getByRole("button", { name: /continue with google/i }));
+
+    expect(signInWithGoogle).toHaveBeenCalledOnce();
   });
 });

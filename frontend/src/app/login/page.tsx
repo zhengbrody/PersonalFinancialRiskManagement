@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Email + password sign-in against Supabase.
+ * Google-first sign-in against Supabase, with email + password fallback.
  *
  * Behaviour on success: redirect to `/portfolios`. The auth context
  * subscription will see the new session and surface the email in the
@@ -25,11 +25,18 @@ const POST_LOGIN_REDIRECT = "/portfolios";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { user, configured, loading: authLoading, signIn } = useAuth();
+  const {
+    user,
+    configured,
+    loading: authLoading,
+    signIn,
+    signInWithGoogle,
+  } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [oauthSubmitting, setOauthSubmitting] = useState(false);
 
   // Already signed in? Bounce. Avoids showing the form to an authed user
   // who navigated here by accident (e.g. bookmark).
@@ -51,6 +58,18 @@ export default function LoginPage() {
       setError(err instanceof Error ? err.message : "Sign-in failed.");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function onGoogle() {
+    if (!configured) return;
+    setError(null);
+    setOauthSubmitting(true);
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Google sign-in failed.");
+      setOauthSubmitting(false);
     }
   }
 
@@ -77,7 +96,27 @@ export default function LoginPage() {
               <code className="font-mono">npm run dev</code>.
             </div>
           ) : (
-            <form onSubmit={onSubmit} className="space-y-4">
+            <div className="space-y-5">
+              <Button
+                type="button"
+                className="w-full"
+                variant="outline"
+                disabled={oauthSubmitting || submitting || authLoading}
+                onClick={onGoogle}
+              >
+                <span aria-hidden="true" className="font-semibold">
+                  G
+                </span>
+                {oauthSubmitting ? "Opening Google…" : "Continue with Google"}
+              </Button>
+
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span className="h-px flex-1 bg-border" />
+                <span>Email fallback</span>
+                <span className="h-px flex-1 bg-border" />
+              </div>
+
+              <form onSubmit={onSubmit} className="space-y-4">
               <div className="space-y-2">
                 <label
                   htmlFor="email"
@@ -123,6 +162,7 @@ export default function LoginPage() {
                 {submitting ? "Signing in…" : "Sign in"}
               </Button>
             </form>
+            </div>
           )}
         </CardContent>
       </Card>
