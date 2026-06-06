@@ -69,14 +69,14 @@ export default function AdminPage() {
         <h1 className="text-3xl font-semibold tracking-tight">Usage & cost</h1>
         <p className="text-sm text-muted-foreground">
           Month to date{sinceLabel ? ` (since ${sinceLabel})` : ""} ·
-          metered from real token cost. 1 credit = $0.01.
+          metered from real token cost. 1 cost unit = $0.01.
         </p>
       </header>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Events" value={(totals.events ?? 0).toLocaleString()} />
         <Stat label="Cost" value={`$${(totals.cost_usd ?? 0).toFixed(2)}`} />
-        <Stat label="Credits" value={(totals.credits ?? 0).toLocaleString()} />
+        <Stat label="Cost units" value={(totals.credits ?? 0).toLocaleString()} />
         <Stat
           label="Tokens"
           value={fmtTokens((totals.tokens_in ?? 0) + (totals.tokens_out ?? 0))}
@@ -89,7 +89,7 @@ export default function AdminPage() {
         </CardHeader>
         <CardContent>
           <Table
-            head={["Kind", "Events", "Cost", "Credits"]}
+            head={["Kind", "Events", "Cost", "Cost units"]}
             rows={Object.entries(by_kind).map(([k, v]) => [
               k,
               (v.events ?? 0).toLocaleString(),
@@ -107,7 +107,7 @@ export default function AdminPage() {
         </CardHeader>
         <CardContent>
           <Table
-            head={["User", "Events", "Cost", "Credits"]}
+            head={["User", "Events", "Cost", "Cost units"]}
             rows={users.map((u) => [
               u.user_id.slice(0, 8) + "…",
               (u.events ?? 0).toLocaleString(),
