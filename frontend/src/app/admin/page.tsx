@@ -61,13 +61,14 @@ export default function AdminPage() {
   if (usage.isLoading || !usage.data) return <PageSkeleton />;
 
   const { totals, by_kind, users, since } = usage.data;
+  const sinceLabel = formatSinceUtc(since);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <header className="space-y-1">
         <h1 className="text-3xl font-semibold tracking-tight">Usage & cost</h1>
         <p className="text-sm text-muted-foreground">
-          Month to date{since ? ` (since ${new Date(since).toLocaleDateString()})` : ""} ·
+          Month to date{sinceLabel ? ` (since ${sinceLabel})` : ""} ·
           metered from real token cost. 1 credit = $0.01.
         </p>
       </header>
@@ -190,6 +191,18 @@ function SystemStatus({
       </CardContent>
     </Card>
   );
+}
+
+function formatSinceUtc(since: string | null | undefined) {
+  if (!since) return "";
+  const date = new Date(since);
+  if (Number.isNaN(date.getTime())) return since;
+  return `${new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date)} UTC`;
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
