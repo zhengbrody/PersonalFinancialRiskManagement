@@ -827,6 +827,164 @@ export function useTickerVerdict() {
   });
 }
 
+// ── ticker research 2.0 (FactPack cockpit) ──────────────────────────
+// Two-stage, same shape as the dossier flow above: useFactPack (fast,
+// authed, no credit) paints the cockpit; useResearchVerdict (authed +
+// credit-gated) phrases a verdict OVER the FactPack the cockpit already
+// fetched — so /verdict never re-hits the network.
+
+const factPackValuationSchema = z.looseObject({
+  pe: fnum,
+  forward_pe: fnum,
+  ps: fnum,
+  pb: fnum,
+  ev_ebitda: fnum,
+  fcf_yield: fnum,
+  dividend_yield: fnum,
+  band: fstr, // "cheap" | "in-line" | "rich" | null
+  peer_median_pe: fnum,
+});
+
+const factPackQualitySchema = z.looseObject({
+  gross_margin: fnum,
+  operating_margin: fnum,
+  net_margin: fnum,
+  roe: fnum,
+  roa: fnum,
+  roic: fnum,
+  current_ratio: fnum,
+  debt_to_equity: fnum,
+  interest_coverage: fnum,
+});
+
+const factPackGrowthSchema = z.looseObject({
+  revenue_cagr: fnum,
+  eps_cagr: fnum,
+  revenue_growth_yoy: fnum,
+  earnings_growth_yoy: fnum,
+  periods: z.number().nullish(),
+});
+
+const factPackAnalystSchema = z.looseObject({
+  rating: fstr,
+  num_analysts: fnum,
+  target_low: fnum,
+  target_consensus: fnum,
+  target_high: fnum,
+  implied_upside_pct: fnum,
+});
+
+const factPackPeerSchema = z.looseObject({
+  ticker: z.string(),
+  name: fstr,
+  market_cap: fnum,
+  pe: fnum,
+  ps: fnum,
+  net_margin: fnum,
+  roe: fnum,
+});
+
+const factPackNewsSchema = z.looseObject({
+  title: z.string(),
+  site: fstr,
+  published: fstr,
+  url: fstr,
+});
+
+const factPackDataQualitySourceSchema = z.looseObject({
+  field: z.string(),
+  source: z.string(), // "fmp" | "yfinance" | "derived" | "unavailable"
+  as_of: fstr,
+  coverage: fnum,
+});
+
+const factPackDataQualitySchema = z.looseObject({
+  coverage: fnum,
+  sources: z.array(factPackDataQualitySourceSchema),
+  warnings: z.array(z.string()),
+});
+
+export const factPackSchema = z.looseObject({
+  ticker: z.string(),
+  name: fstr,
+  sector: fstr,
+  industry: fstr,
+  currency: fstr,
+  as_of: fstr,
+  price: fnum,
+  market_cap: fnum,
+  beta: fnum,
+  valuation: factPackValuationSchema,
+  quality: factPackQualitySchema,
+  growth: factPackGrowthSchema,
+  analyst: factPackAnalystSchema,
+  peers: z.array(factPackPeerSchema),
+  news: z.array(factPackNewsSchema),
+  drivers: z.array(z.string()),
+  risk_flags: z.array(z.string()),
+  data_quality: factPackDataQualitySchema,
+});
+export type FactPack = z.infer<typeof factPackSchema>;
+
+const verdictDimensionSchema = z.looseObject({
+  name: z.string(), // valuation | growth | quality | momentum | risk
+  score: z.number(),
+  note: fstr,
+});
+export const researchVerdictSchema = z.looseObject({
+  rating: z.string(), // Strong Buy | Buy | Hold | Sell | Strong Sell
+  conviction: z.string(), // low | medium | high
+  summary: z.string(),
+  dimensions: z.array(verdictDimensionSchema),
+  catalysts: z.array(z.string()),
+  risks: z.array(z.string()),
+  what_would_change_my_mind: z.array(z.string()),
+  data_only: z.boolean(),
+});
+export type ResearchVerdict = z.infer<typeof researchVerdictSchema>;
+
+export const factPackResponseSchema = z.looseObject({
+  fact_pack: factPackSchema,
+});
+export type FactPackResponse = z.infer<typeof factPackResponseSchema>;
+
+export const researchVerdictResponseSchema = z.looseObject({
+  verdict: researchVerdictSchema,
+  fact_pack: factPackSchema,
+});
+export type ResearchVerdictResponse = z.infer<
+  typeof researchVerdictResponseSchema
+>;
+
+/** Fetch the deterministic FactPack for a ticker (fast, no credit). */
+export function useFactPack() {
+  const { accessToken } = useAuth();
+  return useMutation<FactPackResponse, Error, { ticker: string }>({
+    mutationFn: ({ ticker }) =>
+      apiFetch<FactPackResponse>(
+        `/api/v1/research/fact_pack/${encodeURIComponent(ticker)}`,
+        {
+          authToken: accessToken ?? undefined,
+          schema: factPackResponseSchema,
+        },
+      ),
+  });
+}
+
+/** Phrase an AI verdict over an already-fetched FactPack (credit-gated). */
+export function useResearchVerdict() {
+  const { accessToken } = useAuth();
+  return useMutation<ResearchVerdictResponse, Error, { fact_pack: FactPack }>({
+    mutationFn: (body) =>
+      apiFetch<ResearchVerdictResponse>("/api/v1/research/verdict", {
+        method: "POST",
+        body,
+        authToken: accessToken ?? undefined,
+        schema: researchVerdictResponseSchema,
+      }),
+  });
+}
+
 // ── scenario simulator + efficient frontier ─────────────────────────
 const frontierPointSchema = z.looseObject({ vol: z.number(), ret: z.number() });
 export const efficientFrontierSchema = z.looseObject({
