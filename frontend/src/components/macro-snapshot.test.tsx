@@ -31,6 +31,8 @@ describe("MacroSnapshot", () => {
       if (url.includes("/macro/series")) {
         return mockJson({
           data: {
+            source: "FRED",
+            cache_ttl_seconds: 3600,
             series: [
               {
                 series_id: "DFF",
@@ -70,6 +72,8 @@ describe("MacroSnapshot", () => {
         return mockJson({
           data: {
             as_of: "2026-05-28",
+            source: "US Treasury",
+            cache_ttl_seconds: 3600,
             points: [
               { tenor: "3M", yield_pct: 3.69 },
               { tenor: "2Y", yield_pct: 3.99 },
@@ -86,6 +90,7 @@ describe("MacroSnapshot", () => {
 
     renderWithQuery(<MacroSnapshot />);
 
+    expect(await screen.findByText(/auto-refreshes after 1 hour/i)).toBeInTheDocument();
     expect(await screen.findByText("Fed Funds")).toBeInTheDocument();
     expect(screen.getByText("10Y Treasury")).toBeInTheDocument();
     expect(screen.getByText("CPI (level)")).toBeInTheDocument();
@@ -98,6 +103,7 @@ describe("MacroSnapshot", () => {
     await waitFor(() =>
       expect(screen.getByText(/as of 2026-05-28/i)).toBeInTheDocument(),
     );
+    expect(screen.getAllByText(/US Treasury/i).length).toBeGreaterThan(0);
     // Yield curve bars: one per tenor.
     expect(screen.getByText("3M")).toBeInTheDocument();
     expect(screen.getByText("10Y")).toBeInTheDocument();

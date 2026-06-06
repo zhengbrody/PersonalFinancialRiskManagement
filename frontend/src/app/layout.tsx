@@ -37,9 +37,57 @@ const geistMono = localFont({
   weight: "100 900",
 });
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
+
 export const metadata: Metadata = {
-  title: "MindMarket — Portfolio Risk",
-  description: "Institutional-grade portfolio risk analytics.",
+  metadataBase: new URL(SITE_URL),
+  applicationName: "MindMarket",
+  title: {
+    default: "MindMarket | AI Portfolio Risk Analytics",
+    template: "%s | MindMarket",
+  },
+  description:
+    "AI portfolio risk analytics for individual investors: portfolio health score, VaR, CVaR, stress tests, factor exposure, and live US rates data.",
+  keywords: [
+    "MindMarket",
+    "portfolio risk analytics",
+    "AI portfolio risk management",
+    "portfolio health score",
+    "VaR calculator",
+    "CVaR",
+    "stress testing portfolio",
+    "factor exposure",
+    "US Treasury yield curve",
+    "FRED macro data",
+  ],
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    type: "website",
+    url: "/",
+    siteName: "MindMarket",
+    title: "MindMarket | AI Portfolio Risk Analytics",
+    description:
+      "Score your portfolio, inspect downside risk, and understand macro exposure with deterministic risk math plus AI explanations.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "MindMarket | AI Portfolio Risk Analytics",
+    description:
+      "Portfolio health score, VaR/CVaR, stress tests, factor exposure, and live US rates data for individual investors.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-snippet": -1,
+      "max-image-preview": "large",
+      "max-video-preview": -1,
+    },
+  },
 };
 
 export default function RootLayout({

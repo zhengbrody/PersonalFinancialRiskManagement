@@ -9,6 +9,60 @@ import {
 } from "@/components/ui/card";
 import { MacroSnapshot } from "@/components/macro-snapshot";
 
+const PRODUCT_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "MindMarket",
+  applicationCategory: "FinanceApplication",
+  operatingSystem: "Web",
+  url: "https://mindmarket.app/",
+  description:
+    "AI portfolio risk analytics for individual investors, including portfolio health score, VaR, CVaR, stress tests, factor exposure, and live US rates data.",
+  offers: [
+    {
+      "@type": "Offer",
+      name: "Free",
+      price: "0",
+      priceCurrency: "USD",
+    },
+    {
+      "@type": "Offer",
+      name: "Basic",
+      price: "10",
+      priceCurrency: "USD",
+      priceSpecification: {
+        "@type": "UnitPriceSpecification",
+        price: "10",
+        priceCurrency: "USD",
+        billingDuration: "P1M",
+      },
+    },
+  ],
+};
+
+const FAQ_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: [
+    {
+      "@type": "Question",
+      name: "What does MindMarket measure?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "MindMarket measures portfolio health, volatility, Sharpe ratio, max drawdown, VaR, CVaR, factor exposure, stress-test losses, and live macro context.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Does the AI invent portfolio risk numbers?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "No. Risk numbers are calculated by deterministic Python services. AI explanations only summarize already-computed metrics.",
+      },
+    },
+  ],
+};
+
 /**
  * Anonymous landing page (the marketing/story view). Signed-in users get the
  * personalized <Dashboard/> instead — see app/page.tsx.
@@ -16,6 +70,17 @@ import { MacroSnapshot } from "@/components/macro-snapshot";
 export function MarketingLanding() {
   return (
     <div className="space-y-16">
+      <script
+        type="application/ld+json"
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(PRODUCT_JSON_LD) }}
+      />
+      <script
+        type="application/ld+json"
+        suppressHydrationWarning
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_JSON_LD) }}
+      />
+
       {/* ── hero ─────────────────────────────────────────────── */}
       <section className="space-y-6 text-center md:text-left">
         <p className="text-xs font-medium uppercase tracking-widest text-primary">
@@ -50,6 +115,39 @@ export function MarketingLanding() {
 
       {/* ── live macro panel ─────────────────────────────────── */}
       <MacroSnapshot />
+
+      {/* ── SEO-readable product category ────────────────────── */}
+      <section className="grid gap-6 md:grid-cols-[1.2fr_0.8fr]">
+        <div className="space-y-3">
+          <p className="text-xs font-medium uppercase tracking-widest text-primary">
+            Portfolio risk management software
+          </p>
+          <h2 className="text-3xl font-semibold tracking-tight">
+            See what can hurt your portfolio before the market does.
+          </h2>
+          <p className="text-sm leading-6 text-muted-foreground">
+            MindMarket is an AI portfolio risk analytics platform for
+            individual investors who want more than a broker balance. It turns
+            holdings into a Portfolio Health Score, VaR and CVaR estimates,
+            factor exposure, stress-test losses, liquidity checks, and
+            plain-English explanations grounded in computed data.
+          </p>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Built for risk questions</CardTitle>
+            <CardDescription>
+              Search-ready workflows users actually ask for.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm text-muted-foreground">
+            <p>How risky is my portfolio?</p>
+            <p>What is my worst-case drawdown?</p>
+            <p>Which holding drives the most VaR?</p>
+            <p>How do rates, inflation, and the yield curve affect me?</p>
+          </CardContent>
+        </Card>
+      </section>
 
       {/* ── feature pillars ──────────────────────────────────── */}
       <section className="space-y-6">

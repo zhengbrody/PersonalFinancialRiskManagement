@@ -50,6 +50,7 @@ _HTTP_TIMEOUT = 20
 # curve updates once per day. Within an hour we're guaranteed identical
 # data; the cache just dampens the load.
 _CACHE_TTL_SECONDS = 60 * 60
+CACHE_TTL_SECONDS = _CACHE_TTL_SECONDS
 
 # FRED series ID format — uppercase letters, digits, underscore, dot.
 # Examples: DFF, CPIAUCSL, GDPC1, T10Y2Y, UNRATE.

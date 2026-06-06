@@ -32,6 +32,7 @@ const FRIENDLY_UNIT: Record<string, string> = {
 export function MacroSnapshot() {
   const snapshot = useMacroSnapshot(SERIES);
   const yc = useYieldCurve();
+  const ttl = snapshot.data?.cache_ttl_seconds ?? yc.data?.cache_ttl_seconds ?? 3600;
 
   return (
     <section className="space-y-4">
@@ -44,7 +45,9 @@ export function MacroSnapshot() {
             US rates &amp; macro
           </h2>
           <p className="text-xs text-muted-foreground">
-            FRED + US Treasury, cached 1h server-side.
+            FRED + US Treasury. Auto-refreshes after {fmtTtl(ttl)}; new
+            observations appear as soon as the source publishes and cache
+            expires.
           </p>
         </div>
       </div>
@@ -75,8 +78,8 @@ export function MacroSnapshot() {
                   {FRIENDLY_UNIT[s.series_id] ?? ""}
                 </span>
               </p>
-              <p className="text-[10px] text-muted-foreground">
-                as of {s.latest_date ?? "—"}
+            <p className="text-[10px] text-muted-foreground">
+                as of {s.latest_date ?? "—"} · {snapshot.data?.source ?? "FRED"}
               </p>
             </CardContent>
           </Card>
@@ -91,7 +94,7 @@ export function MacroSnapshot() {
               US Treasury yield curve
             </CardTitle>
             <p className="text-[10px] text-muted-foreground">
-              as of {yc.data?.as_of ?? "—"}
+              as of {yc.data?.as_of ?? "—"} · {yc.data?.source ?? "US Treasury"}
             </p>
           </div>
         </CardHeader>
@@ -156,4 +159,12 @@ function fmtValue(v: number | null | undefined): string {
   // decimal counts read better in each regime.
   if (Math.abs(v) >= 100) return v.toFixed(1);
   return v.toFixed(2);
+}
+
+function fmtTtl(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "about 1 hour";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} minutes`;
+  const hours = Math.round(minutes / 60);
+  return `${hours} hour${hours === 1 ? "" : "s"}`;
 }

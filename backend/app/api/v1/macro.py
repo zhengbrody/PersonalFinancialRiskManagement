@@ -94,7 +94,8 @@ def get_series(
                 points=[SeriesPointOut(date=p.date, value=p.value) for p in r.points],
             )
             for r in results
-        ]
+        ],
+        cache_ttl_seconds=macro_data.CACHE_TTL_SECONDS,
     )
     return ok(payload.model_dump(), request=request, started_at=started)
 
@@ -112,6 +113,7 @@ def get_yield_curve(request: Request):
     payload = YieldCurveResponse(
         as_of=result.as_of,
         points=[YieldCurvePointOut(tenor=p.tenor, yield_pct=p.yield_pct) for p in result.points],
+        cache_ttl_seconds=macro_data.CACHE_TTL_SECONDS,
     )
     return ok(payload.model_dump(), request=request, started_at=started)
 

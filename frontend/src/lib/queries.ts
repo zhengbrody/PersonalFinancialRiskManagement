@@ -71,6 +71,9 @@ export type MacroSeries = z.infer<typeof macroSeriesSchema>;
 
 export const macroSeriesBatchSchema = z.looseObject({
   series: z.array(macroSeriesSchema),
+  source: z.string().optional(),
+  cache_ttl_seconds: z.number().optional(),
+  refresh_policy: z.string().optional(),
 });
 export type MacroSeriesBatch = z.infer<typeof macroSeriesBatchSchema>;
 
@@ -83,6 +86,9 @@ export type YieldCurvePoint = z.infer<typeof yieldCurvePointSchema>;
 export const yieldCurveSchema = z.looseObject({
   as_of: z.string(),
   points: z.array(yieldCurvePointSchema),
+  source: z.string().optional(),
+  cache_ttl_seconds: z.number().optional(),
+  refresh_policy: z.string().optional(),
 });
 export type YieldCurve = z.infer<typeof yieldCurveSchema>;
 

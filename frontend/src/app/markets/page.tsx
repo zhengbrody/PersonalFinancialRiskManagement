@@ -7,9 +7,18 @@ import { PortfolioSentiment } from "@/components/portfolio-sentiment";
 import { MacroSnapshot } from "@/components/macro-snapshot";
 
 export const metadata: Metadata = {
-  title: "Markets · MindMarket",
+  title: "US Markets & Macro",
   description:
     "Live market regime — VIX, Fear & Greed, the US Treasury yield curve, and key macro series. Free, no signup.",
+  alternates: {
+    canonical: "/markets",
+  },
+  openGraph: {
+    title: "US Markets & Macro | MindMarket",
+    description:
+      "Track VIX, market regime, sector movers, macro news, FRED rates, and the US Treasury yield curve.",
+    url: "/markets",
+  },
 };
 
 /**

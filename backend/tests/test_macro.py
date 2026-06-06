@@ -71,6 +71,9 @@ def test_returns_fred_series_envelope(test_client, fake_http):
     assert series[0]["latest_value"] == pytest.approx(4.31)
     assert series[0]["latest_date"] == "2026-05-27"
     assert len(series[0]["points"]) == 2
+    assert body["data"]["source"] == "FRED"
+    assert body["data"]["cache_ttl_seconds"] == 3600
+    assert "Auto-refreshes" in body["data"]["refresh_policy"]
 
 
 def test_strips_fred_missing_value_sentinel(test_client, fake_http):
@@ -141,6 +144,9 @@ def test_returns_yield_curve_envelope(test_client, fake_http):
     assert tenors == ["1M", "3M", "6M", "1Y", "2Y", "5Y", "10Y", "30Y"]
     by_tenor = {p["tenor"]: p["yield_pct"] for p in data["points"]}
     assert by_tenor["10Y"] == pytest.approx(4.45)
+    assert data["source"] == "US Treasury"
+    assert data["cache_ttl_seconds"] == 3600
+    assert "Auto-refreshes" in data["refresh_policy"]
 
 
 def test_yield_curve_upstream_failure_is_server_error(test_client, fake_http):

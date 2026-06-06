@@ -24,6 +24,11 @@ class SeriesBatchResponse(BaseModel):
     """Payload for ``GET /api/v1/macro/series``."""
 
     series: list[SeriesResultOut]
+    source: str = "FRED"
+    cache_ttl_seconds: int = 3600
+    refresh_policy: str = (
+        "Auto-refreshes after cache expiry; FRED publication cadence controls when new observations appear."
+    )
 
 
 class YieldCurvePointOut(BaseModel):
@@ -36,6 +41,11 @@ class YieldCurveResponse(BaseModel):
 
     as_of: str
     points: list[YieldCurvePointOut]
+    source: str = "US Treasury"
+    cache_ttl_seconds: int = 3600
+    refresh_policy: str = (
+        "Auto-refreshes after cache expiry; Treasury publication cadence controls when the latest curve appears."
+    )
 
 
 # ── /api/v1/macro/regime ───────────────────────────────────────────
