@@ -98,13 +98,23 @@ def get_prices(
         raise server_error("Market data fetch failed.", reason=type(exc).__name__) from exc
 
     by_ticker = prov.get("by_ticker", {})
+
+    def _source_for(price_row) -> str:
+        ticker = str(getattr(price_row, "ticker", "") or "").upper()
+        return (
+            getattr(price_row, "source", None)
+            or by_ticker.get(ticker)
+            or by_ticker.get(str(getattr(price_row, "ticker", "")))
+            or "unknown"
+        )
+
     payload = PricesResponse(
         prices=[
             PriceRow(
                 ticker=p.ticker,
                 price=p.price,
                 as_of=p.as_of,
-                source=getattr(p, "source", "yfinance"),
+                source=_source_for(p),
             )
             for p in latest
         ],
