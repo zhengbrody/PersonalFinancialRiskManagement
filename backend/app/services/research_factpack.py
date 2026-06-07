@@ -16,12 +16,23 @@ renders for free-tier/no-key deploys.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Callable, Optional
 
 from ..schemas import research as R
 from .providers import fmp_provider as fmp
 
 _log = logging.getLogger(__name__)
+
+# Free yfinance enrichment is now ALWAYS run to fill fields FMP doesn't carry
+# (forward P/E, YoY growth) — cached briefly so repeat searches stay snappy and
+# don't re-hit yfinance on every page load.
+_ENRICH_TTL = 60 * 60
+_enrich_cache: dict[str, tuple[float, dict]] = {}
+
+
+def reset_enrich_cache() -> None:
+    _enrich_cache.clear()
 
 
 def _pref(*vals):
@@ -70,15 +81,17 @@ def build_fact_pack(
     peers = fmp.get_peers(tk)
     news = fmp.get_news(tk, limit=6)
 
-    # Free fallback only when the paid legs that drive the page are thin.
+    # ALWAYS enrich from free yfinance, then let FMP win where present (the merge
+    # below uses _pref(fmp, yf)). yfinance backfills the fields FMP /stable simply
+    # doesn't expose — forward P/E and YoY revenue/earnings growth — and is a
+    # safety net for any FMP leg that came back thin. Best-effort: never raises.
     yf: dict = {}
-    if not (profile.ok and fund.ok):
-        try:
-            enr = yf_enricher if yf_enricher is not None else _default_enricher
-            yf = enr(tk) or {}
-        except Exception:  # noqa: BLE001 - fallback is best-effort
-            _log.warning("research.factpack.yf_fallback_failed ticker=%s", tk)
-            yf = {}
+    try:
+        enr = yf_enricher if yf_enricher is not None else _cached_enrich
+        yf = enr(tk) or {}
+    except Exception:  # noqa: BLE001 - enrichment is best-effort
+        _log.warning("research.factpack.yf_enrich_failed ticker=%s", tk)
+        yf = {}
 
     yf_mkt = yf.get("market", {})
     yf_fund = yf.get("fundamentals", {})
@@ -185,6 +198,18 @@ def _default_enricher(tk: str) -> dict:
     from libs.analysis.equity_research import _enrich_from_yfinance
 
     return _enrich_from_yfinance(tk)
+
+
+def _cached_enrich(tk: str) -> dict:
+    """yfinance enrichment with a short in-proc TTL so always-on enrichment
+    doesn't re-hit the network on every research page load."""
+    now = time.time()
+    hit = _enrich_cache.get(tk)
+    if hit is not None and now - hit[0] < _ENRICH_TTL:
+        return hit[1]
+    data = _default_enricher(tk)
+    _enrich_cache[tk] = (now, data)
+    return data
 
 
 # ── verdict (deterministic skeleton → LLM phrasing) ─────────────────
