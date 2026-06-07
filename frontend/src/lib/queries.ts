@@ -636,6 +636,49 @@ export function useRunBacktest() {
 // /api/v1/copilot/chat/stream directly); the old non-streaming useCopilotChat
 // hook + copilotResponseSchema were removed when the streaming path landed.
 
+// ── Copilot 2.0 — structured single-shot answer ─────────────────────
+// A one-shot /ask endpoint that returns a pre-formatted markdown answer
+// PLUS structured evidence (each numeric fact tagged with its source) and
+// the classified intent. Distinct from the streaming chat: this is a
+// mutation (explicit "Ask" click, credit-gated) whose result renders as a
+// structured card, not a running conversation.
+
+const copilotEvidenceSchema = z.looseObject({
+  label: z.string(),
+  value: z.string(),
+  source: z.string(), // engine|fmp|yfinance|macro|derived|glossary
+});
+export type CopilotEvidence = z.infer<typeof copilotEvidenceSchema>;
+
+export const copilotAnswerSchema = z.looseObject({
+  intent: z.string(),
+  tickers: z.array(z.string()),
+  answer_markdown: z.string(),
+  evidence: z.array(copilotEvidenceSchema),
+  data_only: z.boolean(),
+  model: z.string().nullish(),
+});
+export type CopilotAnswer = z.infer<typeof copilotAnswerSchema>;
+
+/**
+ * Ask the Copilot 2.0 structured-answer endpoint. A mutation (explicit user
+ * action — it spends credits). 429 `quota_exceeded` on quota; `data_only`
+ * answer (no LLM key) is still a valid 200. Mirrors the auth-token + schema
+ * plumbing of the other copilot/equity mutations in this file.
+ */
+export function useCopilotAsk() {
+  const { accessToken } = useAuth();
+  return useMutation<CopilotAnswer, Error, { message: string }>({
+    mutationFn: ({ message }) =>
+      apiFetch<CopilotAnswer>("/api/v1/copilot/ask", {
+        method: "POST",
+        body: { message },
+        authToken: accessToken ?? undefined,
+        schema: copilotAnswerSchema,
+      }),
+  });
+}
+
 /**
  * Score the user's active portfolio using real market data.
  *
