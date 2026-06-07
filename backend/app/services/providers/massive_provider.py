@@ -33,16 +33,21 @@ from ...schemas.providers import CompanyProfile, PriceBar, ProviderResult
 _log = logging.getLogger(__name__)
 
 # ── config (all overridable; sensible defaults) ─────────────────────
-_DEFAULT_BASE_URL = "https://api.massivestocks.com"
+# Massive's REST API is Polygon-style: base https://api.massive.com, auth via
+# ?apiKey=, aggregate bars under /v2/aggs/ticker/..., results in a `results`
+# array of {t(epoch ms), o, h, l, c, v} bars. Verified live against the Basic
+# free key (prev + range both 200).
+_DEFAULT_BASE_URL = "https://api.massive.com"
 _TIMEOUT = 6.0
 
-# Endpoint path templates — overridable so the mapping can be corrected against
-# the real Massive Basic docs without a code change. Use ``or`` (not getenv's
-# default arg) so an EMPTY env value (compose passes `${VAR:-}` = "") still
-# falls back to the default instead of becoming a broken empty path.
-_EOD_PATH = os.getenv("MASSIVE_EOD_PATH") or "/v1/eod/{ticker}"
-_HISTORY_PATH = os.getenv("MASSIVE_HISTORY_PATH") or "/v1/history/{ticker}"
-_REFERENCE_PATH = os.getenv("MASSIVE_REFERENCE_PATH") or "/v1/reference/{ticker}"
+# Endpoint path templates — overridable via env (use ``or`` not getenv's default
+# arg so compose's empty `${VAR:-}` still falls back to the default). The history
+# template carries {from}/{to} date placeholders filled per-request.
+_EOD_PATH = os.getenv("MASSIVE_EOD_PATH") or "/v2/aggs/ticker/{ticker}/prev"
+_HISTORY_PATH = (
+    os.getenv("MASSIVE_HISTORY_PATH") or "/v2/aggs/ticker/{ticker}/range/1/day/{from}/{to}"
+)
+_REFERENCE_PATH = os.getenv("MASSIVE_REFERENCE_PATH") or "/v3/reference/tickers/{ticker}"
 
 # TTLs (seconds) — keep the 5 calls/min budget intact.
 _TTL_PRICE = 20 * 60
@@ -87,14 +92,38 @@ def _pick(d: Optional[dict], *names: str) -> Any:
     return None
 
 
+def _epoch_ms_to_date(v: Any) -> Optional[str]:
+    """Massive bar timestamps are Unix MILLISECONDS (`t`). Convert to an ISO
+    YYYY-MM-DD (UTC). Pass through an already-ISO string unchanged."""
+    if v is None:
+        return None
+    if isinstance(v, str):
+        return v[:10] if v else None
+    try:
+        from datetime import datetime, timezone
+
+        return datetime.fromtimestamp(float(v) / 1000.0, tz=timezone.utc).strftime("%Y-%m-%d")
+    except (TypeError, ValueError, OSError):
+        return None
+
+
+def _results(raw: Any) -> list:
+    """Massive wraps rows in ``{status, results: [...]}``; tolerate a bare list."""
+    if isinstance(raw, dict):
+        return raw.get("results") or raw.get("data") or []
+    return raw if isinstance(raw, list) else []
+
+
 def _get(path: str, params: Optional[dict] = None) -> Any:
-    """One GET against Massive. Raises ``_RateLimited`` on 429 so the caller can
-    warn specifically; any other failure raises and is caught upstream → None."""
+    """One GET against Massive. Auth is a ``?apiKey=`` query param (Polygon-style),
+    NOT a Bearer header. Raises ``_RateLimited`` on 429 so the caller can warn
+    specifically; any other failure raises and is caught upstream → None."""
     import requests
 
     url = _base_url() + path
-    headers = {"Authorization": f"Bearer {_key()}", "Accept": "application/json"}
-    resp = requests.get(url, params=params or {}, headers=headers, timeout=_TIMEOUT)
+    q = dict(params or {})
+    q["apiKey"] = _key()
+    resp = requests.get(url, params=q, headers={"Accept": "application/json"}, timeout=_TIMEOUT)
     if resp.status_code == 429:
         raise _RateLimited()
     resp.raise_for_status()
@@ -141,13 +170,14 @@ def get_latest_price(ticker: str) -> ProviderResult[PriceBar]:
         return ProviderResult(data=None, source="massive", warnings=["bad_ticker"])
 
     def _produce() -> ProviderResult:
-        raw = _get(_EOD_PATH.format(ticker=tk), {"symbol": tk})
-        row = raw[0] if isinstance(raw, list) and raw else raw
-        close = _num(_pick(row, "close", "c", "price", "adjClose", "adjusted_close"))
-        date = _pick(row, "date", "d", "t", "timestamp")
+        raw = _get(_EOD_PATH.format(ticker=tk), {"adjusted": "true"})
+        rows = _results(raw)
+        row = rows[0] if rows else (raw if isinstance(raw, dict) else None)
+        close = _num(_pick(row, "c", "close", "price"))
+        date = _epoch_ms_to_date(_pick(row, "t", "date", "timestamp"))
         if close is None:
             return ProviderResult(data=None, source="massive", warnings=["no_price"])
-        bar = PriceBar(date=str(date) if date else "", close=close)
+        bar = PriceBar(date=date or "", close=close)
         return ProviderResult(data=bar, source="massive", as_of=bar.date or None, coverage=1.0)
 
     return _cached("price", tk, _TTL_PRICE, _produce)
@@ -161,14 +191,19 @@ def get_daily_history(ticker: str, *, days: int = 365) -> ProviderResult[list[Pr
     days = min(max(int(days), 1), _MAX_HISTORY_DAYS)
 
     def _produce() -> ProviderResult:
-        raw = _get(_HISTORY_PATH.format(ticker=tk), {"symbol": tk, "days": days})
-        rows = raw if isinstance(raw, list) else (raw.get("results") or raw.get("data") or [])
+        from datetime import date as _date
+        from datetime import timedelta
+
+        end = _date.today()
+        start = end - timedelta(days=days)
+        path = _HISTORY_PATH.format(ticker=tk, **{"from": start.isoformat(), "to": end.isoformat()})
+        raw = _get(path, {"adjusted": "true", "sort": "asc", "limit": 50000})
         bars: list[PriceBar] = []
-        for r in rows:
-            close = _num(_pick(r, "close", "c", "price", "adjClose", "adjusted_close"))
-            date = _pick(r, "date", "d", "t", "timestamp")
+        for r in _results(raw):
+            close = _num(_pick(r, "c", "close", "price"))
+            date = _epoch_ms_to_date(_pick(r, "t", "date", "timestamp"))
             if close is not None and date:
-                bars.append(PriceBar(date=str(date), close=close))
+                bars.append(PriceBar(date=date, close=close))
         if not bars:
             return ProviderResult(data=None, source="massive", warnings=["no_history"])
         bars.sort(key=lambda b: b.date)  # oldest → newest
@@ -185,15 +220,17 @@ def get_reference(ticker: str) -> ProviderResult[CompanyProfile]:
         return ProviderResult(data=None, source="massive", warnings=["bad_ticker"])
 
     def _produce() -> ProviderResult:
-        raw = _get(_REFERENCE_PATH.format(ticker=tk), {"symbol": tk})
-        row = raw[0] if isinstance(raw, list) and raw else raw
+        raw = _get(_REFERENCE_PATH.format(ticker=tk))
+        # v3 reference returns a SINGLE results object (not an array).
+        res = raw.get("results") if isinstance(raw, dict) else raw
+        row = res[0] if isinstance(res, list) and res else res
         if not isinstance(row, dict):
             return ProviderResult(data=None, source="massive", warnings=["no_reference"])
         prof = CompanyProfile(
             ticker=tk,
             name=_pick(row, "name", "companyName"),
-            exchange=_pick(row, "exchange", "exchangeShortName"),
-            currency=_pick(row, "currency"),
+            exchange=_pick(row, "primary_exchange", "exchange", "exchangeShortName"),
+            currency=_pick(row, "currency_name", "currency"),
         )
         return ProviderResult(data=prof, source="massive", coverage=1.0)
 

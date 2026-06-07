@@ -56,23 +56,48 @@ def test_missing_key_fail_soft(monkeypatch):
     assert "massive_key_missing" in res.warnings
 
 
-# ── successful reads ────────────────────────────────────────────────
+# ── successful reads (real Massive/Polygon shape: {results:[{t,c,...}]}) ──
+
+
+def _ms(d: str) -> int:
+    """ISO date → Unix MILLISECONDS (UTC), as Massive returns in `t`."""
+    from datetime import datetime, timezone
+
+    return int(datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp() * 1000)
 
 
 def test_latest_price_success(monkeypatch):
-    _route(monkeypatch, lambda *a, **k: _Resp({"close": 214.5, "date": "2026-06-05"}))
+    _route(
+        monkeypatch,
+        lambda *a, **k: _Resp({"status": "OK", "results": [{"t": _ms("2026-06-05"), "c": 214.5}]}),
+    )
     res = mp.get_latest_price("aapl")
     assert res.ok and res.source == "massive"
-    assert res.data.close == 214.5 and res.data.date == "2026-06-05"
+    assert res.data.close == 214.5 and res.data.date == "2026-06-05"  # epoch ms → ISO
     assert res.as_of == "2026-06-05"
 
 
+def test_auth_uses_apikey_query_param(monkeypatch):
+    seen = {}
+
+    def handler(url, params=None, headers=None, timeout=None):
+        seen["params"] = params
+        return _Resp({"status": "OK", "results": [{"t": _ms("2026-06-05"), "c": 1.0}]})
+
+    _route(monkeypatch, handler)
+    mp.get_latest_price("AAPL")
+    assert seen["params"].get("apiKey") == "test-key"  # auth is a query param, not Bearer
+
+
 def test_daily_history_success_sorted(monkeypatch):
-    payload = [
-        {"date": "2026-06-03", "close": 100.0},
-        {"date": "2026-06-01", "close": 90.0},
-        {"date": "2026-06-02", "close": 95.0},
-    ]
+    payload = {
+        "status": "OK",
+        "results": [
+            {"t": _ms("2026-06-03"), "c": 100.0},
+            {"t": _ms("2026-06-01"), "c": 90.0},
+            {"t": _ms("2026-06-02"), "c": 95.0},
+        ],
+    }
     _route(monkeypatch, lambda *a, **k: _Resp(payload))
     res = mp.get_daily_history("AAPL", days=30)
     assert res.ok and len(res.data) == 3
@@ -109,7 +134,7 @@ def test_cache_hit_avoids_second_call(monkeypatch):
 
     def handler(*a, **k):
         calls["n"] += 1
-        return _Resp({"close": 10.0, "date": "2026-06-05"})
+        return _Resp({"status": "OK", "results": [{"t": _ms("2026-06-05"), "c": 10.0}]})
 
     _route(monkeypatch, handler)
     mp.get_latest_price("AAPL")
