@@ -9,7 +9,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.main import create_app
-from backend.app.schemas import research as R
 from backend.app.services import research_factpack as rf
 from backend.app.services.providers import fmp_provider as fp
 
