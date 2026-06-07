@@ -78,6 +78,8 @@ describe("AdminPage", () => {
     // Usage aggregate + system status both render.
     expect(await screen.findByText("Usage & cost")).toBeInTheDocument();
     expect(screen.getByText(/Month to date \(since Jun 1, 2026 UTC\)/)).toBeInTheDocument();
+    expect(screen.getByText(/1 cost unit = \$0.01/)).toBeInTheDocument();
+    expect(screen.getAllByText("Cost units").length).toBeGreaterThan(0);
     expect(await screen.findByText("System status")).toBeInTheDocument();
     expect(await screen.findByText("Claude (Anthropic)")).toBeInTheDocument();
     expect(screen.getByText("Configured")).toBeInTheDocument();
