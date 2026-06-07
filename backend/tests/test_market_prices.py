@@ -29,6 +29,7 @@ def fake_market(monkeypatch):
             self.rows: list[_Latest] = []
             self.calls: list[list[str]] = []
             self.raise_on_call: Exception | None = None
+            self.source_by_ticker: dict[str, str] = {}
 
         def set(self, rows: list[_Latest]) -> None:
             self.rows = rows
@@ -36,12 +37,22 @@ def fake_market(monkeypatch):
         def raise_with(self, exc: Exception) -> None:
             self.raise_on_call = exc
 
-        def __call__(self, tickers, *, cache_provider=None):
+        def set_sources(self, sources: dict[str, str]) -> None:
+            self.source_by_ticker = dict(sources)
+
+        def __call__(self, tickers, *, cache_provider=None, provenance=None):
             self.calls.append(list(tickers))
             if self.raise_on_call is not None:
                 raise self.raise_on_call
             requested = {t for t in tickers}
-            return [r for r in self.rows if r.ticker in requested]
+            rows = [r for r in self.rows if r.ticker in requested]
+            if provenance is not None:
+                provenance["by_ticker"] = {
+                    r.ticker: self.source_by_ticker.get(r.ticker, getattr(r, "source", "yfinance"))
+                    for r in rows
+                }
+                provenance["missing"] = [t for t in requested if t not in {r.ticker for r in rows}]
+            return rows
 
     stub = _Stub()
     from backend.app.services import market_data as md
@@ -74,8 +85,28 @@ def test_normalises_and_dedupes_input(test_client, fake_market):
     resp = test_client.get("/api/v1/market/prices?tickers=spy,SPY,SPY")
     assert resp.status_code == 200
     assert resp.json()["data"]["requested"] == ["SPY"]
+    assert resp.json()["data"]["prices"][0]["source"] == "yfinance"
     # Service was called once with the deduped list.
     assert fake_market.calls == [["SPY"]]
+
+
+def test_price_source_falls_back_to_provenance_when_row_has_no_source(test_client, fake_market):
+    """Regression for Sentry MINDMARKET-BACKEND-K: old tests used a lightweight
+    _Latest row without ``source``; the route must derive provenance from the
+    service-level by_ticker map instead of crashing on ``p.source``."""
+    fake_market.set([_Latest("SPY", 521.0, "2026-05-28")])
+    fake_market.set_sources({"SPY": "massive"})
+
+    resp = test_client.get("/api/v1/market/prices?tickers=spy,SPY,SPY")
+
+    assert resp.status_code == 200, resp.json()
+    data = resp.json()["data"]
+    assert data["requested"] == ["SPY"]
+    assert data["prices"] == [
+        {"ticker": "SPY", "price": 521.0, "as_of": "2026-05-28", "source": "massive"}
+    ]
+    assert data["provenance"]["by_ticker"] == {"SPY": "massive"}
+    assert data["provenance"]["massive_fallback_used"] == ["SPY"]
 
 
 def test_partial_coverage_reports_only_priced_tickers(test_client, fake_market):

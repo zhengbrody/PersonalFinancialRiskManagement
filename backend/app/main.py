@@ -10,6 +10,10 @@ module (``core/`` for cross-cutting concerns, ``api/v1/`` for routes).
 
 from __future__ import annotations
 
+import logging
+import os
+import sys
+
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,11 +43,26 @@ from .core.responses import (
 )
 
 
+def _running_under_pytest() -> bool:
+    """Hard guard for monitoring. Local shells can inherit production env vars;
+    pytest/TestClient must never emit production Sentry events."""
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return True
+    return any("pytest" in os.path.basename(arg) for arg in sys.argv)
+
+
+def _quiet_expected_provider_noise() -> None:
+    """Free upstreams can log expected misses at ERROR level (Yahoo crumb,
+    delisted symbols). Routes already return partial data + warnings; avoid
+    turning provider log spam into Sentry issues."""
+    logging.getLogger("yfinance").setLevel(logging.CRITICAL)
+
+
 def _maybe_init_sentry(settings) -> None:
     """Initialise Sentry — PRODUCTION ONLY, so dev/CI/test never send events.
     The FastAPI integration (sentry-sdk[fastapi]) auto-captures unhandled 500s.
     Errors-only (no perf tracing) to keep cost bounded. Never raises."""
-    if settings.environment != "production" or not settings.sentry_dsn:
+    if _running_under_pytest() or settings.environment != "production" or not settings.sentry_dsn:
         return
     try:
         import sentry_sdk
@@ -64,6 +83,7 @@ def create_app() -> FastAPI:
     up an isolated app with a swapped Settings instance, instead of
     importing the module-level ``app`` and inheriting its config."""
     settings = get_settings()
+    _quiet_expected_provider_noise()
     _maybe_init_sentry(settings)
 
     app = FastAPI(

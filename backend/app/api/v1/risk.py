@@ -44,6 +44,7 @@ from ...schemas.risk import (
     HistoricalScenariosOut,
     LiquidityRow,
     PortfolioMetricsOut,
+    PriceProvenanceOut,
     ReportFromActiveRequest,
     RiskReportOut,
     ScenarioPoint,
@@ -448,8 +449,11 @@ def score_from_active_endpoint(
     # Pull real price history. The same cache underpins /market/prices.
     from ...services import market_data
 
+    price_prov: dict = {}
     try:
-        price_frame = market_data.get_price_history(tickers, days=body.history_days)
+        price_frame = market_data.get_price_history(
+            tickers, days=body.history_days, provenance=price_prov
+        )
     except Exception as exc:
         raise server_error("Market data fetch failed.", reason=type(exc).__name__) from exc
 
@@ -580,11 +584,17 @@ def score_from_active_endpoint(
     )
 
     response = _serialize_score(score)
+    by_ticker = price_prov.get("by_ticker", {})
     response = response.model_copy(
         update={
             "metrics": response.metrics.model_copy(
                 update={k: v for k, v in account_metrics.items() if v is not None}
-            )
+            ),
+            "price_provenance": PriceProvenanceOut(
+                massive_fallback_used=sorted(t for t, s in by_ticker.items() if s == "massive"),
+                missing=price_prov.get("missing", []),
+                trading_days=int(len(price_frame)),
+            ),
         }
     )
     return ok(response.model_dump(), request=request, started_at=started)
@@ -952,8 +962,11 @@ def report_from_active_endpoint(
 
     from ...services import market_data
 
+    price_prov: dict = {}
     try:
-        price_frame = market_data.get_price_history(tickers, days=body.history_days)
+        price_frame = market_data.get_price_history(
+            tickers, days=body.history_days, provenance=price_prov
+        )
     except Exception as exc:
         raise server_error("Market data fetch failed.", reason=type(exc).__name__) from exc
 
@@ -1023,6 +1036,16 @@ def report_from_active_endpoint(
         market_values,
         risk_scale=risk_scale,
         account_metrics=account_metrics,
+    )
+    by_ticker = price_prov.get("by_ticker", {})
+    out = out.model_copy(
+        update={
+            "price_provenance": PriceProvenanceOut(
+                massive_fallback_used=sorted(t for t, s in by_ticker.items() if s == "massive"),
+                missing=price_prov.get("missing", []),
+                trading_days=int(len(price_frame)),
+            )
+        }
     )
     return ok(out.model_dump(), request=request, started_at=started)
 
