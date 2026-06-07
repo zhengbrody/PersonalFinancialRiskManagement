@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CopilotConversation } from "@/components/copilot-conversation";
+import { CopilotAsk } from "@/components/copilot-ask";
 import { useAuth } from "@/lib/auth-context";
 import { useBillingMe } from "@/lib/queries";
 
@@ -68,6 +69,8 @@ export default function CopilotPage() {
           explains the risk first — the hard numbers are always one tap away.
         </p>
       </header>
+
+      <CopilotAsk />
 
       <CopilotConversation variant="page" />
     </div>

@@ -1,0 +1,363 @@
+"""Build the deterministic, source-attributed **FactPack** for one ticker.
+
+This is the heart of Research 2.0: it composes the paid FMP provider (primary)
+with free yfinance (fallback), then computes — in plain Python, never the LLM —
+the derived signals an analyst actually reasons over: peer-relative valuation
+band, revenue/EPS CAGR, analyst implied upside, the top-K drivers, and risk
+flags. The output is small and fully attributed (every block carries its source
++ as_of + coverage), so the verdict LLM explains vetted numbers and cannot make
+any up.
+
+Fail-soft throughout: a missing FMP key or a dead endpoint degrades a block to
+``None`` (and yfinance fills the core scalars) — it never raises, so the page
+renders for free-tier/no-key deploys.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Callable, Optional
+
+from ..schemas import research as R
+from .providers import fmp_provider as fmp
+
+_log = logging.getLogger(__name__)
+
+
+def _pref(*vals):
+    """First non-None value (FMP wins, yfinance fills gaps)."""
+    for v in vals:
+        if v is not None:
+            return v
+    return None
+
+
+def _cagr(series: list[Optional[float]]) -> Optional[float]:
+    """Compound annual growth from an oldest→newest numeric series. Needs ≥2
+    strictly-positive endpoints (negatives make the root undefined)."""
+    clean = [v for v in series if v is not None]
+    if len(clean) < 2 or clean[0] <= 0 or clean[-1] <= 0:
+        return None
+    n = len(clean) - 1
+    return (clean[-1] / clean[0]) ** (1.0 / n) - 1.0
+
+
+def _pct(numer: Optional[float], denom: Optional[float]) -> Optional[float]:
+    if numer is None or not denom:
+        return None
+    return numer / denom
+
+
+def build_fact_pack(
+    ticker: str,
+    *,
+    yf_enricher: Optional[Callable[[str], dict]] = None,
+) -> R.FactPack:
+    """Compose provider + free data into a compact FactPack. Pure data — no LLM.
+
+    ``yf_enricher`` is injectable for tests; defaults to the proven free
+    ``equity_research._enrich_from_yfinance`` and is only invoked when FMP can't
+    cover the core scalars (saves a network hit when the key is present).
+    """
+    tk = (ticker or "").strip().upper()
+    if not tk:
+        raise ValueError("ticker is required")
+
+    profile = fmp.get_profile(tk)
+    fund = fmp.get_fundamentals(tk)
+    growth = fmp.get_growth(tk)
+    analyst = fmp.get_analyst(tk)
+    peers = fmp.get_peers(tk)
+    news = fmp.get_news(tk, limit=6)
+
+    # Free fallback only when the paid legs that drive the page are thin.
+    yf: dict = {}
+    if not (profile.ok and fund.ok):
+        try:
+            enr = yf_enricher if yf_enricher is not None else _default_enricher
+            yf = enr(tk) or {}
+        except Exception:  # noqa: BLE001 - fallback is best-effort
+            _log.warning("research.factpack.yf_fallback_failed ticker=%s", tk)
+            yf = {}
+
+    yf_mkt = yf.get("market", {})
+    yf_fund = yf.get("fundamentals", {})
+    yf_rate = yf.get("ratings", {})
+    yf_tgt = yf_rate.get("price_targets", {})
+
+    p = profile.data
+    f = fund.data
+    price = _pref(getattr(p, "price", None), yf_mkt.get("current_price"))
+
+    valuation = R.ValuationBlock(
+        pe=_pref(getattr(f, "pe", None), yf_fund.get("pe_ttm")),
+        forward_pe=_pref(getattr(f, "forward_pe", None), yf_fund.get("pe_forward")),
+        ps=_pref(getattr(f, "ps", None), yf_fund.get("ps_ttm")),
+        pb=_pref(getattr(f, "pb", None), yf_fund.get("pb")),
+        ev_ebitda=_pref(getattr(f, "ev_ebitda", None), yf_fund.get("ev_ebitda")),
+        fcf_yield=_pref(getattr(f, "fcf_yield", None), yf_fund.get("fcf_yield")),
+        dividend_yield=_pref(getattr(f, "dividend_yield", None), yf_fund.get("dividend_yield")),
+    )
+    quality = R.QualityBlock(
+        gross_margin=_pref(getattr(f, "gross_margin", None), yf_fund.get("gross_margin")),
+        operating_margin=_pref(
+            getattr(f, "operating_margin", None), yf_fund.get("operating_margin")
+        ),
+        net_margin=_pref(getattr(f, "net_margin", None), yf_fund.get("net_margin")),
+        roe=_pref(getattr(f, "roe", None), yf_fund.get("roe")),
+        roa=_pref(getattr(f, "roa", None), yf_fund.get("roa")),
+        roic=getattr(f, "roic", None),
+        current_ratio=_pref(getattr(f, "current_ratio", None), yf_fund.get("current_ratio")),
+        debt_to_equity=_pref(getattr(f, "debt_to_equity", None), yf_fund.get("debt_to_equity")),
+        interest_coverage=getattr(f, "interest_coverage", None),
+    )
+
+    grows = growth.data or []
+    growth_block = R.GrowthBlock(
+        revenue_cagr=_cagr([g.revenue for g in grows]),
+        eps_cagr=_cagr([g.eps for g in grows]),
+        revenue_growth_yoy=yf_fund.get("revenue_growth_yoy"),
+        earnings_growth_yoy=yf_fund.get("earnings_growth_yoy"),
+        periods=len(grows),
+    )
+
+    a = analyst.data
+    consensus = _pref(getattr(a, "target_consensus", None), yf_tgt.get("mean"))
+    analyst_block = R.AnalystBlock(
+        rating=_pref(getattr(a, "rating", None), yf_rate.get("analyst_rating")),
+        num_analysts=_pref(getattr(a, "num_analysts", None), yf_rate.get("analyst_count")),
+        target_low=_pref(getattr(a, "target_low", None), yf_tgt.get("low")),
+        target_consensus=consensus,
+        target_high=_pref(getattr(a, "target_high", None), yf_tgt.get("high")),
+        implied_upside_pct=_pct((consensus - price) if (consensus and price) else None, price),
+    )
+
+    peer_rows = [
+        R.PeerCompareRow(
+            ticker=pr.ticker,
+            name=pr.name or "",
+            market_cap=pr.market_cap,
+            pe=pr.pe,
+            ps=pr.ps,
+            net_margin=pr.net_margin,
+            roe=pr.roe,
+        )
+        for pr in (peers.data or [])
+    ]
+    peer_pes = sorted(pr.pe for pr in peer_rows if pr.pe and pr.pe > 0)
+    if peer_pes:
+        mid = peer_pes[len(peer_pes) // 2]
+        valuation.peer_median_pe = mid
+        if valuation.pe and valuation.pe > 0:
+            ratio = valuation.pe / mid
+            valuation.band = "cheap" if ratio < 0.85 else "rich" if ratio > 1.15 else "in-line"
+
+    news_items = [
+        R.NewsHeadline(title=n.title, site=n.site, published=n.published, url=n.url)
+        for n in (news.data or [])
+        if n.title
+    ]
+
+    fp = R.FactPack(
+        ticker=tk,
+        name=_pref(getattr(p, "name", None)),
+        sector=_pref(getattr(p, "sector", None)),
+        industry=_pref(getattr(p, "industry", None)),
+        currency=_pref(getattr(p, "currency", None)) or "USD",
+        as_of=_pref(profile.as_of, fund.as_of),
+        price=price,
+        market_cap=_pref(getattr(p, "market_cap", None), yf_mkt.get("market_cap")),
+        beta=_pref(getattr(p, "beta", None), yf_mkt.get("beta")),
+        valuation=valuation,
+        quality=quality,
+        growth=growth_block,
+        analyst=analyst_block,
+        peers=peer_rows,
+        news=news_items,
+    )
+    fp.drivers = _drivers(fp)
+    fp.risk_flags = _risk_flags(fp)
+    fp.data_quality = _data_quality(profile, fund, growth, analyst, peers, news, used_yf=bool(yf))
+    return fp
+
+
+def _default_enricher(tk: str) -> dict:
+    from libs.analysis.equity_research import _enrich_from_yfinance
+
+    return _enrich_from_yfinance(tk)
+
+
+# ── verdict (deterministic skeleton → LLM phrasing) ─────────────────
+
+_VERDICT_SYSTEM = (
+    "You are a buy-side equity analyst. You are given a compact, pre-computed "
+    "FactPack of vetted numbers for ONE stock. RULES: (1) Use ONLY numbers that "
+    "appear in the FactPack — never invent prices, ratios, or targets. (2) You "
+    "judge, rank, and explain; the math is already done. (3) Be concise and "
+    "specific, citing the FactPack's own figures.\n"
+    "Return JSON ONLY with this exact schema: {rating: one of "
+    '"Strong Buy"|"Buy"|"Hold"|"Sell"|"Strong Sell", conviction: '
+    '"low"|"medium"|"high", summary: string (2-3 sentences), dimensions: '
+    "[{name: one of valuation|growth|quality|momentum|risk, score: 0-100 int, "
+    "note: short string}], catalysts: [string], risks: [string], "
+    "what_would_change_my_mind: [string]}."
+)
+
+
+def _dimension_scores(fp: R.FactPack) -> list[R.DimensionScore]:
+    """Deterministic 0-100 scores per dimension (higher = better; for `risk`,
+    higher = lower risk)."""
+
+    def clamp(x: float) -> int:
+        return int(max(0, min(100, round(x))))
+
+    v, q, g, a = fp.valuation, fp.quality, fp.growth, fp.analyst
+    val = {"cheap": 78, "in-line": 55, "rich": 32}.get(v.band or "", 50)
+    if v.fcf_yield:
+        val += min(15, v.fcf_yield * 100)
+    growth = 40 + (g.revenue_cagr * 250 if g.revenue_cagr else 0)
+    qual = 50.0
+    if q.net_margin is not None:
+        qual = 40 + q.net_margin * 150
+    if q.roe:
+        qual = (qual + (40 + q.roe * 150)) / 2
+    mom = 50 + (a.implied_upside_pct * 100 if a.implied_upside_pct else 0)
+    risk = 80 - 12 * len(fp.risk_flags)
+    return [
+        R.DimensionScore(name="valuation", score=clamp(val), note=v.band or "n/a"),
+        R.DimensionScore(name="growth", score=clamp(growth), note=f"{g.periods} yrs of data"),
+        R.DimensionScore(name="quality", score=clamp(qual), note="margins + ROE"),
+        R.DimensionScore(name="momentum", score=clamp(mom), note="analyst implied upside"),
+        R.DimensionScore(name="risk", score=clamp(risk), note=f"{len(fp.risk_flags)} risk flag(s)"),
+    ]
+
+
+def _rating_from(score: float) -> str:
+    if score >= 72:
+        return "Strong Buy"
+    if score >= 60:
+        return "Buy"
+    if score >= 45:
+        return "Hold"
+    if score >= 33:
+        return "Sell"
+    return "Strong Sell"
+
+
+def _deterministic_verdict(fp: R.FactPack) -> R.ResearchVerdict:
+    dims = _dimension_scores(fp)
+    avg = sum(d.score for d in dims) / len(dims)
+    name = fp.name or fp.ticker
+    return R.ResearchVerdict(
+        rating=_rating_from(avg),
+        conviction="medium" if fp.data_quality.coverage > 0.5 else "low",
+        summary=(
+            f"{name} screens as a {_rating_from(avg).lower()} on the data. "
+            + (f"Key positives: {fp.drivers[0].lower()}. " if fp.drivers else "")
+            + (f"Watch: {fp.risk_flags[0].lower()}." if fp.risk_flags else "")
+        ).strip(),
+        dimensions=dims,
+        catalysts=fp.drivers[:3],
+        risks=fp.risk_flags[:3],
+        what_would_change_my_mind=[
+            "A change in the peer-relative valuation band",
+            "A break in the revenue / margin trend",
+        ],
+        data_only=True,
+    )
+
+
+def build_verdict(fp: R.FactPack, llm_callable: Optional[Callable[..., str]] = None):
+    """LLM judgment over the FactPack. ``llm_callable`` None → deterministic
+    placeholder so the feature renders without a key. The deterministic
+    dimension scores are always attached as a floor the LLM refines."""
+    floor = _deterministic_verdict(fp)
+    if llm_callable is None:
+        return floor
+
+    import json
+
+    from libs.analysis.equity_research import _extract_json
+
+    prompt = (
+        "FactPack (JSON — use ONLY these numbers):\n"
+        + json.dumps(fp.model_dump(), indent=2, sort_keys=True, default=str)
+        + "\n\nReturn the verdict JSON now."
+    )
+    try:
+        raw = llm_callable(prompt=prompt, system=_VERDICT_SYSTEM, max_tokens=1100, temperature=0.3)
+        parsed = _extract_json(raw or "")
+        if not parsed:
+            return floor
+        if not parsed.get("dimensions"):  # absent OR empty → use the floor
+            parsed["dimensions"] = [d.model_dump() for d in floor.dimensions]
+        parsed["data_only"] = False
+        return R.ResearchVerdict.model_validate(parsed)
+    except Exception:  # noqa: BLE001 - any LLM/parse failure → deterministic floor
+        _log.warning("research.verdict.llm_failed ticker=%s", fp.ticker)
+        return floor
+
+
+def _drivers(fp: R.FactPack) -> list[str]:
+    """Top plain-language positives, strongest first."""
+    out: list[tuple[float, str]] = []
+    q, v, g, a = fp.quality, fp.valuation, fp.growth, fp.analyst
+    if q.net_margin and q.net_margin > 0.20:
+        out.append((q.net_margin, f"High profitability — {q.net_margin:.0%} net margin"))
+    if q.roe and q.roe > 0.20:
+        out.append((q.roe, f"Strong returns on equity ({q.roe:.0%})"))
+    if v.fcf_yield and v.fcf_yield > 0.05:
+        out.append((v.fcf_yield, f"Attractive free-cash-flow yield ({v.fcf_yield:.1%})"))
+    if g.revenue_cagr and g.revenue_cagr > 0.10:
+        out.append((g.revenue_cagr, f"Double-digit revenue growth ({g.revenue_cagr:.0%} CAGR)"))
+    if a.implied_upside_pct and a.implied_upside_pct > 0.15:
+        out.append(
+            (a.implied_upside_pct, f"Analyst targets imply {a.implied_upside_pct:.0%} upside")
+        )
+    if v.band == "cheap":
+        out.append((1.0, "Trades at a discount to sector peers"))
+    out.sort(key=lambda t: t[0], reverse=True)
+    return [s for _, s in out[:4]]
+
+
+def _risk_flags(fp: R.FactPack) -> list[str]:
+    """Material risks a reviewer should not miss."""
+    flags: list[str] = []
+    q, v, g, a = fp.quality, fp.valuation, fp.growth, fp.analyst
+    if q.debt_to_equity and q.debt_to_equity > 2.0:
+        flags.append(f"High leverage — debt/equity {q.debt_to_equity:.1f}×")
+    if q.net_margin is not None and q.net_margin < 0:
+        flags.append("Unprofitable — negative net margin")
+    if q.current_ratio is not None and q.current_ratio < 1.0:
+        flags.append(f"Weak liquidity — current ratio {q.current_ratio:.2f}")
+    if g.revenue_cagr is not None and g.revenue_cagr < 0:
+        flags.append("Shrinking revenue over the trailing window")
+    if v.band == "rich" and v.pe and v.pe > 40:
+        flags.append(f"Rich valuation — P/E {v.pe:.0f} vs peer median {v.peer_median_pe:.0f}")
+    if a.num_analysts is not None and a.num_analysts < 3:
+        flags.append("Thin analyst coverage")
+    if fp.beta and fp.beta > 1.5:
+        flags.append(f"High market sensitivity (beta {fp.beta:.1f})")
+    return flags
+
+
+def _data_quality(*results, used_yf: bool) -> R.DataQuality:
+    labels = ["profile", "fundamentals", "growth", "analyst", "peers", "news"]
+    sources: list[R.SourceRef] = []
+    warnings: list[str] = []
+    covs: list[float] = []
+    for label, res in zip(labels, results):
+        covs.append(res.coverage)
+        sources.append(
+            R.SourceRef(
+                field=label,
+                source=res.source if res.ok else ("yfinance" if used_yf else "unavailable"),
+                as_of=res.as_of,
+                coverage=res.coverage,
+            )
+        )
+        for w in res.warnings:
+            if w not in warnings:
+                warnings.append(w)
+    overall = sum(covs) / len(covs) if covs else 0.0
+    return R.DataQuality(coverage=round(overall, 3), sources=sources, warnings=warnings)

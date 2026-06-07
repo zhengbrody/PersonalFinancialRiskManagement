@@ -75,13 +75,12 @@ SCORE_PORTFOLIO_SCHEMA: dict[str, Any] = {
 }
 
 
-async def score_portfolio(arguments: dict[str, Any]) -> dict[str, Any]:
-    """Score a hypothetical portfolio with real prices + the
-    deterministic 0..1000 engine."""
-    holdings = arguments.get("holdings") or []
-    risk_pref = int(arguments.get("risk_preference", 3))
-    days = int(arguments.get("history_days", 365))
+def _score_from_holdings(holdings: list[dict], *, risk_pref: int = 3, days: int = 365):
+    """Resolve holdings → real prices → typed positions → deterministic score.
 
+    Shared by every portfolio-based MCP tool so they can NEVER diverge from
+    score_portfolio (or the dashboard). Returns ``(score, positions)``.
+    """
     tickers = sorted({str(h["ticker"]).upper() for h in holdings if h.get("ticker")})
     if not tickers:
         raise ValueError("No tickers in holdings.")
@@ -122,8 +121,18 @@ async def score_portfolio(arguments: dict[str, Any]) -> dict[str, Any]:
         risk_free_rate=0.045,
     )
     returns_frame = price_frame.pct_change().dropna(how="all")
-
     score = score_portfolio_from_input(portfolio_input, returns_frame)
+    return score, positions
+
+
+async def score_portfolio(arguments: dict[str, Any]) -> dict[str, Any]:
+    """Score a hypothetical portfolio with real prices + the
+    deterministic 0..1000 engine."""
+    holdings = arguments.get("holdings") or []
+    risk_pref = int(arguments.get("risk_preference", 3))
+    days = int(arguments.get("history_days", 365))
+
+    score, _positions = _score_from_holdings(holdings, risk_pref=risk_pref, days=days)
     metrics = score.metrics.as_dict() if hasattr(score.metrics, "as_dict") else {}
 
     return {
@@ -236,6 +245,202 @@ async def get_yield_curve(arguments: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# ── tool: get_ticker_fact_pack ─────────────────────────────────────
+
+GET_FACT_PACK_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {"ticker": {"type": "string", "description": "Ticker symbol."}},
+    "required": ["ticker"],
+}
+
+
+async def get_ticker_fact_pack(arguments: dict[str, Any]) -> dict[str, Any]:
+    """Compact, source-attributed FactPack for one ticker (same builder the
+    /research cockpit uses): valuation band, quality, growth CAGR, analyst
+    implied upside, drivers, risk flags, provenance."""
+    from backend.app.services import research_factpack as rf
+
+    ticker = str(arguments.get("ticker") or "").strip()
+    if not ticker:
+        raise ValueError("ticker is required")
+    return rf.build_fact_pack(ticker).model_dump()
+
+
+# ── tool: compare_tickers ──────────────────────────────────────────
+
+COMPARE_TICKERS_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "tickers": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 2,
+            "maxItems": 5,
+            "description": "2-5 ticker symbols to compare side by side.",
+        }
+    },
+    "required": ["tickers"],
+}
+
+
+async def compare_tickers(arguments: dict[str, Any]) -> dict[str, Any]:
+    """Side-by-side FactPack comparison for 2-5 tickers — reuses the SAME
+    FactPack builder per name (no separate compare logic)."""
+    from backend.app.services import research_factpack as rf
+
+    raw = arguments.get("tickers") or []
+    tickers = [str(t).strip().upper() for t in raw if str(t).strip()][:5]
+    if len(tickers) < 2:
+        raise ValueError("Provide at least two tickers.")
+
+    rows = []
+    for tk in tickers:
+        try:
+            fp = rf.build_fact_pack(tk)
+        except Exception:  # noqa: BLE001 - one bad ticker shouldn't sink the rest
+            continue
+        rows.append(
+            {
+                "ticker": fp.ticker,
+                "name": fp.name,
+                "price": fp.price,
+                "pe": fp.valuation.pe,
+                "valuation_band": fp.valuation.band,
+                "net_margin": fp.quality.net_margin,
+                "roe": fp.quality.roe,
+                "revenue_cagr": fp.growth.revenue_cagr,
+                "implied_upside_pct": fp.analyst.implied_upside_pct,
+                "drivers": fp.drivers[:2],
+                "risk_flags": fp.risk_flags[:2],
+            }
+        )
+    return {"comparison": rows}
+
+
+# ── tool: get_macro_context ────────────────────────────────────────
+
+GET_MACRO_CONTEXT_SCHEMA: dict[str, Any] = {"type": "object", "properties": {}}
+
+
+async def get_macro_context(arguments: dict[str, Any]) -> dict[str, Any]:
+    """Current market regime (VIX / Fear & Greed / yield curve) — the same
+    fail-soft snapshot the /markets page shows."""
+    from backend.app.services import market_regime
+
+    snap = market_regime.get_market_regime()
+    return snap.model_dump() if hasattr(snap, "model_dump") else dict(snap)
+
+
+# ── tool: get_portfolio_risk_drivers ───────────────────────────────
+
+PORTFOLIO_HOLDINGS_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "holdings": SCORE_PORTFOLIO_SCHEMA["properties"]["holdings"],
+        "risk_preference": SCORE_PORTFOLIO_SCHEMA["properties"]["risk_preference"],
+    },
+    "required": ["holdings"],
+}
+
+
+async def get_portfolio_risk_drivers(arguments: dict[str, Any]) -> dict[str, Any]:
+    """The weakest score dimensions + key risk metrics for a portfolio — what's
+    dragging the score down, ranked weakest-first. Reuses the deterministic
+    engine score (never a separate model)."""
+    holdings = arguments.get("holdings") or []
+    risk_pref = int(arguments.get("risk_preference", 3))
+    score, _positions = _score_from_holdings(holdings, risk_pref=risk_pref)
+    metrics = score.metrics.as_dict() if hasattr(score.metrics, "as_dict") else {}
+
+    drivers = sorted(
+        (
+            {"name": d.name, "score": float(d.score), "status": d.status, "detail": d.detail}
+            for d in score.dimensions.values()
+        ),
+        key=lambda d: d["score"],
+    )
+    return {
+        "overall_score": int(score.overall_score),
+        "risk_drivers": drivers,  # weakest first
+        "metrics": {
+            "annual_volatility": metrics.get("annual_volatility"),
+            "max_drawdown": metrics.get("max_drawdown"),
+            "var_95_daily": metrics.get("var_95_daily"),
+            "beta_to_benchmark": metrics.get("beta_to_benchmark"),
+        },
+    }
+
+
+# ── tool: run_portfolio_scenario ───────────────────────────────────
+
+RUN_SCENARIO_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "holdings": SCORE_PORTFOLIO_SCHEMA["properties"]["holdings"],
+        "shocks": {
+            "type": "array",
+            "items": {"type": "number"},
+            "description": "Market move fractions, e.g. [-0.3,-0.2,-0.1,0.1]. Default sweep used if omitted.",
+        },
+    },
+    "required": ["holdings"],
+}
+
+
+async def run_portfolio_scenario(arguments: dict[str, Any]) -> dict[str, Any]:
+    """Estimated portfolio P&L under market-wide moves, via the portfolio's
+    real engine beta (linear beta approximation, clearly labeled). Reuses the
+    deterministic score for beta + market value."""
+    holdings = arguments.get("holdings") or []
+    shocks = arguments.get("shocks") or [-0.3, -0.2, -0.1, 0.1, 0.2]
+    score, _positions = _score_from_holdings(holdings)
+    metrics = score.metrics.as_dict() if hasattr(score.metrics, "as_dict") else {}
+    beta = metrics.get("beta_to_benchmark") or 1.0
+    value = metrics.get("total_value") or sum(float(h.get("market_value") or 0) for h in holdings)
+
+    scenarios = [
+        {
+            "market_move_pct": float(s),
+            "estimated_pnl": round(beta * float(s) * value, 2),
+            "estimated_value": round(value * (1 + beta * float(s)), 2),
+        }
+        for s in shocks
+    ]
+    return {
+        "method": "linear_beta_approximation",
+        "beta_to_benchmark": beta,
+        "base_value": value,
+        "scenarios": scenarios,
+    }
+
+
+# ── tool: generate_action_cards ────────────────────────────────────
+
+
+async def generate_action_cards(arguments: dict[str, Any]) -> dict[str, Any]:
+    """Concrete next-step cards (fee/tax-loss scans + non-binding draft trades)
+    for a portfolio — reuses the resident StrategyOptimizer agent (same scans
+    the Copilot uses)."""
+    holdings = arguments.get("holdings") or []
+    risk_pref = int(arguments.get("risk_preference", 3))
+    score, positions = _score_from_holdings(holdings, risk_pref=risk_pref)
+
+    from libs.ai_agents.portfolio_agents import StrategyOptimizerAgent
+
+    prep = StrategyOptimizerAgent().prepare(score, positions)
+    tr = prep.get("tool_results", {}) or {}
+    cards = []
+    for key in ("hidden_fees", "fees", "tax_loss_harvest", "tax_loss"):
+        block = tr.get(key)
+        if isinstance(block, dict) and block.get("summary"):
+            cards.append({"kind": key, "summary": str(block["summary"])})
+    draft = prep.get("draft_trades") or []
+    return {
+        "action_cards": cards,
+        "draft_trades": [t.to_dict() if hasattr(t, "to_dict") else t for t in draft],
+    }
+
+
 # ── registry ───────────────────────────────────────────────────────
 
 
@@ -277,5 +482,61 @@ TOOLS = [
         "description": ("Latest US Treasury daily yield curve, tenors 1M through 30Y."),
         "input_schema": GET_YIELD_CURVE_SCHEMA,
         "handler": get_yield_curve,
+    },
+    {
+        "name": "mindmarket_get_ticker_fact_pack",
+        "description": (
+            "Compact, source-attributed FactPack for one ticker: valuation band "
+            "vs peers, quality ratios, revenue/EPS CAGR, analyst implied upside, "
+            "plain-language drivers + risk flags, and per-field provenance. All "
+            "numbers are platform-computed — never invent figures from this."
+        ),
+        "input_schema": GET_FACT_PACK_SCHEMA,
+        "handler": get_ticker_fact_pack,
+    },
+    {
+        "name": "mindmarket_compare_tickers",
+        "description": (
+            "Side-by-side FactPack comparison for 2-5 tickers (price, P/E, "
+            "valuation band, margins, ROE, growth, implied upside, drivers/risks)."
+        ),
+        "input_schema": COMPARE_TICKERS_SCHEMA,
+        "handler": compare_tickers,
+    },
+    {
+        "name": "mindmarket_get_macro_context",
+        "description": (
+            "Current market regime: VIX (level + value), CNN Fear & Greed, and "
+            "yield-curve status. Fail-soft snapshot, 5-min cache."
+        ),
+        "input_schema": GET_MACRO_CONTEXT_SCHEMA,
+        "handler": get_macro_context,
+    },
+    {
+        "name": "mindmarket_get_portfolio_risk_drivers",
+        "description": (
+            "The weakest score dimensions (ranked weakest-first) plus key risk "
+            "metrics for a portfolio — what's dragging the 0..1000 score down."
+        ),
+        "input_schema": PORTFOLIO_HOLDINGS_SCHEMA,
+        "handler": get_portfolio_risk_drivers,
+    },
+    {
+        "name": "mindmarket_run_portfolio_scenario",
+        "description": (
+            "Estimated portfolio P&L under market-wide moves, using the "
+            "portfolio's real engine beta (linear beta approximation)."
+        ),
+        "input_schema": RUN_SCENARIO_SCHEMA,
+        "handler": run_portfolio_scenario,
+    },
+    {
+        "name": "mindmarket_generate_action_cards",
+        "description": (
+            "Concrete next-step cards for a portfolio: hidden-fee + tax-loss "
+            "scans and non-binding draft trades from the StrategyOptimizer."
+        ),
+        "input_schema": PORTFOLIO_HOLDINGS_SCHEMA,
+        "handler": generate_action_cards,
     },
 ]

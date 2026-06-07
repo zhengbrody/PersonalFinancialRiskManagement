@@ -636,6 +636,49 @@ export function useRunBacktest() {
 // /api/v1/copilot/chat/stream directly); the old non-streaming useCopilotChat
 // hook + copilotResponseSchema were removed when the streaming path landed.
 
+// ── Copilot 2.0 — structured single-shot answer ─────────────────────
+// A one-shot /ask endpoint that returns a pre-formatted markdown answer
+// PLUS structured evidence (each numeric fact tagged with its source) and
+// the classified intent. Distinct from the streaming chat: this is a
+// mutation (explicit "Ask" click, credit-gated) whose result renders as a
+// structured card, not a running conversation.
+
+const copilotEvidenceSchema = z.looseObject({
+  label: z.string(),
+  value: z.string(),
+  source: z.string(), // engine|fmp|yfinance|macro|derived|glossary
+});
+export type CopilotEvidence = z.infer<typeof copilotEvidenceSchema>;
+
+export const copilotAnswerSchema = z.looseObject({
+  intent: z.string(),
+  tickers: z.array(z.string()),
+  answer_markdown: z.string(),
+  evidence: z.array(copilotEvidenceSchema),
+  data_only: z.boolean(),
+  model: z.string().nullish(),
+});
+export type CopilotAnswer = z.infer<typeof copilotAnswerSchema>;
+
+/**
+ * Ask the Copilot 2.0 structured-answer endpoint. A mutation (explicit user
+ * action — it spends credits). 429 `quota_exceeded` on quota; `data_only`
+ * answer (no LLM key) is still a valid 200. Mirrors the auth-token + schema
+ * plumbing of the other copilot/equity mutations in this file.
+ */
+export function useCopilotAsk() {
+  const { accessToken } = useAuth();
+  return useMutation<CopilotAnswer, Error, { message: string }>({
+    mutationFn: ({ message }) =>
+      apiFetch<CopilotAnswer>("/api/v1/copilot/ask", {
+        method: "POST",
+        body: { message },
+        authToken: accessToken ?? undefined,
+        schema: copilotAnswerSchema,
+      }),
+  });
+}
+
 /**
  * Score the user's active portfolio using real market data.
  *
@@ -823,6 +866,164 @@ export function useTickerVerdict() {
         body,
         authToken: accessToken ?? undefined,
         schema: analyzeResponseSchema,
+      }),
+  });
+}
+
+// ── ticker research 2.0 (FactPack cockpit) ──────────────────────────
+// Two-stage, same shape as the dossier flow above: useFactPack (fast,
+// authed, no credit) paints the cockpit; useResearchVerdict (authed +
+// credit-gated) phrases a verdict OVER the FactPack the cockpit already
+// fetched — so /verdict never re-hits the network.
+
+const factPackValuationSchema = z.looseObject({
+  pe: fnum,
+  forward_pe: fnum,
+  ps: fnum,
+  pb: fnum,
+  ev_ebitda: fnum,
+  fcf_yield: fnum,
+  dividend_yield: fnum,
+  band: fstr, // "cheap" | "in-line" | "rich" | null
+  peer_median_pe: fnum,
+});
+
+const factPackQualitySchema = z.looseObject({
+  gross_margin: fnum,
+  operating_margin: fnum,
+  net_margin: fnum,
+  roe: fnum,
+  roa: fnum,
+  roic: fnum,
+  current_ratio: fnum,
+  debt_to_equity: fnum,
+  interest_coverage: fnum,
+});
+
+const factPackGrowthSchema = z.looseObject({
+  revenue_cagr: fnum,
+  eps_cagr: fnum,
+  revenue_growth_yoy: fnum,
+  earnings_growth_yoy: fnum,
+  periods: z.number().nullish(),
+});
+
+const factPackAnalystSchema = z.looseObject({
+  rating: fstr,
+  num_analysts: fnum,
+  target_low: fnum,
+  target_consensus: fnum,
+  target_high: fnum,
+  implied_upside_pct: fnum,
+});
+
+const factPackPeerSchema = z.looseObject({
+  ticker: z.string(),
+  name: fstr,
+  market_cap: fnum,
+  pe: fnum,
+  ps: fnum,
+  net_margin: fnum,
+  roe: fnum,
+});
+
+const factPackNewsSchema = z.looseObject({
+  title: z.string(),
+  site: fstr,
+  published: fstr,
+  url: fstr,
+});
+
+const factPackDataQualitySourceSchema = z.looseObject({
+  field: z.string(),
+  source: z.string(), // "fmp" | "yfinance" | "derived" | "unavailable"
+  as_of: fstr,
+  coverage: fnum,
+});
+
+const factPackDataQualitySchema = z.looseObject({
+  coverage: fnum,
+  sources: z.array(factPackDataQualitySourceSchema),
+  warnings: z.array(z.string()),
+});
+
+export const factPackSchema = z.looseObject({
+  ticker: z.string(),
+  name: fstr,
+  sector: fstr,
+  industry: fstr,
+  currency: fstr,
+  as_of: fstr,
+  price: fnum,
+  market_cap: fnum,
+  beta: fnum,
+  valuation: factPackValuationSchema,
+  quality: factPackQualitySchema,
+  growth: factPackGrowthSchema,
+  analyst: factPackAnalystSchema,
+  peers: z.array(factPackPeerSchema),
+  news: z.array(factPackNewsSchema),
+  drivers: z.array(z.string()),
+  risk_flags: z.array(z.string()),
+  data_quality: factPackDataQualitySchema,
+});
+export type FactPack = z.infer<typeof factPackSchema>;
+
+const verdictDimensionSchema = z.looseObject({
+  name: z.string(), // valuation | growth | quality | momentum | risk
+  score: z.number(),
+  note: fstr,
+});
+export const researchVerdictSchema = z.looseObject({
+  rating: z.string(), // Strong Buy | Buy | Hold | Sell | Strong Sell
+  conviction: z.string(), // low | medium | high
+  summary: z.string(),
+  dimensions: z.array(verdictDimensionSchema),
+  catalysts: z.array(z.string()),
+  risks: z.array(z.string()),
+  what_would_change_my_mind: z.array(z.string()),
+  data_only: z.boolean(),
+});
+export type ResearchVerdict = z.infer<typeof researchVerdictSchema>;
+
+export const factPackResponseSchema = z.looseObject({
+  fact_pack: factPackSchema,
+});
+export type FactPackResponse = z.infer<typeof factPackResponseSchema>;
+
+export const researchVerdictResponseSchema = z.looseObject({
+  verdict: researchVerdictSchema,
+  fact_pack: factPackSchema,
+});
+export type ResearchVerdictResponse = z.infer<
+  typeof researchVerdictResponseSchema
+>;
+
+/** Fetch the deterministic FactPack for a ticker (fast, no credit). */
+export function useFactPack() {
+  const { accessToken } = useAuth();
+  return useMutation<FactPackResponse, Error, { ticker: string }>({
+    mutationFn: ({ ticker }) =>
+      apiFetch<FactPackResponse>(
+        `/api/v1/research/fact_pack/${encodeURIComponent(ticker)}`,
+        {
+          authToken: accessToken ?? undefined,
+          schema: factPackResponseSchema,
+        },
+      ),
+  });
+}
+
+/** Phrase an AI verdict over an already-fetched FactPack (credit-gated). */
+export function useResearchVerdict() {
+  const { accessToken } = useAuth();
+  return useMutation<ResearchVerdictResponse, Error, { fact_pack: FactPack }>({
+    mutationFn: (body) =>
+      apiFetch<ResearchVerdictResponse>("/api/v1/research/verdict", {
+        method: "POST",
+        body,
+        authToken: accessToken ?? undefined,
+        schema: researchVerdictResponseSchema,
       }),
   });
 }
