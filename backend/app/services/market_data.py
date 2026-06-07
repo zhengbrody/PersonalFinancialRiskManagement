@@ -105,6 +105,12 @@ _TICKER_RE = re.compile(r"^[A-Z0-9.\^=\-]{1,20}$")
 MAX_TICKERS_PER_CALL = 50
 
 
+# How many yfinance-missing tickers we'll try to backfill from Massive in one
+# call. Massive Basic is 5 calls/min; each fallback ticker is one history call
+# (then cached), so we cap and LOG the overflow rather than silently truncating.
+_MAX_MASSIVE_FALLBACK = 5
+
+
 @dataclass(frozen=True)
 class LatestPrice:
     """One ticker's most recent observation."""
@@ -112,6 +118,7 @@ class LatestPrice:
     ticker: str
     price: float
     as_of: str  # ISO date YYYY-MM-DD of the bar
+    source: str = "yfinance"  # "yfinance" | "massive" — price provenance
 
 
 def _normalise_tickers(tickers: Iterable[str]) -> list[str]:
@@ -156,19 +163,66 @@ def _fetch_one_history(cache_provider, ticker: str, start: str, end: str) -> Opt
         return None
 
 
+def _bars_to_series(bars) -> Optional[pd.Series]:
+    """Massive ``PriceBar`` list → a date-indexed close Series (best-effort)."""
+    pairs = {}
+    for b in bars or []:
+        try:
+            pairs[pd.Timestamp(b.date)] = float(b.close)
+        except Exception:  # noqa: BLE001 - skip an unparseable bar, keep the rest
+            continue
+    if not pairs:
+        return None
+    return pd.Series(pairs).sort_index()
+
+
+def _massive_fallback(missing: list[str], days: int, frames: dict, src_map: dict) -> None:
+    """Backfill yfinance-missing tickers from Massive (fallback only). Mutates
+    ``frames``/``src_map`` in place. Fail-soft: a dead Massive just leaves the
+    ticker missing. Capped at ``_MAX_MASSIVE_FALLBACK`` calls; overflow logged."""
+    try:
+        from .providers import massive_provider as massive
+    except Exception:  # noqa: BLE001 - provider import must never break pricing
+        return
+    if not missing or not massive.is_configured():
+        return
+    if len(missing) > _MAX_MASSIVE_FALLBACK:
+        _logger.warning(
+            "market_data.massive_fallback_capped requested=%d cap=%d dropped=%s",
+            len(missing),
+            _MAX_MASSIVE_FALLBACK,
+            missing[_MAX_MASSIVE_FALLBACK:],
+        )
+    for t in missing[:_MAX_MASSIVE_FALLBACK]:
+        try:
+            res = massive.get_daily_history(t, days=days)
+        except Exception as exc:  # noqa: BLE001 - provider should fail-soft; double-guard anyway
+            _logger.warning(
+                "market_data.massive_fallback_error ticker=%s err=%s", t, type(exc).__name__
+            )
+            continue
+        if res.ok and res.data:
+            series = _bars_to_series(res.data)
+            if series is not None and not series.empty:
+                frames[t] = series
+                src_map[t] = "massive"
+
+
 def get_price_history(
     tickers: Iterable[str],
     *,
     days: int = 365,
     cache_provider=None,
+    provenance: Optional[dict] = None,
 ) -> pd.DataFrame:
     """Return a date-indexed DataFrame of adjusted close, one column
     per ticker.
 
-    Tickers that yfinance can't price are silently dropped. The
-    caller can inspect ``frame.columns`` to see which symbols
-    survived. We do NOT raise here on partial coverage — most
-    risk-engine math handles missing columns gracefully.
+    yfinance is the source; tickers it can't price are backfilled from Massive
+    (fallback only) when ``MASSIVE_API_KEY`` is set. Pass a ``provenance`` dict
+    to receive ``{"by_ticker": {tk: "yfinance"|"massive"}, "missing": [...]}``
+    (the param is additive — existing callers are unaffected). We do NOT raise
+    on partial coverage — most risk-engine math handles missing columns.
     """
     tk = _normalise_tickers(tickers)
     end = pd.Timestamp.today().normalize()
@@ -189,6 +243,14 @@ def get_price_history(
             series = _extract_close_series(df)
             if series is not None and not series.empty:
                 frames[t] = series
+
+    # Provenance + Massive fallback for whatever yfinance couldn't price.
+    src_map = {t: "yfinance" for t in frames}
+    missing = [t for t in tk if t not in frames]
+    _massive_fallback(missing, max(days, 30), frames, src_map)
+    if provenance is not None:
+        provenance["by_ticker"] = src_map
+        provenance["missing"] = [t for t in tk if t not in frames]
 
     if not frames:
         return pd.DataFrame()
@@ -230,6 +292,7 @@ def get_latest_prices(
     tickers: Iterable[str],
     *,
     cache_provider=None,
+    provenance: Optional[dict] = None,
 ) -> list[LatestPrice]:
     """Return the most recent close + its date for each ticker.
 
@@ -238,19 +301,34 @@ def get_latest_prices(
     if the intraday fetch is unavailable (off-hours, rate-limited) we fall back
     to the daily close, so this never fails. Risk math still uses daily closes
     via ``get_price_history`` — only this display endpoint goes intraday.
+
+    Each ``LatestPrice`` carries its ``source`` ("yfinance" | "massive"). A
+    Massive-sourced (fallback) ticker keeps its EOD close — no intraday overlay,
+    since Massive Basic has no live intraday. Pass ``provenance`` to also receive
+    the by-ticker/missing summary.
     """
-    frame = get_price_history(tickers, days=30, cache_provider=cache_provider)
+    inner_prov: dict = {}
+    frame = get_price_history(
+        tickers, days=30, cache_provider=cache_provider, provenance=inner_prov
+    )
+    src_by_ticker: dict = inner_prov.get("by_ticker", {})
+    if provenance is not None:
+        provenance["by_ticker"] = src_by_ticker
+        provenance["missing"] = inner_prov.get("missing", [])
     if frame.empty:
         return []
 
-    intraday = _intraday_quotes([str(t) for t in frame.columns])
+    # Intraday overlay only for yfinance tickers (Massive has no live intraday).
+    yf_cols = [str(t) for t in frame.columns if src_by_ticker.get(str(t), "yfinance") == "yfinance"]
+    intraday = _intraday_quotes(yf_cols)
 
     out: list[LatestPrice] = []
     for ticker in frame.columns:
         tk = str(ticker)
+        source = src_by_ticker.get(tk, "yfinance")
         fresh = intraday.get(tk)
         if fresh is not None:
-            out.append(LatestPrice(ticker=tk, price=fresh[0], as_of=fresh[1]))
+            out.append(LatestPrice(ticker=tk, price=fresh[0], as_of=fresh[1], source=source))
             continue
         series = frame[ticker].dropna()
         if series.empty:
@@ -260,6 +338,7 @@ def get_latest_prices(
                 ticker=tk,
                 price=float(series.iloc[-1]),
                 as_of=pd.Timestamp(series.index[-1]).strftime("%Y-%m-%d"),
+                source=source,
             )
         )
     return out

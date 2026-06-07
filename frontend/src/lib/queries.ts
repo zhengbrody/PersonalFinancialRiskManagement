@@ -20,6 +20,7 @@ import { z } from "zod";
 import { apiFetch } from "./api";
 import { useAuth } from "./auth-context";
 import {
+  priceProvenanceSchema,
   scoreResponseSchema,
   type ScoreFromActiveRequest,
   type ScoreResponse,
@@ -526,6 +527,7 @@ export const riskReportSchema = z.looseObject({
   macro_betas: z.record(z.string(), z.number()),
   liquidity: z.array(liquidityRowSchema),
   drawdown_stats: z.record(z.string(), z.unknown()).nullable(),
+  price_provenance: priceProvenanceSchema.nullish(),
 });
 export type RiskReport = z.infer<typeof riskReportSchema>;
 

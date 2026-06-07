@@ -78,6 +78,14 @@ services:
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
       - FMP_API_KEY=${FMP_API_KEY:-}
+      # Massive Stocks (Basic) — OPTIONAL fallback market price/history source.
+      # Blank → yfinance remains the source. Base URL / endpoint paths are
+      # overridable so the live Basic contract can be corrected without a rebuild.
+      - MASSIVE_API_KEY=${MASSIVE_API_KEY:-}
+      - MASSIVE_BASE_URL=${MASSIVE_BASE_URL:-}
+      - MASSIVE_EOD_PATH=${MASSIVE_EOD_PATH:-}
+      - MASSIVE_HISTORY_PATH=${MASSIVE_HISTORY_PATH:-}
+      - MASSIVE_REFERENCE_PATH=${MASSIVE_REFERENCE_PATH:-}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
       - STRIPE_BASIC_PRICE_ID=${STRIPE_BASIC_PRICE_ID:-}
       - STRIPE_PRO_PRICE_ID=${STRIPE_PRO_PRICE_ID:-}

@@ -86,14 +86,17 @@ def fake_price_history(monkeypatch):
         def raise_with(self, exc: Exception) -> None:
             self.raise_on_call = exc
 
-        def __call__(self, tickers, *, days=365, cache_provider=None):
+        def __call__(self, tickers, *, days=365, cache_provider=None, provenance=None):
             self.calls.append(list(tickers))
             if self.raise_on_call is not None:
                 raise self.raise_on_call
             cols = [t for t in tickers if t in self.frame.columns]
+            if provenance is not None:
+                provenance["by_ticker"] = {c: "yfinance" for c in cols}
+                provenance["missing"] = [t for t in tickers if t not in cols]
             return self.frame[cols] if cols else pd.DataFrame()
 
-        def latest(self, tickers, *, cache_provider=None):
+        def latest(self, tickers, *, cache_provider=None, provenance=None):
             rows = []
             for t in tickers:
                 if t not in self.frame.columns:

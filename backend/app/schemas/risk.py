@@ -71,6 +71,17 @@ class LiquidityRow(BaseModel):
     market_value: Optional[float] = None
 
 
+class PriceProvenanceOut(BaseModel):
+    """Where the portfolio's price history came from + how deep it is. Surfaced
+    in the Health Score / Risk Report 'data quality' area."""
+
+    primary: str = "yfinance"
+    fallback: str = "massive"
+    massive_fallback_used: list[str] = Field(default_factory=list)
+    missing: list[str] = Field(default_factory=list)
+    trading_days: Optional[int] = None
+
+
 class RiskReportOut(BaseModel):
     """JSON-safe projection of the engine's ``RiskReport`` dataclass.
 
@@ -78,6 +89,9 @@ class RiskReportOut(BaseModel):
     NOT shipped over the wire — they'd add tens of MB and the dashboard
     doesn't render them anyway. If a chart needs them later, we add a
     targeted endpoint that returns just that slice."""
+
+    # Price-data provenance for the report's 'data quality' area.
+    price_provenance: Optional[PriceProvenanceOut] = None
 
     # KPIs — scalars, NaN-scrubbed at the envelope layer.
     annual_return: Optional[float] = None
@@ -261,6 +275,7 @@ class ScoreResponse(BaseModel):
     risk_target: dict
     metrics: PortfolioMetricsOut
     dimensions: dict[str, DimensionScoreOut]
+    price_provenance: Optional[PriceProvenanceOut] = None
 
 
 # ── /api/v1/risk/benchmarks (public reference context) ──────────────

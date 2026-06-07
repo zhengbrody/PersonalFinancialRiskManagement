@@ -142,8 +142,21 @@ Fork → connect to [share.streamlit.io](https://share.streamlit.io) → set sec
 # .streamlit/secrets.toml
 ANTHROPIC_API_KEY = "sk-ant-..."
 DEEPSEEK_API_KEY  = "sk-..."
-FMP_API_KEY       = "..."
+FMP_API_KEY       = "..."   # fundamentals / analyst / peers / valuation
+MASSIVE_API_KEY   = "..."   # OPTIONAL — market price/history FALLBACK only
 ```
+
+### Market-data providers
+
+| Provider | Role | Notes |
+|----------|------|-------|
+| **yfinance** | Default free **market price/history** source | Always on; no key |
+| **Massive Stocks (Basic)** | **Fallback only** for price/history | `MASSIVE_API_KEY` optional; free Basic = **5 calls/min** → used only when yfinance returns empty/NaN/errors, in-process cached (price ~20m, history ~12h, reference ~24h), top-N capped. Never WebSocket/snapshot/intraday. |
+| **FMP** | **Fundamentals / analyst / peers / valuation** | `FMP_API_KEY` optional; Massive never touches these |
+
+Every price carries a `source` (`yfinance` \| `massive`); the Health Score / Risk
+Report "data quality" area and `GET /api/v1/market/prices` surface which tickers
+used the Massive fallback and which stayed missing. Do **not** commit a real key.
 
 ---
 

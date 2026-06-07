@@ -117,7 +117,10 @@ function KpiGrid({ report }: { report: RiskReport }) {
         <Kpi label="CVaR 95 (1d)" value={fmtPct(report.cvar_95)} accent="destructive" />
         <Kpi label="Risk-free" value={fmtPct(report.risk_free_rate)} />
       </div>
-      <DataProvenance source="Monte-Carlo VaR + factor regression on yfinance history" />
+      <DataProvenance
+        source="Monte-Carlo VaR + factor regression on yfinance history"
+        priceProvenance={report.price_provenance}
+      />
     </section>
   );
 }

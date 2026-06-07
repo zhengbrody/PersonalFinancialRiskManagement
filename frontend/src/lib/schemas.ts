@@ -37,6 +37,18 @@ export const dimensionScoreSchema = z.looseObject({
 });
 export type DimensionScore = z.infer<typeof dimensionScoreSchema>;
 
+// Price-source data quality. Optional/nullable so older backend
+// responses (before this field shipped) still parse. Describes which
+// source priced each holding and any gaps.
+export const priceProvenanceSchema = z.looseObject({
+  primary: z.string().nullish(),
+  fallback: z.string().nullish(),
+  massive_fallback_used: z.array(z.string()).nullish(),
+  missing: z.array(z.string()).nullish(),
+  trading_days: z.number().nullish(),
+});
+export type PriceProvenance = z.infer<typeof priceProvenanceSchema>;
+
 export const portfolioMetricsSchema = z.looseObject({
   annual_return: z.number().nullable(),
   annual_volatility: z.number().nullable(),
@@ -67,5 +79,6 @@ export const scoreResponseSchema = z.looseObject({
   risk_target: z.record(z.string(), z.unknown()),
   metrics: portfolioMetricsSchema,
   dimensions: z.record(z.string(), dimensionScoreSchema),
+  price_provenance: priceProvenanceSchema.nullish(),
 });
 export type ScoreResponse = z.infer<typeof scoreResponseSchema>;

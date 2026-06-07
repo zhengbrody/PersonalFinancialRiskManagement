@@ -435,6 +435,7 @@ function MetricsCard({ result }: { result: ScoreResponse }) {
           source="Computed from yfinance history"
           observations={result.metrics.observations}
           coverage={result.metrics.data_coverage}
+          priceProvenance={result.price_provenance}
         />
       </CardContent>
     </Card>

@@ -36,12 +36,16 @@ def fake_market(monkeypatch):
         def raise_with(self, exc: Exception) -> None:
             self.raise_on_call = exc
 
-        def __call__(self, tickers, *, cache_provider=None):
+        def __call__(self, tickers, *, cache_provider=None, provenance=None):
             self.calls.append(list(tickers))
             if self.raise_on_call is not None:
                 raise self.raise_on_call
             requested = {t for t in tickers}
-            return [r for r in self.rows if r.ticker in requested]
+            rows = [r for r in self.rows if r.ticker in requested]
+            if provenance is not None:
+                provenance["by_ticker"] = {r.ticker: getattr(r, "source", "yfinance") for r in rows}
+                provenance["missing"] = [t for t in requested if t not in {r.ticker for r in rows}]
+            return rows
 
     stub = _Stub()
     from backend.app.services import market_data as md

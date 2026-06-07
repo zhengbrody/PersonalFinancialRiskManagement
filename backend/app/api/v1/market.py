@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import ok, server_error, too_many_requests, unprocessable
 from ...schemas.market import (
+    PriceProvenance,
     PriceRow,
     PricesResponse,
     SentimentResponse,
@@ -89,15 +90,30 @@ def get_prices(
     except ValueError as exc:
         raise unprocessable(str(exc)) from exc
 
+    prov: dict = {}
     try:
-        latest = market_data.get_latest_prices(normalised)
+        latest = market_data.get_latest_prices(normalised, provenance=prov)
     except Exception as exc:
         _logger.warning("market.prices.fetch_failed err=%s", exc)
         raise server_error("Market data fetch failed.", reason=type(exc).__name__) from exc
 
+    by_ticker = prov.get("by_ticker", {})
     payload = PricesResponse(
-        prices=[PriceRow(ticker=p.ticker, price=p.price, as_of=p.as_of) for p in latest],
+        prices=[
+            PriceRow(
+                ticker=p.ticker,
+                price=p.price,
+                as_of=p.as_of,
+                source=getattr(p, "source", "yfinance"),
+            )
+            for p in latest
+        ],
         requested=normalised,
+        provenance=PriceProvenance(
+            by_ticker=by_ticker,
+            massive_fallback_used=sorted(t for t, s in by_ticker.items() if s == "massive"),
+            missing=prov.get("missing", []),
+        ),
     )
     return ok(payload.model_dump(), request=request, started_at=started)
 
