@@ -72,13 +72,23 @@ def test_fundamentals_pick_handles_field_renames(monkeypatch, with_key):
         if path == "/ratios":
             return [{"priceToEarningsRatio": 30.0, "netProfitMargin": 0.25, "date": "2025-12-31"}]
         if path == "/key-metrics":
-            return [{"freeCashFlowYield": 0.03, "returnOnInvestedCapital": 0.4}]
+            # ROE/ROA/ROIC/FCF-yield all live here on FMP /stable, not /ratios.
+            return [
+                {
+                    "freeCashFlowYield": 0.03,
+                    "returnOnInvestedCapital": 0.4,
+                    "returnOnEquity": 1.5,
+                    "returnOnAssets": 0.28,
+                }
+            ]
         return None
 
     _route(monkeypatch, handler)
     res = fp.get_fundamentals("AAPL")
     assert res.ok and res.data.pe == 30.0 and res.data.net_margin == 0.25
     assert res.data.fcf_yield == 0.03 and res.data.roic == 0.4
+    # ROE/ROA sourced from /key-metrics (regression: were null off /ratios)
+    assert res.data.roe == 1.5 and res.data.roa == 0.28
     assert res.as_of == "2025-12-31" and res.coverage > 0
 
 
@@ -95,19 +105,32 @@ def test_analyst_consensus(monkeypatch, with_key):
     assert res.ok and res.data.target_consensus == 230 and res.data.rating == "Buy"
 
 
-def test_peers_with_key_metrics(monkeypatch, with_key):
+def test_peers_from_profile_and_ratios_ttm(monkeypatch, with_key):
     def handler(path, key, params=None, **k):
+        sym = (params or {}).get("symbol")
         if path == "/stock-peers":
             return [{"symbol": "MSFT"}, {"symbol": "GOOGL"}]
-        if path == "/key-metrics-ttm":
-            sym = (params or {}).get("symbol")
-            return [{"peRatioTTM": 28.0 if sym == "MSFT" else 22.0, "netProfitMarginTTM": 0.34}]
+        if path == "/profile":
+            return [{"companyName": f"{sym} Inc", "marketCap": 3.0e12}]
+        if path == "/ratios-ttm":
+            return [
+                {
+                    "priceToEarningsRatioTTM": 28.0 if sym == "MSFT" else 22.0,
+                    "priceToSalesRatioTTM": 12.0,
+                    "netProfitMarginTTM": 0.34,
+                }
+            ]
         return None
 
     _route(monkeypatch, handler)
     res = fp.get_peers("AAPL")
     assert res.ok and len(res.data) == 2
-    assert res.data[0].ticker == "MSFT" and res.data[0].pe == 28.0
+    row = res.data[0]
+    # name from /profile; P/E + P/S + net margin from /ratios-ttm
+    assert row.ticker == "MSFT" and row.name == "MSFT Inc"
+    assert row.pe == 28.0 and row.ps == 12.0 and row.net_margin == 0.34
+    # net margin is the real margin, never ROE (would be an impossible 100%+).
+    assert row.net_margin < 1.0
 
 
 # ── fail-soft on upstream error / cache ─────────────────────────────

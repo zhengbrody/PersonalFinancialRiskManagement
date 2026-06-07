@@ -13,6 +13,15 @@ from backend.app.services import research_factpack as rf
 from backend.app.services.providers import fmp_provider as fp
 
 
+@pytest.fixture(autouse=True)
+def _no_network_enrich(monkeypatch):
+    """yfinance enrichment is now ALWAYS on; stub it to {} by default so offline
+    tests don't hit the network. Tests that want the merge pass their own
+    yf_enricher explicitly."""
+    monkeypatch.setattr(rf, "_cached_enrich", lambda tk: {})
+    rf.reset_enrich_cache()
+
+
 def _pr(model_or_list, *, source="fmp", as_of="2025-12-31", coverage=1.0, warnings=None):
     return fp.ProviderResult(
         data=model_or_list, source=source, as_of=as_of, coverage=coverage, warnings=warnings or []
@@ -142,6 +151,64 @@ def test_factpack_no_key_falls_back_to_yfinance(monkeypatch):
     assert "fmp_key_missing" in fp_obj.data_quality.warnings
     # never raised, and a source row marks yfinance fallback
     assert any(s.source == "yfinance" for s in fp_obj.data_quality.sources)
+
+
+def _fmp_minimal(monkeypatch, *, fund=None, peers=None):
+    """FMP present (profile + fundamentals OK) but otherwise sparse — used to
+    prove yfinance fills only the gaps."""
+    monkeypatch.setattr(
+        fp, "get_profile", lambda t: _pr(fp.CompanyProfile(ticker=t, name="X", price=100.0))
+    )
+    monkeypatch.setattr(
+        fp, "get_fundamentals", lambda t: _pr(fund if fund is not None else fp.Ratios(pe=30.0))
+    )
+    monkeypatch.setattr(fp, "get_growth", lambda t: _pr([]))
+    monkeypatch.setattr(fp, "get_analyst", lambda t: _pr(fp.AnalystConsensus()))
+    monkeypatch.setattr(fp, "get_peers", lambda t: _pr(peers if peers is not None else []))
+    monkeypatch.setattr(fp, "get_news", lambda t, limit=6: _pr([]))
+
+
+def test_yf_fills_forward_pe_when_fmp_present(monkeypatch):
+    _fmp_minimal(monkeypatch)  # FMP has pe=30 but no forward P/E (never in /stable)
+    yf = {"fundamentals": {"pe_forward": 25.0}}
+    fp_obj = rf.build_fact_pack("X", yf_enricher=lambda t: yf)
+    assert fp_obj.valuation.pe == 30.0  # FMP wins where present
+    assert fp_obj.valuation.forward_pe == 25.0  # yfinance fills the gap
+
+
+def test_yf_fills_yoy_growth_when_fmp_present(monkeypatch):
+    _fmp_minimal(monkeypatch)
+    yf = {"fundamentals": {"revenue_growth_yoy": 0.12, "earnings_growth_yoy": 0.20}}
+    fp_obj = rf.build_fact_pack("X", yf_enricher=lambda t: yf)
+    assert fp_obj.growth.revenue_growth_yoy == 0.12
+    assert fp_obj.growth.earnings_growth_yoy == 0.20
+
+
+def test_peer_median_pe_computes_when_peer_metrics_exist(monkeypatch):
+    peers = [
+        fp.PeerRow(ticker="A", pe=20.0),
+        fp.PeerRow(ticker="B", pe=30.0),
+        fp.PeerRow(ticker="C", pe=40.0),
+    ]
+    _fmp_minimal(monkeypatch, fund=fp.Ratios(pe=30.0), peers=peers)
+    fp_obj = rf.build_fact_pack("X", yf_enricher=lambda t: {})
+    assert fp_obj.valuation.peer_median_pe == 30.0
+    assert fp_obj.valuation.band == "in-line"  # pe 30 vs median 30
+
+
+def test_partial_failure_never_500s(monkeypatch):
+    # Every FMP leg dead AND yfinance raises → still returns a FactPack.
+    none = _pr(None, source="fmp", as_of=None, coverage=0.0, warnings=["fmp_error:X"])
+    for name in ("get_profile", "get_fundamentals", "get_analyst", "get_peers"):
+        monkeypatch.setattr(fp, name, lambda t, _n=name: none)
+    monkeypatch.setattr(fp, "get_growth", lambda t: _pr([], coverage=0.0))
+    monkeypatch.setattr(fp, "get_news", lambda t, limit=6: _pr([], coverage=0.0))
+
+    def boom(_t):
+        raise RuntimeError("yfinance down")
+
+    fp_obj = rf.build_fact_pack("ZZZ", yf_enricher=boom)  # must not raise
+    assert fp_obj.ticker == "ZZZ"
 
 
 def test_factpack_blank_ticker_raises():

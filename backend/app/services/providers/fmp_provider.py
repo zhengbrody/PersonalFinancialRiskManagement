@@ -168,8 +168,9 @@ def get_fundamentals(ticker: str) -> ProviderResult[Ratios]:
             gross_margin=_num(_pick(ratios, "grossProfitMargin")),
             operating_margin=_num(_pick(ratios, "operatingProfitMargin")),
             net_margin=_num(_pick(ratios, "netProfitMargin")),
-            roe=_num(_pick(ratios, "returnOnEquity")),
-            roa=_num(_pick(ratios, "returnOnAssets")),
+            # ROE/ROA live in /key-metrics on FMP /stable, NOT /ratios.
+            roe=_num(_pick(km, "returnOnEquity")),
+            roa=_num(_pick(km, "returnOnAssets")),
             roic=_num(_pick(km, "returnOnInvestedCapital", "roic")),
             current_ratio=_num(_pick(ratios, "currentRatio")),
             debt_to_equity=_num(_pick(ratios, "debtToEquityRatio", "debtEquityRatio")),
@@ -256,15 +257,22 @@ def get_peers(ticker: str, *, limit: int = 5) -> ProviderResult[list[PeerRow]]:
             return ProviderResult(data=None, warnings=["no_peers"])
         rows: list[PeerRow] = []
         for sym in symbols:
-            km = _first_obj(_get("/key-metrics-ttm", {"symbol": sym}))
+            # FMP /stable splits these: name + market cap live in /profile; the
+            # valuation multiples + margin in /ratios-ttm. /key-metrics-ttm has
+            # NEITHER P/E nor net margin (only returnOnEquityTTM) — the old
+            # mapping silently nulled P/E/P/S and surfaced ROE as "net margin".
+            prof = _first_obj(_get("/profile", {"symbol": sym}))
+            rt = _first_obj(_get("/ratios-ttm", {"symbol": sym}))
             rows.append(
                 PeerRow(
                     ticker=sym,
-                    market_cap=_num(_pick(km, "marketCapTTM", "marketCap")),
-                    pe=_num(_pick(km, "peRatioTTM", "peRatio")),
-                    ps=_num(_pick(km, "priceToSalesRatioTTM", "priceToSalesRatio")),
-                    net_margin=_num(_pick(km, "netProfitMarginTTM", "netProfitMargin")),
-                    roe=_num(_pick(km, "roeTTM", "returnOnEquityTTM", "returnOnEquity")),
+                    name=str(_pick(prof, "companyName", "name") or ""),
+                    market_cap=_num(_pick(prof, "marketCap", "mktCap")),
+                    pe=_num(_pick(rt, "priceToEarningsRatioTTM")),
+                    ps=_num(_pick(rt, "priceToSalesRatioTTM")),
+                    net_margin=_num(_pick(rt, "netProfitMarginTTM")),
+                    # ROE is in /key-metrics-ttm; omitted to keep peers to 2 calls.
+                    roe=None,
                 )
             )
         return ProviderResult(data=rows, coverage=1.0 if rows else 0.0)
