@@ -136,26 +136,33 @@ class _RateLimited(Exception):
 
 def _cached(domain: str, ticker: str, ttl: int, producer) -> ProviderResult:
     """Run ``producer`` behind the TTL cache + the fail-soft contract."""
+    from .. import metrics
+
     if not _key():
+        metrics.record_provider("massive", "no_key")
         return ProviderResult(data=None, source="massive", warnings=["massive_key_missing"])
 
     ck = f"{domain}:{ticker}"
     now = time.time()
     hit = _cache.get(ck)
     if hit is not None and now - hit[0] < ttl:
+        metrics.record_provider("massive", "cache_hit")
         return hit[1]
 
     try:
         result = producer()
     except _RateLimited:
         _log.warning("massive.rate_limited domain=%s ticker=%s", domain, ticker)
+        metrics.record_provider("massive", "rate_limited")
         return ProviderResult(data=None, source="massive", warnings=["massive_rate_limited"])
     except Exception as exc:  # noqa: BLE001 - any upstream failure → fail-soft
         _log.warning("massive.error domain=%s ticker=%s err=%s", domain, ticker, type(exc).__name__)
+        metrics.record_provider("massive", "error")
         return ProviderResult(
             data=None, source="massive", warnings=[f"massive_error:{type(exc).__name__}"]
         )
 
+    metrics.record_provider("massive", "ok" if result.data is not None else "empty")
     _cache[ck] = (now, result)
     return result
 

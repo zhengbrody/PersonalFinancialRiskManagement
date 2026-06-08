@@ -143,17 +143,26 @@ def _http_get(url: str) -> str:
 
     Separated so tests can monkeypatch this single function instead
     of monkeypatching ``requests`` globally."""
-    resp = requests.get(
-        url,
-        timeout=_HTTP_TIMEOUT,
-        headers={
-            # Identify ourselves so upstream operators can contact
-            # if a usage pattern looks abusive. Both endpoints are
-            # public and don't gate by UA.
-            "User-Agent": "MindMarketBackend/1.0 (contact@mindmarket.app)"
-        },
-    )
-    resp.raise_for_status()
+    from . import metrics
+
+    # FRED vs Treasury, derived from the host so both upstreams count separately.
+    provider = "treasury" if "treasury" in url.lower() else "fred"
+    try:
+        resp = requests.get(
+            url,
+            timeout=_HTTP_TIMEOUT,
+            headers={
+                # Identify ourselves so upstream operators can contact
+                # if a usage pattern looks abusive. Both endpoints are
+                # public and don't gate by UA.
+                "User-Agent": "MindMarketBackend/1.0 (contact@mindmarket.app)"
+            },
+        )
+        resp.raise_for_status()
+    except Exception:
+        metrics.record_provider(provider, "error")
+        raise
+    metrics.record_provider(provider, "ok")
     return resp.text
 
 

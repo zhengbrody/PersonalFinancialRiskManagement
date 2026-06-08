@@ -176,6 +176,29 @@ def billing_admin_usage(request: Request, user: AuthedUser = Depends(require_use
     return ok(summary, request=request, started_at=started)
 
 
+# ── GET /admin/metrics — owner-only LIVE in-process API activity ───
+
+
+@router.get("/admin/metrics", summary="Owner-only: live in-process API call metrics")
+def billing_admin_metrics(request: Request, user: AuthedUser = Depends(require_user)):
+    """Real-time, in-process counters for the owner live-activity view: per-route
+    HTTP volume/latency/errors + per external-provider (yfinance/FMP/Massive/
+    FRED/Treasury) call outcomes. Pure memory read — no DB hit — so it's safe to
+    poll every few seconds. Counters are monotonic since process start (reset on
+    deploy); the dashboard diffs consecutive snapshots to show live rates. The
+    billing ledger ($/credits) stays in /admin/usage. 403 for non-owners."""
+    started = time.perf_counter()
+
+    from libs.admin.status import is_owner_email
+
+    if not is_owner_email(user.email):
+        raise APIError(status=403, code="forbidden", message="Owner only.")
+
+    from ...services import metrics
+
+    return ok(metrics.snapshot(), request=request, started_at=started)
+
+
 # ── GET /admin/status — owner-only integration diagnostics ─────────
 
 

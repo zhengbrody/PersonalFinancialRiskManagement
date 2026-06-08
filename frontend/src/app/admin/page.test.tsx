@@ -35,7 +35,27 @@ const USAGE = {
     since: "2026-06-01",
     totals: { events: 12, cost_usd: 1.23, credits: 123, tokens_in: 1000, tokens_out: 2000 },
     by_kind: { chat: { events: 12, cost_usd: 1.23, credits: 123 } },
+    by_model: {
+      "claude-haiku-4-5": {
+        events: 8,
+        cost_usd: 0.4,
+        credits: 40,
+        tokens_in: 600,
+        tokens_out: 900,
+      },
+    },
     users: [{ user_id: "user-abcdef12", events: 12, cost_usd: 1.23, credits: 123 }],
+  },
+  error: null,
+};
+
+const METRICS = {
+  data: {
+    uptime_s: 125,
+    total_requests: 50,
+    total_errors: 2,
+    routes: [{ method: "GET", route: "/api/v1/health", count: 40, errors: 0, avg_ms: 3 }],
+    providers: [{ name: "yfinance", calls: 10, ok: 8, cache_hit: 1, error: 1, rate_limited: 0 }],
   },
   error: null,
 };
@@ -88,5 +108,28 @@ describe("AdminPage", () => {
     // Run live checks → state flips to Connected.
     await user.click(screen.getByRole("button", { name: /run live checks/i }));
     expect(await screen.findByText("Connected")).toBeInTheDocument();
+  });
+
+  it("renders the live-activity card (providers + endpoints) and the by-model breakdown", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/admin/usage")) return Promise.resolve(mockJson(USAGE));
+      if (url.includes("/admin/metrics")) return Promise.resolve(mockJson(METRICS));
+      if (url.includes("/admin/status")) return Promise.resolve(mockJson(statusBody(false)));
+      return Promise.resolve(mockJson({ data: {}, error: null }));
+    });
+
+    renderWithQuery(<AdminPage />);
+
+    // Live activity card + its two sub-tables.
+    expect(await screen.findByText("Live activity")).toBeInTheDocument();
+    expect(await screen.findByText("External data providers")).toBeInTheDocument();
+    expect(screen.getByText("yfinance")).toBeInTheDocument();
+    expect(screen.getByText("Top endpoints")).toBeInTheDocument();
+    expect(screen.getByText("GET /api/v1/health")).toBeInTheDocument();
+
+    // Per-model AI cost breakdown.
+    expect(await screen.findByText("By model")).toBeInTheDocument();
+    expect(screen.getByText("claude-haiku-4-5")).toBeInTheDocument();
   });
 });

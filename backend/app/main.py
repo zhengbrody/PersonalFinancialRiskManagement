@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import time
 
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
@@ -49,6 +50,49 @@ def _running_under_pytest() -> bool:
     if os.environ.get("PYTEST_CURRENT_TEST"):
         return True
     return any("pytest" in os.path.basename(arg) for arg in sys.argv)
+
+
+class MetricsMiddleware:
+    """Pure-ASGI request-metrics middleware.
+
+    Records ``method · matched-route · status · latency`` into the in-process
+    ``services.metrics`` registry for the owner live-activity dashboard. Written
+    as raw ASGI (not Starlette's ``BaseHTTPMiddleware``) on purpose: that base
+    class buffers the response body, which would break the Copilot SSE stream.
+    This wrapper only intercepts ``http.response.start`` to read the status and
+    times the call — the body bytes stream straight through untouched."""
+
+    def __init__(self, app) -> None:
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+        from .services import metrics
+
+        start = time.perf_counter()
+        status = {"code": 500}
+
+        async def _send(message):
+            if message.get("type") == "http.response.start":
+                status["code"] = message.get("status", 500)
+            await send(message)
+
+        try:
+            await self.app(scope, receive, _send)
+        finally:
+            # ``scope["route"]`` is populated by Starlette's router during the
+            # call above, so it's available here. Use the route TEMPLATE
+            # (`/portfolios/{id}`) to bound cardinality; fall back to raw path.
+            route = scope.get("route")
+            path = getattr(route, "path", None) or scope.get("path", "?")
+            metrics.record_request(
+                scope.get("method", "?"),
+                path,
+                status["code"],
+                (time.perf_counter() - start) * 1000.0,
+            )
 
 
 def _quiet_expected_provider_noise() -> None:
@@ -99,6 +143,11 @@ def create_app() -> FastAPI:
     # CORS first — same kwargs hand-built in core.cors so the
     # production allow-list is auditable in one place.
     app.add_middleware(CORSMiddleware, **cors_kwargs(settings))
+
+    # Live request metrics (in-process counters → owner /admin/metrics). Cheap,
+    # fail-soft, streaming-safe (pure ASGI). Added after CORS so CORS preflights
+    # are still counted.
+    app.add_middleware(MetricsMiddleware)
 
     # Routers. Each router carries its own ``prefix`` and ``tags`` so
     # this file stays a directory of imports.

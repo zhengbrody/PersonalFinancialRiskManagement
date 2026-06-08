@@ -9,7 +9,7 @@
  * 403s for non-owners; this page surfaces that as a friendly notice.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,7 +22,13 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { useAdminStatus, useAdminUsage, type AdminStatus } from "@/lib/queries";
+import {
+  useAdminMetrics,
+  useAdminStatus,
+  useAdminUsage,
+  type AdminMetrics,
+  type AdminStatus,
+} from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 export default function AdminPage() {
@@ -31,6 +37,10 @@ export default function AdminPage() {
   const usage = useAdminUsage(Boolean(user));
   const [liveChecks, setLiveChecks] = useState(false);
   const status = useAdminStatus(Boolean(user), liveChecks);
+  // Only poll the live-metrics endpoint once usage confirms this caller is the
+  // owner — otherwise a non-owner would 403 every 4s.
+  const isOwner = Boolean(usage.data) && !usage.isError;
+  const metrics = useAdminMetrics(isOwner);
 
   useEffect(() => {
     if (!configured) return;
@@ -60,7 +70,7 @@ export default function AdminPage() {
 
   if (usage.isLoading || !usage.data) return <PageSkeleton />;
 
-  const { totals, by_kind, users, since } = usage.data;
+  const { totals, by_kind, by_model, users, since } = usage.data;
   const sinceLabel = formatSinceUtc(since);
 
   return (
@@ -83,6 +93,8 @@ export default function AdminPage() {
         />
       </div>
 
+      <LiveActivity data={metrics.data} loading={metrics.isLoading} />
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">By kind</CardTitle>
@@ -99,6 +111,29 @@ export default function AdminPage() {
           />
         </CardContent>
       </Card>
+
+      {by_model && Object.keys(by_model).length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">By model</CardTitle>
+            <CardDescription>AI spend split by the model that served it.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table
+              head={["Model", "Events", "Tokens", "Cost", "Cost units"]}
+              rows={Object.entries(by_model)
+                .sort((a, b) => (b[1].cost_usd ?? 0) - (a[1].cost_usd ?? 0))
+                .map(([m, v]) => [
+                  m,
+                  (v.events ?? 0).toLocaleString(),
+                  fmtTokens((v.tokens_in ?? 0) + (v.tokens_out ?? 0)),
+                  `$${(v.cost_usd ?? 0).toFixed(2)}`,
+                  (v.credits ?? 0).toLocaleString(),
+                ])}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -126,6 +161,106 @@ export default function AdminPage() {
         onRunLive={() => setLiveChecks(true)}
       />
     </div>
+  );
+}
+
+function LiveActivity({
+  data,
+  loading,
+}: {
+  data: AdminMetrics | undefined;
+  loading: boolean;
+}) {
+  // Live request rate = Δrequests / Δuptime across consecutive 4s polls. The
+  // server only exposes monotonic counters; the rate is derived here.
+  const prev = useRef<{ total: number; uptime: number } | null>(null);
+  const [rate, setRate] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!data) return;
+    const p = prev.current;
+    // Skip the tick where uptime went backwards (process restarted / redeployed).
+    if (p && data.uptime_s > p.uptime) {
+      const dReq = data.total_requests - p.total;
+      const dT = data.uptime_s - p.uptime;
+      if (dT > 0) setRate(Math.max(0, dReq / dT));
+    }
+    prev.current = { total: data.total_requests, uptime: data.uptime_s };
+  }, [data]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500/70" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+              </span>
+              Live activity
+            </CardTitle>
+            <CardDescription>
+              In-process counters since last deploy · auto-refresh 4s. Real $ cost
+              is in the cards above.
+            </CardDescription>
+          </div>
+          {data && (
+            <span className="text-xs text-muted-foreground">up {fmtUptime(data.uptime_s)}</span>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {loading && !data ? (
+          <Skeleton className="h-24" />
+        ) : !data ? (
+          <p className="text-sm text-muted-foreground">No activity yet.</p>
+        ) : (
+          <>
+            <div className="grid grid-cols-3 gap-3">
+              <Stat label="Requests" value={data.total_requests.toLocaleString()} />
+              <Stat label="Live rate" value={rate == null ? "…" : `${rate.toFixed(1)}/s`} />
+              <Stat label="Errors (5xx)" value={data.total_errors.toLocaleString()} />
+            </div>
+
+            <div>
+              <div className="mb-1 text-xs font-medium text-muted-foreground">
+                External data providers
+              </div>
+              <Table
+                head={["Provider", "Calls", "OK", "Cache", "Errors", "Limited"]}
+                rows={data.providers.map((p) => [
+                  p.name,
+                  p.calls.toLocaleString(),
+                  (p.ok ?? 0).toLocaleString(),
+                  (p.cache_hit ?? 0).toLocaleString(),
+                  (p.error ?? 0).toLocaleString(),
+                  (p.rate_limited ?? 0).toLocaleString(),
+                ])}
+              />
+            </div>
+
+            <div>
+              <div className="mb-1 text-xs font-medium text-muted-foreground">
+                Top endpoints
+              </div>
+              <Table
+                head={["Endpoint", "Count", "Avg ms", "Errors"]}
+                rows={data.routes
+                  .slice(0, 12)
+                  .map((r) => [
+                    `${r.method} ${r.route}`,
+                    r.count.toLocaleString(),
+                    (r.avg_ms ?? 0).toFixed(0),
+                    (r.errors ?? 0).toLocaleString(),
+                  ])}
+                mono
+              />
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -261,6 +396,12 @@ function fmtTokens(n: number): string {
   if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
   if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
   return String(n);
+}
+
+function fmtUptime(s: number): string {
+  if (s >= 3600) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+  if (s >= 60) return `${Math.floor(s / 60)}m`;
+  return `${Math.round(s)}s`;
 }
 
 function PageSkeleton() {

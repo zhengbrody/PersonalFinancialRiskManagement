@@ -362,6 +362,7 @@ export const adminUsageSchema = z.looseObject({
   since: z.string().nullable(),
   totals: usageAggSchema,
   by_kind: z.record(z.string(), usageAggSchema),
+  by_model: z.record(z.string(), usageAggSchema).optional(),
   users: z.array(usageUserSchema),
 });
 export type AdminUsage = z.infer<typeof adminUsageSchema>;
@@ -409,6 +410,58 @@ export function useAdminStatus(enabled: boolean, live: boolean) {
         { authToken: accessToken!, schema: adminStatusSchema },
       ),
     staleTime: 60 * 1000,
+    retry: false,
+  });
+}
+
+// ── owner: live in-process API metrics ──────────────────────────────
+const metricRouteSchema = z.looseObject({
+  method: z.string(),
+  route: z.string(),
+  count: z.number(),
+  errors: z.number().optional(),
+  status_2xx: z.number().optional(),
+  status_4xx: z.number().optional(),
+  status_5xx: z.number().optional(),
+  avg_ms: z.number().optional(),
+});
+const metricProviderSchema = z.looseObject({
+  name: z.string(),
+  calls: z.number(),
+  ok: z.number().optional(),
+  cache_hit: z.number().optional(),
+  empty: z.number().optional(),
+  error: z.number().optional(),
+  rate_limited: z.number().optional(),
+  no_key: z.number().optional(),
+});
+export const adminMetricsSchema = z.looseObject({
+  uptime_s: z.number(),
+  total_requests: z.number(),
+  total_errors: z.number(),
+  routes: z.array(metricRouteSchema),
+  providers: z.array(metricProviderSchema),
+});
+export type AdminMetrics = z.infer<typeof adminMetricsSchema>;
+export type MetricRoute = z.infer<typeof metricRouteSchema>;
+export type MetricProvider = z.infer<typeof metricProviderSchema>;
+
+/** Owner-only LIVE in-process API activity. In-memory on the server (no DB
+ * hit), so it's safe to poll every few seconds — the dashboard diffs
+ * consecutive snapshots to show live rates. */
+export function useAdminMetrics(enabled: boolean) {
+  const { accessToken } = useAuth();
+  return useQuery<AdminMetrics>({
+    queryKey: ["billing", "admin", "metrics"],
+    enabled: enabled && Boolean(accessToken),
+    queryFn: () =>
+      apiFetch<AdminMetrics>("/api/v1/billing/admin/metrics", {
+        authToken: accessToken!,
+        schema: adminMetricsSchema,
+      }),
+    refetchInterval: 4000,
+    refetchIntervalInBackground: false,
+    staleTime: 0,
     retry: false,
   });
 }
