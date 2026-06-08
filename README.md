@@ -1,73 +1,94 @@
 # MindMarket
 
-Full-stack portfolio risk intelligence for individual investors.
+AI-native portfolio risk cockpit for individual investors.
 
-[![Live](https://img.shields.io/badge/live-mindmarket.app-2563eb)](https://mindmarket.app)
-[![Backend CI](https://github.com/zhengbrody/PersonalFinancialRiskManagement/actions/workflows/ci.yml/badge.svg)](https://github.com/zhengbrody/PersonalFinancialRiskManagement/actions)
-[![License](https://img.shields.io/badge/license-MIT-111827)](LICENSE)
-[![Next.js](https://img.shields.io/badge/frontend-Next.js%20%2B%20TypeScript-111827)](frontend)
-[![FastAPI](https://img.shields.io/badge/backend-FastAPI%20%2B%20Python-059669)](backend)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-mindmarket.app-2563eb)](https://mindmarket.app)
+[![CI](https://github.com/zhengbrody/PersonalFinancialRiskManagement/actions/workflows/ci.yml/badge.svg)](https://github.com/zhengbrody/PersonalFinancialRiskManagement/actions)
+[![License](https://img.shields.io/badge/License-MIT-111827)](LICENSE)
 
-MindMarket is a modern wealthtech SaaS that turns portfolio holdings into
-risk scores, factor diagnostics, stress scenarios, AI explanations, and
-actionable follow-up questions.
+MindMarket helps retail investors move from "I own these tickers" to "I
+understand what can hurt this portfolio, why it matters, and what to inspect
+next."
 
-The product is built around one rule:
+Upload holdings, score portfolio health, diagnose risk drivers, simulate
+downside scenarios, research individual names, and ask an AI copilot grounded in
+the same deterministic metrics the platform shows on screen.
+
+The design principle is simple:
 
 > Quantitative numbers are computed deterministically in Python. The LLM can
 > explain, rank, and summarize those numbers, but it must not invent them.
 
-Live beta: [https://mindmarket.app](https://mindmarket.app)
+Try the live beta: [mindmarket.app](https://mindmarket.app)
 
 ---
 
-## What It Does
+## Why This Exists
 
-MindMarket helps a user answer:
+Most consumer portfolio tools show balances and price charts. Professional risk
+systems show factor exposure, downside tails, stress losses, liquidity, and
+attribution, but they are hard to use.
 
-1. Is my portfolio risk appropriate for my target risk level?
-2. Which positions or factors are driving the risk?
-3. What changed since the last score?
-4. What scenario would hurt me most?
-5. What should I inspect before making a trade decision?
+MindMarket sits between those worlds:
 
-Core product areas:
+- Retail-friendly onboarding and portfolio management.
+- Institutional-style risk calculations.
+- AI explanations that cite computed evidence instead of guessing.
+- Clear source provenance for market data.
+- A production SaaS foundation: auth, billing, observability, CI, and rollback.
 
-| Area | Description |
+---
+
+## Product Workflow
+
+| Step | What the user gets |
 | --- | --- |
-| Portfolio Health Score | 0-1000 score with risk match, risk-adjusted return, and downside protection dimensions. |
-| Risk Report | VaR, CVaR, max drawdown, factor beta, component VaR, stress losses, and liquidity diagnostics. |
-| Scenario Lab | Shock-based portfolio simulation with per-holding loss attribution. |
-| Research | Ticker research with fundamentals, valuation, peer context, technicals, and AI verdicts. |
-| Copilot | Streaming AI assistant over the same scoring, market, macro, and portfolio services used by the UI. |
-| Owner Analytics | Usage, token cost, health checks, Sentry status, and product feedback loops. |
+| Add holdings | Save tickers, market values, cash, cost basis, and risk preference. |
+| Score portfolio | 0-1000 health score across risk match, risk-adjusted return, and downside protection. |
+| Diagnose risk | VaR, CVaR, drawdown, factor beta, component VaR, stress losses, and liquidity outliers. |
+| Model scenarios | Shock the portfolio and see which holdings drive the loss. |
+| Research names | Combine fundamentals, valuation, peers, market data, and AI verdicts. |
+| Ask Copilot | Streamed assistant answers using the same API services and source data as the UI. |
 
 ---
 
-## Architecture
+## Highlights
+
+- **Deterministic quant core**: portfolio scoring, VaR/CVaR, factor betas,
+  scenario losses, and drawdown are computed in Python, not by the LLM.
+- **Grounded AI layer**: summaries and copilot answers use compact evidence
+  packets and fallback templates when the model is unavailable.
+- **Provider provenance**: price rows identify whether data came from yfinance,
+  Massive fallback, or remained missing.
+- **Production SaaS plumbing**: Supabase Auth/RLS, Stripe billing, Sentry,
+  PostHog, GitHub Actions, GHCR, Docker Compose, and Caddy.
+- **Agent-ready backend**: MCP tools expose scoring, market data, macro data,
+  and portfolio context to Claude-compatible clients.
+
+---
+
+## System Architecture
 
 MindMarket is a split-stack application:
 
 ```mermaid
-flowchart LR
-  Browser["Next.js App Router<br/>Tailwind + shadcn-style UI"]
-  API["FastAPI<br/>typed JSON envelope"]
-  Quant["Python Quant Engine<br/>VaR, CVaR, factors, scenarios"]
-  Data["Market + Macro Providers<br/>yfinance, Massive fallback, FMP, FRED, Treasury"]
-  AI["LLM Layer<br/>Claude / fallback templates"]
-  DB["Supabase<br/>Auth, Postgres, RLS"]
-  Billing["Stripe<br/>checkout + portal"]
-  Obs["Sentry + PostHog<br/>errors + product analytics"]
-  MCP["MCP Server<br/>agent tools"]
+flowchart TD
+  User["Investor"]
+  Web["Next.js Web App"]
+  API["FastAPI API<br/>{data, error, meta} envelope"]
 
-  Browser --> API
-  API --> Quant
-  API --> Data
-  API --> AI
-  API --> DB
-  API --> Billing
-  API --> Obs
-  API --> MCP
+  User --> Web
+  Web --> API
+
+  API --> Auth["Supabase Auth + RLS"]
+  API --> Portfolio["Portfolio Service"]
+  API --> Quant["Quant Engine<br/>score, VaR, stress, factors"]
+  API --> Data["Market Data<br/>yfinance + Massive fallback"]
+  API --> Research["Research Data<br/>FMP, SEC, FRED, Treasury"]
+  API --> AI["AI Services<br/>Claude + deterministic fallback"]
+  API --> Billing["Stripe Billing"]
+  API --> Observability["Sentry + PostHog"]
+  API --> MCP["MCP Tools for AI Clients"]
 ```
 
 ### Production Routing
@@ -85,9 +106,9 @@ small EC2 instance never runs a memory-heavy `next build`.
 
 ---
 
-## Tech Stack
+## Built With
 
-| Layer | Stack |
+| Layer | Choices |
 | --- | --- |
 | Frontend | Next.js 14 App Router, TypeScript, Tailwind CSS, shadcn-style primitives, React Query, Zod |
 | Backend | FastAPI, Pydantic, typed response envelope, PyJWT/JWKS auth verification |
