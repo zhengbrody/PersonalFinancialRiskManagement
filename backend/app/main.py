@@ -45,8 +45,16 @@ from .core.responses import (
 
 def _running_under_pytest() -> bool:
     """Hard guard for monitoring. Local shells can inherit production env vars;
-    pytest/TestClient must never emit production Sentry events."""
+    pytest/TestClient must never emit production Sentry events.
+
+    ``PYTEST_CURRENT_TEST`` is only set *during* a test, not while the module-level
+    ``app = create_app()`` runs at import/collection time, and ``sys.argv[0]`` is
+    ``__main__.py`` (not "pytest") under ``python -m pytest`` — so neither alone is
+    enough. ``"pytest" in sys.modules`` is true the moment pytest is the runner,
+    regardless of how it was invoked, and covers the import-time init path."""
     if os.environ.get("PYTEST_CURRENT_TEST"):
+        return True
+    if "pytest" in sys.modules:
         return True
     return any("pytest" in os.path.basename(arg) for arg in sys.argv)
 
