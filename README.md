@@ -1,565 +1,409 @@
-<div align="center">
+# MindMarket
 
-# 📊 MindMarket AI
+Full-stack portfolio risk intelligence for individual investors.
 
-### Decision-First Portfolio Risk Analytics · 决策优先的投资组合风控平台
+[![Live](https://img.shields.io/badge/live-mindmarket.app-2563eb)](https://mindmarket.app)
+[![Backend CI](https://github.com/zhengbrody/PersonalFinancialRiskManagement/actions/workflows/ci.yml/badge.svg)](https://github.com/zhengbrody/PersonalFinancialRiskManagement/actions)
+[![License](https://img.shields.io/badge/license-MIT-111827)](LICENSE)
+[![Next.js](https://img.shields.io/badge/frontend-Next.js%20%2B%20TypeScript-111827)](frontend)
+[![FastAPI](https://img.shields.io/badge/backend-FastAPI%20%2B%20Python-059669)](backend)
 
-[![Live](https://img.shields.io/badge/🌐_LIVE-mindmarket.app-0B7285?style=for-the-badge)](https://mindmarket.app/)
+MindMarket is a modern wealthtech SaaS that turns portfolio holdings into
+risk scores, factor diagnostics, stress scenarios, AI explanations, and
+actionable follow-up questions.
 
-[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
-[![Streamlit](https://img.shields.io/badge/Streamlit-1.30%2B-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)](https://streamlit.io)
-[![Claude](https://img.shields.io/badge/AI-Claude_%7C_DeepSeek_%7C_Ollama-blueviolet?style=flat-square&logo=anthropic)](https://anthropic.com)
-[![CI](https://github.com/zhengbrody/PersonalFinancialRiskManagement/actions/workflows/ci.yml/badge.svg)](https://github.com/zhengbrody/PersonalFinancialRiskManagement/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker&logoColor=white)]()
+The product is built around one rule:
 
-**[English](#english) · [中文](#中文)**
+> Quantitative numbers are computed deterministically in Python. The LLM can
+> explain, rank, and summarize those numbers, but it must not invent them.
 
-</div>
-
----
-
-<a name="english"></a>
-
-## ⚡ Overview
-
-**MindMarket AI** is a portfolio risk platform for retail investors who want institutional-grade analytics without institutional-grade complexity.
-
-It is designed to answer three questions quickly:
-
-1. Is my capital safe right now?
-2. What is actually driving portfolio risk?
-3. What should I change next?
-
-Under the hood, the stack is still quantitative and serious: Monte Carlo VaR, multi-factor attribution, regime detection, SEC 13F tracking, and AI-powered narrative summaries. The difference is that the product flow is now organized around decisions, not around raw tools.
-
-> Built to bridge hedge-fund-style risk tooling and retail-friendly product UX.
-
-### Best First-Time Flow
-
-- `Run Demo Portfolio` to land directly in the executive dashboard.
-- `Overview` to validate net equity, concentration, and P&L coverage.
-- `Risk` to inspect VaR, drawdown, factor exposure, and stress loss.
-- `Portfolio Actions` only after the risk picture is clear.
-- `Ticker Research` and `Institutions` as evidence layers, not as the starting point.
+Live beta: [https://mindmarket.app](https://mindmarket.app)
 
 ---
 
-## 📸 Screenshots
+## What It Does
 
-<div align="center">
+MindMarket helps a user answer:
 
-![Landing Page](docs/screenshots/01_landing.png)
-*Landing · feature grid · personas · tech badges*
+1. Is my portfolio risk appropriate for my target risk level?
+2. Which positions or factors are driving the risk?
+3. What changed since the last score?
+4. What scenario would hurt me most?
+5. What should I inspect before making a trade decision?
 
-![TradingView Page](docs/screenshots/02_tradingview.png)
-*Page 5 — Embedded TradingView charts + technical analysis*
+Core product areas:
 
-![Ticker Research Page](docs/screenshots/03_ticker_research.png)
-*Page 10 — Standalone any-ticker deep dive with AI recommendation*
-
-![Trading Floor Page](docs/screenshots/04_trading_floor.png)
-*Page 7 — Bloomberg-style market monitor*
-
-</div>
-
----
-
-## 🎯 Core Capabilities
-
-| Domain | Highlights |
-|---|---|
-| 🛡️ **Risk Engine** | Monte Carlo VaR/CVaR · EWMA covariance (λ=0.94) · Component VaR · Stress testing · Margin-call distance |
-| 📈 **Factor Models** | 6-factor OLS with t-statistics · Macro sensitivities (rates/USD/oil) · Barra PCA attribution |
-| 🏛️ **Institutional Intel** | SEC 13F parser (top ~30 filers) · Smart-money overlap · crowding detection · conviction tracking |
-| 🔄 **Regime & Backtest** | HMM (Gaussian mixture EM) · Vectorized backtesting · Brinson-Hood-Beebower attribution |
-| 🤖 **AI Digests** | Narrative summaries on every page (Claude / DeepSeek / Ollama with auto-detection) |
-| 🌏 **Presentation Layer** | English-first UI · browser translation friendly · dark-mode design system |
+| Area | Description |
+| --- | --- |
+| Portfolio Health Score | 0-1000 score with risk match, risk-adjusted return, and downside protection dimensions. |
+| Risk Report | VaR, CVaR, max drawdown, factor beta, component VaR, stress losses, and liquidity diagnostics. |
+| Scenario Lab | Shock-based portfolio simulation with per-holding loss attribution. |
+| Research | Ticker research with fundamentals, valuation, peer context, technicals, and AI verdicts. |
+| Copilot | Streaming AI assistant over the same scoring, market, macro, and portfolio services used by the UI. |
+| Owner Analytics | Usage, token cost, health checks, Sentry status, and product feedback loops. |
 
 ---
 
-## 🌐 Live Environment
+## Architecture
 
-👉 **Live app:** **[mindmarket.app](https://mindmarket.app/)**
+MindMarket is a split-stack application:
 
-`mindmarket.app` is the recruiter / product-preview environment running on AWS (EC2 + Caddy + Let's Encrypt + Lambda + DynamoDB). The long-term public SaaS brand remains **mindmarket.ai**; the current repo is still in the transition from engineering demo to real multi-user product.
+```mermaid
+flowchart LR
+  Browser["Next.js App Router<br/>Tailwind + shadcn-style UI"]
+  API["FastAPI<br/>typed JSON envelope"]
+  Quant["Python Quant Engine<br/>VaR, CVaR, factors, scenarios"]
+  Data["Market + Macro Providers<br/>yfinance, Massive fallback, FMP, FRED, Treasury"]
+  AI["LLM Layer<br/>Claude / fallback templates"]
+  DB["Supabase<br/>Auth, Postgres, RLS"]
+  Billing["Stripe<br/>checkout + portal"]
+  Obs["Sentry + PostHog<br/>errors + product analytics"]
+  MCP["MCP Server<br/>agent tools"]
 
-> _Previously hosted on Streamlit Cloud (`mindmarketai.streamlit.app`); migrated to AWS in 2026-04 for custom domain, per-user portfolios, and Supabase-backed auth. Streamlit Cloud deployment retired 2026-05._
+  Browser --> API
+  API --> Quant
+  API --> Data
+  API --> AI
+  API --> DB
+  API --> Billing
+  API --> Obs
+  API --> MCP
+```
+
+### Production Routing
+
+| Path | Service |
+| --- | --- |
+| `/` | Next.js frontend |
+| `/api/v1/*` | FastAPI backend |
+| `/legacy/*` | Legacy Streamlit app, retained as a rollback surface |
+| `/mcp` / stdio | MCP tools for AI clients |
+
+The production deployment uses Docker Compose, Caddy, GitHub Actions, and GHCR
+images. Frontend and backend images are built off-box in GitHub Actions so the
+small EC2 instance never runs a memory-heavy `next build`.
 
 ---
 
-## 🗂️ Product Pages
+## Tech Stack
 
-| # | Page | What It Shows |
-|---|------|---------------|
-| 1 | 🏠 **Overview** | KPIs, cumulative returns, drawdown, cost-basis P&L, AI digest |
-| 2 | 🛡️ **Risk** | VaR/CVaR, component VaR, factor betas, 3-mode stress testing, AI risk briefing |
-| 3 | 📰 **Markets** | VIX · Fear & Greed · Yield curve · Macro news · AI sentiment (all holdings) · Earnings AI |
-| 4 | 💼 **Portfolio** | Efficient frontier · Trade blotter · Scenario simulator (-30% ~ +30%) · Margin monitor |
-| 5 | 📉 **TradingView** | Embedded TradingView charts + technical analysis |
-| 6 | 🏙️ **Trading Floor** | Bloomberg-style regime + sectors + movers + next-read routing |
-| 7 | 🏛️ **Institutions** | SEC 13F smart money · Institution deep dive · conviction and crowding analysis |
-| 8 | 🔬 **Quant Lab** | Backtesting · Performance attribution · Regime analysis |
-| 9 | 🔎 **Ticker Research** | Standalone any-ticker deep dive (10 data sources + AI recommendation) |
+| Layer | Stack |
+| --- | --- |
+| Frontend | Next.js 14 App Router, TypeScript, Tailwind CSS, shadcn-style primitives, React Query, Zod |
+| Backend | FastAPI, Pydantic, typed response envelope, PyJWT/JWKS auth verification |
+| Quant | NumPy, pandas, SciPy, custom portfolio scoring and risk engine |
+| Data | yfinance, Massive Stocks fallback, FMP, FRED CSV, Treasury CSV, SEC EDGAR |
+| Auth + DB | Supabase Auth, Postgres, Row Level Security |
+| AI | Anthropic Claude, deterministic fallback templates, MCP tool surface |
+| Payments | Stripe Checkout, Customer Portal, Supabase webhook sync |
+| Observability | Sentry, PostHog, structured logs |
+| Deploy | Docker, Caddy, GitHub Actions, GHCR, AWS EC2 |
 
 ---
 
-## 🚀 Quick Start
+## Repository Layout
 
-### Prerequisites
+```text
+.
+├── frontend/              # Next.js SaaS frontend
+├── backend/               # FastAPI API, schemas, services, MCP server, tests
+├── engine/                # Deterministic portfolio scoring engine
+├── domain/                # Shared Pydantic domain models
+├── libs/                  # Auth, billing, analysis, risk, data-quality helpers
+├── supabase/              # Database migrations and edge functions
+├── docs/                  # ADRs, AWS runbooks, SEO notes, legal docs
+├── infra/                 # Historical AWS CDK experiments and runbooks
+├── pages/, app.py, ui/    # Legacy Streamlit surface retained under /legacy
+├── compose.split.yml      # Production split-stack compose file
+├── Caddyfile.split        # Production routing
+└── .github/workflows/     # CI and GHCR image builds
+```
 
-| Tool | Version | Purpose |
-|------|---------|---------|
-| Python | 3.10+ | Runtime |
-| pip | latest | Package manager |
-| Git | any | Clone repo |
-| Anthropic API key | optional | Claude AI digests |
-| FMP API key | optional | Earnings transcripts / price targets |
-| Ollama | optional | Local LLM (auto-detected on port 11434) |
+---
 
-### Option 1 — Native Python
+## Quick Start
+
+### 1. Clone
 
 ```bash
 git clone https://github.com/zhengbrody/PersonalFinancialRiskManagement.git
 cd PersonalFinancialRiskManagement
+```
+
+### 2. Backend
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
+pip install -r backend/requirements-backend.txt
+
+uvicorn backend.app.main:app --reload --port 8000
+```
+
+Open the API docs:
+
+```text
+http://localhost:8000/docs
+```
+
+### 3. Frontend
+
+```bash
+cd frontend
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+Open:
+
+```text
+http://localhost:3000
+```
+
+The public score demo works without Supabase. Login, saved portfolios, billing,
+and owner dashboards need the environment variables below.
+
+---
+
+## Environment Variables
+
+Never commit real secrets. Use `.env`, `frontend/.env.local`, GitHub Actions
+Variables/Secrets, or the EC2 `.env` file.
+
+### Frontend
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `NEXT_PUBLIC_API_BASE_URL` | Recommended | Use `https://mindmarket.app` in production, `http://localhost:8000` locally. |
+| `NEXT_PUBLIC_SUPABASE_URL` | Auth | Public Supabase project URL. |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Auth | Public browser anon key. |
+| `NEXT_PUBLIC_SENTRY_DSN` | Optional | Public browser DSN for frontend errors. |
+| `NEXT_PUBLIC_POSTHOG_KEY` | Optional | Product analytics key. |
+| `NEXT_PUBLIC_POSTHOG_HOST` | Optional | Usually `https://us.i.posthog.com` for US PostHog Cloud. |
+
+### Backend
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `MINDMARKET_ENV` | No | `dev`, `staging`, or `production`. |
+| `MINDMARKET_ALLOWED_ORIGINS` | Production | Comma-separated CORS allow-list. |
+| `SUPABASE_URL` | Auth | Supabase project URL, also used for JWKS verification. |
+| `SUPABASE_JWT_SECRET` | Legacy auth | Needed only for HS256 Supabase JWT projects. |
+| `SUPABASE_ANON_KEY` | Auth | Used for Supabase client parity. |
+| `ANTHROPIC_API_KEY` | AI | Server-side only. |
+| `STRIPE_SECRET_KEY` | Billing | Server-side only. |
+| `STRIPE_PRICE_BASIC`, `STRIPE_PRICE_PRO` | Billing | Stripe price ids. |
+| `FMP_API_KEY` | Research | Fundamentals, analyst, peers, valuation data. |
+| `MASSIVE_API_KEY` | Market fallback | Optional fallback for price/history when yfinance fails. |
+| `SENTRY_DSN` | Observability | Backend Sentry DSN. |
+
+---
+
+## Data Provider Policy
+
+MindMarket separates market data by job:
+
+| Provider | Role |
+| --- | --- |
+| yfinance | Default free price/history provider. |
+| Massive Stocks | Fallback-only provider for prices/history when yfinance is empty, stale, or errors. |
+| FMP | Fundamentals, valuation, analyst, profile, peers, and research context. |
+| FRED + Treasury | Macro rates, inflation, unemployment, and yield curve snapshots. |
+
+Every market price row carries provenance so the UI and API can report whether a
+number came from `yfinance`, `massive`, or a missing-data fallback. Missing data
+should degrade gracefully; it should not become fabricated data.
+
+---
+
+## API Contract
+
+FastAPI responses use a consistent envelope:
+
+```json
+{
+  "data": {},
+  "error": null,
+  "meta": {
+    "request_id": "req_...",
+    "elapsed_ms": 12
+  }
+}
+```
+
+On failure:
+
+```json
+{
+  "data": null,
+  "error": {
+    "code": "unauthorized",
+    "message": "Token is invalid or expired.",
+    "details": {}
+  },
+  "meta": {
+    "request_id": "req_...",
+    "elapsed_ms": 4
+  }
+}
+```
+
+Useful local smoke tests:
+
+```bash
+curl -s http://localhost:8000/api/v1/health
+
+curl -s "http://localhost:8000/api/v1/market/prices?tickers=SPY,BND"
+
+curl -s -X POST http://localhost:8000/api/v1/risk/score \
+  -H "Content-Type: application/json" \
+  -d '{"holdings":[{"ticker":"SPY","market_value":60000},{"ticker":"BND","market_value":40000}],"risk_preference":3}'
+```
+
+---
+
+## Development Commands
+
+### Backend
+
+```bash
+python -m pytest backend/tests -q --no-cov
+python -m black --check backend
+python -m ruff check backend
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm run lint
+npm run test -- --run
+npx tsc --noEmit
+npm run build
+```
+
+### Legacy Streamlit
+
+```bash
 streamlit run app.py
-# → http://localhost:8501
 ```
 
-### Option 2 — Docker
-
-```bash
-docker-compose up --build
-# → http://localhost:8501
-```
-
-### Option 3 — Streamlit Cloud (one-click)
-
-Fork → connect to [share.streamlit.io](https://share.streamlit.io) → set secrets → deploy.
-
-```toml
-# .streamlit/secrets.toml
-ANTHROPIC_API_KEY = "sk-ant-..."
-DEEPSEEK_API_KEY  = "sk-..."
-FMP_API_KEY       = "..."   # fundamentals / analyst / peers / valuation
-MASSIVE_API_KEY   = "..."   # OPTIONAL — market price/history FALLBACK only
-```
-
-### Market-data providers
-
-| Provider | Role | Notes |
-|----------|------|-------|
-| **yfinance** | Default free **market price/history** source | Always on; no key |
-| **Massive Stocks (Basic)** | **Fallback only** for price/history | `MASSIVE_API_KEY` optional; free Basic = **5 calls/min** → used only when yfinance returns empty/NaN/errors, in-process cached (price ~20m, history ~12h, reference ~24h), top-N capped. Never WebSocket/snapshot/intraday. |
-| **FMP** | **Fundamentals / analyst / peers / valuation** | `FMP_API_KEY` optional; Massive never touches these |
-
-Every price carries a `source` (`yfinance` \| `massive`); the Health Score / Risk
-Report "data quality" area and `GET /api/v1/market/prices` surface which tickers
-used the Massive fallback and which stayed missing. Do **not** commit a real key.
+Legacy Streamlit is kept for rollback and historical workflows. New product
+development should target `frontend/` and `backend/`.
 
 ---
 
-## 🏗️ Architecture
+## Testing Strategy
 
-```
-                    ┌─────────────────────┐
-                    │  portfolio_config   │  ← Holdings + cost basis
-                    └──────────┬──────────┘
-                               │
-                    ┌──────────▼──────────┐
-                    │   data_provider     │  ← yfinance + caching + validation
-                    └──────────┬──────────┘
-                               │
-                ┌──────────────▼──────────────┐
-                │      risk_engine.py         │
-                │   EWMA · MC VaR · OLS       │
-                │   Stress · Frontier · Barra │
-                └──────────────┬──────────────┘
-                               │
-      ┌────────┬────────┬──────┼──────┬────────┬────────┐
-      ▼        ▼        ▼      ▼      ▼        ▼        ▼
-  options  backtest  regime  vol.  inst.   options   perf.
-  engine   engine   detector scan. track.  flow     attrib.
-      └────────┴────────┴──────┼──────┴────────┴────────┘
-                               │
-                     ┌─────────▼─────────┐
-                     │    app.py (UI)    │
-                     │  10 Streamlit     │
-                     │  pages + call_llm │
-                     └───────────────────┘
-```
+The test suite is designed to run offline:
+
+- Backend endpoint contract tests use local fixtures and mocked providers.
+- JWT tests mint local tokens and verify fail-closed behavior.
+- Frontend tests mock API envelopes and exercise loading, error, and auth states.
+- Market data code degrades to partial results instead of hard failing when a
+  provider is unavailable.
+
+Before opening a PR, run the backend and frontend gates listed above.
 
 ---
 
-## 🛠️ Tech Stack
+## Deployment
 
-| Layer | Tools |
-|-------|-------|
-| **UI** | Streamlit · Plotly · custom CSS (dark theme) |
-| **Quant** | NumPy · pandas · SciPy (`optimize`, `stats`) |
-| **Data** | yfinance · SEC EDGAR · FMP API · CNN Fear & Greed · RSS feeds |
-| **AI** | Anthropic Claude · DeepSeek · Ollama (local) |
-| **Testing** | pytest · pytest-cov · pytest-asyncio (unit · integration · performance) |
-| **Quality** | black · ruff · mypy · pre-commit · GitHub Actions CI |
-| **Logging** | structlog · python-json-logger |
-| **Deploy** | Docker · docker-compose · Streamlit Cloud · **AWS (CDK Python, see below)** |
+Production deploys are pull-only on EC2:
 
----
+1. Merge to `main`.
+2. GitHub Actions builds frontend/backend images on hosted runners.
+3. Images are pushed to GHCR.
+4. EC2 pulls images and recreates the relevant containers.
+5. Caddy routes `/`, `/api/v1/*`, and `/legacy/*`.
 
-## ☁️ AWS Migration (Phases 1–2 complete)
+Key files:
 
-The original Streamlit-only deployment is being migrated to a distributed AWS
-architecture with infrastructure-as-code. **Status:** Phase 1 + Phase 2
-designed, deployed end-to-end, smoke-tested, and torn back down. Live demo
-URL is available on demand — `./infra/scripts/deploy-phase-1.sh` brings it
-up in ~10 min.
+| File | Purpose |
+| --- | --- |
+| `.github/workflows/build-images.yml` | Build and push GHCR images. |
+| `compose.split.yml` | Split-stack production services. |
+| `Caddyfile.split` | Production routing. |
+| `docs/aws/ci-image-deploy.md` | CI image deploy runbook. |
+| `docs/aws/operations.md` | Operations checklist. |
 
-### Target architecture
-
-```
-                       ┌────────────────────┐
-       Users   ──────► │ CloudFront + WAF   │      (Phase 4)
-                       └─────────┬──────────┘
-                                 │
-                       ┌─────────▼──────────┐
-                       │  EC2 (Streamlit)   │      Phase 1
-                       │  Caddy auto-HTTPS  │      + Let's Encrypt
-                       │  CloudWatch Agent  │      via *.nip.io
-                       └─────────┬──────────┘
-                                 │ feature flag USE_REMOTE_COMPUTE
-                                 │
-                       ┌─────────▼──────────┐
-                       │  REST API Gateway  │      Phase 2
-                       │  api_key + 1k/day  │
-                       └─────────┬──────────┘
-                                 │
-        ┌────────────────────────┼────────────────────────┐
-        │                        │                        │
-   ┌────▼─────┐            ┌─────▼─────┐            ┌────▼─────┐
-   │ /var     │            │ /greeks   │            │ /price/* │
-   │ Lambda   │            │ Lambda    │            │ Lambda   │
-   │ MC VaR   │            │ BS+Greeks │            │ yfinance │
-   │ 3GB mem  │            │ 512MB     │            │ +DDB rw  │
-   └────┬─────┘            └───────────┘            └────┬─────┘
-        │                                                │
-        └──────────► DynamoDB PriceCache ◄───────────────┘
-                     pk=TICKER#sym
-                     sk=BAR#interval#period
-                     TTL=expiresAt
-```
-
-### Cost (US East 1, on-demand teardown pattern)
-
-| Stack | Idle | While running | Verified spend |
-|---|---|---|---|
-| Foundation (VPC + SG + S3 logs) | $0 | $0 | $0 |
-| Compute (EC2 t3.micro + EIP) | $0 | ~$9.30/mo | < $0.50 across 3 deploys |
-| Data (DynamoDB on-demand) | $0 | $0 (free tier) | $0 |
-| Api (3 Lambdas + REST API + UsagePlan) | $0 | ~$3-5/mo at 50K req | < $0.20 across 3 deploys |
-| CDKToolkit (one-time bootstrap) | ~$0.02/mo | ~$0.02/mo | $0.02 |
-
-**Total verified Phase 1 + Phase 2 spend: ~$0.70 of $200 Free Plan credits.**
-Strategy: deploy when demoing, destroy when not. Re-create takes ~10 min via
-`deploy-phase-1.sh` and `cdk deploy MindMarket-Data MindMarket-Api`.
-
-### Repo layout for the migration
-
-```
-infra/                              CDK Python (one-shot scaffold + 4 stacks)
-├── infra/foundation_stack.py       VPC, SG, S3 logs (Phase 1)
-├── infra/compute_stack.py          EC2 + EIP + IAM + user-data (Phase 1)
-├── infra/data_stack.py             DynamoDB PriceCache (Phase 2)
-├── infra/api_stack.py              REST API + 3 Lambdas + UsagePlan (Phase 2)
-└── scripts/{deploy-phase-1.sh, destroy.sh}
-
-libs/mindmarket_core/               Pure-compute primitives (no I/O)
-├── constants.py · var.py · portfolio_math.py · black_scholes.py · data_prep.py
-
-services/                           Lambda function bodies
-├── risk-calculator/   handler.py + Dockerfile + tests/   POST /var
-├── options-pricer/    handler.py + Dockerfile + tests/   POST /greeks
-└── price-cache/       handler.py + Dockerfile + tests/   GET  /price/{ticker}
-
-docs/adr/                           Architecture Decision Records
-├── 0001-foundation-vpc-design.md   Why 2 AZs, 0 NAT, port 80 for ACME
-└── 0002-phase2-compute-design.md   Why Container Image Lambda, REST not HTTP API
-docs/aws/phase-1-ec2.md             Operational runbook + 6 troubleshooting recipes
-docs/migration-log.md               Dated log of what shipped, by session
-```
-
-### Smoke-test results (verified during Phase 2 deploy)
-
-| Endpoint | Input | Output | Latency |
-|---|---|---|---|
-| `POST /greeks` | ATM 1Y call S=K=100 r=5% σ=20% | **price 10.4506, delta 0.6368** (matches Hull 17.5 to 4 dp) | 156 ms warm |
-| `POST /var` | 3-asset synthetic returns, 5K sims, 21d horizon | VaR95 6.12%, CVaR95 7.17% (CVaR ≥ VaR ✓) | 9 s cold, < 1 s warm |
-| `GET /price/{t}` | AAPL 5d 1d | Architecture verified; yfinance 0.2.50 ↔ Yahoo API drift returns empty df | 21 s cold |
-
-### What I Learned (real bugs found in real deploys)
-
-| Bug | Root cause | Lesson |
-|---|---|---|
-| `GroupDescription` rejected with em-dash `—` | EC2 SecurityGroup props are ASCII-only | Lint passes don't catch service-level constraints — only real CFN does |
-| `compose build requires buildx 0.17+` on AL2023 | Bundled buildx is 0.12; Compose v2.31 wants 0.17 | Always pin tooling versions in IaC; AMI bundles drift |
-| `OCI runtime exec failed: curl: file not found` | `python:3.10-slim` doesn't include curl | Healthchecks should use base-image-native tools (`python -c urllib`) |
-| `pip install` failed compiling NumPy from source in Lambda image | M-series Mac builds arm64; Lambda is x86_64; numpy 2.x lacks arm64 wheel | Always set `platform=LINUX_AMD64` on `DockerImageCode.from_image_asset` |
-| `Runtime.ImportModuleError: No module named 'pandas'` | Eager `__init__.py` `from . import var` forced every consumer to install pandas | Lazy package init when sub-modules have divergent transitive deps |
-| `JSONDecodeError` from yfinance for every ticker | Yahoo API contract drifted; yfinance 0.2.50 stale | External free data sources are fragile; production needs paid feed (FMP/Polygon) |
-
-### Quick deploy / destroy
-
-```bash
-# One-time per AWS account/region
-cd infra && python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cdk bootstrap aws://<account>/<region> --profile mindmarket
-
-# Deploy everything (~10 min)
-export OPERATOR_IP=$(curl -s -4 ifconfig.me)
-cdk deploy --all --profile mindmarket --context operator_ip=$OPERATOR_IP
-
-# Smoke test (URL + key from outputs.json)
-API_URL=$(jq -r '.["MindMarket-Api"].ApiUrl' cdk.out/outputs.json | sed 's:/$::')
-KEY_ID=$(jq -r '.["MindMarket-Api"].ApiKeyId' cdk.out/outputs.json)
-API_KEY=$(aws apigateway get-api-key --api-key $KEY_ID --include-value --profile mindmarket --query value --output text)
-curl -X POST "$API_URL/greeks" -H "x-api-key: $API_KEY" -H "Content-Type: application/json" \
-  -d '{"spot":100,"strike":100,"time_to_expiry_years":1,"risk_free_rate":0.05,"volatility":0.2,"option_type":"call"}'
-
-# Tear it all down (~3 min)
-./infra/scripts/destroy.sh --force
-```
-
-Full operational details in `docs/aws/phase-1-ec2.md`.
+Do not build the Next.js image on the t3.micro host. That already caused an OOM
+incident; the repository now uses off-box GHCR builds.
 
 ---
 
-## 🧪 Testing
+## Security and Privacy
 
-```bash
-# Full suite
-python -m pytest tests/ -v
-
-# No coverage (faster)
-python -m pytest tests/ --no-cov
-
-# Single module
-python -m pytest tests/unit/test_risk_engine.py -v
-```
-
-Unit / integration / performance suites. Count the current suite with `python -m pytest tests/ --collect-only -q | tail -1`.
+- Supabase Row Level Security is the database boundary for user portfolios.
+- Backend routes verify Supabase JWTs and fail closed when auth config is missing.
+- Service-role keys, Stripe keys, Anthropic keys, and data-provider keys are
+  server-side only.
+- Browser analytics must not include tickers, position sizes, portfolio ids, or
+  dollar values.
+- This project is financial analytics software, not investment advice.
 
 ---
 
-## 📂 Project Structure
+## Documentation
 
-```
-MindMarket AI/
-├── app.py                          # Entry · call_llm() · session state
-├── risk_engine.py                  # Quant engine (EWMA, VaR, betas, stress)
-├── data_provider.py                # Yahoo Finance with caching
-├── market_intelligence.py          # News · DCF · insider · Reddit · crypto
-├── options_engine.py               # Black-Scholes + Greeks + strategies
-├── regime_detector.py              # HMM regime detection
-├── institutional_tracker.py        # SEC 13F filing tracker
-├── backtest_engine.py              # Vectorized strategy backtest
-├── performance_attribution.py      # Brinson + factor attribution
-├── volatility_scanner.py           # S&P movers · IV rank · sectors
-├── options_flow.py                 # Unusual options activity
-├── portfolio_config.py             # Holdings · margin · SECTOR_MAP (canonical)
-├── i18n.py                         # Bilingual labels (500+ keys)
-│
-├── pages/                          # 10 Streamlit pages
-│   └── 1_Overview.py ... 10_Ticker_Research.py
-│
-├── ui/                             # Design system
-│   ├── tokens.py                   # Color / spacing / typography tokens
-│   ├── components.py               # render_kpi_row · render_ai_digest · etc.
-│   ├── shared_sidebar.py           # Provider detection · config
-│   ├── floating_chat.py            # Persistent AI chat
-│   └── tradingview.py              # TradingView widget integration
-│
-├── tests/                          # unit · integration · performance
-│   ├── unit/ · integration/ · performance/
-│
-├── infra/                          # AWS CDK Python (Phase 1+2)
-│   ├── infra/{foundation,compute,data,api}_stack.py
-│   ├── scripts/{deploy-phase-1,destroy}.sh
-│   └── app.py · cdk.json · requirements.txt
-│
-├── libs/mindmarket_core/           # Pure-compute library (no I/O, Lambda-importable)
-│   └── constants · var · portfolio_math · black_scholes · data_prep
-│
-├── services/                       # Lambda functions (3)
-│   ├── risk-calculator/  handler · Dockerfile · tests
-│   ├── options-pricer/   handler · Dockerfile · tests
-│   └── price-cache/      handler · Dockerfile · tests
-│
-├── docs/
-│   ├── adr/                        # Architecture Decision Records (2)
-│   ├── aws/phase-1-ec2.md          # AWS runbook + troubleshooting
-│   ├── migration-log.md            # Dated session log
-│   ├── user/                       # QUICK_START · SETUP · TROUBLESHOOT
-│   └── archive/                    # Historical implementation notes
-│
-├── requirements.txt · requirements-dev.txt
-├── Dockerfile · docker-compose.yml · compose.aws.yml · Caddyfile
-├── pyproject.toml · pytest.ini · .pre-commit-config.yaml
-└── .github/workflows/{ci.yml, deploy-services.yml}
-```
+| Document | Description |
+| --- | --- |
+| [`docs/adr/0004-fastapi-nextjs-migration.md`](docs/adr/0004-fastapi-nextjs-migration.md) | Migration strategy from monolith to split stack. |
+| [`docs/aws/operations.md`](docs/aws/operations.md) | Production operations runbook. |
+| [`docs/aws/ci-image-deploy.md`](docs/aws/ci-image-deploy.md) | GHCR deploy process. |
+| [`docs/seo/google_indexing.md`](docs/seo/google_indexing.md) | Search indexing notes. |
+| [`docs/legal/disclaimer.md`](docs/legal/disclaimer.md) | Financial disclaimer. |
+| [`backend/README.md`](backend/README.md) | Backend API development notes. |
+| [`frontend/README.md`](frontend/README.md) | Frontend development notes. |
 
 ---
 
-## 🗺️ Roadmap
+## Roadmap
 
-- [x] 10-page analytics dashboard
-- [x] Multi-provider LLM integration with auto-detection
-- [x] Scenario simulator + cost-basis P&L tracking
-- [x] Standalone ticker research page
-- [x] **AWS Phase 1** — VPC + EC2 + Caddy auto-HTTPS + CloudWatch (Apr 2026)
-- [x] **AWS Phase 2** — REST API GW + 3 Lambda DockerImageFunctions + DynamoDB cache (Apr 2026)
-- [ ] AWS Phase 3 — Cognito auth · async backtest pipeline · observability dashboards
-- [ ] AWS Phase 4 — Cost optimization · 6-pager design doc · demo video
-- [ ] Multi-user auth (Cognito or Supabase) + per-user portfolios
-- [ ] Credit-based AI billing with Stripe
-- [ ] Custom domain @ **mindmarket.ai**
-- [ ] OAuth broker integration (Robinhood / Moomoo)
-- [ ] Email alerts (margin warning, VaR breach)
+Near-term:
 
----
+- Improve the Health Score and Risk Report cockpit with richer interaction.
+- Expand ticker research with stronger provider coverage and confidence labels.
+- Add owner dashboard polish for signups, activation, retention, and usage cost.
+- Continue reducing market-data gaps with explicit provider provenance.
 
-## 📄 License
+Later:
 
-MIT. See [LICENSE](LICENSE).
+- Broker import integrations.
+- Tax-aware portfolio actions.
+- Alerting for drawdown, VaR, concentration, and liquidity events.
+- Mobile-native workflows.
 
 ---
 
-<a name="中文"></a>
+## Contributing
 
-## ⚡ 项目概览
+This repository is maintained like a production SaaS codebase:
 
-**MindMarket AI** 是一个面向个人投资者的投资组合风控平台，底层是机构级量化能力，但产品路径是决策优先而不是工具堆砌。
+1. Keep quant math deterministic and tested.
+2. Keep LLM output grounded in computed data.
+3. Preserve the response envelope contract.
+4. Add tests for API contracts, auth behavior, and user-facing regressions.
+5. Do not commit secrets, generated caches, coverage output, or local media.
 
-它优先回答三个问题：
+For substantial changes, open a PR with:
 
-1. 我的本金现在安全吗？
-2. 风险到底来自哪里？
-3. 下一步应该调整什么？
-
-底层仍然保持专业：蒙特卡洛 VaR、多因子归因、市场状态识别、SEC 13F 跟踪、AI 风险摘要都在，但页面结构已经围绕“先判断、再解释、最后动作”重组。
-
-> 目标：把对冲基金级分析能力和散户真正能用的产品 UX 接起来。
-
-### 首次使用建议路径
-
-- 先点 `Run Demo Portfolio`，直接进入执行驾驶舱。
-- 在 `Overview` 先看净值、集中度和盈亏覆盖率。
-- 到 `Risk` 看 VaR、回撤、因子暴露和压力损失。
-- 理解风险后，再进入 `Portfolio Actions` 做调仓讨论。
-- `Ticker Research` 和 `Institutions` 用来验证想法，不应该作为起点。
+- What changed.
+- Why it changed.
+- How it was tested.
+- Any rollout or rollback notes.
 
 ---
 
-## 🎯 核心能力
+## License
 
-| 领域 | 亮点 |
-|---|---|
-| 🛡️ **风险引擎** | 蒙特卡洛 VaR/CVaR · EWMA 协方差（λ=0.94）· 边际 VaR · 压力测试 · 保证金追缴距离 |
-| 📈 **因子模型** | 6 因子 OLS（带 t 统计量）· 宏观敏感度（利率/美元/原油）· Barra PCA 归因 |
-| 🧭 **分析路径** | 问题导向工作流 · 目标驱动页面入口 · 面向散户的优先指标 |
-| 🏛️ **机构情报** | SEC 13F 解析器（约 30 家头部机构）· Smart money 重合 · 拥挤度检测 · 机构信念跟踪 |
-| 🔄 **状态识别 & 回测** | HMM（高斯混合 EM）· 向量化回测 · Brinson-Hood-Beebower 归因 |
-| 🤖 **AI 摘要** | 每页独立的 AI 叙述（Claude / DeepSeek / Ollama 自动检测） |
-| 🌏 **展示层** | 英文主界面 · 便于浏览器翻译 · 暗色主题设计系统 |
+MIT. See [`LICENSE`](LICENSE).
 
 ---
 
-## ☁️ AWS 迁移(Phase 1+2 完成)
+## Disclaimer
 
-原 Streamlit-only 部署正在迁往分布式 AWS 架构,IaC 全程 CDK。
-**当前状态**:Phase 1 + Phase 2 设计、部署、烟测、销毁回环已全部跑通,
-零残留。`./infra/scripts/deploy-phase-1.sh` ~10 分钟即可重建 demo URL。
-
-| 阶段 | 内容 | 月成本(运行中)|
-|---|---|---|
-| Phase 1 | EC2 + Caddy auto-HTTPS + CloudWatch | ~$9.30 |
-| Phase 2 | REST API + 3 Lambda + DynamoDB cache | ~$3-5 |
-| 空闲(已 destroy) | CDKToolkit + S3 logs | ~$0.02 |
-
-**真实部署验证**:`POST /greeks` 返回 ATM 1Y call 价格 10.4506(与 Hull 教材完全吻合,4 位小数),
-`POST /var` 返回 VaR95 6.12% / CVaR95 7.17%(CVaR ≥ VaR ✓)。
-完整运维 cookbook 在 [`docs/aws/operations.md`](docs/aws/operations.md)。
-
----
-
-## 🚀 快速开始
-
-### 前置要求
-
-| 工具 | 版本 | 用途 |
-|------|------|------|
-| Python | 3.10+ | 运行时 |
-| pip | 最新 | 包管理器 |
-| Git | 任意 | 克隆仓库 |
-| Anthropic API 密钥 | 可选 | Claude AI 摘要 |
-| FMP API 密钥 | 可选 | 财报电话会 / 目标价 |
-| Ollama | 可选 | 本地 LLM（自动检测 11434 端口）|
-
-### 方式一 — 本地 Python
-
-```bash
-git clone https://github.com/zhengbrody/PersonalFinancialRiskManagement.git
-cd PersonalFinancialRiskManagement
-pip install -r requirements.txt
-streamlit run app.py
-# → http://localhost:8501
-```
-
-### 方式二 — Docker
-
-```bash
-docker-compose up --build
-# → http://localhost:8501
-```
-
-### 方式三 — Streamlit Cloud（一键部署）
-
-Fork → 连接到 [share.streamlit.io](https://share.streamlit.io) → 配置 secrets → 部署。
-
----
-
-## 🧪 测试
-
-```bash
-python -m pytest tests/ -v
-```
-
-覆盖单元 / 集成 / 性能测试套件。使用 `python -m pytest tests/ --collect-only -q | tail -1` 查询当前测试数量。
-
----
-
-## 🗺️ 路线图
-
-- [x] 10 页分析仪表盘
-- [x] 多后端 LLM 集成 + 自动检测
-- [x] 情景模拟器 + 成本基础 P&L 跟踪
-- [x] 独立股票研究页面
-- [ ] 多用户登录系统（Supabase）
-- [ ] 基于积分的 AI 计费（Stripe）
-- [ ] 自定义域名 **mindmarket.ai**
-- [ ] 券商 OAuth 接入（Robinhood / Moomoo）
-- [ ] 邮件提醒（保证金、VaR 突破）
-
----
-
-<div align="center">
-
-**🔗 在线访问：[mindmarket.app](https://mindmarket.app/)**
-
-目标公开品牌域名：**mindmarket.ai**
-
-Built with ❤️ by [Zheng Dong](https://github.com/zhengbrody)
-
-_If this project helps, consider leaving a ⭐ — it means a lot._
-
-</div>
+MindMarket provides educational portfolio analytics and software demonstrations.
+It does not provide investment, tax, legal, or financial advice.
