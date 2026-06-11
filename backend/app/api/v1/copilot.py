@@ -161,6 +161,17 @@ def copilot_ask_endpoint(
     """
     started = time.perf_counter()
 
+    # ── Response cache (input-hash, 30 min). Keyed per-user because the
+    # evidence folds in the caller's portfolio — never share across users.
+    # Checked before the credit gate so a repeated question is free.
+    from ...services.ai_cache import ask_cache
+    from ...services.ai_telemetry import input_hash
+
+    cache_key = input_hash(f"{user.id}|{body.message.strip()}")
+    cached = ask_cache.get(cache_key)
+    if cached is not None:
+        return ok(cached, request=request, started_at=started)
+
     from libs.billing.usage import ESTIMATED_COST_USD, QuotaExceeded, check_credits
 
     try:
@@ -177,6 +188,7 @@ def copilot_ask_endpoint(
 
     if llm is not None and not result.data_only:
         _record_ask_cost(user.id, result, started)
+        ask_cache.put(cache_key, result.model_dump())
 
     return ok(result.model_dump(), request=request, started_at=started)
 

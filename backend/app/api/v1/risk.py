@@ -23,6 +23,7 @@ endpoint inherits the change for free.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 
@@ -1249,8 +1250,6 @@ def _record_explain_cost(user_id: str, body: RiskExplainInput, out) -> None:
     """Log the actual token cost of a diagnosis (visibility only — not gated).
     Never raises."""
     try:
-        import json
-
         from libs.billing.costs import estimate_cost_usd, estimate_tokens
         from libs.billing.usage import record_event
 
@@ -1285,7 +1284,16 @@ def explain_endpoint(
     started = time.perf_counter()
 
     from ...services import risk_explain
+    from ...services.ai_cache import explain_cache
+    from ...services.ai_telemetry import input_hash
     from ...services.llm_client import get_llm_callable
+
+    # Response cache (input-hash, 45 min): the metrics payload fully
+    # determines the diagnosis, so identical inputs skip the LLM entirely.
+    cache_key = input_hash(json.dumps(body.model_dump(), default=str, sort_keys=True))
+    cached = explain_cache.get(cache_key)
+    if cached is not None:
+        return ok(cached, request=request, started_at=started)
 
     # with_tools=False → plain Haiku/Sonnet by size; explain uses small
     # max_tokens so it routes to Haiku. None → deterministic template.
@@ -1294,6 +1302,9 @@ def explain_endpoint(
 
     if out.ai_generated:
         _record_explain_cost(user.id, body, out)
+        # Only real AI output is cached — the deterministic template is
+        # cheap and caching it would mask a recovered LLM key.
+        explain_cache.put(cache_key, out.model_dump())
 
     return ok(out.model_dump(), request=request, started_at=started)
 
