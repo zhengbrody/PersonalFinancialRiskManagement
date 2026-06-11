@@ -163,10 +163,15 @@ def _build_cache_provider():
 def _fetch_one_history(cache_provider, ticker: str, start: str, end: str) -> Optional[pd.DataFrame]:
     """Fetch one ticker's price history through the cache. Returns
     None when yfinance has nothing for the symbol (delisted, typo)."""
+    from . import metrics
+
     try:
-        return cache_provider.fetch_with_cache(ticker, start, end, data_type="prices")
+        df = cache_provider.fetch_with_cache(ticker, start, end, data_type="prices")
+        metrics.record_provider("yfinance", "ok" if df is not None and not df.empty else "empty")
+        return df
     except Exception as exc:
         _logger.warning("market_data.fetch_failed ticker=%s err=%s", ticker, exc)
+        metrics.record_provider("yfinance", "error")
         return None
 
 

@@ -519,7 +519,7 @@ def get_admin_usage(*, since_iso: Optional[str] = None) -> dict[str, Any]:
         sb, _ = _cost_client()
         resp = (
             sb.table("usage_events")
-            .select("user_id,kind,tokens_in,tokens_out,cost_usd,created_at")
+            .select("user_id,kind,model,tokens_in,tokens_out,cost_usd,created_at")
             .gte("created_at", since)
             .limit(50_000)
             .execute()
@@ -531,6 +531,7 @@ def get_admin_usage(*, since_iso: Optional[str] = None) -> dict[str, Any]:
     totals = {"events": 0, "tokens_in": 0, "tokens_out": 0, "cost_usd": 0.0}
     by_kind: dict[str, dict[str, Any]] = {}
     by_user: dict[str, dict[str, Any]] = {}
+    by_model: dict[str, dict[str, Any]] = {}
     for r in rows:
         try:
             cost = float(r.get("cost_usd") or 0.0)
@@ -540,11 +541,12 @@ def get_admin_usage(*, since_iso: Optional[str] = None) -> dict[str, Any]:
             continue
         kind = r.get("kind") or "other"
         uid = r.get("user_id") or "unknown"
+        model = r.get("model") or "unknown"
         totals["events"] += 1
         totals["tokens_in"] += t_in
         totals["tokens_out"] += t_out
         totals["cost_usd"] += cost
-        for bucket, key in ((by_kind, kind), (by_user, uid)):
+        for bucket, key in ((by_kind, kind), (by_user, uid), (by_model, model)):
             b = bucket.setdefault(
                 key, {"events": 0, "tokens_in": 0, "tokens_out": 0, "cost_usd": 0.0}
             )
@@ -553,23 +555,22 @@ def get_admin_usage(*, since_iso: Optional[str] = None) -> dict[str, Any]:
             b["tokens_out"] += t_out
             b["cost_usd"] += cost
 
+    def _finalize(v: dict[str, Any]) -> dict[str, Any]:
+        return {**v, "cost_usd": round(v["cost_usd"], 4), "credits": usd_to_credits(v["cost_usd"])}
+
     totals["cost_usd"] = round(totals["cost_usd"], 4)
     totals["credits"] = usd_to_credits(totals["cost_usd"])
-    kinds = {
-        k: {**v, "cost_usd": round(v["cost_usd"], 4), "credits": usd_to_credits(v["cost_usd"])}
-        for k, v in by_kind.items()
-    }
-    users = [
-        {
-            "user_id": u,
-            **v,
-            "cost_usd": round(v["cost_usd"], 4),
-            "credits": usd_to_credits(v["cost_usd"]),
-        }
-        for u, v in by_user.items()
-    ]
+    kinds = {k: _finalize(v) for k, v in by_kind.items()}
+    models = {m: _finalize(v) for m, v in by_model.items()}
+    users = [{"user_id": u, **_finalize(v)} for u, v in by_user.items()]
     users.sort(key=lambda x: x["cost_usd"], reverse=True)
-    return {"since": since, "totals": totals, "by_kind": kinds, "users": users[:100]}
+    return {
+        "since": since,
+        "totals": totals,
+        "by_kind": kinds,
+        "by_model": models,
+        "users": users[:100],
+    }
 
 
 def record_event(

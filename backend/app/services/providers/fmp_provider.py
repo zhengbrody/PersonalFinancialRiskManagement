@@ -94,17 +94,23 @@ def _get(path: str, params: dict) -> Any:
 def _cached(
     domain: str, ticker: str, ttl: int, producer: Callable[[], ProviderResult]
 ) -> ProviderResult:
+    from .. import metrics
+
     key = f"{domain}:{ticker}"
     hit = _cache.get(key)
     if hit is not None and hit[0] > time.monotonic():
+        metrics.record_provider("fmp", "cache_hit")
         return hit[1]
     if not _key():
+        metrics.record_provider("fmp", "no_key")
         res: ProviderResult = ProviderResult(data=None, warnings=["fmp_key_missing"], coverage=0.0)
     else:
         try:
             res = producer()
+            metrics.record_provider("fmp", "ok" if res.data is not None else "empty")
         except Exception as exc:  # noqa: BLE001 - fail-soft, caller uses free data
             _log.warning("fmp.%s.failed ticker=%s err=%s", domain, ticker, type(exc).__name__)
+            metrics.record_provider("fmp", "error")
             res = ProviderResult(data=None, warnings=[f"fmp_error:{type(exc).__name__}"])
     _cache[key] = (time.monotonic() + ttl, res)
     return res
