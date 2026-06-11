@@ -119,6 +119,17 @@ const SAMPLE_REPORT = {
     macro_betas: { rates: 0.4, usd: -0.1, oil: 0.05 },
     liquidity: [],
     drawdown_stats: null,
+    concentration: {
+      num_holdings: 2,
+      top_holding_ticker: "SPY",
+      top_holding_weight: 0.917,
+      top5_weight: 1.0,
+      hhi: 0.848,
+      effective_holdings: 1.18,
+    },
+    data_quality_notes: [
+      "Stress test assumed market beta (1.0) for BND — not enough overlapping history to estimate beta.",
+    ],
   },
   error: null,
   meta: { request_id: "r-report" },
@@ -259,6 +270,19 @@ describe("PortfolioRiskPage", () => {
     // Component VaR rendered with tickers.
     const componentVarMatches = screen.getAllByText("SPY");
     expect(componentVarMatches.length).toBeGreaterThan(0);
+
+    // Concentration card: top holding flagged (>25% of book) + effective N.
+    expect(screen.getByText(/^concentration$/i)).toBeInTheDocument();
+    expect(screen.getByText("SPY 91.70%")).toBeInTheDocument();
+    expect(screen.getByText("1.2")).toBeInTheDocument(); // effective holdings
+    expect(
+      screen.getByText(/single-name news moves your whole portfolio/i),
+    ).toBeInTheDocument();
+
+    // Data-quality note from the backend is rendered verbatim.
+    expect(
+      screen.getByText(/assumed market beta \(1\.0\) for BND/i),
+    ).toBeInTheDocument();
 
     // After success the button becomes Re-run.
     expect(

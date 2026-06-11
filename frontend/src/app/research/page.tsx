@@ -89,7 +89,9 @@ function ResearchWorkbench() {
     const ticker = raw.trim().toUpperCase();
     if (!ticker || factM.isPending) return;
     verdictM.reset();
-    track("research_searched", { ticker });
+    // Privacy: never send the ticker itself to analytics — searching a
+    // symbol can reveal what the user holds.
+    track("research_searched");
     try {
       const { fact_pack } = await factM.mutateAsync({ ticker });
       verdictM.mutate({ fact_pack });

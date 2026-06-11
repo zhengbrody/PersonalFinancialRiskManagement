@@ -79,6 +79,23 @@ def verdict(
             _log.warning("research.verdict.factpack_failed err=%s", type(exc).__name__)
             raise unprocessable(f"Could not build a FactPack for {body.ticker!r}.") from exc
 
+    # ── Response cache (input-hash, 45 min). A repeat verdict over the same
+    # FactPack costs nothing — return it before the credit gate so a cache
+    # hit never burns credits. The FactPack carries no user data, so the
+    # cache is safely shared across users researching the same ticker.
+    from ...services.ai_cache import verdict_cache
+    from ...services.ai_telemetry import input_hash
+
+    fp_json = json.dumps(fp.model_dump(), default=str, sort_keys=True)
+    cache_key = input_hash(fp_json)
+    cached = verdict_cache.get(cache_key)
+    if cached is not None:
+        return ok(
+            {"verdict": cached, "fact_pack": fp.model_dump()},
+            request=request,
+            started_at=started,
+        )
+
     # ── Credit gate (LLM). Out of credits → 429; metering blip → fail-open. ──
     from libs.billing.usage import ESTIMATED_COST_USD, QuotaExceeded, check_credits
 
@@ -97,6 +114,7 @@ def verdict(
     # Record ACTUAL cost + full telemetry — only when a real model ran.
     if llm is not None and not result.data_only:
         _record_verdict_cost(user.id, fp, result, started)
+        verdict_cache.put(cache_key, result.model_dump())
 
     return ok(
         {"verdict": result.model_dump(), "fact_pack": fp.model_dump()},

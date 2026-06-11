@@ -23,6 +23,7 @@ endpoint inherits the change for free.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 
@@ -36,6 +37,7 @@ from ...schemas.risk import (
     BenchmarkRow,
     BenchmarksOut,
     ComponentVarRow,
+    ConcentrationOut,
     DimensionScoreOut,
     EfficientFrontierOut,
     FactorBetaRow,
@@ -903,6 +905,45 @@ def _serialize_report(
                 )
             )
 
+    # Concentration: pure arithmetic over the invested book's market
+    # values (cash never reaches market_values). HHI on weights; 1/HHI is
+    # the equally-weighted-equivalent position count.
+    concentration: ConcentrationOut | None = None
+    mv = {t: f for t, v in (market_values or {}).items() if (f := _finite(v)) and f > 0}
+    invested = sum(mv.values())
+    if mv and invested > 0:
+        weights_desc = sorted((v / invested for v in mv.values()), reverse=True)
+        top_ticker = max(mv, key=mv.__getitem__)
+        hhi = sum(w * w for w in weights_desc)
+        concentration = ConcentrationOut(
+            num_holdings=len(mv),
+            top_holding_ticker=top_ticker,
+            top_holding_weight=weights_desc[0],
+            top5_weight=sum(weights_desc[:5]),
+            hhi=hhi,
+            effective_holdings=(1.0 / hhi) if hhi > 0 else None,
+        )
+
+    # The engine's stress test substitutes β=1.0 (market-like) for any
+    # holding whose benchmark beta is NaN (e.g. <30 days of overlapping
+    # history, or the benchmark fetch failed). That substitution was
+    # previously silent — surface it so the stress numbers aren't read
+    # as more precise than they are.
+    notes: list[str] = []
+    raw_betas = report.betas or {}
+    beta_fallbacks = sorted(t for t, v in raw_betas.items() if _finite(v) is None)
+    if beta_fallbacks and len(beta_fallbacks) == len(raw_betas):
+        notes.append(
+            "Benchmark data was unavailable — the stress test assumed market "
+            "beta (1.0) for every holding."
+        )
+    elif beta_fallbacks:
+        notes.append(
+            "Stress test assumed market beta (1.0) for "
+            + ", ".join(beta_fallbacks)
+            + " — not enough overlapping history to estimate beta."
+        )
+
     # Annual return re-mixed toward the risk-free rate by the same
     # weight that scales risk: r_net = scale·r_equity + (1−scale)·rf.
     # (scale<1 = cash drag pulls toward rf; scale>1 = margin amplifies
@@ -942,7 +983,9 @@ def _serialize_report(
             if _finite(v) is not None
         },
         liquidity=liquidity_rows,
+        concentration=concentration,
         drawdown_stats=getattr(report, "drawdown_stats", None),
+        data_quality_notes=notes,
     )
 
 
@@ -1045,7 +1088,18 @@ def report_from_active_endpoint(
         risk_scale=risk_scale,
         account_metrics=account_metrics,
     )
-    out = out.model_copy(update={"price_provenance": _price_provenance(price_prov, price_frame)})
+    notes = list(out.data_quality_notes)
+    if len(price_frame) < 60:
+        notes.append(
+            f"Only {len(price_frame)} trading days of price history; "
+            "annualized risk estimates are low-confidence."
+        )
+    out = out.model_copy(
+        update={
+            "price_provenance": _price_provenance(price_prov, price_frame),
+            "data_quality_notes": notes,
+        }
+    )
     return ok(out.model_dump(), request=request, started_at=started)
 
 
@@ -1056,6 +1110,16 @@ def report_from_active_endpoint(
 # "what could go wrong" view for a novice.
 
 _SCENARIO_SHOCKS = [-0.30, -0.20, -0.10, -0.05, 0.0, 0.05, 0.10, 0.20, 0.30]
+
+
+def _frame_as_of(frame) -> str | None:
+    """Last index date of a returns/price frame as ISO yyyy-mm-dd."""
+    try:
+        if frame is None or len(frame) == 0:
+            return None
+        return pd.Timestamp(frame.index[-1]).strftime("%Y-%m-%d")
+    except Exception:  # noqa: BLE001 - provenance must never sink the payload
+        return None
 
 
 def _build_active_engine(user: AuthedUser, body: ReportFromActiveRequest):
@@ -1168,6 +1232,8 @@ def efficient_frontier_endpoint(
         frontier=points,
         current=FrontierPoint(vol=cur_vol, ret=cur_ret),
         risk_free_rate=body.risk_free_rate,
+        as_of=_frame_as_of(returns),
+        observations=len(returns),
     )
     return ok(out.model_dump(), request=request, started_at=started)
 
@@ -1229,7 +1295,12 @@ def scenarios_endpoint(
     if not points:
         raise server_error("Scenario simulation produced no usable points.")
 
-    out = ScenariosOut(total_value=float(net_equity), scenarios=points)
+    out = ScenariosOut(
+        total_value=float(net_equity),
+        scenarios=points,
+        as_of=_frame_as_of(returns),
+        observations=len(returns),
+    )
     return ok(out.model_dump(), request=request, started_at=started)
 
 
@@ -1249,8 +1320,6 @@ def _record_explain_cost(user_id: str, body: RiskExplainInput, out) -> None:
     """Log the actual token cost of a diagnosis (visibility only — not gated).
     Never raises."""
     try:
-        import json
-
         from libs.billing.costs import estimate_cost_usd, estimate_tokens
         from libs.billing.usage import record_event
 
@@ -1285,7 +1354,16 @@ def explain_endpoint(
     started = time.perf_counter()
 
     from ...services import risk_explain
+    from ...services.ai_cache import explain_cache
+    from ...services.ai_telemetry import input_hash
     from ...services.llm_client import get_llm_callable
+
+    # Response cache (input-hash, 45 min): the metrics payload fully
+    # determines the diagnosis, so identical inputs skip the LLM entirely.
+    cache_key = input_hash(json.dumps(body.model_dump(), default=str, sort_keys=True))
+    cached = explain_cache.get(cache_key)
+    if cached is not None:
+        return ok(cached, request=request, started_at=started)
 
     # with_tools=False → plain Haiku/Sonnet by size; explain uses small
     # max_tokens so it routes to Haiku. None → deterministic template.
@@ -1294,6 +1372,9 @@ def explain_endpoint(
 
     if out.ai_generated:
         _record_explain_cost(user.id, body, out)
+        # Only real AI output is cached — the deterministic template is
+        # cheap and caching it would mask a recovered LLM key.
+        explain_cache.put(cache_key, out.model_dump())
 
     return ok(out.model_dump(), request=request, started_at=started)
 

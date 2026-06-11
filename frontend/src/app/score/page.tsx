@@ -243,7 +243,7 @@ function ResultSkeleton() {
       </CardHeader>
       <CardContent className="space-y-3">
         <Skeleton className="h-16 w-40" />
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid gap-3 sm:grid-cols-3">
           <Skeleton className="h-20" />
           <Skeleton className="h-20" />
           <Skeleton className="h-20" />
