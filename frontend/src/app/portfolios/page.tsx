@@ -131,7 +131,7 @@ function PortfolioCard({ portfolio }: { portfolio: PortfolioRow }) {
         <div className="font-mono text-xs text-muted-foreground">
           {tickerPreview}
         </div>
-        <div className="grid grid-cols-3 gap-3 pt-2 text-xs">
+        <div className="grid gap-3 pt-2 text-xs sm:grid-cols-3">
           <Stat label="Contributed" value={fmtUSD(portfolio.contributed_capital)} />
           <Stat label="Cash" value={fmtUSD(portfolio.cash_balance)} />
           <Stat label="Margin" value={fmtUSD(portfolio.margin_loan)} />
@@ -279,7 +279,7 @@ function ScoreResult({ result }: { result: ScoreResponse }) {
           / 1000 · pref {result.risk_preference}
         </span>
       </div>
-      <div className="grid grid-cols-3 gap-2 text-xs">
+      <div className="grid gap-2 text-xs sm:grid-cols-3">
         {dims.map((d) => (
           <div
             key={d.name}
@@ -308,7 +308,7 @@ function ScoreLoadingSkeleton() {
   return (
     <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
       <Skeleton className="h-10 w-32" />
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid gap-2 sm:grid-cols-3">
         <Skeleton className="h-14" />
         <Skeleton className="h-14" />
         <Skeleton className="h-14" />

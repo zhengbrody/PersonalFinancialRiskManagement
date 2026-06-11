@@ -22,6 +22,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { track } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -63,6 +64,7 @@ function PricingPageInner() {
 
   async function onSubscribe(plan: "basic" | "pro") {
     setError(null);
+    track("upgrade_clicked", { plan, signed_in: Boolean(accessToken) });
     // Anonymous → send through signup first, return here.
     if (!accessToken) {
       router.push("/signup");

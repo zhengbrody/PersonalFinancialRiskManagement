@@ -217,7 +217,7 @@ function LiveActivity({
           <p className="text-sm text-muted-foreground">No activity yet.</p>
         ) : (
           <>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid gap-3 sm:grid-cols-3">
               <Stat label="Requests" value={data.total_requests.toLocaleString()} />
               <Stat label="Live rate" value={rate == null ? "…" : `${rate.toFixed(1)}/s`} />
               <Stat label="Errors (5xx)" value={data.total_errors.toLocaleString()} />
