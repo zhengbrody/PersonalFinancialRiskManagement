@@ -270,9 +270,39 @@ export function MarketingLanding() {
           </a>
         </div>
       </section>
+
+      {/* ── learn (SEO hub) ──────────────────────────────────────
+          Plain <a> links: these are static HTML pages served by Caddy from
+          assets/seo/, not Next routes — next/link prefetch would 404 in dev
+          and adds nothing for full-page navigations. They give crawlers an
+          in-content path to the topic pages (previously sitemap-only). */}
+      <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Learn portfolio risk</h2>
+        <ul className="grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          {LEARN_LINKS.map((l) => (
+            <li key={l.href}>
+              <a href={l.href} className="text-muted-foreground hover:text-primary hover:underline">
+                {l.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
     </div>
   );
 }
+
+const LEARN_LINKS = [
+  { href: "/portfolio-risk-management", label: "Personal portfolio risk management" },
+  { href: "/ai-portfolio-analysis", label: "AI portfolio analysis" },
+  { href: "/portfolio-var-stress-testing", label: "VaR & stress testing explained" },
+  { href: "/portfolio-stress-test", label: "Stress-test your portfolio" },
+  { href: "/stock-portfolio-concentration-risk", label: "Concentration risk in stock portfolios" },
+  { href: "/margin-risk-calculator", label: "Margin risk calculator" },
+  { href: "/robinhood-margin-risk", label: "Margin risk on Robinhood" },
+  { href: "/sample-risk-report", label: "Sample risk report" },
+  { href: "/about", label: "About MindMarket" },
+];
 
 function Step({ n, title, body }: { n: string; title: string; body: string }) {
   return (

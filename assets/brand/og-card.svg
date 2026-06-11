@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B0E11"/>
+      <stop offset="1" stop-color="#10171D"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0B7285" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#0B7285" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="1200" fill="url(#bg)"/>
+  <g transform="translate(0,285)">
+    <circle cx="1050" cy="-40" r="360" fill="url(#glow)"/>
+    <g transform="translate(84,76) scale(0.30)">
+      <rect width="512" height="512" rx="96" fill="#0B0E11" stroke="#1E2A33" stroke-width="6"/>
+      <circle cx="256" cy="256" r="188" fill="#0B7285"/>
+      <path d="M128 344V168h52l76 108 76-108h52v176h-52V250l-58 82h-36l-58-82v94h-52z" fill="#F8FAFC"/>
+      <path d="M122 372h268" stroke="#F8FAFC" stroke-width="22" stroke-linecap="round" opacity=".95"/>
+      <path d="M306 372l70-76 54 39" fill="none" stroke="#D4A017" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <text x="268" y="166" font-family="Helvetica Neue, Arial, sans-serif" font-size="56" font-weight="700" fill="#F8FAFC">MindMarket AI</text>
+    <text x="84" y="330" font-family="Helvetica Neue, Arial, sans-serif" font-size="54" font-weight="700" fill="#F8FAFC">Know your portfolio&#8217;s risk</text>
+    <text x="84" y="398" font-family="Helvetica Neue, Arial, sans-serif" font-size="54" font-weight="700" fill="#39A3B5">before the market tests it.</text>
+    <text x="84" y="468" font-family="Helvetica Neue, Arial, sans-serif" font-size="24" fill="#AAB4C2">Portfolio Health Score &#183; VaR &amp; stress tests &#183; AI explanations, never invented numbers</text>
+    <path d="M84 560 L340 560 L430 516 L560 542 L700 482 L840 506 L1100 430" fill="none" stroke="#D4A017" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>
+    <circle cx="1100" cy="430" r="12" fill="#D4A017"/>
+  </g>
+</svg>
