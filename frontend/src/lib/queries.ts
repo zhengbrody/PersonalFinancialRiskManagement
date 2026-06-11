@@ -545,6 +545,12 @@ export const stressAssetLossSchema = z.looseObject({
 });
 export type StressAssetLoss = z.infer<typeof stressAssetLossSchema>;
 
+export const componentReturnRowSchema = z.looseObject({
+  ticker: z.string(),
+  contribution: z.number(),
+});
+export type ComponentReturnRow = z.infer<typeof componentReturnRowSchema>;
+
 export const liquidityRowSchema = z.looseObject({
   ticker: z.string(),
   days_to_liquidate: z.number().nullable(),
@@ -584,6 +590,7 @@ export const riskReportSchema = z.looseObject({
   betas: z.record(z.string(), z.number()),
   factor_betas: z.array(factorBetaRowSchema),
   component_var_pct: z.array(componentVarRowSchema),
+  component_return: z.array(componentReturnRowSchema).optional().default([]),
   stress_loss: z.number().nullable(),
   stress_market_shock: z.number().nullable(),
   stress_asset_losses: z.array(stressAssetLossSchema),
@@ -792,150 +799,10 @@ export function useActiveScore() {
   });
 }
 
-// ── ticker research (single-name equity) ────────────────────────────
-// Two-stage: useTickerDossier (fast, authed, no quota) paints the data
-// dashboard; useTickerVerdict (authed + quota) fills the AI verdict. The
-// verdict REUSES the dossier the dashboard already fetched, so /analyze
-// doesn't re-hit the network.
-
+// (The pre-FactPack /equity dossier hooks were removed 2026-06-11 — the
+// /research cockpit reads /research/fact_pack + /research/verdict only.)
 const fnum = z.number().nullish();
 const fstr = z.string().nullish();
-
-export const equityDossierSchema = z.looseObject({
-  ticker: z.string(),
-  as_of: z.string().optional(),
-  profile: z.looseObject({
-    name: fstr,
-    sector: fstr,
-    industry: fstr,
-    description: fstr,
-    employees: fnum,
-    website: fstr,
-  }),
-  market: z.looseObject({
-    current_price: fnum,
-    market_cap: fnum,
-    beta: fnum,
-    implied_volatility: fnum,
-    shares_outstanding: fnum,
-  }),
-  fundamentals: z.looseObject({
-    pe_ttm: fnum,
-    pe_forward: fnum,
-    ps_ttm: fnum,
-    pb: fnum,
-    ev_ebitda: fnum,
-    roe: fnum,
-    roa: fnum,
-    gross_margin: fnum,
-    operating_margin: fnum,
-    net_margin: fnum,
-    eps_ttm: fnum,
-    dividend_yield: fnum,
-    revenue_growth_yoy: fnum,
-    earnings_growth_yoy: fnum,
-    debt_to_equity: fnum,
-    current_ratio: fnum,
-    free_cash_flow: fnum,
-    fcf_yield: fnum,
-  }),
-  valuation: z.looseObject({
-    dcf_intrinsic_value: fnum,
-    dcf_upside_pct: fnum,
-    wacc: fnum,
-    terminal_growth: fnum,
-  }),
-  technicals: z.looseObject({
-    rsi_14: fnum,
-    sma_50: fnum,
-    sma_200: fnum,
-    fifty_two_week_high: fnum,
-    fifty_two_week_low: fnum,
-    max_drawdown_1y: fnum,
-  }),
-  ratings: z
-    .looseObject({
-      analyst_rating: fstr,
-      analyst_count: fnum,
-      price_targets: z
-        .looseObject({ low: fnum, mean: fnum, high: fnum, current: fnum })
-        .optional(),
-    })
-    .optional(),
-  ownership: z.looseObject({ institutional_pct: fnum }).optional(),
-  earnings_quarterly: z
-    .array(
-      z.looseObject({
-        period: z.string(),
-        revenue: fnum,
-        net_income: fnum,
-        eps: fnum,
-      }),
-    )
-    .optional(),
-});
-export type EquityDossier = z.infer<typeof equityDossierSchema>;
-
-const dimensionSchema = z.looseObject({
-  score_0_100: z.number(),
-  key_points: z.array(z.string()),
-  evidence: z.array(z.string()),
-});
-export const deepAnalysisSchema = z.looseObject({
-  ticker: z.string(),
-  as_of: z.string().optional(),
-  verdict: z.looseObject({
-    rating: z.string(),
-    confidence: z.string(),
-    target_weight_pct_band: z.string().optional(),
-    thesis_one_liner: z.string().optional(),
-  }),
-  dimensions: z.record(z.string(), dimensionSchema),
-  catalysts_90d: z.array(z.string()),
-  risks: z.array(z.string()),
-  data_gaps: z.array(z.string()),
-  would_change_mind: z.array(z.string()),
-});
-export type DeepAnalysis = z.infer<typeof deepAnalysisSchema>;
-
-export const dossierResponseSchema = z.looseObject({
-  dossier: equityDossierSchema,
-});
-export type DossierResponse = z.infer<typeof dossierResponseSchema>;
-
-export const analyzeResponseSchema = z.looseObject({
-  analysis: deepAnalysisSchema,
-  dossier: equityDossierSchema,
-});
-export type AnalyzeResponse = z.infer<typeof analyzeResponseSchema>;
-
-/** Fetch the deterministic dossier for a ticker (fast, no quota). */
-export function useTickerDossier() {
-  const { accessToken } = useAuth();
-  return useMutation<DossierResponse, Error, { ticker: string }>({
-    mutationFn: (body) =>
-      apiFetch<DossierResponse>("/api/v1/equity/dossier", {
-        method: "POST",
-        body,
-        authToken: accessToken ?? undefined,
-        schema: dossierResponseSchema,
-      }),
-  });
-}
-
-/** Run the AI analyst verdict over an already-fetched dossier (quota). */
-export function useTickerVerdict() {
-  const { accessToken } = useAuth();
-  return useMutation<AnalyzeResponse, Error, { dossier: EquityDossier }>({
-    mutationFn: (body) =>
-      apiFetch<AnalyzeResponse>("/api/v1/equity/analyze", {
-        method: "POST",
-        body,
-        authToken: accessToken ?? undefined,
-        schema: analyzeResponseSchema,
-      }),
-  });
-}
 
 // ── ticker research 2.0 (FactPack cockpit) ──────────────────────────
 // Two-stage, same shape as the dossier flow above: useFactPack (fast,
@@ -1647,6 +1514,8 @@ export const attributionSchema = z.looseObject({
   active_return_annual: z.number().nullish(),
   brinson: brinsonSchema.nullable(),
   factor: factorSchema.nullable(),
+  as_of: z.string().nullable().optional(),
+  observations: z.number().nullable().optional(),
 });
 export type Attribution = z.infer<typeof attributionSchema>;
 

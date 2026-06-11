@@ -110,6 +110,10 @@ const SAMPLE_REPORT = {
       { ticker: "SPY", pct: 0.6 },
       { ticker: "BND", pct: 0.4 },
     ],
+    component_return: [
+      { ticker: "SPY", contribution: 0.071 },
+      { ticker: "BND", contribution: 0.009 },
+    ],
     stress_loss: 0.09,
     stress_market_shock: -0.1,
     stress_asset_losses: [
@@ -270,6 +274,10 @@ describe("PortfolioRiskPage", () => {
     // Component VaR rendered with tickers.
     const componentVarMatches = screen.getAllByText("SPY");
     expect(componentVarMatches.length).toBeGreaterThan(0);
+
+    // Risk-vs-return table: VaR share and return contribution side by side.
+    expect(screen.getByText(/risk vs return per holding/i)).toBeInTheDocument();
+    expect(screen.getByText("7.10%")).toBeInTheDocument(); // SPY return contribution
 
     // Concentration card: top holding flagged (>25% of book) + effective N.
     expect(screen.getByText(/^concentration$/i)).toBeInTheDocument();
