@@ -37,6 +37,7 @@ from ...schemas.risk import (
     BenchmarkRow,
     BenchmarksOut,
     ComponentVarRow,
+    ConcentrationOut,
     DimensionScoreOut,
     EfficientFrontierOut,
     FactorBetaRow,
@@ -904,6 +905,25 @@ def _serialize_report(
                 )
             )
 
+    # Concentration: pure arithmetic over the invested book's market
+    # values (cash never reaches market_values). HHI on weights; 1/HHI is
+    # the equally-weighted-equivalent position count.
+    concentration: ConcentrationOut | None = None
+    mv = {t: f for t, v in (market_values or {}).items() if (f := _finite(v)) and f > 0}
+    invested = sum(mv.values())
+    if mv and invested > 0:
+        weights_desc = sorted((v / invested for v in mv.values()), reverse=True)
+        top_ticker = max(mv, key=mv.__getitem__)
+        hhi = sum(w * w for w in weights_desc)
+        concentration = ConcentrationOut(
+            num_holdings=len(mv),
+            top_holding_ticker=top_ticker,
+            top_holding_weight=weights_desc[0],
+            top5_weight=sum(weights_desc[:5]),
+            hhi=hhi,
+            effective_holdings=(1.0 / hhi) if hhi > 0 else None,
+        )
+
     # The engine's stress test substitutes β=1.0 (market-like) for any
     # holding whose benchmark beta is NaN (e.g. <30 days of overlapping
     # history, or the benchmark fetch failed). That substitution was
@@ -963,6 +983,7 @@ def _serialize_report(
             if _finite(v) is not None
         },
         liquidity=liquidity_rows,
+        concentration=concentration,
         drawdown_stats=getattr(report, "drawdown_stats", None),
         data_quality_notes=notes,
     )
@@ -1091,6 +1112,16 @@ def report_from_active_endpoint(
 _SCENARIO_SHOCKS = [-0.30, -0.20, -0.10, -0.05, 0.0, 0.05, 0.10, 0.20, 0.30]
 
 
+def _frame_as_of(frame) -> str | None:
+    """Last index date of a returns/price frame as ISO yyyy-mm-dd."""
+    try:
+        if frame is None or len(frame) == 0:
+            return None
+        return pd.Timestamp(frame.index[-1]).strftime("%Y-%m-%d")
+    except Exception:  # noqa: BLE001 - provenance must never sink the payload
+        return None
+
+
 def _build_active_engine(user: AuthedUser, body: ReportFromActiveRequest):
     """Shared: active holdings → prices → weights → a constructed RiskEngine.
 
@@ -1201,6 +1232,8 @@ def efficient_frontier_endpoint(
         frontier=points,
         current=FrontierPoint(vol=cur_vol, ret=cur_ret),
         risk_free_rate=body.risk_free_rate,
+        as_of=_frame_as_of(returns),
+        observations=len(returns),
     )
     return ok(out.model_dump(), request=request, started_at=started)
 
@@ -1262,7 +1295,12 @@ def scenarios_endpoint(
     if not points:
         raise server_error("Scenario simulation produced no usable points.")
 
-    out = ScenariosOut(total_value=float(net_equity), scenarios=points)
+    out = ScenariosOut(
+        total_value=float(net_equity),
+        scenarios=points,
+        as_of=_frame_as_of(returns),
+        observations=len(returns),
+    )
     return ok(out.model_dump(), request=request, started_at=started)
 
 

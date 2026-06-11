@@ -553,6 +553,16 @@ export const liquidityRowSchema = z.looseObject({
 });
 export type LiquidityRow = z.infer<typeof liquidityRowSchema>;
 
+export const concentrationSchema = z.looseObject({
+  num_holdings: z.number(),
+  top_holding_ticker: z.string().nullable().optional(),
+  top_holding_weight: z.number().nullable().optional(),
+  top5_weight: z.number().nullable().optional(),
+  hhi: z.number().nullable().optional(),
+  effective_holdings: z.number().nullable().optional(),
+});
+export type Concentration = z.infer<typeof concentrationSchema>;
+
 export const riskReportSchema = z.looseObject({
   annual_return: z.number().nullable(),
   annual_volatility: z.number().nullable(),
@@ -582,6 +592,7 @@ export const riskReportSchema = z.looseObject({
   drawdown_stats: z.record(z.string(), z.unknown()).nullable(),
   price_provenance: priceProvenanceSchema.nullish(),
   data_quality_notes: z.array(z.string()).optional().default([]),
+  concentration: concentrationSchema.nullish(),
 });
 export type RiskReport = z.infer<typeof riskReportSchema>;
 
@@ -1090,6 +1101,8 @@ export const efficientFrontierSchema = z.looseObject({
   frontier: z.array(frontierPointSchema),
   current: frontierPointSchema,
   risk_free_rate: z.number(),
+  as_of: z.string().nullable().optional(),
+  observations: z.number().nullable().optional(),
 });
 export type EfficientFrontier = z.infer<typeof efficientFrontierSchema>;
 
@@ -1104,6 +1117,8 @@ const scenarioPointSchema = z.looseObject({
 export const scenariosSchema = z.looseObject({
   total_value: z.number(),
   scenarios: z.array(scenarioPointSchema),
+  as_of: z.string().nullable().optional(),
+  observations: z.number().nullable().optional(),
 });
 export type Scenarios = z.infer<typeof scenariosSchema>;
 

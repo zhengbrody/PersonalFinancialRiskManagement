@@ -492,3 +492,43 @@ def test_clean_report_has_no_data_quality_notes(
     )
     assert resp.status_code == 200, resp.json()
     assert resp.json()["data"]["data_quality_notes"] == []
+
+
+def test_concentration_block_is_deterministic_arithmetic(
+    test_client,
+    mint_token,
+    fake_active_portfolio,
+    fake_price_history,
+    fake_engine,
+    fake_capital,
+):
+    fake_active_portfolio.set(
+        {
+            "SPY": {"shares": 100, "avg_cost": 400.0},
+            "BND": {"shares": 50, "avg_cost": 70.0},
+        }
+    )
+    fake_price_history.set(_make_history(["BND", "SPY"]))
+    fake_engine.last_report = _FakeReport()
+
+    resp = test_client.post(
+        "/api/v1/risk/report_from_active",
+        json={},
+        headers={"Authorization": f"Bearer {mint_token(sub='user-conc')}"},
+    )
+    assert resp.status_code == 200, resp.json()
+    conc = resp.json()["data"]["concentration"]
+    assert conc is not None
+
+    mv_spy = 100 * float(fake_price_history.frame["SPY"].dropna().iloc[-1])
+    mv_bnd = 50 * float(fake_price_history.frame["BND"].dropna().iloc[-1])
+    total = mv_spy + mv_bnd
+    w_top = max(mv_spy, mv_bnd) / total
+    hhi = (mv_spy / total) ** 2 + (mv_bnd / total) ** 2
+
+    assert conc["num_holdings"] == 2
+    assert conc["top_holding_ticker"] == ("SPY" if mv_spy > mv_bnd else "BND")
+    assert conc["top_holding_weight"] == pytest.approx(w_top)
+    assert conc["top5_weight"] == pytest.approx(1.0)
+    assert conc["hhi"] == pytest.approx(hhi)
+    assert conc["effective_holdings"] == pytest.approx(1.0 / hhi)

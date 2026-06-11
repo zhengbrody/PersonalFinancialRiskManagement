@@ -82,6 +82,19 @@ class PriceProvenanceOut(BaseModel):
     trading_days: Optional[int] = None
 
 
+class ConcentrationOut(BaseModel):
+    """Deterministic concentration diagnostics over the invested book
+    (cash excluded). HHI = sum of squared weights; effective_holdings =
+    1/HHI is 'how many equally-weighted positions this behaves like'."""
+
+    num_holdings: int
+    top_holding_ticker: Optional[str] = None
+    top_holding_weight: Optional[float] = None
+    top5_weight: Optional[float] = None
+    hhi: Optional[float] = None
+    effective_holdings: Optional[float] = None
+
+
 class RiskReportOut(BaseModel):
     """JSON-safe projection of the engine's ``RiskReport`` dataclass.
 
@@ -133,6 +146,9 @@ class RiskReportOut(BaseModel):
     # Liquidity rows (one per ticker).
     liquidity: list[LiquidityRow] = Field(default_factory=list)
 
+    # Concentration diagnostics (single-name risk), derived from market values.
+    concentration: Optional[ConcentrationOut] = None
+
     # Drawdown stats. Engine returns a free-form dict; we pass through
     # only the keys frontends consume so a new field doesn't leak.
     drawdown_stats: Optional[dict[str, Any]] = None
@@ -156,6 +172,9 @@ class EfficientFrontierOut(BaseModel):
     frontier: list[FrontierPoint] = Field(default_factory=list)
     current: FrontierPoint
     risk_free_rate: float
+    # Provenance: last price date + daily return observations behind the curve.
+    as_of: Optional[str] = None
+    observations: Optional[int] = None
 
 
 class ScenarioPoint(BaseModel):
@@ -176,6 +195,9 @@ class ScenariosOut(BaseModel):
 
     total_value: float
     scenarios: list[ScenarioPoint] = Field(default_factory=list)
+    # Provenance: last price date + daily return observations behind the betas.
+    as_of: Optional[str] = None
+    observations: Optional[int] = None
 
 
 class ReportFromActiveRequest(BaseModel):

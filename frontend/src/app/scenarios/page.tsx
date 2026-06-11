@@ -45,6 +45,7 @@ import {
   type Scenarios,
 } from "@/lib/queries";
 import { HistoricalScenarios } from "@/components/historical-scenarios";
+import { DataProvenance } from "@/components/data-provenance";
 
 const AXIS = "hsl(var(--muted-foreground))";
 const GRID = "hsl(var(--border))";
@@ -185,6 +186,11 @@ function ScenarioView({ data }: { data: Scenarios }) {
           </BarChart>
         </ResponsiveContainer>
       </div>
+      <DataProvenance
+        asOf={data.as_of}
+        source="Beta-scaled stress on yfinance history"
+        observations={data.observations}
+      />
     </div>
   );
 }
@@ -214,6 +220,7 @@ function FrontierView({ data }: { data: EfficientFrontier }) {
   const curve = data.frontier.map((p) => ({ x: p.vol * 100, y: p.ret * 100 }));
   const mine = [{ x: data.current.vol * 100, y: data.current.ret * 100 }];
   return (
+    <div className="space-y-2">
     <div style={{ width: "100%", height: 280 }} role="img" aria-label="Efficient frontier" data-testid="frontier-chart">
       <ResponsiveContainer width="100%" height="100%">
         <ScatterChart margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
@@ -245,6 +252,12 @@ function FrontierView({ data }: { data: EfficientFrontier }) {
           <Scatter name="Your portfolio" data={mine} fill="hsl(var(--foreground))" shape="diamond" isAnimationActive={false} />
         </ScatterChart>
       </ResponsiveContainer>
+    </div>
+      <DataProvenance
+        asOf={data.as_of}
+        source="Mean-variance optimization on yfinance history"
+        observations={data.observations}
+      />
     </div>
   );
 }

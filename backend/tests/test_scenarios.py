@@ -122,6 +122,9 @@ def test_efficient_frontier_happy(
     assert len(data["frontier"]) == 3
     assert all(np.isfinite(p["vol"]) and np.isfinite(p["ret"]) for p in data["frontier"])
     assert np.isfinite(data["current"]["vol"]) and np.isfinite(data["current"]["ret"])
+    # Provenance: last price date + observation count behind the curve.
+    assert data["as_of"] is not None
+    assert data["observations"] and data["observations"] > 0
 
 
 def test_efficient_frontier_needs_two_holdings(
@@ -150,6 +153,9 @@ def test_scenarios_happy_sweep(
     crash = shocks[-0.30]
     assert crash["pnl_pct"] == pytest.approx(-0.30, abs=1e-6)
     assert crash["portfolio_value"] == pytest.approx(data["total_value"] * 0.70, rel=1e-6)
+    # Provenance: last price date + observation count behind the betas.
+    assert data["as_of"] is not None
+    assert data["observations"] and data["observations"] > 0
 
 
 def test_scenarios_carry_per_asset_losses(

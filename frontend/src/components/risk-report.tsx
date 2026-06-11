@@ -89,6 +89,9 @@ export function ReportSections({ report }: { report: RiskReport }) {
         kind="pct"
       />
       <RiskDrivers report={report} />
+      {report.concentration && (
+        <ConcentrationCard concentration={report.concentration} />
+      )}
       <ScenarioExplorer
         scenarios={scenarios.data}
         loading={scenarios.isPending}
@@ -154,6 +157,53 @@ function Kpi({
         >
           {value}
         </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ConcentrationCard({
+  concentration,
+}: {
+  concentration: NonNullable<RiskReport["concentration"]>;
+}) {
+  const c = concentration;
+  const topWeight = c.top_holding_weight ?? null;
+  const highSingleName = topWeight != null && topWeight > 0.25;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Concentration</CardTitle>
+        <CardDescription>
+          How much of the book rides on a few names. &ldquo;Effective
+          holdings&rdquo; is the equally-weighted equivalent — 10 positions
+          that behave like 3 are 3.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <Kpi
+            label="Top holding"
+            value={
+              c.top_holding_ticker
+                ? `${c.top_holding_ticker} ${fmtPct(topWeight)}`
+                : "—"
+            }
+            accent={highSingleName ? "destructive" : undefined}
+          />
+          <Kpi label="Top 5 weight" value={fmtPct(c.top5_weight)} />
+          <Kpi
+            label="Effective holdings"
+            value={fmtNum(c.effective_holdings, 1)}
+          />
+          <Kpi label="Positions" value={String(c.num_holdings)} />
+        </div>
+        {highSingleName && (
+          <p className="text-xs text-muted-foreground">
+            One position is over 25% of the invested book — single-name news
+            moves your whole portfolio.
+          </p>
+        )}
       </CardContent>
     </Card>
   );
