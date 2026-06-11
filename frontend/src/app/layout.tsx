@@ -70,12 +70,21 @@ export const metadata: Metadata = {
     title: "MindMarket | AI Portfolio Risk Analytics",
     description:
       "Score your portfolio, inspect downside risk, and understand macro exposure with deterministic risk math plus AI explanations.",
+    images: [
+      {
+        url: "/og.jpg",
+        width: 1200,
+        height: 630,
+        alt: "MindMarket AI — know your portfolio's risk before the market tests it",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "MindMarket | AI Portfolio Risk Analytics",
     description:
       "Portfolio health score, VaR/CVaR, stress tests, factor exposure, and live US rates data for individual investors.",
+    images: ["/og.jpg"],
   },
   robots: {
     index: true,
@@ -90,6 +99,36 @@ export const metadata: Metadata = {
   },
 };
 
+// Structured data for search engines. Static + deterministic (no user data),
+// so it lives in the server-rendered root layout and ships with every page.
+const JSON_LD = JSON.stringify({
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": `${SITE_URL}/#org`,
+      name: "MindMarket AI",
+      url: SITE_URL,
+      logo: `${SITE_URL}/favicon-512.png`,
+    },
+    {
+      "@type": "SoftwareApplication",
+      name: "MindMarket AI",
+      url: SITE_URL,
+      applicationCategory: "FinanceApplication",
+      operatingSystem: "Web",
+      description:
+        "AI portfolio risk analytics for individual investors: portfolio health score (0-1000), VaR/CVaR, stress tests, factor exposure, and an AI copilot grounded in deterministic risk math.",
+      offers: [
+        { "@type": "Offer", name: "Free", price: "0", priceCurrency: "USD" },
+        { "@type": "Offer", name: "Basic", price: "10", priceCurrency: "USD" },
+        { "@type": "Offer", name: "Pro", price: "25", priceCurrency: "USD" },
+      ],
+      publisher: { "@id": `${SITE_URL}/#org` },
+    },
+  ],
+});
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -102,6 +141,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON_LD }} />
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
         <MarketThemeSync />
         <Providers>
