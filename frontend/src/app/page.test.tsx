@@ -1,6 +1,9 @@
 /**
- * Home auth-switch: signed-in → Dashboard, anonymous → MarketingLanding,
- * session-loading → skeleton (no flash of the wrong view).
+ * Home auth-switch: signed-in → Dashboard, anonymous → MarketingLanding.
+ * While the session loads: marketing by default (it's also what the
+ * production prerender ships to crawlers — a skeleton here means a
+ * content-free homepage), skeleton only when localStorage carries a
+ * Supabase session (returning user, dashboard incoming).
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -38,10 +41,28 @@ describe("Home", () => {
     expect(screen.queryByText("LANDING_VIEW")).not.toBeInTheDocument();
   });
 
-  it("shows neither view while the session is still loading", () => {
+  it("shows marketing (the crawlable default) while loading with no stored session", () => {
     useAuthMock.mockReturnValue({ user: null, loading: true, configured: true });
     render(<Home />);
+    expect(screen.getByText("LANDING_VIEW")).toBeInTheDocument();
     expect(screen.queryByText("DASHBOARD_VIEW")).not.toBeInTheDocument();
-    expect(screen.queryByText("LANDING_VIEW")).not.toBeInTheDocument();
+  });
+
+  it("shows a skeleton while loading when localStorage carries a Supabase session", () => {
+    // The runner's localStorage is non-functional (node --localstorage-file
+    // quirk), so stub the minimal surface hasStoredSession() reads.
+    const original = Object.getOwnPropertyDescriptor(window, "localStorage");
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: { length: 1, key: () => "sb-test-ref-auth-token" },
+    });
+    try {
+      useAuthMock.mockReturnValue({ user: null, loading: true, configured: true });
+      render(<Home />);
+      expect(screen.queryByText("LANDING_VIEW")).not.toBeInTheDocument();
+      expect(screen.queryByText("DASHBOARD_VIEW")).not.toBeInTheDocument();
+    } finally {
+      if (original) Object.defineProperty(window, "localStorage", original);
+    }
   });
 });
