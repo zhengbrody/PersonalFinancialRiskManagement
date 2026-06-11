@@ -50,6 +50,16 @@ const EXAMPLE_QUESTIONS = [
   "How do I protect against a crash?",
 ];
 
+// Deterministic follow-up prompts shown after each answer (no LLM call —
+// just the natural next questions). Ones already asked are filtered out.
+const FOLLOW_UP_QUESTIONS = [
+  "What's my single biggest risk right now?",
+  "How would a -20% market drop hit me?",
+  "Am I being paid for the risk I'm taking?",
+  "What would diversify my portfolio the most?",
+  "Any hidden fees or tax-loss opportunities?",
+];
+
 export type CopilotConversationVariant = "page" | "floating";
 
 /**
@@ -260,6 +270,16 @@ export function CopilotConversation({
           <ThinkingBubble />
         )}
 
+        {!pending &&
+          !error &&
+          messages.length > 0 &&
+          messages[messages.length - 1]?.role === "assistant" && (
+            <FollowUpChips
+              asked={messages.filter((m) => m.role === "user").map((m) => m.text)}
+              onPick={(q) => send(q)}
+            />
+          )}
+
         {error && <ErrorNotice error={error} />}
 
         <div ref={scrollAnchor} />
@@ -395,6 +415,35 @@ function DraftTrades({ trades }: { trades: unknown[] }) {
       <p className="mt-2 text-[10px] text-muted-foreground">
         Ideas to consider — not financial advice, and nothing is executed.
       </p>
+    </div>
+  );
+}
+
+function FollowUpChips({
+  asked,
+  onPick,
+}: {
+  asked: string[];
+  onPick: (q: string) => void;
+}) {
+  const askedSet = new Set(asked.map((q) => q.trim().toLowerCase()));
+  const suggestions = FOLLOW_UP_QUESTIONS.filter(
+    (q) => !askedSet.has(q.trim().toLowerCase()),
+  ).slice(0, 3);
+  if (suggestions.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-2">
+      {suggestions.map((q) => (
+        <Button
+          key={q}
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPick(q)}
+        >
+          {q}
+        </Button>
+      ))}
     </div>
   );
 }

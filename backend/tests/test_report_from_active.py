@@ -532,3 +532,41 @@ def test_concentration_block_is_deterministic_arithmetic(
     assert conc["top5_weight"] == pytest.approx(1.0)
     assert conc["hhi"] == pytest.approx(hhi)
     assert conc["effective_holdings"] == pytest.approx(1.0 / hhi)
+
+
+def test_component_return_is_weight_times_annualized_mean(
+    test_client,
+    mint_token,
+    fake_active_portfolio,
+    fake_price_history,
+    fake_engine,
+    fake_capital,
+):
+    """component_return mirrors component VaR on the return side:
+    contribution_i = w_i x mean(daily r_i) x 252, from the same price frame."""
+    fake_active_portfolio.set(
+        {
+            "SPY": {"shares": 100, "avg_cost": 400.0},
+            "BND": {"shares": 50, "avg_cost": 70.0},
+        }
+    )
+    frame = _make_history(["BND", "SPY"])
+    fake_price_history.set(frame)
+    fake_engine.last_report = _FakeReport()
+
+    resp = test_client.post(
+        "/api/v1/risk/report_from_active",
+        json={},
+        headers={"Authorization": f"Bearer {mint_token(sub='user-cr')}"},
+    )
+    assert resp.status_code == 200, resp.json()
+    rows = {r["ticker"]: r["contribution"] for r in resp.json()["data"]["component_return"]}
+    assert set(rows) == {"SPY", "BND"}
+
+    mv_spy = 100 * float(frame["SPY"].dropna().iloc[-1])
+    mv_bnd = 50 * float(frame["BND"].dropna().iloc[-1])
+    total = mv_spy + mv_bnd
+    rets = frame.pct_change().dropna(how="all")
+    for tk, mv in (("SPY", mv_spy), ("BND", mv_bnd)):
+        expected = (mv / total) * float(rets[tk].dropna().mean()) * 252.0
+        assert rows[tk] == pytest.approx(expected)

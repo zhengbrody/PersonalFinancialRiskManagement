@@ -32,6 +32,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable, type Column } from "@/components/ui/data-table";
+import { CreditsBadge } from "@/components/credits-badge";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { track } from "@/lib/analytics";
@@ -123,6 +124,7 @@ function ResearchWorkbench() {
           {factM.isPending ? "Loading…" : "Research"}
         </Button>
       </form>
+      <CreditsBadge />
 
       {factM.isPending && <FactPackSkeleton />}
 

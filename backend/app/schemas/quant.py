@@ -116,3 +116,6 @@ class AttributionResponse(BaseModel):
     active_return_annual: Optional[float] = None
     brinson: Optional[BrinsonOut] = None
     factor: Optional[FactorOut] = None
+    # Provenance: last price date + daily return observations used.
+    as_of: Optional[str] = None
+    observations: Optional[int] = None

@@ -405,26 +405,55 @@ function FactorBetasTable({ report }: { report: RiskReport }) {
   );
 }
 
+type RiskReturnRow = ComponentVarRow & { contribution: number | null };
+
 function ComponentVarTable({ report }: { report: RiskReport }) {
   if (report.component_var_pct.length === 0) return null;
-  const columns: Column<ComponentVarRow>[] = [
+  // Merge the return-side contribution (when the backend ships it) so each
+  // holding shows "who risks you" next to "who pays you".
+  const contribByTicker = new Map(
+    report.component_return.map((r) => [r.ticker, r.contribution]),
+  );
+  const rows: RiskReturnRow[] = report.component_var_pct.map((r) => ({
+    ...r,
+    contribution: contribByTicker.get(r.ticker) ?? null,
+  }));
+  const hasReturns = report.component_return.length > 0;
+  const columns: Column<RiskReturnRow>[] = [
     { key: "ticker", header: "Ticker", render: (r) => <span className="font-sans">{r.ticker}</span>, sortValue: (r) => r.ticker },
     { key: "pct", header: "Share of VaR", align: "right", render: (r) => fmtPct(r.pct), sortValue: (r) => r.pct },
+    ...(hasReturns
+      ? [
+          {
+            key: "contribution",
+            header: "Return contribution",
+            align: "right",
+            render: (r) => fmtPct(r.contribution),
+            sortValue: (r) => r.contribution ?? -Infinity,
+          } satisfies Column<RiskReturnRow>,
+        ]
+      : []),
   ];
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Component VaR — full table</CardTitle>
-        <CardDescription>Every holding&apos;s share of total portfolio VaR.</CardDescription>
+        <CardTitle className="text-base">
+          {hasReturns ? "Risk vs return per holding" : "Component VaR — full table"}
+        </CardTitle>
+        <CardDescription>
+          {hasReturns
+            ? "Each holding's share of portfolio VaR next to its contribution to annualized return — a big risk share with a small return contribution is a position to question."
+            : "Every holding's share of total portfolio VaR."}
+        </CardDescription>
       </CardHeader>
       <CardContent className="p-4">
         <DataTable
-          rows={report.component_var_pct}
+          rows={rows}
           columns={columns}
           rowKey={(r) => r.ticker}
           filterKey="ticker"
           initialSort={{ key: "pct", dir: "desc" }}
-          minWidth={280}
+          minWidth={hasReturns ? 380 : 280}
         />
       </CardContent>
     </Card>

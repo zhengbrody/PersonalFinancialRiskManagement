@@ -294,8 +294,10 @@ def _deterministic_verdict(fp: R.FactPack) -> R.ResearchVerdict:
 
 def build_verdict(fp: R.FactPack, llm_callable: Optional[Callable[..., str]] = None):
     """LLM judgment over the FactPack. ``llm_callable`` None → deterministic
-    placeholder so the feature renders without a key. The deterministic
-    dimension scores are always attached as a floor the LLM refines."""
+    placeholder so the feature renders without a key. Dimension SCORES are
+    always the deterministic floor's (same rule as risk_explain: the model
+    phrases and ranks, it never invents a number); the LLM's per-dimension
+    note text is kept where the names line up."""
     floor = _deterministic_verdict(fp)
     if llm_callable is None:
         return floor
@@ -314,8 +316,15 @@ def build_verdict(fp: R.FactPack, llm_callable: Optional[Callable[..., str]] = N
         parsed = _extract_json(raw or "")
         if not parsed:
             return floor
-        if not parsed.get("dimensions"):  # absent OR empty → use the floor
-            parsed["dimensions"] = [d.model_dump() for d in floor.dimensions]
+        llm_notes = {
+            str(d.get("name", "")).lower(): str(d.get("note", "") or "")
+            for d in (parsed.get("dimensions") or [])
+            if isinstance(d, dict)
+        }
+        parsed["dimensions"] = [
+            {**d.model_dump(), "note": llm_notes.get(d.name.lower()) or d.note}
+            for d in floor.dimensions
+        ]
         parsed["data_only"] = False
         return R.ResearchVerdict.model_validate(parsed)
     except Exception:  # noqa: BLE001 - any LLM/parse failure → deterministic floor

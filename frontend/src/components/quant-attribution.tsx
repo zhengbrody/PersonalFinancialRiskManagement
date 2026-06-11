@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { HorizontalBarChart, type BarDatum } from "@/components/ui/bar-chart";
+import { DataProvenance } from "@/components/data-provenance";
 import { ApiError } from "@/lib/api";
 import { useAttribution, type Attribution } from "@/lib/queries";
 
@@ -118,6 +119,11 @@ function AttributionResult({ data }: { data: Attribution }) {
           </CardContent>
         </Card>
       )}
+      <DataProvenance
+        asOf={data.as_of}
+        source="Brinson + factor regression on daily yfinance closes"
+        observations={data.observations}
+      />
     </div>
   );
 }

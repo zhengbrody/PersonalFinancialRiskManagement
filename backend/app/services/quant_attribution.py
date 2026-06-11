@@ -128,4 +128,11 @@ def run_attribution(user, *, history_days: int = 730) -> dict:
     except Exception as exc:
         raise server_error("Attribution computation failed.", reason=type(exc).__name__) from exc
 
-    return _serialize(summary)
+    out = _serialize(summary)
+    # Provenance: last price date + return observations behind the attribution.
+    try:
+        out["as_of"] = pd.Timestamp(price_frame.index[-1]).strftime("%Y-%m-%d")
+        out["observations"] = int(len(returns))
+    except Exception:  # noqa: BLE001 - provenance must never sink the payload
+        pass
+    return out

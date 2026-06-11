@@ -37,6 +37,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs } from "@/components/ui/tabs";
 import { TimeSeriesChart } from "@/components/ui/chart-line";
 import { QuantAttribution } from "@/components/quant-attribution";
+import { DataProvenance } from "@/components/data-provenance";
 import { QuantRegime } from "@/components/quant-regime";
 import { track } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
@@ -356,6 +357,11 @@ function Results({ result }: { result: BacktestResponse }) {
         </CardContent>
       </Card>
 
+      <DataProvenance
+        asOf={result.end_date}
+        source="Backtest on daily yfinance closes"
+        observations={equity_curve.length}
+      />
       <p className="text-center text-xs text-muted-foreground">
         Past performance doesn&apos;t predict future results. This is a
         simulation, not financial advice.
