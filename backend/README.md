@@ -58,7 +58,7 @@ http://localhost:8000/docs
 | `/api/v1/market` | Prices, movers, sentiment, market context. |
 | `/api/v1/macro` | FRED series and Treasury yield curve. |
 | `/api/v1/portfolios` | Supabase-backed portfolio CRUD. |
-| `/api/v1/equity`, `/api/v1/research` | Ticker research and AI analysis. |
+| `/api/v1/research` | Ticker research (FactPack) and AI verdict. |
 | `/api/v1/copilot` | Streaming and non-streaming AI copilot. |
 | `/api/v1/billing` | Plan, checkout, portal, usage. |
 | `/api/v1/quant`, `/api/v1/institutions` | Quant lab and institutional data. |

@@ -22,7 +22,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from .api.v1 import (
     billing,
     copilot,
-    equity,
     feedback,
     health,
     institutions,
@@ -161,7 +160,6 @@ def create_app() -> FastAPI:
     # this file stays a directory of imports.
     app.include_router(health.router)
     app.include_router(risk.router)
-    app.include_router(equity.router)
     app.include_router(portfolios.router)
     app.include_router(market.router)
     app.include_router(macro.router)

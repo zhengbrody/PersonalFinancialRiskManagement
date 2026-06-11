@@ -88,6 +88,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/risk/last_snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The prior-day portfolio snapshot, for the 'what changed' delta
+         * @description Return the most recent snapshot older than ~a day (the baseline the
+         *     dashboard diffs today's score against), or null when there isn't one.
+         */
+        get: operations["last_snapshot_endpoint_api_v1_risk_last_snapshot_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/snapshot_history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recent portfolio snapshots (score/vol/VaR over time) for trend lines
+         * @description Recent snapshots oldest→newest so the score/risk pages can draw trend
+         *     sparklines. Fail-soft to an empty list.
+         */
+        get: operations["snapshot_history_endpoint_api_v1_risk_snapshot_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/risk/report_from_active": {
         parameters: {
             query?: never;
@@ -114,7 +156,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/equity/deep_analysis": {
+    "/api/v1/risk/efficient_frontier": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Efficient frontier + the active portfolio's risk/return point */
+        post: operations["efficient_frontier_endpoint_api_v1_risk_efficient_frontier_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/scenarios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Project portfolio P&L across a −30%…+30% market move sweep */
+        post: operations["scenarios_endpoint_api_v1_risk_scenarios_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/explain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Structured AI risk diagnosis over already-computed metrics */
+        post: operations["explain_endpoint_api_v1_risk_explain_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/benchmarks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Reference annualized stats: S&P 500 + 60/40 */
+        get: operations["benchmarks_endpoint_api_v1_risk_benchmarks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/historical_scenarios": {
         parameters: {
             query?: never;
             header?: never;
@@ -124,17 +234,34 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Run the single-name equity analyst (no LLM in Phase 1)
-         * @description Return the deterministic ``DeepAnalysis`` placeholder for the
-         *     requested ticker / dossier.
-         *
-         *     Phase 1 does NOT invoke the LLM: it returns the placeholder
-         *     analysis (HOLD / low confidence) so the frontend can wire the
-         *     dashboard before we plumb billing-aware LLM routing. The placeholder
-         *     is the same one the equity module emits when its ``llm_callable``
-         *     argument is None — see ``libs.analysis.equity_research``.
+         * Replay real market crises on the active portfolio
+         * @description What the caller's ACTUAL holdings would have done through COVID / 2022 /
+         *     2018Q4 / GFC — realised return, drawdown, S&P 500 over the same window, and
+         *     recovery time. Deterministic, no credits.
          */
-        post: operations["deep_analysis_api_v1_equity_deep_analysis_post"];
+        post: operations["historical_scenarios_endpoint_api_v1_risk_historical_scenarios_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/var_backtest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Backtest the portfolio's 1-day VaR vs realised breaches
+         * @description Gaussian 1-day VaR vs how often the realised daily loss actually breached
+         *     it over the trailing window, plus the empirical return distribution.
+         *     Deterministic, no credits.
+         */
+        post: operations["var_backtest_endpoint_api_v1_risk_var_backtest_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -231,6 +358,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/market/sentiment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * AI sentiment per holding (authed, credits)
+         * @description Per-holding AI sentiment over recent headlines for the caller's ACTIVE
+         *     portfolio. Credit-gated (it's an LLM call per ticker); fail-open on a
+         *     metering blip; degrades to neutral/data-only without an LLM key, so it never
+         *     500s. Cached per ticker-set in the service.
+         */
+        post: operations["portfolio_sentiment_api_v1_market_sentiment_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/macro/series": {
         parameters: {
             query?: never;
@@ -271,6 +421,96 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/macro/regime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Market-regime snapshot: VIX, Fear & Greed, yield curve
+         * @description Return the current market regime. Public.
+         *
+         *     Each leg (VIX / Fear & Greed / yield-curve status) is fetched
+         *     independently and nulls itself on upstream failure — the panel
+         *     renders partially rather than 500-ing on one dead source. Hence no
+         *     error branch here: a well-formed (possibly partially-null) snapshot
+         *     is always a 200.
+         */
+        get: operations["get_regime_api_v1_macro_regime_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/macro/regime_detail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Market-wide regime (bull/bear/transition) + history
+         * @description Return the composite market regime (bull / bear / transition) with a
+         *     confidence, the sub-signals, and a ~1y history. Public. Fails soft to an
+         *     empty snapshot — always a 200, never blocks the /markets page.
+         */
+        get: operations["get_regime_detail_endpoint_api_v1_macro_regime_detail_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/macro/movers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sector performance + today's top gainers/losers
+         * @description Sector ETF performance + S&P-500 top gainers/losers/unusual-volume.
+         *     Public, free (yfinance). Fail-soft: any leg may be empty if its upstream is
+         *     down — always a 200, never blocks the /markets page.
+         */
+        get: operations["get_movers_endpoint_api_v1_macro_movers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/macro/news": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Latest macro market news (free RSS + yfinance)
+         * @description Aggregated macro headlines. Public, free, fail-soft to an empty list.
+         */
+        get: operations["get_news_endpoint_api_v1_macro_news_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/billing/me": {
         parameters: {
             query?: never;
@@ -285,6 +525,74 @@ export interface paths {
          *     the pricing table without a second round-trip.
          */
         get: operations["billing_me_api_v1_billing_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/admin/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Owner-only: aggregate token/cost/credit usage
+         * @description Month-to-date usage aggregates (tokens / $ / credits, per kind + per
+         *     user) for the owner dashboard. 403 for everyone else.
+         */
+        get: operations["billing_admin_usage_api_v1_billing_admin_usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/admin/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Owner-only: live in-process API call metrics
+         * @description Real-time, in-process counters for the owner live-activity view: per-route
+         *     HTTP volume/latency/errors + per external-provider (yfinance/FMP/Massive/
+         *     FRED/Treasury) call outcomes. Pure memory read — no DB hit — so it's safe to
+         *     poll every few seconds. Counters are monotonic since process start (reset on
+         *     deploy); the dashboard diffs consecutive snapshots to show live rates. The
+         *     billing ledger ($/credits) stays in /admin/usage. 403 for non-owners.
+         */
+        get: operations["billing_admin_metrics_api_v1_billing_admin_metrics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/admin/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Owner-only: integration config + live checks
+         * @description Integration config presence (instant) + optional live key-validation
+         *     checks (``?live=true``). Owner only (403 otherwise). Never returns secret
+         *     values — only present/missing + state.
+         */
+        get: operations["billing_admin_status_api_v1_billing_admin_status_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -346,10 +654,307 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/copilot/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Chat with the AI Portfolio Copilot about the active portfolio
+         * @description Answer a chat turn about the caller's active portfolio.
+         *
+         *     Flow:
+         *       1. Resolve positions + score (422 codes on empty/unpriceable data).
+         *       2. Gate on the user's monthly chat quota (429 when exhausted;
+         *          fail-OPEN on a Supabase blip — availability over strict metering).
+         *       3. Dispatch to the orchestrator with the LLM callable (or ``None``
+         *          → deterministic templates).
+         */
+        post: operations["copilot_chat_endpoint_api_v1_copilot_chat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/ask": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copilot 2.0 — intent-routed, evidence-grounded answer
+         * @description Copilot 2.0: classify the message into one of 8 intents, gather
+         *     deterministic evidence (ticker FactPacks, portfolio score, macro regime,
+         *     fee/tax scans, metric glossary), then synthesize ONE answer in the fixed
+         *     five-section format using only that evidence.
+         *
+         *     Unlike ``/chat`` this does NOT require an active portfolio — ticker /
+         *     compare / macro / explain intents answer with no holdings. Evidence
+         *     gathering is fail-soft (a dead provider just thins the evidence).
+         *     Credit-gated (LLM); fail-open on a metering blip; data-only without a key.
+         */
+        post: operations["copilot_ask_endpoint_api_v1_copilot_ask_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/chat/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Streaming (SSE) Copilot chat — answer tokens arrive as written
+         * @description Same as /chat but **streams** the answer over Server-Sent Events so
+         *     the UI renders text as it's generated instead of waiting for the whole
+         *     turn. Events: ``status`` (phase), ``delta`` ({text}), ``done``
+         *     ({agent_name, grounded_in, draft_trades}), ``error`` ({code, message}).
+         *
+         *     Auth is enforced up-front (a 401 here is a normal HTTP error, not an SSE
+         *     frame). Everything after the stream starts is reported via SSE events —
+         *     a 422 (no portfolio) / 429 (quota) becomes an ``error`` event so the
+         *     client maps it to the same friendly CTA as the non-streaming route.
+         */
+        post: operations["copilot_chat_stream_endpoint_api_v1_copilot_chat_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/quant/backtest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Backtest the authed user's active portfolio
+         * @description Run the requested strategy over the active portfolio and return the
+         *     equity curve, drawdown series, scalar stats, and benchmark total
+         *     return. See ``services.quant_backtest`` for the math + error codes.
+         */
+        post: operations["backtest_active_endpoint_api_v1_quant_backtest_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/quant/attribution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Performance attribution (Brinson + factor) for the active portfolio
+         * @description Brinson sector decomposition + multi-factor regression + tracking-error
+         *     / information-ratio / hit-ratio for the caller's active portfolio vs SPY.
+         *     Deterministic (no LLM, no credits).
+         */
+        post: operations["attribution_active_endpoint_api_v1_quant_attribution_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/research/fact_pack/{ticker}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Compact, source-attributed FactPack for a ticker (no credit) */
+        get: operations["fact_pack_api_v1_research_fact_pack__ticker__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/research/verdict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** LLM verdict over a FactPack (credit-gated) */
+        post: operations["verdict_api_v1_research_verdict_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/institutions/smart_money": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Institutional conviction for your holdings */
+        get: operations["smart_money_api_v1_institutions_smart_money_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/institutions/top": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Top ~30 institutional 13F filers */
+        get: operations["top_api_v1_institutions_top_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/institutions/{cik}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A fund's top holdings + QoQ changes */
+        get: operations["detail_api_v1_institutions__cik__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit beta feedback */
+        post: operations["submit_feedback_api_v1_feedback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AnalystBlock */
+        AnalystBlock: {
+            /** Rating */
+            rating?: string | null;
+            /** Num Analysts */
+            num_analysts?: number | null;
+            /** Target Low */
+            target_low?: number | null;
+            /** Target Consensus */
+            target_consensus?: number | null;
+            /** Target High */
+            target_high?: number | null;
+            /** Implied Upside Pct */
+            implied_upside_pct?: number | null;
+        };
+        /**
+         * BacktestRequest
+         * @description Inbound body. The active portfolio supplies the tickers; the body
+         *     only chooses the strategy + window + tuning knobs.
+         *
+         *     ``lookback`` / ``top_n`` are momentum-only and ignored by the other
+         *     two strategies (kept on the shared body so the frontend posts one
+         *     shape regardless of strategy).
+         */
+        BacktestRequest: {
+            /**
+             * Strategy
+             * @default static
+             * @enum {string}
+             */
+            strategy?: "static" | "equal_weight" | "momentum";
+            /**
+             * Years
+             * @default 3
+             */
+            years?: number;
+            /**
+             * Rebalance Freq
+             * @default M
+             * @enum {string}
+             */
+            rebalance_freq?: "D" | "W" | "M" | "Q";
+            /**
+             * Benchmark
+             * @default SPY
+             */
+            benchmark?: string;
+            /**
+             * Lookback
+             * @default 252
+             */
+            lookback?: number;
+            /**
+             * Top N
+             * @default 5
+             */
+            top_n?: number;
+        };
+        /**
+         * ChatRequest
+         * @description One chat turn from the user. The orchestrator routes the message
+         *     to the right agent (analyzer / optimizer); we don't parse intent
+         *     here.
+         */
+        ChatRequest: {
+            /** Message */
+            message: string;
+        };
         /**
          * CheckoutSessionRequest
          * @description Body for ``POST /api/v1/billing/checkout_session``.
@@ -365,22 +970,149 @@ export interface components {
             /** Cancel Path */
             cancel_path?: string | null;
         };
-        /** DeepAnalysisRequest */
-        DeepAnalysisRequest: {
+        /** CopilotAskRequest */
+        CopilotAskRequest: {
+            /** Message */
+            message: string;
+        };
+        /** DataQuality */
+        DataQuality: {
+            /**
+             * Coverage
+             * @default 0
+             */
+            coverage?: number;
+            /** Sources */
+            sources?: components["schemas"]["SourceRef"][];
+            /** Warnings */
+            warnings?: string[];
+        };
+        /** ExplainContributor */
+        ExplainContributor: {
             /** Ticker */
-            ticker?: string | null;
+            ticker: string;
+            /** Pct */
+            pct: number;
+        };
+        /** ExplainDimension */
+        ExplainDimension: {
             /**
-             * Fmp Key
-             * @description Pass-through FMP key for the dossier fetch. Optional.
+             * Name
+             * @default
              */
-            fmp_key?: string | null;
+            name?: string;
+            /** Score */
+            score?: number | null;
             /**
-             * Dossier Override
-             * @description When supplied, the endpoint SKIPS the network dossier fetch and uses this dict verbatim. Lets tests + offline clients exercise the analysis without yfinance / FMP.
+             * Status
+             * @default
              */
-            dossier_override?: {
-                [key: string]: unknown;
-            } | null;
+            status?: string;
+        };
+        /** ExplainLiquidity */
+        ExplainLiquidity: {
+            /** Ticker */
+            ticker: string;
+            /** Days To Liquidate */
+            days_to_liquidate?: number | null;
+        };
+        /** ExplainMetrics */
+        ExplainMetrics: {
+            /** Annual Return */
+            annual_return?: number | null;
+            /** Annual Volatility */
+            annual_volatility?: number | null;
+            /** Sharpe Ratio */
+            sharpe_ratio?: number | null;
+            /** Max Drawdown */
+            max_drawdown?: number | null;
+            /** Var 95 Daily */
+            var_95_daily?: number | null;
+            /** Cvar 95 Daily */
+            cvar_95_daily?: number | null;
+            /** Beta To Benchmark */
+            beta_to_benchmark?: number | null;
+            /** Total Value */
+            total_value?: number | null;
+            /** Cash Weight */
+            cash_weight?: number | null;
+        };
+        /** ExplainSnapshotDelta */
+        ExplainSnapshotDelta: {
+            /** As Of */
+            as_of?: string | null;
+            /** Prev Overall Score */
+            prev_overall_score?: number | null;
+            /** Prev Annual Volatility */
+            prev_annual_volatility?: number | null;
+            /** Prev Sharpe Ratio */
+            prev_sharpe_ratio?: number | null;
+        };
+        /**
+         * FactPack
+         * @description The compact, source-attributed fact sheet for one ticker.
+         */
+        FactPack: {
+            /** Ticker */
+            ticker: string;
+            /** Name */
+            name?: string | null;
+            /** Sector */
+            sector?: string | null;
+            /** Industry */
+            industry?: string | null;
+            /**
+             * Currency
+             * @default USD
+             */
+            currency?: string;
+            /** As Of */
+            as_of?: string | null;
+            /** Price */
+            price?: number | null;
+            /** Market Cap */
+            market_cap?: number | null;
+            /** Beta */
+            beta?: number | null;
+            valuation?: components["schemas"]["ValuationBlock"];
+            quality?: components["schemas"]["QualityBlock"];
+            growth?: components["schemas"]["GrowthBlock"];
+            analyst?: components["schemas"]["AnalystBlock"];
+            /** Peers */
+            peers?: components["schemas"]["PeerCompareRow"][];
+            /** News */
+            news?: components["schemas"]["NewsHeadline"][];
+            /** Drivers */
+            drivers?: string[];
+            /** Risk Flags */
+            risk_flags?: string[];
+            data_quality?: components["schemas"]["DataQuality"];
+        };
+        /** FeedbackIn */
+        FeedbackIn: {
+            /** Message */
+            message: string;
+            /**
+             * Context
+             * @default
+             */
+            context?: string;
+        };
+        /** GrowthBlock */
+        GrowthBlock: {
+            /** Revenue Cagr */
+            revenue_cagr?: number | null;
+            /** Eps Cagr */
+            eps_cagr?: number | null;
+            /** Revenue Growth Yoy */
+            revenue_growth_yoy?: number | null;
+            /** Earnings Growth Yoy */
+            earnings_growth_yoy?: number | null;
+            /**
+             * Periods
+             * @default 0
+             */
+            periods?: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -411,11 +1143,8 @@ export interface components {
             asset_type?: "public_security" | "cash" | "crypto" | "real_estate";
             /** Market Value */
             market_value: number;
-            /**
-             * Cost Basis
-             * @default 0
-             */
-            cost_basis?: number;
+            /** Cost Basis */
+            cost_basis?: number | null;
             /**
              * Expense Ratio
              * @default 0
@@ -455,6 +1184,41 @@ export interface components {
             margin_eligible?: boolean | null;
         } & {
             [key: string]: unknown;
+        };
+        /**
+         * NewsHeadline
+         * @description Metadata ONLY — title/site/published/url. No article body is ever
+         *     forwarded to the LLM (principle: no raw blobs).
+         */
+        NewsHeadline: {
+            /** Title */
+            title: string;
+            /** Site */
+            site?: string | null;
+            /** Published */
+            published?: string | null;
+            /** Url */
+            url?: string | null;
+        };
+        /** PeerCompareRow */
+        PeerCompareRow: {
+            /** Ticker */
+            ticker: string;
+            /**
+             * Name
+             * @default
+             */
+            name?: string;
+            /** Market Cap */
+            market_cap?: number | null;
+            /** Pe */
+            pe?: number | null;
+            /** Ps */
+            ps?: number | null;
+            /** Net Margin */
+            net_margin?: number | null;
+            /** Roe */
+            roe?: number | null;
         };
         /**
          * PortalSessionRequest
@@ -520,6 +1284,27 @@ export interface components {
             /** Is Default */
             is_default?: boolean | null;
         };
+        /** QualityBlock */
+        QualityBlock: {
+            /** Gross Margin */
+            gross_margin?: number | null;
+            /** Operating Margin */
+            operating_margin?: number | null;
+            /** Net Margin */
+            net_margin?: number | null;
+            /** Roe */
+            roe?: number | null;
+            /** Roa */
+            roa?: number | null;
+            /** Roic */
+            roic?: number | null;
+            /** Current Ratio */
+            current_ratio?: number | null;
+            /** Debt To Equity */
+            debt_to_equity?: number | null;
+            /** Interest Coverage */
+            interest_coverage?: number | null;
+        };
         /**
          * ReportFromActiveRequest
          * @description Body for ``POST /api/v1/risk/report_from_active``.
@@ -543,7 +1328,7 @@ export interface components {
             risk_free_rate?: number;
             /**
              * History Days
-             * @default 730
+             * @default 365
              */
             history_days?: number;
             /**
@@ -552,6 +1337,40 @@ export interface components {
              * @default -0.1
              */
             market_shock?: number;
+        };
+        /**
+         * RiskExplainInput
+         * @description Compact deterministic summary the page already has. Every field is
+         *     optional so the one endpoint serves both the Health Score page (score
+         *     side) and the Risk Report page (report side).
+         */
+        RiskExplainInput: {
+            /**
+             * Source
+             * @default score
+             * @enum {string}
+             */
+            source?: "score" | "risk";
+            /** Overall Score */
+            overall_score?: number | null;
+            /** Dimensions */
+            dimensions?: {
+                [key: string]: components["schemas"]["ExplainDimension"];
+            };
+            metrics?: components["schemas"]["ExplainMetrics"];
+            /** Top Component Var */
+            top_component_var?: components["schemas"]["ExplainContributor"][];
+            /** Factor Betas */
+            factor_betas?: {
+                [key: string]: number;
+            };
+            /** Stress Loss */
+            stress_loss?: number | null;
+            /** Stress Market Shock */
+            stress_market_shock?: number | null;
+            /** Liquidity Outliers */
+            liquidity_outliers?: components["schemas"]["ExplainLiquidity"][];
+            snapshot_delta?: components["schemas"]["ExplainSnapshotDelta"] | null;
         };
         /**
          * ScoreFromActiveRequest
@@ -609,6 +1428,23 @@ export interface components {
             /** Benchmark Returns */
             benchmark_returns?: number[] | null;
         };
+        /**
+         * SourceRef
+         * @description Where one slice of the FactPack came from + how complete it was.
+         */
+        SourceRef: {
+            /** Field */
+            field: string;
+            /** Source */
+            source: string;
+            /** As Of */
+            as_of?: string | null;
+            /**
+             * Coverage
+             * @default 0
+             */
+            coverage?: number;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -621,6 +1457,34 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** ValuationBlock */
+        ValuationBlock: {
+            /** Pe */
+            pe?: number | null;
+            /** Forward Pe */
+            forward_pe?: number | null;
+            /** Ps */
+            ps?: number | null;
+            /** Pb */
+            pb?: number | null;
+            /** Ev Ebitda */
+            ev_ebitda?: number | null;
+            /** Fcf Yield */
+            fcf_yield?: number | null;
+            /** Dividend Yield */
+            dividend_yield?: number | null;
+            /** Band */
+            band?: string | null;
+            /** Peer Median Pe */
+            peer_median_pe?: number | null;
+        };
+        /** VerdictRequest */
+        VerdictRequest: {
+            /** Ticker */
+            ticker?: string | null;
+            /** @description The FactPack already fetched from GET /research/fact_pack/{ticker}. When supplied the verdict REUSES it (no second network fetch). */
+            fact_pack?: components["schemas"]["FactPack"] | null;
         };
     };
     responses: never;
@@ -717,6 +1581,46 @@ export interface operations {
             };
         };
     };
+    last_snapshot_endpoint_api_v1_risk_last_snapshot_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    snapshot_history_endpoint_api_v1_risk_snapshot_history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     report_from_active_endpoint_api_v1_risk_report_from_active_post: {
         parameters: {
             query?: never;
@@ -750,7 +1654,7 @@ export interface operations {
             };
         };
     };
-    deep_analysis_api_v1_equity_deep_analysis_post: {
+    efficient_frontier_endpoint_api_v1_risk_efficient_frontier_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -759,7 +1663,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["DeepAnalysisRequest"];
+                "application/json": components["schemas"]["ReportFromActiveRequest"];
             };
         };
         responses: {
@@ -779,6 +1683,144 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scenarios_endpoint_api_v1_risk_scenarios_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportFromActiveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    explain_endpoint_api_v1_risk_explain_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RiskExplainInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    benchmarks_endpoint_api_v1_risk_benchmarks_get: {
+        parameters: {
+            query?: {
+                days?: number;
+                risk_free?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    historical_scenarios_endpoint_api_v1_risk_historical_scenarios_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    var_backtest_endpoint_api_v1_risk_var_backtest_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };
@@ -934,6 +1976,26 @@ export interface operations {
             };
         };
     };
+    portfolio_sentiment_api_v1_market_sentiment_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     get_series_api_v1_macro_series_get: {
         parameters: {
             query: {
@@ -988,6 +2050,86 @@ export interface operations {
             };
         };
     };
+    get_regime_api_v1_macro_regime_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_regime_detail_endpoint_api_v1_macro_regime_detail_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_movers_endpoint_api_v1_macro_movers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_news_endpoint_api_v1_macro_news_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     billing_me_api_v1_billing_me_get: {
         parameters: {
             query?: never;
@@ -1004,6 +2146,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    billing_admin_usage_api_v1_billing_admin_usage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    billing_admin_metrics_api_v1_billing_admin_metrics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    billing_admin_status_api_v1_billing_admin_status_get: {
+        parameters: {
+            query?: {
+                live?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -1051,6 +2264,326 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["PortalSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    copilot_chat_endpoint_api_v1_copilot_chat_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    copilot_ask_endpoint_api_v1_copilot_ask_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CopilotAskRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    copilot_chat_stream_endpoint_api_v1_copilot_chat_stream_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    backtest_active_endpoint_api_v1_quant_backtest_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BacktestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    attribution_active_endpoint_api_v1_quant_attribution_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    fact_pack_api_v1_research_fact_pack__ticker__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verdict_api_v1_research_verdict_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerdictRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    smart_money_api_v1_institutions_smart_money_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    top_api_v1_institutions_top_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    detail_api_v1_institutions__cik__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cik: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_feedback_api_v1_feedback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackIn"];
             };
         };
         responses: {
