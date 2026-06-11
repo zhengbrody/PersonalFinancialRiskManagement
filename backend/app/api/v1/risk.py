@@ -78,6 +78,19 @@ def _normalize_asset_type(raw: object) -> str:
     return "public_security"
 
 
+def _price_provenance(price_prov: dict, price_frame) -> PriceProvenanceOut:
+    """Build the score/report 'data quality' provenance block from the
+    market_data provenance dict. Shared by /score_from_active + /report_from_active
+    so the two stay in lock-step."""
+    from ...services import market_data
+
+    return PriceProvenanceOut(
+        massive_fallback_used=market_data.massive_fallback_tickers(price_prov.get("by_ticker", {})),
+        missing=price_prov.get("missing", []),
+        trading_days=int(len(price_frame)),
+    )
+
+
 def _serialize_score(score) -> ScoreResponse:
     """Convert the engine's frozen dataclass into the API response
     model. Centralised so /score and /score_from_active stay in lock-
@@ -584,17 +597,12 @@ def score_from_active_endpoint(
     )
 
     response = _serialize_score(score)
-    by_ticker = price_prov.get("by_ticker", {})
     response = response.model_copy(
         update={
             "metrics": response.metrics.model_copy(
                 update={k: v for k, v in account_metrics.items() if v is not None}
             ),
-            "price_provenance": PriceProvenanceOut(
-                massive_fallback_used=sorted(t for t, s in by_ticker.items() if s == "massive"),
-                missing=price_prov.get("missing", []),
-                trading_days=int(len(price_frame)),
-            ),
+            "price_provenance": _price_provenance(price_prov, price_frame),
         }
     )
     return ok(response.model_dump(), request=request, started_at=started)
@@ -1037,16 +1045,7 @@ def report_from_active_endpoint(
         risk_scale=risk_scale,
         account_metrics=account_metrics,
     )
-    by_ticker = price_prov.get("by_ticker", {})
-    out = out.model_copy(
-        update={
-            "price_provenance": PriceProvenanceOut(
-                massive_fallback_used=sorted(t for t, s in by_ticker.items() if s == "massive"),
-                missing=price_prov.get("missing", []),
-                trading_days=int(len(price_frame)),
-            )
-        }
-    )
+    out = out.model_copy(update={"price_provenance": _price_provenance(price_prov, price_frame)})
     return ok(out.model_dump(), request=request, started_at=started)
 
 

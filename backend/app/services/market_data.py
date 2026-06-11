@@ -121,6 +121,13 @@ class LatestPrice:
     source: str = "yfinance"  # "yfinance" | "massive" — price provenance
 
 
+def massive_fallback_tickers(by_ticker: dict) -> list[str]:
+    """The (sorted) tickers a provenance ``by_ticker`` map served from Massive —
+    the single source for the 'massive_fallback_used' field shared by the
+    /market/prices, score, and report responses."""
+    return sorted(t for t, s in by_ticker.items() if s == "massive")
+
+
 def _normalise_tickers(tickers: Iterable[str]) -> list[str]:
     """Uppercase, dedupe, validate, sort.
 
@@ -313,8 +320,7 @@ def get_latest_prices(
     )
     src_by_ticker: dict = inner_prov.get("by_ticker", {})
     if provenance is not None:
-        provenance["by_ticker"] = src_by_ticker
-        provenance["missing"] = inner_prov.get("missing", [])
+        provenance.update(inner_prov)  # carries by_ticker + missing
     if frame.empty:
         return []
 
