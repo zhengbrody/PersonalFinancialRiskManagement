@@ -71,6 +71,7 @@ def test_agent_router_dispatches_optimizer_for_tax_question():
     assert result.tool_trace == [
         "scan_hidden_fund_fees",
         "scan_unrealized_tax_losses",
+        "compare_vs_institutional_reference",
         "generate_non_binding_draft_trades",
     ]
 
@@ -95,3 +96,90 @@ def test_router_prepare_routes_optimizer_for_fee_question():
     assert plan2["agent_name"] == "Portfolio Analyzer Agent"
     assert "dimensions" in plan2["tool_results"]
     assert plan2["draft_trades"] == []
+
+
+# ── reply-language detection ─────────────────────────────────────────
+
+
+def test_detect_reply_language_chinese():
+    from libs.ai_agents.portfolio_agents import detect_reply_language
+
+    assert detect_reply_language("我的组合风险高吗？") == "Simplified Chinese (简体中文)"
+    assert detect_reply_language("NVDA 怎么样") == "Simplified Chinese (简体中文)"
+    # English / near-English stays None.
+    assert detect_reply_language("How risky is my portfolio?") is None
+    assert detect_reply_language("buy NVDA 吗") is None  # 1 CJK char = noise
+    assert detect_reply_language("") is None
+
+
+def test_formatter_messages_force_chinese_reply():
+    from libs.ai_agents.portfolio_agents import build_formatter_messages
+
+    system_zh, _ = build_formatter_messages(
+        user_message="我的组合风险高吗？",
+        context={},
+        tool_results={},
+        agent_name="x",
+    )
+    assert "简体中文" in system_zh and "ENTIRE answer" in system_zh
+
+    system_en, _ = build_formatter_messages(
+        user_message="How risky am I?",
+        context={},
+        tool_results={},
+        agent_name="x",
+    )
+    assert "简体中文" not in system_en
+    assert "Answer in the user's language." in system_en
+
+
+# ── institutional reference comparison ───────────────────────────────
+
+
+def test_institutional_comparison_rows_are_deterministic():
+    from libs.ai_agents.portfolio_agents import build_institutional_comparison
+
+    positions = demo_asset_positions(100_000)
+    returns = _returns()
+    score = score_portfolio(
+        positions,
+        returns,
+        benchmark_returns=returns["SPY"],
+        risk_preference=3,
+    )
+
+    rows = build_institutional_comparison(score, positions)
+    by_metric = {r["metric"]: r for r in rows}
+
+    sharpe_row = by_metric["Sharpe ratio"]
+    assert sharpe_row["yours"] == round(score.metrics.sharpe_ratio, 2)
+    expected = "meets the institutional bar" if score.metrics.sharpe_ratio >= 1.0 else "below it"
+    assert sharpe_row["assessment"] == expected
+
+    # Largest-position row: weight over the non-cash book.
+    active = [p for p in positions if p.asset_type != "cash" and p.market_value > 0]
+    total = sum(p.market_value for p in active)
+    top = max(active, key=lambda p: p.market_value)
+    top_row = next(r for r in rows if r["metric"].startswith("Largest position"))
+    assert top.ticker in top_row["metric"]
+    assert top_row["yours"] == round(top.market_value / total, 4)
+
+    # Every row has the four keys and a non-empty reference string.
+    for r in rows:
+        assert set(r) == {"metric", "yours", "institutional_reference", "assessment"}
+        assert r["institutional_reference"]
+
+
+def test_analyzer_prepare_carries_institutional_comparison():
+    positions = demo_asset_positions(100_000)
+    returns = _returns()
+    score = score_portfolio(positions, returns, benchmark_returns=returns["SPY"], risk_preference=3)
+    from libs.ai_agents.portfolio_agents import (
+        PortfolioAnalyzerAgent,
+        StrategyOptimizerAgent,
+    )
+
+    for agent in (PortfolioAnalyzerAgent(), StrategyOptimizerAgent()):
+        plan = agent.prepare(score, positions)
+        rows = plan["tool_results"]["institutional_comparison"]
+        assert rows and any(r["metric"] == "Sharpe ratio" for r in rows)

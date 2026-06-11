@@ -152,3 +152,40 @@ def test_answer_llm_empty_falls_back(monkeypatch):
 def test_ask_endpoint_requires_auth():
     client = TestClient(create_app())
     assert client.post("/api/v1/copilot/ask", json={"message": "hi"}).status_code == 401
+
+
+def test_gather_portfolio_includes_desk_view(monkeypatch):
+    monkeypatch.setattr(cr, "_load_score_positions", lambda user: ([], _Score()))
+    ev = cr._gather("portfolio_diagnosis", "how risky am I", [], user=object())
+    desk = [e for e in ev if e.label.startswith("Desk view — ")]
+    assert desk, "institutional comparison rows missing"
+    assert all(e.source == "reference" for e in desk)
+    sharpe = next(e for e in desk if "Sharpe" in e.label)
+    # Both sides deterministic: the user's value and the static reference.
+    assert "0.67" in sharpe.value and "multi-strategy" in sharpe.value
+
+
+def test_answer_chinese_question_forces_chinese_reply(monkeypatch):
+    monkeypatch.setattr(cr, "_load_score_positions", lambda user: ([], _Score()))
+    seen = {}
+
+    def fake_llm(prompt, system, max_tokens, temperature):
+        seen["system"] = system
+        return "**结论**\n风险偏高。"
+
+    ans = cr.answer("我的组合风险高吗？", user=object(), llm_callable=fake_llm)
+    assert ans.data_only is False
+    assert "简体中文" in seen["system"]
+    assert "结论" in seen["system"]  # translated section headers instructed
+
+
+def test_answer_english_question_keeps_default_system(monkeypatch):
+    monkeypatch.setattr(cr, "_load_score_positions", lambda user: ([], _Score()))
+    seen = {}
+
+    def fake_llm(prompt, system, max_tokens, temperature):
+        seen["system"] = system
+        return "**Conclusion**\nFine."
+
+    cr.answer("how risky is my portfolio", user=object(), llm_callable=fake_llm)
+    assert "简体中文" not in seen["system"]

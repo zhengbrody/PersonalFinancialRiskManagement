@@ -203,6 +203,108 @@ def generate_draft_trades(score: PortfolioScore, positions: Iterable[AssetPositi
     return trades
 
 
+def detect_reply_language(text: str) -> str | None:
+    """Deterministically detect a clearly non-English message so the reply
+    language is FORCED rather than left to the model's judgment.
+
+    Currently detects Chinese: ≥2 CJK ideographs that make up ≥20% of the
+    non-space characters (so "buy NVDA?" with one stray character doesn't
+    flip the answer). Returns the language name for the prompt, or None."""
+    if not text:
+        return None
+    cjk = sum(1 for ch in text if "一" <= ch <= "鿿")
+    dense = len([c for c in text if not c.isspace()])
+    if cjk >= 2 and dense > 0 and cjk / dense >= 0.2:
+        return "Simplified Chinese (简体中文)"
+    return None
+
+
+# ── institutional reference comparison (the "Citadel bone") ──────────
+# Static, sourced-from-practice reference points for how a professional
+# multi-strategy / quant fund risk desk judges the same numbers. These are
+# CONSTANTS in code — the LLM may cite them verbatim but never alter them,
+# and every "yours" value comes from the deterministic score engine.
+
+
+def _assess(value: float, good_below: float | None = None, good_above: float | None = None) -> str:
+    if good_below is not None:
+        return "within the institutional band" if value <= good_below else "above it"
+    if good_above is not None:
+        return "meets the institutional bar" if value >= good_above else "below it"
+    return ""
+
+
+def build_institutional_comparison(
+    score: PortfolioScore, positions: Iterable[AssetPosition]
+) -> list[dict]:
+    """Deterministic rows comparing the investor's metrics to professional
+    multi-strategy / quant-desk reference points. Skips metrics that are
+    missing/NaN rather than guessing."""
+    import math
+
+    m = score.metrics
+    rows: list[dict] = []
+
+    def _row(metric: str, yours, reference: str, assessment: str) -> None:
+        rows.append(
+            {
+                "metric": metric,
+                "yours": yours,
+                "institutional_reference": reference,
+                "assessment": assessment,
+            }
+        )
+
+    if math.isfinite(m.sharpe_ratio):
+        _row(
+            "Sharpe ratio",
+            round(m.sharpe_ratio, 2),
+            "multi-strategy funds target ≥ 1.0; top quant pods run 2+",
+            _assess(m.sharpe_ratio, good_above=1.0),
+        )
+    if math.isfinite(m.annual_volatility):
+        _row(
+            "Annual volatility",
+            round(m.annual_volatility, 4),
+            "institutional multi-strategy books typically run 6-12% annualized",
+            _assess(m.annual_volatility, good_below=0.12),
+        )
+    if math.isfinite(m.max_drawdown):
+        _row(
+            "Max drawdown",
+            round(m.max_drawdown, 4),
+            "a 20% drawdown triggers de-risking reviews; pod shops often hard-stop pods at 5-10%",
+            _assess(m.max_drawdown, good_below=0.20),
+        )
+    if math.isfinite(m.var_95_daily):
+        _row(
+            "Daily VaR (95%)",
+            round(m.var_95_daily, 4),
+            "institutional books are typically held to 1-2% of NAV per day",
+            _assess(m.var_95_daily, good_below=0.02),
+        )
+    if math.isfinite(m.beta_to_benchmark):
+        _row(
+            "Beta to market",
+            round(m.beta_to_benchmark, 2),
+            "market-neutral quant desks target |β| < 0.3; an index fund is 1.0",
+            "market-neutral style" if abs(m.beta_to_benchmark) < 0.3 else "directional book",
+        )
+
+    active = [p for p in positions if p.asset_type != "cash" and p.market_value > 0]
+    total = sum(p.market_value for p in active)
+    if active and total > 0:
+        top = max(active, key=lambda p: p.market_value)
+        top_w = top.market_value / total
+        _row(
+            f"Largest position ({top.ticker})",
+            round(top_w, 4),
+            "pod shops cap single names near 5%; diversified funds rarely exceed 10%",
+            _assess(top_w, good_below=0.10),
+        )
+    return rows
+
+
 def build_formatter_messages(
     *,
     user_message: str,
@@ -216,6 +318,14 @@ def build_formatter_messages(
     (below) and the streaming Copilot endpoint reuse the exact same
     grounding rules + structure — no second, drifting prompt.
     """
+    lang = detect_reply_language(user_message)
+    lang_rule = (
+        f"LANGUAGE: the user wrote in {lang} — write the ENTIRE answer in {lang}, "
+        "including section headers and table headers. Keep tickers and standard "
+        "abbreviations (VaR, Sharpe, ETF, P/E) as-is."
+        if lang
+        else "Answer in the user's language."
+    )
     system = (
         "You are MindMarket's portfolio AI copilot for a NOVICE retail investor "
         "(many use margin and lack risk discipline). Ground EVERY number ONLY in "
@@ -232,8 +342,13 @@ def build_formatter_messages(
         "Lean defensive ('don't lose money'): surface tail risk, concentration, "
         "and margin/liquidation danger, and suggest simple hedges (e.g. trimming, "
         "a cash/SGOV ballast) when warranted.\n\n"
+        "When tool_results.institutional_comparison is present and relevant, add a "
+        "short 'professional desk view': a Markdown table comparing the investor's "
+        "numbers to those supplied institutional reference points (how a "
+        "Citadel-style multi-strategy risk desk would judge the same book). Cite "
+        "ONLY the supplied reference values — do not add benchmarks of your own.\n\n"
         "CRITICAL: write a COMPLETE answer — finish every section, never stop "
-        "mid-sentence or mid-conclusion. Answer in the user's language."
+        f"mid-sentence or mid-conclusion. {lang_rule}"
     )
     prompt = (
         f"Agent: {agent_name}\n"
@@ -293,9 +408,10 @@ class PortfolioAnalyzerAgent:
             f"**{_pct(metric.var_95_daily)}**.\n\n"
             f"**Action:** Focus first on {weakest.name.lower()}: {weakest.detail}"
         )
+        positions_list = list(positions)
         return {
             "agent_name": self.name,
-            "context": build_agent_context(score, positions),
+            "context": build_agent_context(score, positions_list),
             "tool_results": {
                 "overall_score": score.overall_score,
                 "annual_return": metric.annual_return,
@@ -305,10 +421,12 @@ class PortfolioAnalyzerAgent:
                 "var_95_daily": metric.var_95_daily,
                 "beta_to_benchmark": metric.beta_to_benchmark,
                 "dimensions": {k: asdict(v) for k, v in score.dimensions.items()},
+                "institutional_comparison": build_institutional_comparison(score, positions_list),
             },
             "tool_trace": [
                 "read_exact_quant_score",
                 "read_exact_sharpe_vol_drawdown_var_beta",
+                "compare_vs_institutional_reference",
                 "format_post_investment_diagnosis",
             ],
             "draft_trades": [],
@@ -388,10 +506,12 @@ class StrategyOptimizerAgent:
                 "hidden_fees": fees,
                 "tax_loss_harvesting": tax_losses,
                 "draft_trades": draft_trades,
+                "institutional_comparison": build_institutional_comparison(score, positions_list),
             },
             "tool_trace": [
                 "scan_hidden_fund_fees",
                 "scan_unrealized_tax_losses",
+                "compare_vs_institutional_reference",
                 "generate_non_binding_draft_trades",
             ],
             "draft_trades": draft_trades,
