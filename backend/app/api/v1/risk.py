@@ -904,6 +904,26 @@ def _serialize_report(
                 )
             )
 
+    # The engine's stress test substitutes β=1.0 (market-like) for any
+    # holding whose benchmark beta is NaN (e.g. <30 days of overlapping
+    # history, or the benchmark fetch failed). That substitution was
+    # previously silent — surface it so the stress numbers aren't read
+    # as more precise than they are.
+    notes: list[str] = []
+    raw_betas = report.betas or {}
+    beta_fallbacks = sorted(t for t, v in raw_betas.items() if _finite(v) is None)
+    if beta_fallbacks and len(beta_fallbacks) == len(raw_betas):
+        notes.append(
+            "Benchmark data was unavailable — the stress test assumed market "
+            "beta (1.0) for every holding."
+        )
+    elif beta_fallbacks:
+        notes.append(
+            "Stress test assumed market beta (1.0) for "
+            + ", ".join(beta_fallbacks)
+            + " — not enough overlapping history to estimate beta."
+        )
+
     # Annual return re-mixed toward the risk-free rate by the same
     # weight that scales risk: r_net = scale·r_equity + (1−scale)·rf.
     # (scale<1 = cash drag pulls toward rf; scale>1 = margin amplifies
@@ -944,6 +964,7 @@ def _serialize_report(
         },
         liquidity=liquidity_rows,
         drawdown_stats=getattr(report, "drawdown_stats", None),
+        data_quality_notes=notes,
     )
 
 
@@ -1046,7 +1067,18 @@ def report_from_active_endpoint(
         risk_scale=risk_scale,
         account_metrics=account_metrics,
     )
-    out = out.model_copy(update={"price_provenance": _price_provenance(price_prov, price_frame)})
+    notes = list(out.data_quality_notes)
+    if len(price_frame) < 60:
+        notes.append(
+            f"Only {len(price_frame)} trading days of price history; "
+            "annualized risk estimates are low-confidence."
+        )
+    out = out.model_copy(
+        update={
+            "price_provenance": _price_provenance(price_prov, price_frame),
+            "data_quality_notes": notes,
+        }
+    )
     return ok(out.model_dump(), request=request, started_at=started)
 
 

@@ -581,6 +581,7 @@ export const riskReportSchema = z.looseObject({
   liquidity: z.array(liquidityRowSchema),
   drawdown_stats: z.record(z.string(), z.unknown()).nullable(),
   price_provenance: priceProvenanceSchema.nullish(),
+  data_quality_notes: z.array(z.string()).optional().default([]),
 });
 export type RiskReport = z.infer<typeof riskReportSchema>;
 

@@ -121,6 +121,13 @@ function KpiGrid({ report }: { report: RiskReport }) {
         source="Monte-Carlo VaR + factor regression on yfinance history"
         priceProvenance={report.price_provenance}
       />
+      {report.data_quality_notes.length > 0 && (
+        <ul className="list-disc space-y-0.5 pl-4 text-[11px] text-muted-foreground">
+          {report.data_quality_notes.map((note, i) => (
+            <li key={i}>{note}</li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

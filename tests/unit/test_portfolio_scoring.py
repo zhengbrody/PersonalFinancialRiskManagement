@@ -159,3 +159,37 @@ def test_create_draft_positions_normalizes_weights_without_changing_total_value(
     assert active["Market Value"].sum() == pytest.approx(100_000)
     assert active["Weight"].sum() == pytest.approx(1.0)
     assert active.loc[active["Ticker"] == "SPY", "Weight"].iloc[0] == pytest.approx(0.40)
+
+
+def test_short_history_adds_low_confidence_note():
+    positions = demo_asset_positions(100_000)
+    returns = _sample_returns(periods=45)
+
+    metrics = compute_portfolio_metrics(positions, returns, risk_free_rate=0.04)
+
+    assert any("45 overlapping trading days" in n for n in metrics.data_quality_notes)
+    assert any("low-confidence" in n for n in metrics.data_quality_notes)
+
+
+def test_full_history_has_no_short_history_note():
+    positions = demo_asset_positions(100_000)
+    returns = _sample_returns()
+
+    metrics = compute_portfolio_metrics(positions, returns, risk_free_rate=0.04)
+
+    assert not any("low-confidence" in n for n in metrics.data_quality_notes)
+
+
+def test_unestimable_benchmark_beta_adds_note():
+    """A benchmark with constant (zero-variance) returns means beta can't be
+    estimated — the metrics must say so rather than silently reporting NaN."""
+    positions = demo_asset_positions(100_000)
+    returns = _sample_returns()
+    flat_benchmark = pd.Series(0.0, index=returns.index)
+
+    metrics = compute_portfolio_metrics(
+        positions, returns, benchmark_returns=flat_benchmark, risk_free_rate=0.04
+    )
+
+    assert np.isnan(metrics.beta_to_benchmark)
+    assert any("beta could not be estimated" in n.lower() for n in metrics.data_quality_notes)

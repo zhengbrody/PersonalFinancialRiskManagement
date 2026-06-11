@@ -377,6 +377,13 @@ def compute_portfolio_metrics(
         )
 
     observations = int(port_returns.shape[0])
+    # Annualized stats from under ~3 months of overlapping history are
+    # statistically fragile — say so instead of presenting them as solid.
+    if observations < 60:
+        notes.append(
+            f"Only {observations} overlapping trading days of return history; "
+            "annualized risk estimates are low-confidence."
+        )
 
     annual_return = float(port_returns.mean() * TRADING_DAYS)
     annual_volatility = float(port_returns.std(ddof=1) * np.sqrt(TRADING_DAYS))
@@ -401,6 +408,11 @@ def compute_portfolio_metrics(
             benchmark_var = float(joined["benchmark"].var(ddof=1))
             if benchmark_var > 1e-12:
                 beta = float(joined["portfolio"].cov(joined["benchmark"]) / benchmark_var)
+        if np.isnan(beta):
+            notes.append(
+                "Benchmark beta could not be estimated "
+                "(insufficient overlapping history with the benchmark)."
+            )
 
     return PortfolioMetrics(
         annual_return=annual_return,

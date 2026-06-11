@@ -415,3 +415,80 @@ def test_nan_values_are_scrubbed_to_null(
     # var_95 was finite; it must NOT be nulled.
     assert isinstance(data["var_95"], float)
     assert math.isfinite(data["var_95"])
+
+
+# ── data-quality notes ────────────────────────────────────────────
+
+
+def test_nan_beta_fallback_and_short_history_are_flagged(
+    test_client,
+    mint_token,
+    fake_active_portfolio,
+    fake_price_history,
+    fake_engine,
+    fake_capital,
+):
+    """The stress test silently substitutes beta=1.0 for NaN betas and
+    annualizes off whatever history exists — both must surface as
+    data_quality_notes instead of staying invisible."""
+    fake_active_portfolio.set(
+        {
+            "SPY": {"shares": 100, "avg_cost": 400.0},
+            "BND": {"shares": 50, "avg_cost": 70.0},
+        }
+    )
+    fake_price_history.set(_make_history(["BND", "SPY"], days=40))
+    fake_engine.last_report = _FakeReport(betas={"SPY": 0.96, "BND": float("nan")})
+
+    resp = test_client.post(
+        "/api/v1/risk/report_from_active",
+        json={},
+        headers={"Authorization": f"Bearer {mint_token(sub='user-dq')}"},
+    )
+    assert resp.status_code == 200, resp.json()
+    notes = resp.json()["data"]["data_quality_notes"]
+    assert any("BND" in n and "beta" in n.lower() for n in notes)
+    assert any("40 trading days" in n for n in notes)
+
+
+def test_all_nan_betas_flag_benchmark_unavailable(
+    test_client,
+    mint_token,
+    fake_active_portfolio,
+    fake_price_history,
+    fake_engine,
+    fake_capital,
+):
+    fake_active_portfolio.set({"SPY": {"shares": 100, "avg_cost": 400.0}})
+    fake_price_history.set(_make_history(["SPY"]))
+    fake_engine.last_report = _FakeReport(betas={"SPY": float("nan")})
+
+    resp = test_client.post(
+        "/api/v1/risk/report_from_active",
+        json={},
+        headers={"Authorization": f"Bearer {mint_token(sub='user-dq2')}"},
+    )
+    assert resp.status_code == 200, resp.json()
+    notes = resp.json()["data"]["data_quality_notes"]
+    assert any("Benchmark data was unavailable" in n for n in notes)
+
+
+def test_clean_report_has_no_data_quality_notes(
+    test_client,
+    mint_token,
+    fake_active_portfolio,
+    fake_price_history,
+    fake_engine,
+    fake_capital,
+):
+    fake_active_portfolio.set({"SPY": {"shares": 100, "avg_cost": 400.0}})
+    fake_price_history.set(_make_history(["SPY"]))
+    fake_engine.last_report = _FakeReport()
+
+    resp = test_client.post(
+        "/api/v1/risk/report_from_active",
+        json={},
+        headers={"Authorization": f"Bearer {mint_token(sub='user-dq3')}"},
+    )
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["data"]["data_quality_notes"] == []

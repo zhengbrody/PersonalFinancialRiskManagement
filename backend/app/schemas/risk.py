@@ -137,6 +137,11 @@ class RiskReportOut(BaseModel):
     # only the keys frontends consume so a new field doesn't leak.
     drawdown_stats: Optional[dict[str, Any]] = None
 
+    # Human-readable caveats about the inputs behind the numbers (e.g.
+    # stress test fell back to market beta for tickers with too little
+    # history). Rendered in the report's data-quality area.
+    data_quality_notes: list[str] = Field(default_factory=list)
+
 
 class FrontierPoint(BaseModel):
     """One point on the risk/return plane (annualized)."""
