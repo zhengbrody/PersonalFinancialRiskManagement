@@ -92,10 +92,18 @@ class PriceProvenanceOut(BaseModel):
     trading_days: Optional[int] = None
 
 
+class SectorWeightOut(BaseModel):
+    sector: str
+    weight: float
+
+
 class ConcentrationOut(BaseModel):
     """Deterministic concentration diagnostics over the invested book
     (cash excluded). HHI = sum of squared weights; effective_holdings =
-    1/HHI is 'how many equally-weighted positions this behaves like'."""
+    1/HHI is 'how many equally-weighted positions this behaves like'.
+    Sectors come from the deterministic resolver (holding override →
+    canonical SECTOR_MAP → asset-type default → Unclassified) — no
+    network calls."""
 
     num_holdings: int
     top_holding_ticker: Optional[str] = None
@@ -103,6 +111,9 @@ class ConcentrationOut(BaseModel):
     top5_weight: Optional[float] = None
     hhi: Optional[float] = None
     effective_holdings: Optional[float] = None
+    sectors: list[SectorWeightOut] = Field(default_factory=list)
+    top_sector: Optional[str] = None
+    top_sector_weight: Optional[float] = None
 
 
 class RiskReportOut(BaseModel):

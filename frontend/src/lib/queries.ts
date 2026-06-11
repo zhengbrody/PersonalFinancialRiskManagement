@@ -566,6 +566,12 @@ export const concentrationSchema = z.looseObject({
   top5_weight: z.number().nullable().optional(),
   hhi: z.number().nullable().optional(),
   effective_holdings: z.number().nullable().optional(),
+  sectors: z
+    .array(z.looseObject({ sector: z.string(), weight: z.number() }))
+    .optional()
+    .default([]),
+  top_sector: z.string().nullable().optional(),
+  top_sector_weight: z.number().nullable().optional(),
 });
 export type Concentration = z.infer<typeof concentrationSchema>;
 

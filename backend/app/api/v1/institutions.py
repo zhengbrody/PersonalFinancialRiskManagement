@@ -38,7 +38,12 @@ def smart_money(request: Request, user: AuthedUser = Depends(require_user)):
 
     raw = svc.smart_money_signals(active_tickers(user.access_token))
     signals = [SmartMoneySignal.model_validate(s) for s in raw]
-    out = SmartMoneyOut(signals=signals)
+    from datetime import datetime, timezone
+
+    out = SmartMoneyOut(
+        signals=signals,
+        as_of=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+    )
     return ok(out.model_dump(), request=request, started_at=started)
 
 

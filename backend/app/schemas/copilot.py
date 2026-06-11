@@ -33,3 +33,5 @@ class ChatResponse(BaseModel):
     draft_trades: list[dict] = Field(default_factory=list)
     tool_trace: list[str] = Field(default_factory=list)
     grounded_in: dict[str, Any] = Field(default_factory=dict)
+    # True = LLM-synthesized markdown; False = deterministic fallback template.
+    ai_generated: bool = False

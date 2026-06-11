@@ -240,6 +240,7 @@ def _serialize_result(result, *, strategy: str, benchmark: str) -> dict:
         "alpha": _finite(result.alpha),
         "beta": _finite(result.beta),
     }
+    equity_curve = _series_to_points(result.equity_curve)
     return {
         "strategy": strategy,
         # Prefer the engine's actual curve boundaries (snapped to trading
@@ -248,7 +249,10 @@ def _serialize_result(result, *, strategy: str, benchmark: str) -> dict:
         "end_date": result.end_date,
         "benchmark": benchmark,
         "stats": stats,
-        "equity_curve": _series_to_points(result.equity_curve),
+        "equity_curve": equity_curve,
         "drawdown_series": _series_to_points(result.drawdown_series),
         "benchmark_total_return": _finite(result.benchmark_total_return),
+        # Provenance: the curve's last trading day + daily observations used.
+        "as_of": result.end_date,
+        "observations": len(equity_curve),
     }

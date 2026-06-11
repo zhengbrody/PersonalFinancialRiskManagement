@@ -22,6 +22,9 @@ class AgentResult:
     response_markdown: str
     draft_trades: list[dict]
     tool_trace: list[str]
+    # True when the markdown came from the LLM; False = deterministic
+    # fallback template. Lets the UI label AI output honestly.
+    llm_used: bool = False
 
 
 def _money(value: float) -> str:
@@ -333,6 +336,7 @@ class PortfolioAnalyzerAgent:
             llm_text or plan["fallback_md"],
             plan["draft_trades"],
             plan["tool_trace"],
+            llm_used=bool(llm_text),
         )
 
 
@@ -415,6 +419,7 @@ class StrategyOptimizerAgent:
             llm_text or plan["fallback_md"],
             plan["draft_trades"],
             plan["tool_trace"],
+            llm_used=bool(llm_text),
         )
 
 

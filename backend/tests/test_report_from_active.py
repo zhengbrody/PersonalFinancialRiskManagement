@@ -570,3 +570,42 @@ def test_component_return_is_weight_times_annualized_mean(
     for tk, mv in (("SPY", mv_spy), ("BND", mv_bnd)):
         expected = (mv / total) * float(rets[tk].dropna().mean()) * 252.0
         assert rows[tk] == pytest.approx(expected)
+
+
+def test_concentration_sector_rollup(
+    test_client,
+    mint_token,
+    fake_active_portfolio,
+    fake_price_history,
+    fake_engine,
+    fake_capital,
+):
+    """Sector weights come from the deterministic resolver: a per-holding
+    `sector` override wins; known tickers use the canonical SECTOR_MAP."""
+    fake_active_portfolio.set(
+        {
+            "SPY": {"shares": 100, "avg_cost": 400.0},  # SECTOR_MAP: Broad Market ETF
+            "BND": {"shares": 50, "avg_cost": 70.0, "sector": "Bonds"},  # override
+        }
+    )
+    frame = _make_history(["BND", "SPY"])
+    fake_price_history.set(frame)
+    fake_engine.last_report = _FakeReport()
+
+    resp = test_client.post(
+        "/api/v1/risk/report_from_active",
+        json={},
+        headers={"Authorization": f"Bearer {mint_token(sub='user-sect')}"},
+    )
+    assert resp.status_code == 200, resp.json()
+    conc = resp.json()["data"]["concentration"]
+    sectors = {s["sector"]: s["weight"] for s in conc["sectors"]}
+
+    mv_spy = 100 * float(frame["SPY"].dropna().iloc[-1])
+    mv_bnd = 50 * float(frame["BND"].dropna().iloc[-1])
+    total = mv_spy + mv_bnd
+    assert sectors["Broad Market ETF"] == pytest.approx(mv_spy / total)
+    assert sectors["Bonds"] == pytest.approx(mv_bnd / total)
+    assert sum(sectors.values()) == pytest.approx(1.0)
+    assert conc["top_sector"] in sectors
+    assert conc["top_sector_weight"] == pytest.approx(max(sectors.values()))

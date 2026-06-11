@@ -55,6 +55,7 @@ from ...schemas.risk import (
     ScoreFromActiveRequest,
     ScoreRequest,
     ScoreResponse,
+    SectorWeightOut,
     StressAssetLoss,
     VarBacktestOut,
 )
@@ -850,6 +851,7 @@ def _serialize_report(
     *,
     risk_scale: float = 1.0,
     account_metrics: dict[str, float | None] | None = None,
+    holdings: dict | None = None,
 ) -> RiskReportOut:
     """Project the engine's ``RiskReport`` dataclass into the
     JSON-safe response model. The heavy matrices (cov, corr, MC sim
@@ -941,6 +943,26 @@ def _serialize_report(
         weights_desc = sorted((v / invested for v in mv.values()), reverse=True)
         top_ticker = max(mv, key=mv.__getitem__)
         hhi = sum(w * w for w in weights_desc)
+
+        # Sector roll-up via the deterministic resolver (holding override →
+        # canonical SECTOR_MAP → asset-type default → Unclassified). No
+        # network; fail-soft to "no sector data" rather than sinking the
+        # report.
+        sector_rows: list[SectorWeightOut] = []
+        try:
+            from portfolio_config import infer_sector
+
+            by_sector: dict[str, float] = {}
+            for tk, value in mv.items():
+                sector = infer_sector(tk, (holdings or {}).get(tk))
+                by_sector[sector] = by_sector.get(sector, 0.0) + value / invested
+            sector_rows = [
+                SectorWeightOut(sector=s, weight=w)
+                for s, w in sorted(by_sector.items(), key=lambda kv: kv[1], reverse=True)
+            ]
+        except Exception:  # noqa: BLE001
+            sector_rows = []
+
         concentration = ConcentrationOut(
             num_holdings=len(mv),
             top_holding_ticker=top_ticker,
@@ -948,6 +970,9 @@ def _serialize_report(
             top5_weight=sum(weights_desc[:5]),
             hhi=hhi,
             effective_holdings=(1.0 / hhi) if hhi > 0 else None,
+            sectors=sector_rows,
+            top_sector=sector_rows[0].sector if sector_rows else None,
+            top_sector_weight=sector_rows[0].weight if sector_rows else None,
         )
 
     # The engine's stress test substitutes β=1.0 (market-like) for any
@@ -1113,6 +1138,7 @@ def report_from_active_endpoint(
         market_values,
         risk_scale=risk_scale,
         account_metrics=account_metrics,
+        holdings=holdings,
     )
     notes = list(out.data_quality_notes)
     if len(price_frame) < 60:

@@ -181,6 +181,14 @@ class AgentResponse(BaseModel):
             "agent didn't hallucinate."
         ),
     )
+    ai_generated: bool = Field(
+        default=False,
+        description=(
+            "True when the markdown was synthesized by the LLM; False for "
+            "the deterministic fallback template. Lets the UI label AI "
+            "output honestly."
+        ),
+    )
 
     @classmethod
     def from_agent_result(cls, result: Any) -> AgentResponse:
@@ -192,4 +200,5 @@ class AgentResponse(BaseModel):
             draft_trades=list(getattr(result, "draft_trades", []) or []),
             tool_trace=list(getattr(result, "tool_trace", []) or []),
             grounded_in=getattr(result, "grounded_in", {}) or {},
+            ai_generated=bool(getattr(result, "llm_used", False)),
         )

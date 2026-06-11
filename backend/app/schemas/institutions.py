@@ -25,6 +25,10 @@ class SmartMoneySignal(BaseModel):
 
 class SmartMoneyOut(BaseModel):
     signals: list[SmartMoneySignal] = Field(default_factory=list)
+    # Provenance: 13F filings are quarterly; as_of is when this snapshot was
+    # composed (the service caches ~6h).
+    source: str = "SEC EDGAR 13F"
+    as_of: str | None = None
 
 
 class InstitutionRow(BaseModel):
