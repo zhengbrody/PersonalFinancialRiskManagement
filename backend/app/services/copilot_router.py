@@ -305,12 +305,29 @@ def _gather(intent: str, message: str, tickers: list[str], *, user) -> list[Evid
         return []
     positions, score = score_positions
     ev = _score_evidence(score)
+    ev += safe("desk_view", lambda: _institutional_evidence(score, positions)) or []
 
     if intent in ("tax_fee_review", "action_plan"):
         scans = safe("optimizer", lambda: _optimizer_scans(score, positions))
         for label, value in (scans or {}).items():
             ev.append(EvidenceItem(label=label, value=value, source="engine"))
     return ev
+
+
+def _institutional_evidence(score, positions) -> list[EvidenceItem]:
+    """Professional-desk comparison rows (the 'Citadel bone'): the user's
+    engine-computed metrics next to static institutional reference points.
+    Both sides are deterministic — the LLM may only restate them."""
+    from libs.ai_agents.portfolio_agents import build_institutional_comparison
+
+    return [
+        EvidenceItem(
+            label=f"Desk view — {row['metric']}",
+            value=f"{row['yours']} vs {row['institutional_reference']} ({row['assessment']})",
+            source="reference",
+        )
+        for row in build_institutional_comparison(score, positions)
+    ]
 
 
 def _load_score(user):
@@ -401,6 +418,20 @@ def answer(
             data_only=True,
         )
 
+    # Force the reply language when the question is clearly non-English —
+    # detection is deterministic (CJK ratio), not left to the model.
+    from libs.ai_agents.portfolio_agents import detect_reply_language
+
+    lang = detect_reply_language(message)
+    system = _SYSTEM
+    if lang:
+        system += (
+            f"\nLANGUAGE: the user wrote in {lang} — write the ENTIRE answer in {lang}, "
+            "translating the five section headers too (for Chinese use **结论**, "
+            "**证据**, **风险**, **下一步**, **免责声明**). Keep tickers and standard "
+            "abbreviations (VaR, Sharpe, P/E) as-is."
+        )
+
     prompt = (
         f"User question: {message}\n"
         f"Detected intent: {intent}\n"
@@ -409,7 +440,7 @@ def answer(
         "Write the answer now in the five required sections."
     )
     try:
-        text = llm_callable(prompt=prompt, system=_SYSTEM, max_tokens=1100, temperature=0.3)
+        text = llm_callable(prompt=prompt, system=system, max_tokens=1100, temperature=0.3)
         if not (text or "").strip():
             raise ValueError("empty")
         return CopilotAnswer(
