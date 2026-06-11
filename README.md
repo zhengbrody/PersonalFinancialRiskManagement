@@ -374,6 +374,7 @@ incident; the repository now uses off-box GHCR builds.
 | [`docs/adr/0004-fastapi-nextjs-migration.md`](docs/adr/0004-fastapi-nextjs-migration.md) | Migration strategy from monolith to split stack. |
 | [`docs/aws/operations.md`](docs/aws/operations.md) | Production operations runbook. |
 | [`docs/aws/ci-image-deploy.md`](docs/aws/ci-image-deploy.md) | GHCR deploy process. |
+| [`docs/aws/cloudflare-setup.md`](docs/aws/cloudflare-setup.md) | Putting Cloudflare in front of the origin (hide IP, DDoS/WAF, CDN). |
 | [`docs/seo/google_indexing.md`](docs/seo/google_indexing.md) | Search indexing notes. |
 | [`docs/legal/disclaimer.md`](docs/legal/disclaimer.md) | Financial disclaimer. |
 | [`backend/README.md`](backend/README.md) | Backend API development notes. |
