@@ -320,6 +320,9 @@ def copilot_chat_stream_endpoint(
                 "agent_name": agent_name,
                 "grounded_in": grounded,
                 "draft_trades": draft_trades,
+                # produced=False means the deterministic fallback wrote the
+                # answer — the UI labels the bubble accordingly.
+                "ai_generated": produced,
             },
         )
 

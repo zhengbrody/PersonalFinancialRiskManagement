@@ -42,6 +42,7 @@ type ChatMessage = {
   agentName?: string;
   grounded?: Record<string, unknown>;
   trades?: unknown[];
+  aiGenerated?: boolean;
 };
 
 const EXAMPLE_QUESTIONS = [
@@ -114,6 +115,7 @@ export function CopilotConversation({
     agent_name?: string;
     grounded_in?: Record<string, unknown>;
     draft_trades?: unknown[];
+    ai_generated?: boolean;
   }) {
     setMessages((prev) => {
       const copy = [...prev];
@@ -124,6 +126,7 @@ export function CopilotConversation({
           agentName: meta.agent_name,
           grounded: meta.grounded_in,
           trades: meta.draft_trades,
+          aiGenerated: meta.ai_generated,
         };
       }
       return copy;
@@ -343,6 +346,14 @@ function AssistantBubble({ message }: { message: ChatMessage }) {
 
         {message.grounded && Object.keys(message.grounded).length > 0 && (
           <NumbersBehindThis grounded={message.grounded} />
+        )}
+
+        {message.aiGenerated !== undefined && (
+          <p className="text-[10px] text-muted-foreground">
+            {message.aiGenerated
+              ? "AI-generated · educational, not financial advice"
+              : "Deterministic summary (AI unavailable) · educational, not financial advice"}
+          </p>
         )}
       </div>
     </div>

@@ -280,6 +280,8 @@ def test_stream_happy_path_emits_delta_and_done(
     assert "Hello" in body and "world" in body
     assert "event: done" in body
     assert "grounded_in" in body
+    # the LLM streamed real text → the answer is labeled AI-generated
+    assert '"ai_generated": true' in body
     # quota consumed for chat
     assert fake_quota.calls and fake_quota.calls[0][0] == "user-stream"
 
@@ -337,3 +339,5 @@ def test_stream_empty_yield_falls_back_to_template(
     # so `delta` is present and non-trivial, and `done` still closes the stream.
     assert "event: delta" in body and "event: done" in body
     assert 'data: {"text": ""}' not in body  # not an empty delta
+    # nothing streamed from the model → labeled as the deterministic fallback
+    assert '"ai_generated": false' in body
