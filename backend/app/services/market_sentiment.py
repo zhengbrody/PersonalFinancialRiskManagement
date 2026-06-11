@@ -7,6 +7,12 @@ summarises the supplied headlines — it is told not to invent facts. With no LL
 key (``llm_callable is None``) every ticker degrades to a deterministic neutral
 placeholder so the page still renders. Scoring runs in a small thread pool and
 is cached per ticker-set.
+
+LLM-boundary note: the 0-100 sentiment score is the model CLASSIFYING the
+supplied headlines (rank/summarize — allowed), not a financial metric it
+computed. It must never feed risk math; the UI labels it ``ai_generated``
+and shows the headline basis. If sentiment ever becomes an input to scoring,
+it needs a deterministic floor first (see risk_explain / build_verdict).
 """
 
 from __future__ import annotations

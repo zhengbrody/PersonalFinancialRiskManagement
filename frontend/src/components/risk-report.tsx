@@ -204,6 +204,27 @@ function ConcentrationCard({
             moves your whole portfolio.
           </p>
         )}
+        {c.sectors.length > 0 && (
+          <div className="space-y-1 pt-1">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              By sector
+            </p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+              {c.sectors.slice(0, 6).map((s) => (
+                <span key={s.sector} className="text-muted-foreground">
+                  {s.sector}{" "}
+                  <span className="font-mono text-foreground">{fmtPct(s.weight)}</span>
+                </span>
+              ))}
+            </div>
+            {c.top_sector_weight != null && c.top_sector_weight > 0.5 && (
+              <p className="text-xs text-muted-foreground">
+                Over half the book is {c.top_sector} — a sector-wide drawdown
+                hits most of your positions at once.
+              </p>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
