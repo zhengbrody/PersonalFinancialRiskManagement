@@ -280,6 +280,34 @@ def test_verdict_llm_garbage_falls_back(fmp_full):
     assert v.data_only is True  # parse failed → deterministic floor
 
 
+def test_verdict_llm_cannot_invent_dimension_scores(fmp_full):
+    """Same hard rule as risk_explain: dimension SCORES are always the
+    deterministic floor's; the LLM contributes only the note text."""
+    fp_obj = rf.build_fact_pack("AAPL")
+    floor = rf._deterministic_verdict(fp_obj)
+
+    def fake_llm(prompt, system, max_tokens, temperature):
+        return (
+            '{"rating":"Strong Buy","conviction":"high","summary":"To the moon.",'
+            '"dimensions":[{"name":"valuation","score":99,"note":"cheap vs peers"},'
+            '{"name":"growth","score":1,"note":""},'
+            '{"name":"made_up_dimension","score":100,"note":"??"}],'
+            '"catalysts":[],"risks":[],"what_would_change_my_mind":[]}'
+        )
+
+    v = rf.build_verdict(fp_obj, llm_callable=fake_llm)
+    assert v.data_only is False
+    # Scores: exactly the floor's, in the floor's dimension set — the planted
+    # 99/1 and the invented dimension never reach the response.
+    assert {d.name: d.score for d in v.dimensions} == {d.name: d.score for d in floor.dimensions}
+    # The LLM's phrasing is kept where the dimension names line up.
+    by_name = {d.name: d for d in v.dimensions}
+    assert by_name["valuation"].note == "cheap vs peers"
+    # Empty LLM note → the floor's note survives.
+    floor_growth_note = {d.name: d.note for d in floor.dimensions}["growth"]
+    assert by_name["growth"].note == floor_growth_note
+
+
 # ── endpoints ───────────────────────────────────────────────────────
 
 

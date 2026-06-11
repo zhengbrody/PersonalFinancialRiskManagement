@@ -64,6 +64,16 @@ class StressAssetLoss(BaseModel):
     loss_pct: float
 
 
+class ComponentReturnRow(BaseModel):
+    """Per-holding contribution to annualized portfolio return
+    (weight × annualized mean daily return) — the return-side mirror of
+    component VaR, so the report can show 'who pays you' next to 'who
+    risks you'."""
+
+    ticker: str
+    contribution: float
+
+
 class LiquidityRow(BaseModel):
     ticker: str
     days_to_liquidate: Optional[float] = None
@@ -134,6 +144,9 @@ class RiskReportOut(BaseModel):
     factor_betas: list[FactorBetaRow] = Field(default_factory=list)
     # Per-ticker share of total VaR.
     component_var_pct: list[ComponentVarRow] = Field(default_factory=list)
+    # Per-ticker contribution to annualized return (decimal, sums to the
+    # equity book's annual return before the cash/margin mix).
+    component_return: list[ComponentReturnRow] = Field(default_factory=list)
 
     # Stress test summary.
     stress_loss: Optional[float] = None

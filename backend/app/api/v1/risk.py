@@ -36,6 +36,7 @@ from ...core.responses import APIError, ok, server_error, unprocessable
 from ...schemas.risk import (
     BenchmarkRow,
     BenchmarksOut,
+    ComponentReturnRow,
     ComponentVarRow,
     ConcentrationOut,
     DimensionScoreOut,
@@ -754,6 +755,31 @@ def _equity_risk_scale(*, equity_value: float, cash_balance: float, margin_loan:
     return min(_MAX_LEVERAGE, equity / net_equity)
 
 
+def _component_return_rows(price_frame, weights: dict[str, float]) -> list[ComponentReturnRow]:
+    """Per-holding contribution to annualized return: wᵢ × mean(daily rᵢ) × 252.
+
+    Deterministic mirror of component VaR. Contributions sum to the equity
+    book's annualized return (before the cash/margin re-mix), so the table
+    answers 'who pays you' next to component VaR's 'who risks you'.
+    Fail-soft: any frame trouble returns an empty list, never raises."""
+    rows: list[ComponentReturnRow] = []
+    try:
+        rets = price_frame.pct_change().dropna(how="all")
+        for tk, w in weights.items():
+            if tk not in rets.columns:
+                continue
+            series = rets[tk].dropna()
+            if series.empty:
+                continue
+            contribution = float(w) * float(series.mean()) * 252.0
+            if np.isfinite(contribution):
+                rows.append(ComponentReturnRow(ticker=tk, contribution=contribution))
+    except Exception:  # noqa: BLE001 - an extras table must never sink the report
+        return []
+    rows.sort(key=lambda r: r.contribution, reverse=True)
+    return rows
+
+
 def _compute_weights(
     holdings: dict, price_frame, *, tickers: list[str]
 ) -> tuple[dict[str, float], dict[str, float]]:
@@ -1098,6 +1124,7 @@ def report_from_active_endpoint(
         update={
             "price_provenance": _price_provenance(price_prov, price_frame),
             "data_quality_notes": notes,
+            "component_return": _component_return_rows(price_frame, weights),
         }
     )
     return ok(out.model_dump(), request=request, started_at=started)
