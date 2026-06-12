@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { isDaySession, marketTheme } from "./market-hours";
+import { isDaySession, isUsTradingHours, marketTheme } from "./market-hours";
 
 describe("isDaySession", () => {
   it("is DAY mid-afternoon on a summer weekday (EDT)", () => {
@@ -56,5 +56,30 @@ describe("marketTheme", () => {
   it("is light by day, dark at night", () => {
     expect(marketTheme(new Date("2026-06-01T14:00:00Z"))).toBe("light"); // 10:00 EDT
     expect(marketTheme(new Date("2026-06-02T07:00:00Z"))).toBe("dark"); // 03:00 EDT
+  });
+});
+
+describe("isUsTradingHours", () => {
+  // 2026-06-01 is a Monday; EDT = UTC-4.
+  it("is true mid-session on a weekday (Mon 10:00 ET)", () => {
+    expect(isUsTradingHours(new Date("2026-06-01T14:00:00Z"))).toBe(true);
+  });
+  it("is false before the open (Mon 09:00 ET)", () => {
+    expect(isUsTradingHours(new Date("2026-06-01T13:00:00Z"))).toBe(false);
+  });
+  it("flips exactly at 09:30 ET", () => {
+    expect(isUsTradingHours(new Date("2026-06-01T13:29:00Z"))).toBe(false);
+    expect(isUsTradingHours(new Date("2026-06-01T13:30:00Z"))).toBe(true);
+  });
+  it("is false at/after the 16:00 ET close", () => {
+    expect(isUsTradingHours(new Date("2026-06-01T20:00:00Z"))).toBe(false);
+  });
+  it("is false on weekends even mid-day (Sat 12:00 ET)", () => {
+    // 2026-06-06 is a Saturday.
+    expect(isUsTradingHours(new Date("2026-06-06T16:00:00Z"))).toBe(false);
+  });
+  it("handles EST (winter, UTC-5): Mon 2026-01-05 10:00 ET", () => {
+    expect(isUsTradingHours(new Date("2026-01-05T15:00:00Z"))).toBe(true);
+    expect(isUsTradingHours(new Date("2026-01-05T14:00:00Z"))).toBe(false); // 09:00 ET
   });
 });
