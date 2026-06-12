@@ -6,6 +6,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useBillingMe } from "@/lib/queries";
 import { FloatingCopilot } from "@/components/floating-copilot";
 import { FeedbackWidget } from "@/components/feedback-widget";
+import { MarketStatusBar } from "@/components/market-status-bar";
 
 /**
  * Top-level page shell with sticky header + max-w container.
@@ -74,6 +75,7 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
           {/* Mobile nav */}
           <MobileNav />
         </div>
+        <MarketStatusBar />
       </header>
       <main className="mx-auto max-w-6xl px-4 py-10">{children}</main>
       <FloatingCopilot />

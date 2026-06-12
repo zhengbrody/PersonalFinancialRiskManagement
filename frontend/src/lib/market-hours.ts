@@ -43,3 +43,29 @@ export function isDaySession(now: Date = new Date()): boolean {
 export function marketTheme(now: Date = new Date()): "light" | "dark" {
   return isDaySession(now) ? "light" : "dark";
 }
+
+/**
+ * True during US regular trading hours: 09:30–16:00 ET, Monday–Friday.
+ * Unlike `isDaySession` (the 04:00–20:00 THEME window), this is the honest
+ * exchange session used by the market-status strip. Holidays are not
+ * modeled — the strip says "open" on a NYSE holiday weekday; acceptable for
+ * a status hint (quotes themselves carry their own as-of).
+ */
+export function isUsTradingHours(now: Date = new Date()): boolean {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  const weekday = get("weekday");
+  if (weekday === "Sat" || weekday === "Sun") return false;
+
+  const hour = parseInt(get("hour"), 10) % 24;
+  const minute = parseInt(get("minute"), 10);
+  const mins = hour * 60 + minute;
+  return mins >= 9 * 60 + 30 && mins < 16 * 60;
+}

@@ -60,5 +60,10 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+    /* Institutional numeric discipline: fixed-width (tabular) numerals so
+       figures align in columns everywhere — KPI tiles, tables, deltas —
+       the way a trading terminal renders numbers. Prose is unaffected
+       (only digit glyph widths change). */
+    font-variant-numeric: tabular-nums;
   }
 }
