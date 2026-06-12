@@ -20,6 +20,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { HorizontalBarChart, type BarDatum } from "@/components/ui/bar-chart";
 import { DataTable, type Column } from "@/components/ui/data-table";
+import { TickerBadge } from "@/components/ui/ticker-badge";
 import { RiskDiagnosis } from "@/components/risk-diagnosis";
 import { PortfolioValueSummary } from "@/components/portfolio-value-summary";
 import { BenchmarkContext } from "@/components/benchmark-context";
@@ -441,7 +442,7 @@ function ComponentVarTable({ report }: { report: RiskReport }) {
   }));
   const hasReturns = report.component_return.length > 0;
   const columns: Column<RiskReturnRow>[] = [
-    { key: "ticker", header: "Ticker", render: (r) => <span className="font-sans">{r.ticker}</span>, sortValue: (r) => r.ticker },
+    { key: "ticker", header: "Ticker", render: (r) => <TickerBadge ticker={r.ticker} />, sortValue: (r) => r.ticker },
     { key: "pct", header: "Share of VaR", align: "right", render: (r) => fmtPct(r.pct), sortValue: (r) => r.pct },
     ...(hasReturns
       ? [
@@ -492,7 +493,7 @@ function StressSummary({ report }: { report: RiskReport }) {
     }));
 
   const columns: Column<StressAssetLoss>[] = [
-    { key: "ticker", header: "Ticker", render: (r) => <span className="font-sans">{r.ticker}</span>, sortValue: (r) => r.ticker },
+    { key: "ticker", header: "Ticker", render: (r) => <TickerBadge ticker={r.ticker} />, sortValue: (r) => r.ticker },
     {
       key: "loss",
       header: "Loss",
@@ -570,7 +571,7 @@ function liquidityHeat(days: number | null): string {
 
 function LiquidityTable({ report }: { report: RiskReport }) {
   const columns: Column<LiquidityRow>[] = [
-    { key: "ticker", header: "Ticker", render: (r) => <span className="font-sans">{r.ticker}</span>, sortValue: (r) => r.ticker },
+    { key: "ticker", header: "Ticker", render: (r) => <TickerBadge ticker={r.ticker} />, sortValue: (r) => r.ticker },
     { key: "mv", header: "Market value", align: "right", render: (r) => fmtUSD(r.market_value), sortValue: (r) => r.market_value ?? 0 },
     { key: "adv", header: "30d ADV", align: "right", render: (r) => fmtUSD(r.adv_30d), sortValue: (r) => r.adv_30d ?? 0 },
     {

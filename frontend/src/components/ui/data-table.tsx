@@ -107,7 +107,7 @@ export function DataTable<T>({
                   <th
                     key={c.key}
                     className={cn(
-                      "px-3 py-2 font-medium",
+                      "px-3 py-2 text-[10px] font-medium uppercase tracking-wider",
                       c.align === "right" && "text-right",
                       sortable && "cursor-pointer select-none hover:text-foreground",
                     )}
@@ -134,12 +134,15 @@ export function DataTable<T>({
               </tr>
             ) : (
               shown.map((row) => (
-                <tr key={rowKey(row)} className="border-b border-border/40">
+                <tr
+                  key={rowKey(row)}
+                  className="border-b border-border/40 transition-colors hover:bg-muted/40"
+                >
                   {columns.map((c) => (
                     <td
                       key={c.key}
                       className={cn(
-                        "px-3 py-2",
+                        "px-3 py-1.5",
                         c.align === "right" && "text-right",
                         c.cellClassName?.(row),
                       )}
