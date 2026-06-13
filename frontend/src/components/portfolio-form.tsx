@@ -25,7 +25,50 @@ type Row = {
   ticker: string;
   shares: string;
   avg_cost: string;
+  // Optional so callers (and tests) can build a plain equity row with just
+  // {ticker, shares, avg_cost}; an absent `kind` is treated as "equity".
+  kind?: "equity" | "option";
+  option_type?: "call" | "put";
+  strike?: string;
+  expiry?: string; // YYYY-MM-DD
 };
+
+const rowKind = (r: Row): "equity" | "option" => r.kind ?? "equity";
+
+/**
+ * Build an OCC-style option contract symbol — the synthetic key an option
+ * holding is stored under (e.g. AAPL 2026-01-16 call 150 → "AAPL260116C00150000").
+ * Matches yfinance's `contractSymbol`, so the Greeks/pricing layer (PR2) can
+ * look the contract up directly in the option chain.
+ */
+export function occSymbol(
+  underlying: string,
+  expiry: string,
+  optionType: "call" | "put",
+  strike: number,
+): string {
+  const u = underlying.trim().toUpperCase();
+  const [y, m, d] = expiry.split("-");
+  const yymmdd = `${y.slice(2)}${m}${d}`;
+  const cp = optionType === "call" ? "C" : "P";
+  const strike8 = String(Math.round(strike * 1000)).padStart(8, "0");
+  return `${u}${yymmdd}${cp}${strike8}`;
+}
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function optionRowComplete(r: Row): boolean {
+  const strike = Number(r.strike);
+  return (
+    rowKind(r) === "option" &&
+    r.ticker.trim() !== "" &&
+    Number(r.shares) > 0 &&
+    Number.isFinite(strike) &&
+    strike > 0 &&
+    !!r.expiry &&
+    ISO_DATE_RE.test(r.expiry)
+  );
+}
 
 export type PortfolioFormValues = {
   name: string;
@@ -41,13 +84,27 @@ export function rowsFromHoldings(
 ): Row[] {
   const entries = Object.entries(holdings ?? {});
   if (entries.length === 0) {
-    return [{ ticker: "", shares: "", avg_cost: "" }];
+    return [{ ticker: "", shares: "", avg_cost: "", kind: "equity" }];
   }
-  return entries.map(([ticker, h]) => ({
-    ticker: ticker.toUpperCase(),
-    shares: String(h.shares ?? ""),
-    avg_cost: h.avg_cost == null ? "" : String(h.avg_cost),
-  }));
+  return entries.map(([key, h]) => {
+    const base = {
+      shares: String(h.shares ?? ""),
+      avg_cost: h.avg_cost == null ? "" : String(h.avg_cost),
+    };
+    if (String(h.asset_type ?? "").toLowerCase() === "option") {
+      // Show the UNDERLYING in the ticker field; the contract key (`key`) is
+      // re-derived on submit from underlying + expiry + type + strike.
+      return {
+        ...base,
+        kind: "option" as const,
+        ticker: String(h.underlying ?? "").toUpperCase(),
+        option_type: (h.option_type === "put" ? "put" : "call") as "call" | "put",
+        strike: h.strike == null ? "" : String(h.strike),
+        expiry: h.expiry == null ? "" : String(h.expiry),
+      };
+    }
+    return { ...base, kind: "equity" as const, ticker: key.toUpperCase() };
+  });
 }
 
 export function valuesToCreateInput(
@@ -55,11 +112,33 @@ export function valuesToCreateInput(
 ): PortfolioCreateInput {
   const holdings: Record<string, PortfolioHoldingInput> = {};
   for (const r of values.rows) {
-    const tk = r.ticker.trim().toUpperCase();
     const shares = Number(r.shares);
-    if (!tk || !Number.isFinite(shares) || shares <= 0) continue;
-    const out: PortfolioHoldingInput = { shares };
+    if (!Number.isFinite(shares) || shares <= 0) continue;
     const avg = Number(r.avg_cost);
+
+    if (rowKind(r) === "option") {
+      if (!optionRowComplete(r)) continue; // drop half-specified contracts
+      const underlying = r.ticker.trim().toUpperCase();
+      const strike = Number(r.strike);
+      const optionType = r.option_type === "put" ? "put" : "call";
+      const key = occSymbol(underlying, r.expiry!, optionType, strike);
+      const out: PortfolioHoldingInput = {
+        shares, // number of contracts
+        asset_type: "option",
+        option_type: optionType,
+        underlying,
+        strike,
+        expiry: r.expiry,
+        contract_multiplier: 100,
+      };
+      if (Number.isFinite(avg) && avg > 0) out.avg_cost = avg; // premium / share
+      holdings[key] = out;
+      continue;
+    }
+
+    const tk = r.ticker.trim().toUpperCase();
+    if (!tk) continue;
+    const out: PortfolioHoldingInput = { shares };
     if (Number.isFinite(avg) && avg > 0) out.avg_cost = avg;
     holdings[tk] = out;
   }
@@ -136,7 +215,16 @@ export function PortfolioForm({
   function addRow() {
     setValues((prev) => ({
       ...prev,
-      rows: [...prev.rows, { ticker: "", shares: "", avg_cost: "" }],
+      rows: [...prev.rows, { ticker: "", shares: "", avg_cost: "", kind: "equity" }],
+    }));
+  }
+  function addOptionRow() {
+    setValues((prev) => ({
+      ...prev,
+      rows: [
+        ...prev.rows,
+        { ticker: "", shares: "", avg_cost: "", kind: "option", option_type: "call", strike: "", expiry: "" },
+      ],
     }));
   }
   function removeRow(i: number) {
@@ -152,8 +240,10 @@ export function PortfolioForm({
   const canSubmit =
     !busy &&
     values.name.trim().length > 0 &&
-    values.rows.some(
-      (r) => r.ticker.trim() !== "" && Number(r.shares) > 0,
+    values.rows.some((r) =>
+      rowKind(r) === "option"
+        ? optionRowComplete(r)
+        : r.ticker.trim() !== "" && Number(r.shares) > 0,
     );
 
   return (
@@ -206,6 +296,9 @@ export function PortfolioForm({
             <Button type="button" variant="outline" size="sm" onClick={addRow}>
               + add ticker
             </Button>
+            <Button type="button" variant="outline" size="sm" onClick={addOptionRow}>
+              + add option
+            </Button>
           </div>
         </div>
         {csvNote && (
@@ -223,45 +316,14 @@ export function PortfolioForm({
         </p>
         <div className="space-y-2">
           {values.rows.map((row, i) => (
-            <div key={i} className="space-y-0.5">
-              <div className="flex flex-wrap items-center gap-2 sm:grid sm:grid-cols-[1fr_1fr_1fr_auto]">
-                <Input
-                  aria-label={`Ticker ${i + 1}`}
-                  placeholder="SPY"
-                  className="min-w-[5rem] flex-1 font-mono"
-                  value={row.ticker}
-                  onChange={(e) => updateRow(i, { ticker: e.target.value })}
-                />
-                <Input
-                  aria-label={`Shares ${i + 1}`}
-                  type="number"
-                  step="any"
-                  placeholder="shares"
-                  className="min-w-[5rem] flex-1 font-mono"
-                  value={row.shares}
-                  onChange={(e) => updateRow(i, { shares: e.target.value })}
-                />
-                <Input
-                  aria-label={`Avg cost ${i + 1}`}
-                  type="number"
-                  step="any"
-                  placeholder="avg cost"
-                  className="min-w-[5rem] flex-1 font-mono"
-                  value={row.avg_cost}
-                  onChange={(e) => updateRow(i, { avg_cost: e.target.value })}
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  aria-label={`Remove row ${i + 1}`}
-                  onClick={() => removeRow(i)}
-                >
-                  ×
-                </Button>
-              </div>
-              <ImpliedPnl row={row} price={priceOf(row.ticker)} />
-            </div>
+            <HoldingRow
+              key={i}
+              index={i}
+              row={row}
+              price={priceOf(row.ticker)}
+              onChange={(patch) => updateRow(i, patch)}
+              onRemove={() => removeRow(i)}
+            />
           ))}
         </div>
       </div>
@@ -316,6 +378,120 @@ export function PortfolioForm({
         )}
       </div>
     </form>
+  );
+}
+
+/**
+ * One holdings row — an equity (ticker · shares · avg cost) or an option
+ * contract (underlying · contracts · premium + a detail line for
+ * call/put · strike · expiry). The kind is toggled per row; an option row
+ * suppresses the equity implied-P&L hint (the underlying spot isn't the
+ * contract's value) and instead shows a one-line contract summary.
+ */
+function HoldingRow({
+  index,
+  row,
+  price,
+  onChange,
+  onRemove,
+}: {
+  index: number;
+  row: Row;
+  price: number | undefined;
+  onChange: (patch: Partial<Row>) => void;
+  onRemove: () => void;
+}) {
+  const isOption = rowKind(row) === "option";
+  const i = index;
+  return (
+    <div className="space-y-0.5 rounded-md border border-transparent">
+      <div className="flex flex-wrap items-center gap-2 sm:grid sm:grid-cols-[auto_1fr_1fr_1fr_auto]">
+        <select
+          aria-label={`Kind ${i + 1}`}
+          className="h-9 rounded-md border border-input bg-background px-2 text-xs font-medium uppercase tracking-wide"
+          value={rowKind(row)}
+          onChange={(e) =>
+            onChange(
+              e.target.value === "option"
+                ? { kind: "option", option_type: row.option_type ?? "call", strike: row.strike ?? "", expiry: row.expiry ?? "" }
+                : { kind: "equity" },
+            )
+          }
+        >
+          <option value="equity">Stock</option>
+          <option value="option">Option</option>
+        </select>
+        <Input
+          aria-label={isOption ? `Underlying ${i + 1}` : `Ticker ${i + 1}`}
+          placeholder={isOption ? "AAPL" : "SPY"}
+          className="min-w-[5rem] flex-1 font-mono"
+          value={row.ticker}
+          onChange={(e) => onChange({ ticker: e.target.value })}
+        />
+        <Input
+          aria-label={isOption ? `Contracts ${i + 1}` : `Shares ${i + 1}`}
+          type="number"
+          step="any"
+          placeholder={isOption ? "contracts" : "shares"}
+          className="min-w-[5rem] flex-1 font-mono"
+          value={row.shares}
+          onChange={(e) => onChange({ shares: e.target.value })}
+        />
+        <Input
+          aria-label={isOption ? `Premium ${i + 1}` : `Avg cost ${i + 1}`}
+          type="number"
+          step="any"
+          placeholder={isOption ? "premium" : "avg cost"}
+          className="min-w-[5rem] flex-1 font-mono"
+          value={row.avg_cost}
+          onChange={(e) => onChange({ avg_cost: e.target.value })}
+        />
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-label={`Remove row ${i + 1}`}
+          onClick={onRemove}
+        >
+          ×
+        </Button>
+      </div>
+
+      {isOption ? (
+        <div className="flex flex-wrap items-center gap-2 pl-1 sm:grid sm:grid-cols-[auto_1fr_1fr_auto]">
+          <select
+            aria-label={`Option type ${i + 1}`}
+            className="h-9 rounded-md border border-input bg-background px-2 text-xs font-medium uppercase tracking-wide"
+            value={row.option_type ?? "call"}
+            onChange={(e) => onChange({ option_type: e.target.value === "put" ? "put" : "call" })}
+          >
+            <option value="call">Call</option>
+            <option value="put">Put</option>
+          </select>
+          <Input
+            aria-label={`Strike ${i + 1}`}
+            type="number"
+            step="any"
+            placeholder="strike"
+            className="min-w-[5rem] flex-1 font-mono"
+            value={row.strike ?? ""}
+            onChange={(e) => onChange({ strike: e.target.value })}
+          />
+          <Input
+            aria-label={`Expiry ${i + 1}`}
+            type="date"
+            className="min-w-[8rem] flex-1 font-mono"
+            value={row.expiry ?? ""}
+            onChange={(e) => onChange({ expiry: e.target.value })}
+          />
+          <span className="text-[11px] text-muted-foreground">
+            {price ? `underlying $${price.toFixed(2)}` : "premium per share × 100"}
+          </span>
+        </div>
+      ) : (
+        <ImpliedPnl row={row} price={price} />
+      )}
+    </div>
   );
 }
 

@@ -44,8 +44,15 @@ from libs.mindmarket_core.portfolio_scoring import (  # noqa: F401 (re-export)
 # Tickers we'll accept at the boundary. Mirrors the CSV-import regex
 # in libs/auth/portfolio_csv.py so the two ingestion paths stay aligned.
 _TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-/]{0,11}$")
+# Options are stored under a synthetic OCC-style contract key (e.g.
+# ``AAPL260116C00150000``) which is longer than a real symbol, so the
+# strict ``_TICKER_RE`` deliberately does NOT apply to it. The ``ticker``
+# field for an option carries the UNDERLYING symbol (price-fetchable);
+# the contract identity lives in the option_* fields below.
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
-AssetType = Literal["public_security", "cash", "crypto", "real_estate"]
+AssetType = Literal["public_security", "cash", "crypto", "real_estate", "option"]
+OptionType = Literal["call", "put"]
 
 
 class AssetPositionInput(BaseModel):
@@ -69,7 +76,20 @@ class AssetPositionInput(BaseModel):
     proxy_ticker: str | None = None
     enabled: bool = True
 
-    @field_validator("ticker", "proxy_ticker")
+    # ── option contract fields (only meaningful when asset_type == "option") ──
+    # An option position keeps ``ticker`` = the UNDERLYING symbol so the price
+    # path can fetch the underlying spot; these fields carry the contract
+    # identity used by the Greeks/pricing layer (PR2). ``market_value`` is the
+    # contract's mark × |quantity| × multiplier (a long premium); a short
+    # option is modelled as a negative quantity by the analytics layer, not
+    # here (market_value stays ≥ 0 at the boundary).
+    option_type: OptionType | None = None
+    underlying: str | None = None
+    strike: float | None = Field(default=None, gt=0)
+    expiry: str | None = None  # ISO date "YYYY-MM-DD"
+    contract_multiplier: float = Field(default=100.0, gt=0)
+
+    @field_validator("ticker", "proxy_ticker", "underlying")
     @classmethod
     def _ticker_shape(cls, v: str | None) -> str | None:
         """Reject formula-injection / XSS strings before they reach math/UI."""
@@ -85,7 +105,7 @@ class AssetPositionInput(BaseModel):
             )
         return v
 
-    @field_validator("market_value", "cost_basis", "expense_ratio", mode="before")
+    @field_validator("market_value", "cost_basis", "expense_ratio", "strike", mode="before")
     @classmethod
     def _finite(cls, v: Any) -> Any:
         """NaN / Inf must NEVER reach the math layer; PostgREST rejects
@@ -116,6 +136,28 @@ class AssetPositionInput(BaseModel):
                     f"market_value ({self.market_value:,.0f}); likely a "
                     "data entry error."
                 )
+
+        # Option positions must carry a complete, sane contract. We validate
+        # the shape here (not piecemeal) so a half-specified option can never
+        # reach the Greeks/pricing layer.
+        if self.asset_type == "option":
+            missing = [
+                f
+                for f, v in (
+                    ("option_type", self.option_type),
+                    ("underlying", self.underlying),
+                    ("strike", self.strike),
+                    ("expiry", self.expiry),
+                )
+                if v is None
+            ]
+            if missing:
+                raise ValueError(
+                    "option position is missing required contract fields: " + ", ".join(missing)
+                )
+            if not _DATE_RE.match(self.expiry or ""):
+                raise ValueError(f"option expiry {self.expiry!r} must be an ISO date 'YYYY-MM-DD'.")
+
         return self
 
     def to_position(self) -> AssetPosition:
@@ -130,6 +172,11 @@ class AssetPositionInput(BaseModel):
             source=self.source,
             proxy_ticker=self.proxy_ticker,
             enabled=self.enabled,
+            option_type=self.option_type,
+            underlying=self.underlying,
+            strike=(None if self.strike is None else float(self.strike)),
+            expiry=self.expiry,
+            contract_multiplier=float(self.contract_multiplier),
         )
 
 

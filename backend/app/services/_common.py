@@ -31,7 +31,13 @@ def active_tickers(access_token: str | None) -> list[str]:
         from libs.auth.active_portfolio import get_active_holdings
 
         holdings = get_active_holdings(access_token=access_token) or {}
-        return [str(t).upper() for t in holdings.keys()]
+        # Skip option contracts: their synthetic OCC keys aren't real symbols,
+        # so the discovery adapters (sentiment, 13F) would only fail-soft on them.
+        return [
+            str(t).upper()
+            for t, h in holdings.items()
+            if str((h or {}).get("asset_type") if isinstance(h, dict) else "").lower() != "option"
+        ]
     except Exception as exc:  # noqa: BLE001
         _log.warning("active_tickers.failed err=%s", type(exc).__name__)
         return []

@@ -35,7 +35,17 @@ export const portfolioRowSchema = z.looseObject({
   name: z.string(),
   holdings: z.record(
     z.string(),
-    z.looseObject({ shares: z.number(), avg_cost: z.number().optional() }),
+    z.looseObject({
+      shares: z.number(),
+      avg_cost: z.number().optional(),
+      asset_type: z.string().optional(),
+      // option-contract fields (present only when asset_type === "option")
+      option_type: z.enum(["call", "put"]).optional(),
+      underlying: z.string().optional(),
+      strike: z.number().optional(),
+      expiry: z.string().optional(),
+      contract_multiplier: z.number().optional(),
+    }),
   ),
   margin_loan: z.number().nullable(),
   contributed_capital: z.number().nullable(),
@@ -102,6 +112,14 @@ export type PortfolioHoldingInput = {
   avg_cost?: number;
   sector?: string;
   asset_type?: string;
+  // Option-contract fields (present only when asset_type === "option").
+  // The holding is keyed in `holdings` by a synthetic OCC-style contract
+  // symbol; `shares` = number of contracts, `avg_cost` = premium per share.
+  option_type?: "call" | "put";
+  underlying?: string;
+  strike?: number;
+  expiry?: string; // ISO date "YYYY-MM-DD"
+  contract_multiplier?: number;
 };
 
 export type PortfolioCreateInput = {
@@ -708,6 +726,126 @@ export function useRunBacktest() {
         body,
         authToken: accessToken ?? undefined,
         schema: backtestResponseSchema,
+      }),
+  });
+}
+
+// ── options analytics (Greeks / IV / payoff) ──────────────────────────
+// Deterministic, credit-free. The page derives the contracts from the active
+// portfolio's option holdings and posts them; the backend prices them off free
+// yfinance chains. Fail-soft per contract (each carries its own `warnings`).
+
+const greeksSchema = z.looseObject({
+  delta: z.number(),
+  gamma: z.number(),
+  theta: z.number(),
+  vega: z.number(),
+  rho: z.number(),
+});
+
+const payoffPointSchema = z.looseObject({ price: z.number(), pnl: z.number() });
+
+export const optionAnalyticsSchema = z.looseObject({
+  contract_symbol: z.string().nullish(),
+  underlying: z.string(),
+  option_type: z.string(),
+  strike: z.number(),
+  expiry: z.string(),
+  quantity: z.number(),
+  contract_multiplier: z.number(),
+  days_to_expiry: z.number(),
+  spot: z.number().nullish(),
+  mark: z.number().nullish(),
+  iv: z.number().nullish(),
+  greeks: greeksSchema.nullish(),
+  delta_notional: z.number().nullish(),
+  market_value: z.number().nullish(),
+  cost_basis: z.number().nullish(),
+  unrealized_pnl: z.number().nullish(),
+  break_even: z.number().nullish(),
+  moneyness: z.string().nullish(),
+  payoff: z.array(payoffPointSchema),
+  source: z.string(),
+  warnings: z.array(z.string()),
+});
+export type OptionAnalytics = z.infer<typeof optionAnalyticsSchema>;
+
+export const optionTotalsSchema = z.looseObject({
+  net_delta: z.number(),
+  net_gamma: z.number(),
+  net_theta: z.number(),
+  net_vega: z.number(),
+  delta_notional: z.number(),
+  market_value: z.number(),
+  unrealized_pnl: z.number().nullish(),
+  contracts: z.number(),
+});
+export type OptionTotals = z.infer<typeof optionTotalsSchema>;
+
+export const optionAnalyzeResponseSchema = z.looseObject({
+  results: z.array(optionAnalyticsSchema),
+  totals: optionTotalsSchema,
+  as_of: z.string(),
+  warnings: z.array(z.string()),
+});
+export type OptionAnalyzeResponse = z.infer<typeof optionAnalyzeResponseSchema>;
+
+export type OptionContract = {
+  underlying: string;
+  option_type: "call" | "put";
+  strike: number;
+  expiry: string;
+  quantity: number;
+  avg_premium?: number;
+  contract_multiplier?: number;
+};
+
+/**
+ * Pull option contracts out of a portfolio's holdings dict (the entries with
+ * asset_type === "option"), shaped for POST /options/analyze. Equity holdings
+ * are ignored. Returns [] when the book has no options.
+ */
+export function optionContractsFromHoldings(
+  holdings: Record<string, Record<string, unknown>> | undefined,
+): OptionContract[] {
+  const out: OptionContract[] = [];
+  for (const h of Object.values(holdings ?? {})) {
+    if (String(h.asset_type ?? "").toLowerCase() !== "option") continue;
+    const underlying = String(h.underlying ?? "").toUpperCase();
+    const strike = Number(h.strike);
+    const expiry = String(h.expiry ?? "");
+    if (!underlying || !Number.isFinite(strike) || strike <= 0 || !expiry) continue;
+    out.push({
+      underlying,
+      option_type: h.option_type === "put" ? "put" : "call",
+      strike,
+      expiry,
+      quantity: Number(h.shares ?? 1) || 1,
+      avg_premium: typeof h.avg_cost === "number" ? h.avg_cost : undefined,
+      contract_multiplier: typeof h.contract_multiplier === "number" ? h.contract_multiplier : 100,
+    });
+  }
+  return out;
+}
+
+/**
+ * Analytics for a set of option contracts. A query (not a mutation) keyed on
+ * the contract set so it auto-runs when the page mounts with options and is
+ * served from cache on tab/route revisits. Disabled when there are no options
+ * or no auth token.
+ */
+export function useOptionAnalytics(contracts: OptionContract[]) {
+  const { accessToken } = useAuth();
+  return useQuery<OptionAnalyzeResponse, Error>({
+    queryKey: ["options-analyze", contracts],
+    enabled: Boolean(accessToken) && contracts.length > 0,
+    staleTime: 60_000,
+    queryFn: () =>
+      apiFetch<OptionAnalyzeResponse>("/api/v1/options/analyze", {
+        method: "POST",
+        body: { contracts },
+        authToken: accessToken ?? undefined,
+        schema: optionAnalyzeResponseSchema,
       }),
   });
 }

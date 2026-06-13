@@ -233,3 +233,87 @@ def test_agent_response_grounded_in_round_trips():
     )
     dumped = resp.model_dump()
     assert dumped["grounded_in"]["overall_score"] == 750
+
+
+# ── option positions (PR1 — data model) ───────────────────────────────
+
+
+def test_valid_option_round_trips_with_contract_fields():
+    raw = AssetPositionInput(
+        ticker="aapl",  # underlying; the contract id is the JSONB key, not this
+        name="AAPL 2026-01-16 C150",
+        asset_type="option",
+        market_value=1_040.0,  # 2 contracts × $5.20 × 100
+        cost_basis=1_040.0,
+        option_type="call",
+        underlying="aapl",
+        strike=150.0,
+        expiry="2026-01-16",
+        contract_multiplier=100.0,
+    )
+    assert raw.underlying == "AAPL"  # normalized like a ticker
+    pos = raw.to_position()
+    assert pos.is_option is True
+    assert pos.option_type == "call"
+    assert pos.strike == 150.0
+    assert pos.expiry == "2026-01-16"
+    assert pos.contract_multiplier == 100.0
+
+
+@pytest.mark.parametrize("missing", ["option_type", "underlying", "strike", "expiry"])
+def test_option_missing_contract_field_rejected(missing):
+    fields = {
+        "option_type": "put",
+        "underlying": "SPY",
+        "strike": 400.0,
+        "expiry": "2026-03-20",
+    }
+    fields.pop(missing)
+    with pytest.raises(ValidationError, match="contract fields"):
+        AssetPositionInput(
+            ticker="SPY",
+            name="opt",
+            asset_type="option",
+            market_value=500.0,
+            **fields,
+        )
+
+
+def test_option_bad_expiry_rejected():
+    with pytest.raises(ValidationError, match="ISO date"):
+        AssetPositionInput(
+            ticker="SPY",
+            name="opt",
+            asset_type="option",
+            market_value=500.0,
+            option_type="call",
+            underlying="SPY",
+            strike=400.0,
+            expiry="03/20/2026",
+        )
+
+
+def test_option_negative_strike_rejected():
+    with pytest.raises(ValidationError):
+        AssetPositionInput(
+            ticker="SPY",
+            name="opt",
+            asset_type="option",
+            market_value=500.0,
+            option_type="call",
+            underlying="SPY",
+            strike=-1.0,
+            expiry="2026-03-20",
+        )
+
+
+def test_non_option_ignores_contract_fields():
+    # A plain equity never needs option_* and they default to None.
+    pos = AssetPositionInput(
+        ticker="VTI",
+        name="Vanguard Total Market",
+        asset_type="public_security",
+        market_value=5_000.0,
+    ).to_position()
+    assert pos.is_option is False
+    assert pos.option_type is None and pos.strike is None

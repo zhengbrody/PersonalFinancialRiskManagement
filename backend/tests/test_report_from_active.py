@@ -609,3 +609,61 @@ def test_concentration_sector_rollup(
     assert sum(sectors.values()) == pytest.approx(1.0)
     assert conc["top_sector"] in sectors
     assert conc["top_sector_weight"] == pytest.approx(max(sectors.values()))
+
+
+def test_option_overlay_folds_into_engine_weights_and_notes(
+    test_client,
+    mint_token,
+    fake_active_portfolio,
+    fake_price_history,
+    fake_engine,
+    fake_capital,
+    monkeypatch,
+):
+    """An option holding is folded into its underlying's risk weight via the
+    delta-equivalent overlay, and a data-quality note explains it."""
+    import backend.app.services.options_analytics as oa
+
+    monkeypatch.setattr(
+        oa,
+        "analyze_contracts",
+        lambda specs, **k: {
+            "results": [
+                {
+                    "underlying": "AAPL",
+                    "quantity": 2,
+                    "contract_multiplier": 100,
+                    "greeks": {"delta": 0.6, "gamma": 0.0, "theta": 0.0, "vega": 0.0, "rho": 0.0},
+                }
+            ]
+        },
+    )
+    fake_active_portfolio.set(
+        {
+            "SPY": {"shares": 100, "avg_cost": 400.0},
+            "AAPL270115C00150000": {
+                "shares": 2,
+                "asset_type": "option",
+                "option_type": "call",
+                "underlying": "AAPL",
+                "strike": 150,
+                "expiry": "2027-01-15",
+                "contract_multiplier": 100,
+            },
+        }
+    )
+    fake_price_history.set(_make_history(["SPY", "AAPL"]))
+    fake_engine.last_report = _FakeReport()
+
+    resp = test_client.post(
+        "/api/v1/risk/report_from_active",
+        json={},
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()["data"]
+
+    # The overlay added AAPL (option underlying) to the engine weights.
+    assert "AAPL" in (fake_engine.last_dp_weights or {})
+    # And a note explains the delta-equivalent fold-in.
+    assert any("delta-equivalent" in n for n in body["data_quality_notes"])

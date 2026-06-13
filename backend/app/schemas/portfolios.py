@@ -27,6 +27,18 @@ class HoldingValue(BaseModel):
     currency: Optional[str] = None
     margin_eligible: Optional[bool] = None
 
+    # Option-contract fields. Present only when ``asset_type == "option"``;
+    # the holding is keyed in the JSONB dict by a synthetic OCC-style contract
+    # symbol (e.g. ``AAPL260116C00150000``) so multiple contracts on the same
+    # underlying don't collide. ``shares`` = number of contracts;
+    # ``avg_cost`` = premium paid per share. Validation of the contract shape
+    # happens at the domain boundary (AssetPositionInput) when scoring.
+    option_type: Optional[str] = None  # "call" | "put"
+    underlying: Optional[str] = None
+    strike: Optional[float] = Field(default=None, gt=0)
+    expiry: Optional[str] = None  # ISO date "YYYY-MM-DD"
+    contract_multiplier: Optional[float] = Field(default=None, gt=0)
+
 
 class PortfolioOut(BaseModel):
     """One row from the ``portfolios`` Supabase table."""
