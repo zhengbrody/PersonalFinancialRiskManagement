@@ -8,7 +8,7 @@
  * /portfolios/[id]/risk via <ReportSections/>.
  */
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -24,14 +24,29 @@ import {
   ResultSkeleton,
   RiskErrorPanel,
 } from "@/components/risk-report";
+import { OptionsAnalysis } from "@/components/options-analysis";
 import { useAuth } from "@/lib/auth-context";
-import { useRiskReport } from "@/lib/queries";
+import {
+  optionContractsFromHoldings,
+  useMyPortfolios,
+  useRiskReport,
+} from "@/lib/queries";
 import { useRunOncePerUser } from "@/lib/use-run-once-per-user";
 
 export default function RiskPage() {
   const router = useRouter();
   const { user, loading: authLoading, configured } = useAuth();
   const report = useRiskReport();
+
+  // Options live in the portfolio's holdings (the report itself skips option
+  // contracts); derive them from the default-flagged portfolio — the same one
+  // the report resolves server-side — and analyze them separately.
+  const portfolios = useMyPortfolios();
+  const optionContracts = useMemo(() => {
+    const rows = portfolios.data?.portfolios ?? [];
+    const active = rows.find((p) => p.is_default) ?? rows[0];
+    return optionContractsFromHoldings(active?.holdings);
+  }, [portfolios.data]);
 
   useEffect(() => {
     if (!configured) return;
@@ -65,6 +80,9 @@ export default function RiskPage() {
       {report.isPending && <ResultSkeleton />}
       {report.isError && <RiskErrorPanel error={report.error as Error} />}
       {report.data && !report.isPending && <ReportSections report={report.data} />}
+      {report.data && !report.isPending && (
+        <OptionsAnalysis contracts={optionContracts} />
+      )}
       {!report.data && !report.isPending && !report.isError && (
         <Card>
           <CardHeader>
