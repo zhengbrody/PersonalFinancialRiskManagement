@@ -63,6 +63,7 @@ describe("PortfolioForm implied P&L", () => {
 });
 
 import { occSymbol, rowsFromHoldings, valuesToCreateInput } from "./portfolio-form";
+import { optionContractsFromHoldings } from "@/lib/queries";
 
 describe("PortfolioForm option entry", () => {
   it("builds an OCC contract symbol", () => {
@@ -122,5 +123,56 @@ describe("PortfolioForm option entry", () => {
     expect(rows[0].option_type).toBe("call");
     expect(rows[0].strike).toBe("150");
     expect(rows[0].expiry).toBe("2026-01-16");
+  });
+});
+
+describe("PortfolioForm short option legs (PR4)", () => {
+  it("stores a sold leg as option_side short", () => {
+    const input = valuesToCreateInput({
+      name: "spread",
+      rows: [
+        { ticker: "AAPL", shares: "1", avg_cost: "8", kind: "option", option_type: "call", option_side: "long", strike: "150", expiry: "2027-01-15" },
+        { ticker: "AAPL", shares: "1", avg_cost: "3", kind: "option", option_type: "call", option_side: "short", strike: "170", expiry: "2027-01-15" },
+      ],
+      margin_loan: "0",
+      contributed_capital: "0",
+      cash_balance: "0",
+      is_default: false,
+    });
+    const long = input.holdings.AAPL270115C00150000;
+    const short = input.holdings.AAPL270115C00170000;
+    expect(long.option_side).toBe("long");
+    expect(short.option_side).toBe("short");
+    expect(short.shares).toBe(1); // stored as positive magnitude
+  });
+
+  it("optionContractsFromHoldings negates a short leg's quantity", () => {
+    const contracts = optionContractsFromHoldings({
+      AAPL270115C00170000: {
+        shares: 2,
+        asset_type: "option",
+        option_type: "call",
+        option_side: "short",
+        underlying: "AAPL",
+        strike: 170,
+        expiry: "2027-01-15",
+      },
+    });
+    expect(contracts[0].quantity).toBe(-2); // short → negative
+  });
+
+  it("round-trips a short leg back into the form", () => {
+    const rows = rowsFromHoldings({
+      AAPL270115C00170000: {
+        shares: 1,
+        asset_type: "option",
+        option_type: "call",
+        option_side: "short",
+        underlying: "AAPL",
+        strike: 170,
+        expiry: "2027-01-15",
+      },
+    });
+    expect(rows[0].option_side).toBe("short");
   });
 });

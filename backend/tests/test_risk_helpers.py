@@ -176,3 +176,18 @@ def test_apply_overlay_noop_without_options():
     base_w, base_mv = _compute_weights(holdings, price_frame, tickers=["AAPL"])
     w, h_eng, conc, note = _apply_option_overlay(holdings, price_frame, ["AAPL"], base_w, base_mv)
     assert w == base_w and conc == base_mv and note is None and h_eng is holdings
+
+
+def test_option_specs_short_leg_negates_quantity():
+    holdings = {
+        "AAPL270115C00150000": {**_OPT, "option_side": "long", "shares": 1},
+        "AAPL270115C00170000": {**_OPT, "option_side": "short", "shares": 2, "strike": 170},
+    }
+    specs = {s.strike: s for s in _option_specs_from_holdings(holdings)}
+    assert specs[150.0].quantity == 1.0  # long
+    assert specs[170.0].quantity == -2.0  # short → negative
+
+
+def test_option_specs_default_long_when_no_side():
+    spec = _option_specs_from_holdings({"K": dict(_OPT)})[0]  # no option_side
+    assert spec.quantity == 2.0  # defaults to long (positive)
