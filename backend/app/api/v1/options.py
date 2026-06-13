@@ -15,8 +15,13 @@ from fastapi import APIRouter, Depends, Request
 
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import ok
-from ...schemas.options import OptionAnalyzeRequest, OptionAnalyzeResponse
-from ...services import options_analytics
+from ...schemas.options import (
+    OptionAnalyzeRequest,
+    OptionAnalyzeResponse,
+    OptionScenarioRequest,
+    OptionScenarioResponse,
+)
+from ...services import options_analytics, options_exposure, options_scenarios
 
 router = APIRouter(prefix="/api/v1/options", tags=["options"])
 
@@ -36,6 +41,34 @@ def analyze_options_endpoint(
     number is deterministic math over market data."""
     started = time.perf_counter()
     data = options_analytics.analyze_contracts(body.contracts, risk_free_rate=body.risk_free_rate)
+    # Portfolio-level exposure + deterministic risk flags over the same results.
+    data["exposure"] = options_exposure.build_exposure(data.get("results", []))
     # Validate/normalise through the response schema before enveloping.
     payload = OptionAnalyzeResponse.model_validate(data).model_dump()
+    return ok(payload, request=request, started_at=started)
+
+
+@router.post(
+    "/scenarios",
+    summary="Black-Scholes stress grid (underlying × IV × time) for option contracts",
+    response_model=None,
+)
+def option_scenarios_endpoint(
+    body: OptionScenarioRequest,
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    """Full-reprice option stress grid + the top-5 impacted positions. Deterministic,
+    credit-free; captures gamma/vega/theta that the equity report's delta overlay
+    can't. Each contract is priced from its live analytics, then repriced across the
+    shock axes."""
+    started = time.perf_counter()
+    analytics = options_analytics.analyze_contracts(
+        body.contracts, risk_free_rate=body.risk_free_rate
+    )
+    grid = options_scenarios.scenario_grid(
+        analytics.get("results", []), risk_free_rate=body.risk_free_rate
+    )
+    grid["as_of"] = analytics.get("as_of")
+    payload = OptionScenarioResponse.model_validate(grid).model_dump()
     return ok(payload, request=request, started_at=started)

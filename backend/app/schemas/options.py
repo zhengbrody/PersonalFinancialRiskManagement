@@ -25,6 +25,10 @@ class OptionContractIn(BaseModel):
     quantity: float = Field(default=1.0)  # contracts; negative = short
     avg_premium: Optional[float] = Field(default=None, ge=0)  # per share
     contract_multiplier: float = Field(default=100.0, gt=0)
+    # Optional caller-supplied market inputs — used when the live chain is
+    # unavailable so the contract can still be modelled (theoretical_fallback).
+    market_price: Optional[float] = Field(default=None, ge=0)  # per-share mark override
+    implied_vol: Optional[float] = Field(default=None, gt=0)  # decimal, e.g. 0.35
 
 
 class OptionAnalyzeRequest(BaseModel):
@@ -66,10 +70,15 @@ class OptionAnalyticsOut(BaseModel):
     market_value: Optional[float] = None
     cost_basis: Optional[float] = None
     unrealized_pnl: Optional[float] = None
+    intrinsic_value: Optional[float] = None
+    time_value: Optional[float] = None
+    max_loss: Optional[float] = None  # None = unbounded (e.g. naked short call)
+    max_gain: Optional[float] = None  # None = unbounded (e.g. long call)
+    assignment_risk: Optional[str] = None  # None | "watch" | "high"
     break_even: Optional[float] = None
     moneyness: Optional[str] = None
     payoff: list[PayoffPointOut] = Field(default_factory=list)
-    source: str = "yfinance"
+    source: str = "market"  # "market" | "theoretical_fallback"
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -86,8 +95,95 @@ class OptionTotalsOut(BaseModel):
     contracts: int = 0
 
 
+class OptionFlagOut(BaseModel):
+    code: str
+    severity: str  # info | watch | high
+    detail: str
+
+
+class ExpiryBucketOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    expiry: str
+    days_to_expiry: int
+    contracts: int
+    net_delta: float
+    net_notional: float
+
+
+class UnderlyingExposureOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    underlying: str
+    contracts: int
+    net_delta: float
+    net_notional: float
+    equity_shares: Optional[float] = None
+
+
+class OptionExposureOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    net_delta: float
+    gross_delta: float
+    net_gamma: float
+    net_theta: float
+    net_vega: float
+    option_market_value: Optional[float] = None
+    option_notional: float
+    short_collateral_estimate: float
+    contracts: int
+    short_contracts: int
+    expiry_ladder: list[ExpiryBucketOut] = Field(default_factory=list)
+    underlying_exposure: list[UnderlyingExposureOut] = Field(default_factory=list)
+    flags: list[OptionFlagOut] = Field(default_factory=list)
+
+
 class OptionAnalyzeResponse(BaseModel):
     results: list[OptionAnalyticsOut]
     totals: OptionTotalsOut
+    exposure: OptionExposureOut
     as_of: str
     warnings: list[str] = Field(default_factory=list)
+
+
+# ── scenario grid ─────────────────────────────────────────────────────────────
+
+
+class ScenarioCellOut(BaseModel):
+    underlying_shock: float
+    iv_shock: float
+    horizon: int | str  # days forward, or "expiry"
+    total_pnl: float
+
+
+class ScenarioPositionOut(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    underlying: Optional[str] = None
+    option_type: Optional[str] = None
+    strike: Optional[float] = None
+    expiry: Optional[str] = None
+    quantity: Optional[float] = None
+    pnl: float
+
+
+class OptionScenarioRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    contracts: list[OptionContractIn] = Field(..., min_length=1, max_length=50)
+    risk_free_rate: float = Field(default=0.045, ge=0.0, le=0.20)
+
+
+class OptionScenarioResponse(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    grid: list[ScenarioCellOut]
+    top_positions: list[ScenarioPositionOut]
+    stress_cell: dict[str, float]
+    underlying_shocks: list[float]
+    iv_shocks: list[float]
+    horizons: list[int | str]
+    repriced: int
+    skipped: list[dict] = Field(default_factory=list)
+    as_of: str

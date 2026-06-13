@@ -24,6 +24,7 @@ import numpy as np
 
 from libs.mindmarket_core.black_scholes import (
     bs_greeks,
+    bs_price,
     implied_volatility,
     time_to_expiry_years,
 )
@@ -33,6 +34,14 @@ _log = logging.getLogger(__name__)
 # Number of points on the at-expiry payoff curve and the ± span around spot.
 _PAYOFF_POINTS = 41
 _PAYOFF_SPAN = 0.30  # ±30% of spot
+
+# Documented constants (tuned, not fit).
+# When no live quote/IV is available we still model the contract with
+# Black-Scholes so the cockpit isn't blank — flagged via source=theoretical_fallback.
+_FALLBACK_IV = 0.40  # conservative default vol when the chain has no IV
+# Short, in-the-money options within these day windows carry assignment risk.
+_ASSIGNMENT_DTE_HIGH = 7
+_ASSIGNMENT_DTE_WATCH = 21
 
 
 # ── default market fetchers (injectable for tests) ────────────────────────────
@@ -154,6 +163,55 @@ def _break_even(option_type: str, strike: float, premium_per_share: float) -> fl
     return strike + premium_per_share if option_type == "call" else strike - premium_per_share
 
 
+def _intrinsic_value(option_type: str, spot: float, strike: float) -> float:
+    """Intrinsic value per share (≥ 0)."""
+    return max(spot - strike, 0.0) if option_type == "call" else max(strike - spot, 0.0)
+
+
+def _max_loss_gain(
+    option_type: str,
+    is_long: bool,
+    strike: float,
+    premium_per_share: float,
+    contracts_abs: float,
+    multiplier: float,
+) -> tuple[Optional[float], Optional[float]]:
+    """Position max loss / max gain in dollars (positive magnitudes).
+
+    ``None`` denotes an unbounded side (a long call's upside, a naked short
+    call's downside). Premium is the per-share basis (paid if long, received
+    if short). These are the textbook single-leg bounds — a multi-leg strategy's
+    true combined bound emerges from netting the legs' payoff curves, which the
+    scenario grid covers.
+    """
+    notional = contracts_abs * multiplier
+    prem_total = premium_per_share * notional
+    if option_type == "call":
+        if is_long:
+            return prem_total, None  # lose the premium; upside unbounded
+        return None, prem_total  # short call: keep premium; loss unbounded
+    # put
+    intrinsic_floor = max(strike - premium_per_share, 0.0) * notional  # underlying → 0
+    if is_long:
+        return prem_total, intrinsic_floor  # lose premium; gain capped at strike−premium
+    return intrinsic_floor, prem_total  # short put: max loss if underlying → 0
+
+
+def _assignment_risk(
+    is_short: bool, moneyness: Optional[str], days_to_expiry: int
+) -> Optional[str]:
+    """Early-assignment / exercise risk for SHORT options that are ITM near
+    expiry. ``None`` for long or OTM positions (a long holder controls exercise;
+    an OTM short is unlikely to be assigned)."""
+    if not is_short or moneyness != "ITM" or days_to_expiry < 0:
+        return None
+    if days_to_expiry <= _ASSIGNMENT_DTE_HIGH:
+        return "high"
+    if days_to_expiry <= _ASSIGNMENT_DTE_WATCH:
+        return "watch"
+    return None
+
+
 # ── public API ────────────────────────────────────────────────────────────────
 
 
@@ -201,10 +259,15 @@ def analyze_contract(
         "market_value": None,
         "cost_basis": None,
         "unrealized_pnl": None,
+        "intrinsic_value": None,
+        "time_value": None,
+        "max_loss": None,
+        "max_gain": None,
+        "assignment_risk": None,
         "break_even": None,
         "moneyness": None,
         "payoff": [],
-        "source": "yfinance",
+        "source": "market",
         "warnings": warnings,
     }
 
@@ -214,12 +277,16 @@ def analyze_contract(
     if T <= 0:
         warnings.append("contract has expired")
 
+    is_long = quantity >= 0
+    contracts_abs = abs(quantity)
+
     spot = spot_fn(underlying)
     if spot is None:
         warnings.append("could not fetch underlying spot")
     else:
         result["spot"] = round(spot, 4)
         result["moneyness"] = _moneyness_label(option_type, spot, strike)
+        result["intrinsic_value"] = round(_intrinsic_value(option_type, spot, strike), 4)
 
     row = chain_fn(underlying, expiry, option_type, strike)
     mark: Optional[float] = None
@@ -245,6 +312,30 @@ def analyze_contract(
         if iv is not None:
             result["iv"] = round(iv, 4)
 
+    # Caller-supplied mark override (e.g. a broker price) when the chain is dark.
+    if mark is None:
+        override = getattr(spec, "market_price", None)
+        if override not in (None, 0, 0.0) and float(override) > 0:
+            mark = float(override)
+            result["mark"] = round(mark, 4)
+            if iv is None and spot is not None and T > 0:
+                iv = implied_volatility(mark, spot, strike, T, risk_free_rate, option_type)
+                if iv is not None:
+                    result["iv"] = round(iv, 4)
+
+    # Theoretical fallback: no live quote but we can still MODEL the contract via
+    # Black-Scholes (uses a caller-supplied implied_vol, else a flagged default).
+    # Provenance flips to theoretical_fallback so the UI can show it's modelled.
+    if mark is None and spot is not None and T > 0:
+        if iv is None:
+            supplied = getattr(spec, "implied_vol", None)
+            iv = float(supplied) if supplied not in (None, 0, 0.0) else _FALLBACK_IV
+            result["iv"] = round(iv, 4)
+        mark = bs_price(spot, strike, T, risk_free_rate, iv, option_type)
+        result["mark"] = round(mark, 4)
+        result["source"] = "theoretical_fallback"
+        warnings.append("priced via Black-Scholes theoretical fallback (no live quote)")
+
     # Greeks need spot + iv + live time.
     if spot is not None and iv is not None and T > 0:
         greeks = bs_greeks(spot, strike, T, risk_free_rate, iv, option_type)
@@ -253,16 +344,33 @@ def analyze_contract(
     elif spot is not None and iv is None:
         warnings.append("Greeks unavailable without implied volatility")
 
-    # Market value / cost basis / P&L (per contract × multiplier).
+    # Market value / cost basis / P&L (per contract × multiplier; signed by qty).
     if mark is not None:
         result["market_value"] = round(mark * quantity * multiplier, 2)
+        result["time_value"] = (
+            round(mark - (result["intrinsic_value"] or 0.0), 4)
+            if result["intrinsic_value"] is not None
+            else None
+        )
     if avg_premium is not None:
         result["cost_basis"] = round(avg_premium * quantity * multiplier, 2)
         if mark is not None:
             result["unrealized_pnl"] = round((mark - avg_premium) * quantity * multiplier, 2)
 
-    # Payoff + break-even use the cost basis if known, else the current mark.
+    # Max loss / gain + assignment risk use the cost basis if known, else mark.
     premium_basis = avg_premium if avg_premium is not None else mark
+    if premium_basis is not None:
+        max_loss, max_gain = _max_loss_gain(
+            option_type, is_long, strike, premium_basis, contracts_abs, multiplier
+        )
+        result["max_loss"] = None if max_loss is None else round(max_loss, 2)
+        result["max_gain"] = None if max_gain is None else round(max_gain, 2)
+
+    result["assignment_risk"] = _assignment_risk(
+        is_short=not is_long, moneyness=result["moneyness"], days_to_expiry=days_to_expiry
+    )
+
+    # Payoff + break-even use the cost basis if known, else the current mark.
     if spot is not None and premium_basis is not None:
         result["payoff"] = _payoff_curve(
             option_type, spot, strike, premium_basis, quantity, multiplier
