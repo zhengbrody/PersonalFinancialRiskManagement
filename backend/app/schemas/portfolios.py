@@ -34,6 +34,7 @@ class HoldingValue(BaseModel):
     # ``avg_cost`` = premium paid per share. Validation of the contract shape
     # happens at the domain boundary (AssetPositionInput) when scoring.
     option_type: Optional[str] = None  # "call" | "put"
+    option_side: Optional[str] = None  # "long" (bought) | "short" (sold/written)
     underlying: Optional[str] = None
     strike: Optional[float] = Field(default=None, gt=0)
     expiry: Optional[str] = None  # ISO date "YYYY-MM-DD"

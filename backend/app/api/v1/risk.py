@@ -855,13 +855,17 @@ def _option_specs_from_holdings(holdings: dict) -> list[SimpleNamespace]:
         opt_type = str(h.get("option_type") or "").lower()
         if not underlying or strike in (None, 0) or not expiry or opt_type not in ("call", "put"):
             continue
+        # A sold/written leg is a short position: negate the contract count so
+        # the analytics + delta overlay see negative quantity (short delta,
+        # credit market value). ``shares`` itself stays a positive magnitude.
+        sign = -1.0 if str(h.get("option_side") or "long").lower() == "short" else 1.0
         specs.append(
             SimpleNamespace(
                 underlying=underlying,
                 option_type=opt_type,
                 strike=float(strike),
                 expiry=str(expiry),
-                quantity=float(h.get("shares") or 0.0),
+                quantity=sign * float(h.get("shares") or 0.0),
                 avg_premium=h.get("avg_cost"),
                 contract_multiplier=float(h.get("contract_multiplier") or 100.0),
             )

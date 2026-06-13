@@ -41,6 +41,7 @@ export const portfolioRowSchema = z.looseObject({
       asset_type: z.string().optional(),
       // option-contract fields (present only when asset_type === "option")
       option_type: z.enum(["call", "put"]).optional(),
+      option_side: z.enum(["long", "short"]).optional(),
       underlying: z.string().optional(),
       strike: z.number().optional(),
       expiry: z.string().optional(),
@@ -114,8 +115,11 @@ export type PortfolioHoldingInput = {
   asset_type?: string;
   // Option-contract fields (present only when asset_type === "option").
   // The holding is keyed in `holdings` by a synthetic OCC-style contract
-  // symbol; `shares` = number of contracts, `avg_cost` = premium per share.
+  // symbol; `shares` = number of contracts (positive magnitude),
+  // `avg_cost` = premium per share. `option_side` distinguishes a bought
+  // (long) leg from a sold/written (short) leg.
   option_type?: "call" | "put";
+  option_side?: "long" | "short";
   underlying?: string;
   strike?: number;
   expiry?: string; // ISO date "YYYY-MM-DD"
@@ -815,12 +819,16 @@ export function optionContractsFromHoldings(
     const strike = Number(h.strike);
     const expiry = String(h.expiry ?? "");
     if (!underlying || !Number.isFinite(strike) || strike <= 0 || !expiry) continue;
+    // A sold/written leg is short → negative quantity (the analytics + delta
+    // overlay read the sign). `shares` is stored as a positive magnitude.
+    const magnitude = Number(h.shares ?? 1) || 1;
+    const quantity = h.option_side === "short" ? -magnitude : magnitude;
     out.push({
       underlying,
       option_type: h.option_type === "put" ? "put" : "call",
       strike,
       expiry,
-      quantity: Number(h.shares ?? 1) || 1,
+      quantity,
       avg_premium: typeof h.avg_cost === "number" ? h.avg_cost : undefined,
       contract_multiplier: typeof h.contract_multiplier === "number" ? h.contract_multiplier : 100,
     });

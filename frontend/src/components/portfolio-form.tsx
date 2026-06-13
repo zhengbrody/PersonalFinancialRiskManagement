@@ -29,6 +29,7 @@ type Row = {
   // {ticker, shares, avg_cost}; an absent `kind` is treated as "equity".
   kind?: "equity" | "option";
   option_type?: "call" | "put";
+  option_side?: "long" | "short"; // bought vs sold/written
   strike?: string;
   expiry?: string; // YYYY-MM-DD
 };
@@ -99,6 +100,7 @@ export function rowsFromHoldings(
         kind: "option" as const,
         ticker: String(h.underlying ?? "").toUpperCase(),
         option_type: (h.option_type === "put" ? "put" : "call") as "call" | "put",
+        option_side: (h.option_side === "short" ? "short" : "long") as "long" | "short",
         strike: h.strike == null ? "" : String(h.strike),
         expiry: h.expiry == null ? "" : String(h.expiry),
       };
@@ -123,9 +125,10 @@ export function valuesToCreateInput(
       const optionType = r.option_type === "put" ? "put" : "call";
       const key = occSymbol(underlying, r.expiry!, optionType, strike);
       const out: PortfolioHoldingInput = {
-        shares, // number of contracts
+        shares, // number of contracts (positive magnitude)
         asset_type: "option",
         option_type: optionType,
+        option_side: r.option_side === "short" ? "short" : "long",
         underlying,
         strike,
         expiry: r.expiry,
@@ -223,7 +226,7 @@ export function PortfolioForm({
       ...prev,
       rows: [
         ...prev.rows,
-        { ticker: "", shares: "", avg_cost: "", kind: "option", option_type: "call", strike: "", expiry: "" },
+        { ticker: "", shares: "", avg_cost: "", kind: "option", option_type: "call", option_side: "long", strike: "", expiry: "" },
       ],
     }));
   }
@@ -413,7 +416,13 @@ function HoldingRow({
           onChange={(e) =>
             onChange(
               e.target.value === "option"
-                ? { kind: "option", option_type: row.option_type ?? "call", strike: row.strike ?? "", expiry: row.expiry ?? "" }
+                ? {
+                    kind: "option",
+                    option_type: row.option_type ?? "call",
+                    option_side: row.option_side ?? "long",
+                    strike: row.strike ?? "",
+                    expiry: row.expiry ?? "",
+                  }
                 : { kind: "equity" },
             )
           }
@@ -458,7 +467,16 @@ function HoldingRow({
       </div>
 
       {isOption ? (
-        <div className="flex flex-wrap items-center gap-2 pl-1 sm:grid sm:grid-cols-[auto_1fr_1fr_auto]">
+        <div className="flex flex-wrap items-center gap-2 pl-1 sm:grid sm:grid-cols-[auto_auto_1fr_1fr_auto]">
+          <select
+            aria-label={`Side ${i + 1}`}
+            className="h-9 rounded-md border border-input bg-background px-2 text-xs font-medium uppercase tracking-wide"
+            value={row.option_side ?? "long"}
+            onChange={(e) => onChange({ option_side: e.target.value === "short" ? "short" : "long" })}
+          >
+            <option value="long">Buy</option>
+            <option value="short">Sell</option>
+          </select>
           <select
             aria-label={`Option type ${i + 1}`}
             className="h-9 rounded-md border border-input bg-background px-2 text-xs font-medium uppercase tracking-wide"

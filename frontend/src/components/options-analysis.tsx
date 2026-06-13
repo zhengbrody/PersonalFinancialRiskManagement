@@ -115,14 +115,16 @@ function GreeksRollup({
 
 function ContractCard({ a }: { a: OptionAnalytics }) {
   const dir = a.option_type === "call" ? "CALL" : "PUT";
+  const isShort = a.quantity < 0;
   const pnl = a.unrealized_pnl;
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
+          <Chip label={isShort ? "SHORT" : "LONG"} tone={isShort ? "muted" : "up"} />
           <TickerBadge ticker={a.underlying} />
           <span className="font-mono">
-            {dir} {a.strike}
+            {Math.abs(a.quantity)}× {dir} {a.strike}
           </span>
           <span className="text-muted-foreground">{shortExpiry(a.expiry)}</span>
           {a.moneyness && <Chip label={a.moneyness} tone={a.moneyness === "ITM" ? "up" : a.moneyness === "OTM" ? "muted" : undefined} />}
