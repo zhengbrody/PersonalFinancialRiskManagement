@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -829,6 +830,142 @@ def _compute_weights(
     return weights, mvs
 
 
+# ── option delta-equivalent overlay (PR3) ─────────────────────────────
+# Options are excluded from the equity price/MV path (they're keyed by a
+# synthetic OCC symbol, not a fetchable ticker). To still reflect their
+# directional risk in VaR / factor betas / concentration, each contract is
+# folded into its UNDERLYING as a delta-equivalent stock position:
+#     equivalent shares = Δ × contracts × multiplier
+# then the existing equity machinery (``_compute_weights`` → RiskEngine) runs
+# on the augmented book. The engine is long-only (weights ≥ 0 summing to 1), so
+# a net-short underlying exposure is clamped to zero — VaR is then conservative
+# (no hedge credit) rather than negative-weighted garbage; the clamp is noted.
+# Account value / P&L / liquidity display stay on the REAL equity book.
+
+
+def _option_specs_from_holdings(holdings: dict) -> list[SimpleNamespace]:
+    """Parse option holdings into analytics specs (no network — pure)."""
+    specs: list[SimpleNamespace] = []
+    for h in (holdings or {}).values():
+        if not isinstance(h, dict) or not _is_option_holding(h):
+            continue
+        underlying = str(h.get("underlying") or "").strip().upper()
+        strike = h.get("strike")
+        expiry = h.get("expiry")
+        opt_type = str(h.get("option_type") or "").lower()
+        if not underlying or strike in (None, 0) or not expiry or opt_type not in ("call", "put"):
+            continue
+        specs.append(
+            SimpleNamespace(
+                underlying=underlying,
+                option_type=opt_type,
+                strike=float(strike),
+                expiry=str(expiry),
+                quantity=float(h.get("shares") or 0.0),
+                avg_premium=h.get("avg_cost"),
+                contract_multiplier=float(h.get("contract_multiplier") or 100.0),
+            )
+        )
+    return specs
+
+
+def _option_underlyings(holdings: dict) -> list[str]:
+    """Underlying symbols referenced by the book's option holdings (pure)."""
+    return sorted({s.underlying for s in _option_specs_from_holdings(holdings)})
+
+
+def _option_delta_equiv_shares(specs: list[SimpleNamespace]) -> dict[str, float]:
+    """Σ delta-equivalent shares per underlying (Δ × contracts × multiplier).
+
+    Fail-soft: any analytics trouble returns ``{}`` so the report degrades to
+    the plain equity book rather than 500-ing. Contracts that couldn't be
+    priced (no Greeks) are skipped."""
+    if not specs:
+        return {}
+    try:
+        from ...services import options_analytics
+
+        results = options_analytics.analyze_contracts(specs).get("results", [])
+    except Exception as exc:  # noqa: BLE001 - overlay must never sink the report
+        _log.warning("options.overlay_failed err=%s", type(exc).__name__)
+        return {}
+
+    by_underlying: dict[str, float] = {}
+    for r in results:
+        greeks = r.get("greeks")
+        if not greeks:
+            continue
+        u = str(r.get("underlying") or "").upper()
+        qty = float(r.get("quantity") or 0.0)
+        mult = float(r.get("contract_multiplier") or 100.0)
+        if not u:
+            continue
+        by_underlying[u] = by_underlying.get(u, 0.0) + float(greeks["delta"]) * qty * mult
+    return by_underlying
+
+
+def _augment_holdings_with_deltas(
+    holdings: dict, equity_tickers: list[str], eq_shares_by_u: dict[str, float]
+) -> tuple[dict, list[str]]:
+    """Build an engine-only holdings dict = real equity legs + option
+    delta-equivalent shares merged into their underlyings (clamped ≥ 0).
+
+    Returns ``(aug_holdings, clamped_underlyings)``. Option (OCC-keyed) entries
+    are dropped — only the equity-equivalent exposure survives."""
+    aug: dict = {tk: dict(holdings[tk]) for tk in equity_tickers if tk in holdings}
+    clamped: list[str] = []
+    for u, add_shares in eq_shares_by_u.items():
+        base = dict(aug.get(u, {}))
+        current = float(base.get("shares") or 0.0)
+        combined = current + add_shares
+        if combined < 0:
+            clamped.append(u)
+            combined = 0.0
+        base["shares"] = combined
+        base.setdefault("asset_type", "public_security")
+        aug[u] = base
+    return aug, clamped
+
+
+def _apply_option_overlay(
+    holdings: dict,
+    price_frame,
+    equity_tickers: list[str],
+    weights: dict[str, float],
+    market_values: dict[str, float],
+) -> tuple[dict[str, float], dict, dict[str, float], str | None]:
+    """Fold option delta exposure into the engine weights + concentration.
+
+    Returns ``(weights, holdings_for_engine, concentration_values, note)``.
+    A no-option book (or a fully fail-soft overlay) returns the inputs verbatim,
+    so the equity-only path is byte-for-byte unchanged."""
+    specs = _option_specs_from_holdings(holdings)
+    if not specs:
+        return weights, holdings, market_values, None
+
+    eq_shares_by_u = _option_delta_equiv_shares(specs)
+    if not eq_shares_by_u:
+        return weights, holdings, market_values, None
+
+    aug_holdings, clamped = _augment_holdings_with_deltas(holdings, equity_tickers, eq_shares_by_u)
+    aug_tickers = sorted(set(equity_tickers) | set(eq_shares_by_u.keys()))
+    aug_weights, aug_mv = _compute_weights(aug_holdings, price_frame, tickers=aug_tickers)
+    if not aug_weights:
+        return weights, holdings, market_values, None
+
+    note = (
+        f"Options folded into risk via delta-equivalent exposure "
+        f"({len(specs)} contract(s) across {len(eq_shares_by_u)} underlying(s))."
+    )
+    if clamped:
+        note += (
+            " Net-short option exposure on "
+            + ", ".join(sorted(clamped))
+            + " was clamped to zero (long-only engine) — risk shown is conservative."
+        )
+    return aug_weights, aug_holdings, aug_mv, note
+
+
 def _df_or_none_to_rows(df, *, value_col: str = None) -> list[dict]:
     """Best-effort conversion of a small pandas Series/DataFrame into a
     list of plain dicts. NaN/Inf are dropped; the envelope layer also
@@ -873,6 +1010,7 @@ def _serialize_report(
     risk_scale: float = 1.0,
     account_metrics: dict[str, float | None] | None = None,
     holdings: dict | None = None,
+    concentration_values: dict[str, float] | None = None,
 ) -> RiskReportOut:
     """Project the engine's ``RiskReport`` dataclass into the
     JSON-safe response model. The heavy matrices (cov, corr, MC sim
@@ -956,9 +1094,13 @@ def _serialize_report(
 
     # Concentration: pure arithmetic over the invested book's market
     # values (cash never reaches market_values). HHI on weights; 1/HHI is
-    # the equally-weighted-equivalent position count.
+    # the equally-weighted-equivalent position count. Uses the option-overlay
+    # exposure (equity MV + delta-equivalent option exposure per underlying)
+    # when supplied, so a big call position shows up as concentrated; falls
+    # back to plain market_values for an option-free book.
+    conc_source = concentration_values if concentration_values is not None else market_values
     concentration: ConcentrationOut | None = None
-    mv = {t: f for t, v in (market_values or {}).items() if (f := _finite(v)) and f > 0}
+    mv = {t: f for t, v in (conc_source or {}).items() if (f := _finite(v)) and f > 0}
     invested = sum(mv.values())
     if mv and invested > 0:
         weights_desc = sorted((v / invested for v in mv.values()), reverse=True)
@@ -1082,13 +1224,16 @@ def report_from_active_endpoint(
 
     holdings = _resolve_active_or_raise(user)
     tickers = _priceable_tickers(holdings)
+    # Also fetch any option UNDERLYINGS (even if not held as equity) so the
+    # delta-overlay below can price them; equity weights still use `tickers`.
+    fetch_tickers = sorted(set(tickers) | set(_option_underlyings(holdings)))
 
     from ...services import market_data
 
     price_prov: dict = {}
     try:
         price_frame = market_data.get_price_history(
-            tickers, days=body.history_days, provenance=price_prov
+            fetch_tickers, days=body.history_days, provenance=price_prov
         )
     except Exception as exc:
         raise server_error("Market data fetch failed.", reason=type(exc).__name__) from exc
@@ -1108,6 +1253,13 @@ def report_from_active_endpoint(
             code="no_priced_holdings",
             message="Could not price any holding (shares=0 or no quote).",
         )
+
+    # PR3: fold option delta-equivalent exposure into the engine weights +
+    # concentration (fail-soft no-op for an option-free book). Account value /
+    # P&L / liquidity stay on the REAL equity `market_values`.
+    weights, holdings_for_engine, concentration_values, option_note = _apply_option_overlay(
+        holdings, price_frame, tickers, weights, market_values
+    )
 
     # Fold in portfolio-level cash + margin as a single risk scalar on
     # the equity sub-portfolio the engine prices. RiskEngine normalises
@@ -1141,7 +1293,7 @@ def report_from_active_endpoint(
         raise server_error("Risk engine modules unavailable.", reason=str(exc)) from exc
 
     try:
-        dp = DataProvider(weights=weights, holdings=holdings)
+        dp = DataProvider(weights=weights, holdings=holdings_for_engine)
         engine = RiskEngine(
             dp,
             risk_free_rate_fallback=body.risk_free_rate,
@@ -1160,8 +1312,11 @@ def report_from_active_endpoint(
         risk_scale=risk_scale,
         account_metrics=account_metrics,
         holdings=holdings,
+        concentration_values=concentration_values,
     )
     notes = list(out.data_quality_notes)
+    if option_note:
+        notes.append(option_note)
     if len(price_frame) < 60:
         notes.append(
             f"Only {len(price_frame)} trading days of price history; "
@@ -1205,11 +1360,12 @@ def _build_active_engine(user: AuthedUser, body: ReportFromActiveRequest):
     """
     holdings = _resolve_active_or_raise(user)
     tickers = _priceable_tickers(holdings)
+    fetch_tickers = sorted(set(tickers) | set(_option_underlyings(holdings)))
 
     from ...services import market_data
 
     try:
-        price_frame = market_data.get_price_history(tickers, days=body.history_days)
+        price_frame = market_data.get_price_history(fetch_tickers, days=body.history_days)
     except Exception as exc:
         raise server_error("Market data fetch failed.", reason=type(exc).__name__) from exc
     if price_frame.empty:
@@ -1228,6 +1384,13 @@ def _build_active_engine(user: AuthedUser, body: ReportFromActiveRequest):
             message="Could not price any holding (shares=0 or no quote).",
         )
 
+    # Fold option delta exposure into the frontier/scenario weights too, so
+    # those views see the same risk picture as the report (fail-soft no-op for
+    # an option-free book). risk_scale stays on the REAL equity book.
+    weights, holdings_for_engine, _conc_values, _note = _apply_option_overlay(
+        holdings, price_frame, tickers, weights, market_values
+    )
+
     equity_value = float(sum(market_values.values()))
     cash_balance, margin_loan, _contributed_capital = _resolve_cash_and_margin(user)
     risk_scale = _equity_risk_scale(
@@ -1241,7 +1404,7 @@ def _build_active_engine(user: AuthedUser, body: ReportFromActiveRequest):
         raise server_error("Risk engine modules unavailable.", reason=str(exc)) from exc
 
     try:
-        dp = DataProvider(weights=weights, holdings=holdings)
+        dp = DataProvider(weights=weights, holdings=holdings_for_engine)
         engine = RiskEngine(
             dp,
             risk_free_rate_fallback=body.risk_free_rate,
