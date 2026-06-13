@@ -68,7 +68,7 @@ _log = logging.getLogger(__name__)
 # The domain model (AssetPositionInput) only accepts these asset_type labels.
 # Stored/legacy holdings may carry others (e.g. 'equity', 'stock', 'etf') —
 # normalise unknowns to 'public_security' so a stray label never 500s the score.
-_VALID_ASSET_TYPES = {"public_security", "cash", "crypto", "real_estate"}
+_VALID_ASSET_TYPES = {"public_security", "cash", "crypto", "real_estate", "option"}
 
 
 def _normalize_asset_type(raw: object) -> str:
@@ -79,7 +79,28 @@ def _normalize_asset_type(raw: object) -> str:
         return "crypto"
     if "real" in s or "estate" in s or "reit" in s:
         return "real_estate"
+    if "option" in s or s in {"call", "put"}:
+        return "option"
     return "public_security"
+
+
+def _is_option_holding(h: object) -> bool:
+    """True if a stored holding record is an option contract.
+
+    Option holdings are keyed in the JSONB by a synthetic OCC-style contract
+    symbol that isn't a price-fetchable ticker, and they need the dedicated
+    Greeks/exposure path (PR2) rather than the equity spot-price path. Until
+    that lands they're excluded from the score/report price fetch so they
+    neither 500 nor get mispriced as an equity.
+    """
+    return _normalize_asset_type((h or {}).get("asset_type") if isinstance(h, dict) else None) == (
+        "option"
+    )
+
+
+def _priceable_tickers(holdings: dict) -> list[str]:
+    """Holding keys to fetch equity prices for — excludes option contracts."""
+    return sorted(k for k, v in holdings.items() if not _is_option_holding(v))
 
 
 def _price_provenance(price_prov: dict, price_frame) -> PriceProvenanceOut:
@@ -461,7 +482,7 @@ def score_from_active_endpoint(
             message="No active portfolio. Create one before scoring.",
         )
 
-    tickers = sorted(holdings.keys())
+    tickers = _priceable_tickers(holdings)
 
     # Pull real price history. The same cache underpins /market/prices.
     from ...services import market_data
@@ -1060,7 +1081,7 @@ def report_from_active_endpoint(
     started = time.perf_counter()
 
     holdings = _resolve_active_or_raise(user)
-    tickers = sorted(holdings.keys())
+    tickers = _priceable_tickers(holdings)
 
     from ...services import market_data
 
@@ -1183,7 +1204,7 @@ def _build_active_engine(user: AuthedUser, body: ReportFromActiveRequest):
     1. Raises the same 422/500 envelope codes as report_from_active.
     """
     holdings = _resolve_active_or_raise(user)
-    tickers = sorted(holdings.keys())
+    tickers = _priceable_tickers(holdings)
 
     from ...services import market_data
 

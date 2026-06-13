@@ -47,6 +47,21 @@ class AssetPosition:
     proxy_ticker: str | None = None
     enabled: bool = True
 
+    # Option-contract metadata, populated only when ``asset_type == "option"``
+    # (see domain.models.AssetPositionInput). The scoring math treats a plain
+    # position by its ``market_value``; the Greeks/exposure layer reads these
+    # to price the contract and derive delta-adjusted exposure. Defaults keep
+    # every existing (equity/cash) construction call unchanged.
+    option_type: str | None = None
+    underlying: str | None = None
+    strike: float | None = None
+    expiry: str | None = None  # ISO date "YYYY-MM-DD"
+    contract_multiplier: float = 100.0
+
+    @property
+    def is_option(self) -> bool:
+        return self.asset_type == "option"
+
     @property
     def unrealized_pnl(self) -> float | None:
         """Unrealized P&L, or ``None`` when cost basis is unknown."""

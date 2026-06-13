@@ -102,6 +102,14 @@ export type PortfolioHoldingInput = {
   avg_cost?: number;
   sector?: string;
   asset_type?: string;
+  // Option-contract fields (present only when asset_type === "option").
+  // The holding is keyed in `holdings` by a synthetic OCC-style contract
+  // symbol; `shares` = number of contracts, `avg_cost` = premium per share.
+  option_type?: "call" | "put";
+  underlying?: string;
+  strike?: number;
+  expiry?: string; // ISO date "YYYY-MM-DD"
+  contract_multiplier?: number;
 };
 
 export type PortfolioCreateInput = {
