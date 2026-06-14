@@ -18,6 +18,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { track } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
+import { BETA_LIMIT_MESSAGE, isBillingEnabled } from "@/lib/billing-flag";
 import { useAuth } from "@/lib/auth-context";
 import { usePortfolioSentiment, type SentimentRow } from "@/lib/queries";
 import { cn } from "@/lib/utils";
@@ -80,10 +81,16 @@ export function PortfolioSentiment() {
 
         {quotaHit && (
           <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
-            You&apos;re out of AI credits for this month.{" "}
-            <Link href="/pricing" className="font-medium text-primary hover:underline">
-              See plans →
-            </Link>
+            {isBillingEnabled() ? (
+              <>
+                You&apos;re out of AI credits for this month.{" "}
+                <Link href="/pricing" className="font-medium text-primary hover:underline">
+                  See plans →
+                </Link>
+              </>
+            ) : (
+              BETA_LIMIT_MESSAGE
+            )}
           </div>
         )}
         {err && !quotaHit && (

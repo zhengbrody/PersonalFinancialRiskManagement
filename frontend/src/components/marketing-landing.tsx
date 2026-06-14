@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { isBillingEnabled } from "@/lib/billing-flag";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -102,14 +103,18 @@ export function MarketingLanding() {
               Get started — free
             </Button>
           </Link>
-          <Link href="/pricing">
-            <Button size="lg" variant="outline" className="w-full sm:w-auto">
-              See plans
-            </Button>
-          </Link>
+          {isBillingEnabled() && (
+            <Link href="/pricing">
+              <Button size="lg" variant="outline" className="w-full sm:w-auto">
+                See plans
+              </Button>
+            </Link>
+          )}
         </div>
         <p className="text-xs text-muted-foreground">
-          No credit card to start. Free monthly AI credits included.
+          {isBillingEnabled()
+            ? "No credit card to start. Free monthly AI credits included."
+            : "Free during beta — no credit card, all core features open."}
         </p>
       </section>
 
@@ -230,29 +235,31 @@ export function MarketingLanding() {
         </div>
       </section>
 
-      {/* ── pricing teaser ───────────────────────────────────── */}
-      <section className="space-y-4">
-        <div className="space-y-2">
-          <p className="text-xs font-medium uppercase tracking-widest text-primary">
-            Pricing
+      {/* ── pricing teaser (hidden during the free beta) ─────────── */}
+      {isBillingEnabled() && (
+        <section className="space-y-4">
+          <div className="space-y-2">
+            <p className="text-xs font-medium uppercase tracking-widest text-primary">
+              Pricing
+            </p>
+            <h2 className="text-3xl font-semibold tracking-tight">
+              Free to try. $10/mo to scale.
+            </h2>
+          </div>
+          <Card className="border-primary/30">
+            <CardContent className="grid gap-4 p-6 md:grid-cols-3">
+              <PriceMini label="Free" price="$0" detail="25 AI credits / mo" />
+              <PriceMini label="Basic" price="$10" detail="300 AI credits / mo" highlight />
+              <PriceMini label="Pro" price="$25" detail="800 AI credits / mo" />
+            </CardContent>
+          </Card>
+          <p className="text-sm">
+            <Link href="/pricing" className="text-primary hover:underline">
+              Compare full plans →
+            </Link>
           </p>
-          <h2 className="text-3xl font-semibold tracking-tight">
-            Free to try. $10/mo to scale.
-          </h2>
-        </div>
-        <Card className="border-primary/30">
-          <CardContent className="grid gap-4 p-6 md:grid-cols-3">
-            <PriceMini label="Free" price="$0" detail="25 AI credits / mo" />
-            <PriceMini label="Basic" price="$10" detail="300 AI credits / mo" highlight />
-            <PriceMini label="Pro" price="$25" detail="800 AI credits / mo" />
-          </CardContent>
-        </Card>
-        <p className="text-sm">
-          <Link href="/pricing" className="text-primary hover:underline">
-            Compare full plans →
-          </Link>
-        </p>
-      </section>
+        </section>
+      )}
 
       {/* ── advanced workbench ───────────────────────────────── */}
       <section className="space-y-3 rounded-xl border border-border bg-card p-6">

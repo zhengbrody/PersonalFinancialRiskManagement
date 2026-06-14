@@ -24,6 +24,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { track } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
+import { FREE_BETA_BODY, FREE_BETA_TITLE, isBillingEnabled } from "@/lib/billing-flag";
 import { useAuth } from "@/lib/auth-context";
 import {
   type PlanCard,
@@ -58,6 +59,24 @@ function PricingPageInner() {
       setError((checkout.error as Error).message);
     }
   }, [checkout.error]);
+
+  // Free beta: no pricing / checkout — show the beta notice instead (Stripe
+  // stays in code, just hidden). All hooks above still run (rules-of-hooks).
+  if (!isBillingEnabled()) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-6">
+        <header className="space-y-2 text-center">
+          <h1 className="text-4xl font-semibold tracking-tight">{FREE_BETA_TITLE}</h1>
+          <p className="text-sm text-muted-foreground">{FREE_BETA_BODY}</p>
+        </header>
+        <p className="text-center text-sm">
+          <Link href="/" className="text-primary hover:underline">
+            Back to your dashboard →
+          </Link>
+        </p>
+      </div>
+    );
+  }
 
   const plans: PlanCard[] = billing.data?.plans ?? FALLBACK_PLANS;
   const currentPlan = billing.data?.plan ?? null;

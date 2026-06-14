@@ -18,6 +18,8 @@
 #       NEXT_PUBLIC_SUPABASE_URL      https://<project>.supabase.co
 #       NEXT_PUBLIC_SUPABASE_ANON_KEY sb_publishable_...
 #       NEXT_PUBLIC_SENTRY_DSN        https://<public-key>@.../project-id
+#       NEXT_PUBLIC_BILLING_ENABLED   "false" for the free beta (hides billing UI);
+#                                     omit/anything else = billing UI enabled
 #     (Set these BEFORE relying on the frontend image — an unset value
 #      bakes an empty URL into the bundle → "Supabase not configured".)
 #  2. On EC2, one-time, so `docker compose pull` can read private GHCR:
@@ -80,6 +82,7 @@ jobs:
             NEXT_PUBLIC_SUPABASE_URL=${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
             NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ vars.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
             NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
+            NEXT_PUBLIC_BILLING_ENABLED=${{ vars.NEXT_PUBLIC_BILLING_ENABLED }}
 
   backend:
     runs-on: ubuntu-latest

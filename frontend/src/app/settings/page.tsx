@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api";
+import { isBillingEnabled } from "@/lib/billing-flag";
+import { FreeBetaNotice } from "@/components/free-beta-notice";
 import { useAuth } from "@/lib/auth-context";
 import { useBillingMe, useStartPortal, type CreditStatus } from "@/lib/queries";
 
@@ -80,9 +82,11 @@ function SettingsPageInner() {
         </p>
       </header>
 
-      <CreditsCard credits={me.credits} />
+      {!isBillingEnabled() && <FreeBetaNotice />}
 
-      {justReturned && (
+      {isBillingEnabled() && <CreditsCard credits={me.credits} />}
+
+      {isBillingEnabled() && justReturned && (
         <Card className="border-primary/30">
           <CardHeader>
             <CardTitle className="text-base">Welcome to your new plan</CardTitle>
@@ -95,6 +99,7 @@ function SettingsPageInner() {
       )}
 
       {/* Current plan */}
+      {isBillingEnabled() && (
       <Card>
         <CardHeader>
           <CardTitle>Current plan</CardTitle>
@@ -137,8 +142,10 @@ function SettingsPageInner() {
           )}
         </CardContent>
       </Card>
+      )}
 
       {/* Action: portal or upgrade */}
+      {isBillingEnabled() && (
       <Card>
         <CardHeader>
           <CardTitle>
@@ -171,6 +178,7 @@ function SettingsPageInner() {
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

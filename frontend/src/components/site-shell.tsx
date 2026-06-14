@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { isBillingEnabled } from "@/lib/billing-flag";
 import { useAuth } from "@/lib/auth-context";
 import { useBillingMe } from "@/lib/queries";
 import { FloatingCopilot } from "@/components/floating-copilot";
@@ -39,7 +40,10 @@ const RESEARCH_ITEMS: NavItem[] = [
 function accountLinks(isOwner: boolean): NavItem[] {
   return [
     { href: "/settings", label: "Settings" },
-    { href: "/pricing", label: "Plan & billing" },
+    // Pricing / billing is hidden during the free beta (Stripe stays in code).
+    ...(isBillingEnabled()
+      ? [{ href: "/pricing", label: "Plan & billing" } as NavItem]
+      : []),
     { href: "/legacy/", label: "Advanced workbench", external: true },
     ...(isOwner ? [{ href: "/admin", label: "Admin · usage" } as NavItem] : []),
   ];
@@ -277,7 +281,7 @@ function AccountMenu() {
         title={user.email ?? user.id}
         className="flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
       >
-        {plan && (
+        {isBillingEnabled() && plan && (
           <span className="rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
             {plan}
           </span>
