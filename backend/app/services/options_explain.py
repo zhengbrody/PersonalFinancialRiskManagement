@@ -15,9 +15,10 @@ collateral for the short put"), never trade execution, and always carry
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Optional
+from typing import Callable, Optional
 
 from ..schemas.options import OptionExplainAction, OptionExplainInput, OptionExplainOutput
+from .risk_explain import _extract_json  # shared, more-robust JSON recovery
 
 _DISCLAIMER = "Educational, not financial advice."
 
@@ -146,19 +147,6 @@ _SYSTEM = (
     "probabilities, and do NOT change the severity or the actions. Return JSON with keys "
     "headline (string) and summary_bullets (array of strings)."
 )
-
-
-def _extract_json(raw: str) -> Optional[dict[str, Any]]:
-    import json
-    import re
-
-    m = re.search(r"\{.*\}", raw, re.DOTALL)
-    if not m:
-        return None
-    try:
-        return json.loads(m.group(0))
-    except (ValueError, TypeError):
-        return None
 
 
 def explain(

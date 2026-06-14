@@ -114,19 +114,17 @@ def build_exposure(
                 missing += 1
 
         g = r.get("greeks") or {}
-        d = _num(g.get("delta"))
+        scale = qty * mult
+        d = _num(g.get("delta"))  # reused below in the expiry/underlying ladders
         if d is not None:
-            net_delta += d * qty * mult
-            gross_delta += abs(d * qty * mult)
-        for key, acc in (("gamma", "net_gamma"), ("theta", "net_theta"), ("vega", "net_vega")):
-            gv = _num(g.get(key))
-            if gv is not None:
-                if acc == "net_gamma":
-                    net_gamma += gv * qty * mult
-                elif acc == "net_theta":
-                    net_theta += gv * qty * mult
-                else:
-                    net_vega += gv * qty * mult
+            net_delta += d * scale
+            gross_delta += abs(d * scale)
+        if (gg := _num(g.get("gamma"))) is not None:
+            net_gamma += gg * scale
+        if (gt := _num(g.get("theta"))) is not None:
+            net_theta += gt * scale
+        if (gv := _num(g.get("vega"))) is not None:
+            net_vega += gv * scale
 
         dn = _num(r.get("delta_notional"))
         if dn is not None:

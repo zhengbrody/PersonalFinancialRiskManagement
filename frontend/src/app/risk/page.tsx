@@ -27,7 +27,7 @@ import {
 import { OptionsAnalysis } from "@/components/options-analysis";
 import { useAuth } from "@/lib/auth-context";
 import {
-  optionContractsFromHoldings,
+  activePortfolioOptionContracts,
   useMyPortfolios,
   useRiskReport,
 } from "@/lib/queries";
@@ -42,11 +42,10 @@ export default function RiskPage() {
   // contracts); derive them from the default-flagged portfolio — the same one
   // the report resolves server-side — and analyze them separately.
   const portfolios = useMyPortfolios();
-  const optionContracts = useMemo(() => {
-    const rows = portfolios.data?.portfolios ?? [];
-    const active = rows.find((p) => p.is_default) ?? rows[0];
-    return optionContractsFromHoldings(active?.holdings);
-  }, [portfolios.data]);
+  const optionContracts = useMemo(
+    () => activePortfolioOptionContracts(portfolios.data),
+    [portfolios.data],
+  );
 
   useEffect(() => {
     if (!configured) return;
