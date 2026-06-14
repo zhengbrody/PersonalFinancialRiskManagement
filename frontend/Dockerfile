@@ -42,6 +42,9 @@ ARG NEXT_PUBLIC_API_BASE_URL=
 ARG NEXT_PUBLIC_SUPABASE_URL=
 ARG NEXT_PUBLIC_SUPABASE_ANON_KEY=
 ARG NEXT_PUBLIC_SENTRY_DSN=
+# Free-beta flag: set "false" to hide all user-facing billing UI. Unset/anything
+# else = billing UI enabled (default).
+ARG NEXT_PUBLIC_BILLING_ENABLED=
 
 # Expose the args as env vars so `next build` picks them up and inlines
 # them into the static bundle.
@@ -49,6 +52,7 @@ ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL \
     NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
     NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY \
     NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN \
+    NEXT_PUBLIC_BILLING_ENABLED=$NEXT_PUBLIC_BILLING_ENABLED \
     NEXT_TELEMETRY_DISABLED=1
 
 COPY --from=deps /app/node_modules ./node_modules

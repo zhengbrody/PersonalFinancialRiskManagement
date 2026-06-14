@@ -8,11 +8,13 @@
  */
 
 import Link from "next/link";
+import { isBillingEnabled } from "@/lib/billing-flag";
 import { useBillingMe } from "@/lib/queries";
 
 export function CreditsBadge({ className }: { className?: string }) {
   const billing = useBillingMe();
   const credits = billing.data?.credits;
+  if (!isBillingEnabled()) return null; // free beta: no credit meter
   if (
     !credits ||
     credits.unlimited ||

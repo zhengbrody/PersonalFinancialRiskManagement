@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Markdown } from "@/components/markdown";
 import { ApiError } from "@/lib/api";
+import { BETA_LIMIT_MESSAGE, isBillingEnabled } from "@/lib/billing-flag";
 import { track } from "@/lib/analytics";
 import { type CopilotAnswer, type CopilotEvidence, useCopilotAsk } from "@/lib/queries";
 
@@ -177,6 +178,13 @@ function AnswerSkeleton() {
 
 function AskError({ error }: { error: Error }) {
   if (error instanceof ApiError && error.code === "quota_exceeded") {
+    if (!isBillingEnabled()) {
+      return (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-muted-foreground">
+          {BETA_LIMIT_MESSAGE}
+        </div>
+      );
+    }
     return (
       <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
         <p className="font-medium">You&apos;ve used your AI credits this month.</p>

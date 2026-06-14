@@ -27,6 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CopilotConversation } from "@/components/copilot-conversation";
 import { CopilotAsk } from "@/components/copilot-ask";
 import { CreditsBadge } from "@/components/credits-badge";
+import { isBillingEnabled } from "@/lib/billing-flag";
 import { useAuth } from "@/lib/auth-context";
 import { useBillingMe } from "@/lib/queries";
 
@@ -59,7 +60,7 @@ export default function CopilotPage() {
           <h1 className="text-3xl font-semibold tracking-tight">
             Portfolio Copilot
           </h1>
-          {planLabel && (
+          {isBillingEnabled() && planLabel && (
             <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
               {planLabel}
             </span>

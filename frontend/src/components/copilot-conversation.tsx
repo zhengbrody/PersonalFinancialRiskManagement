@@ -33,6 +33,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { track } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
+import { BETA_LIMIT_MESSAGE, isBillingEnabled } from "@/lib/billing-flag";
 import { env } from "@/lib/env";
 import { useAuth } from "@/lib/auth-context";
 
@@ -540,6 +541,9 @@ function ErrorNotice({ error }: { error: ApiError }) {
   }
 
   if (error.code === "quota_exceeded") {
+    if (!isBillingEnabled()) {
+      return <NoticeCard title="Usage limit reached" body={BETA_LIMIT_MESSAGE} />;
+    }
     return (
       <NoticeCard
         title="You've used your chat quota this month"

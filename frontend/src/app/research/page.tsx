@@ -34,6 +34,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { CreditsBadge } from "@/components/credits-badge";
 import { ApiError } from "@/lib/api";
+import { BETA_LIMIT_MESSAGE, isBillingEnabled } from "@/lib/billing-flag";
 import { useAuth } from "@/lib/auth-context";
 import { track } from "@/lib/analytics";
 import {
@@ -62,7 +63,7 @@ export default function ResearchPage() {
       <header className="space-y-1">
         <div className="flex items-center gap-2">
           <h1 className="text-3xl font-semibold tracking-tight">Research</h1>
-          {billing.data?.plan && (
+          {isBillingEnabled() && billing.data?.plan && (
             <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
               {billing.data.plan}
             </span>
@@ -920,15 +921,23 @@ function VerdictError({ error }: { error: Error }) {
     return (
       <Card>
         <CardContent className="space-y-3 py-6">
-          <p className="text-sm">
-            You&apos;ve used your AI analysis quota this month. The fact pack
-            below is still all yours — upgrade for more AI verdicts.
-          </p>
-          <Link href="/pricing">
-            <Button variant="outline" size="sm">
-              See plans
-            </Button>
-          </Link>
+          {isBillingEnabled() ? (
+            <>
+              <p className="text-sm">
+                You&apos;ve used your AI analysis quota this month. The fact pack
+                below is still all yours — upgrade for more AI verdicts.
+              </p>
+              <Link href="/pricing">
+                <Button variant="outline" size="sm">
+                  See plans
+                </Button>
+              </Link>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {BETA_LIMIT_MESSAGE} The fact pack below is still all yours.
+            </p>
+          )}
         </CardContent>
       </Card>
     );
