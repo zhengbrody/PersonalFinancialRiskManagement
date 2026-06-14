@@ -495,3 +495,25 @@ def test_sanitize_holdings_preserves_option_contract_fields():
     assert opt["contract_multiplier"] == 100
     # equity holding still sanitized normally
     assert out["SPY"]["shares"] == 10
+
+
+def test_sanitize_holdings_passes_through_unknown_future_fields():
+    """The sanitize copies fields through (not a hardcoded allowlist), so a
+    newly-added holding field survives the DB write without code changes — the
+    altitude fix for the option-vanishing bug class."""
+    from libs.auth.portfolios import _sanitize_holdings
+
+    out = _sanitize_holdings({"AAPL": {"shares": 5, "exercise_style": "american", "tag": "core"}})
+    assert out["AAPL"]["exercise_style"] == "american"
+    assert out["AAPL"]["tag"] == "core"
+
+
+def test_sanitize_holdings_drops_nonpositive_basis_and_nan():
+    import math
+
+    from libs.auth.portfolios import _sanitize_holdings
+
+    out = _sanitize_holdings({"X": {"shares": 5, "avg_cost": 0, "strike": -1, "weird": math.inf}})
+    assert "avg_cost" not in out["X"]  # 0 basis dropped (would book pure profit)
+    assert "strike" not in out["X"]  # non-positive dropped
+    assert "weird" not in out["X"]  # NaN/Inf scrubbed

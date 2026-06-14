@@ -28,7 +28,7 @@ import {
 import { OptionsAnalysis } from "@/components/options-analysis";
 import { useAuth } from "@/lib/auth-context";
 import {
-  optionContractsFromHoldings,
+  activePortfolioOptionContracts,
   useMyPortfolios,
   useRiskReport,
 } from "@/lib/queries";
@@ -54,11 +54,10 @@ export default function PortfolioRiskPage() {
 
   // The report is for the DEFAULT portfolio (report_from_active); feed the
   // options cockpit from the same book so they're consistent.
-  const optionContracts = useMemo(() => {
-    const rows = portfoliosQuery.data?.portfolios ?? [];
-    const active = rows.find((p) => p.is_default) ?? rows[0];
-    return optionContractsFromHoldings(active?.holdings);
-  }, [portfoliosQuery.data]);
+  const optionContracts = useMemo(
+    () => activePortfolioOptionContracts(portfoliosQuery.data),
+    [portfoliosQuery.data],
+  );
 
   if (!configured || authLoading || !user || portfoliosQuery.isLoading) {
     return <PageSkeleton />;

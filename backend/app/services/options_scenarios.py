@@ -38,23 +38,28 @@ def _repriceable(r: dict[str, Any]) -> bool:
     )
 
 
-def _contract_pnl(r: dict[str, Any], u: float, v: float, h: Any, risk_free_rate: float) -> float:
-    """P&L for one contract in one scenario cell (signed by quantity)."""
-    spot = float(r["spot"])
-    strike = float(r["strike"])
-    iv = float(r["iv"])
-    opt_type = str(r["option_type"]).lower()
-    qty = float(r.get("quantity") or 0.0)
-    mult = float(r.get("contract_multiplier") or 100.0)
-    mark = float(r["mark"])
-    t_years = float(r["days_to_expiry"]) / _YEAR_DAYS
+def _parse_contract(r: dict[str, Any]) -> dict[str, Any]:
+    """Parse a repriceable contract's constants ONCE so the 180-cell grid loop
+    isn't re-running float() per cell."""
+    return {
+        "spot": float(r["spot"]),
+        "strike": float(r["strike"]),
+        "iv": float(r["iv"]),
+        "opt_type": str(r["option_type"]).lower(),
+        "qty": float(r.get("quantity") or 0.0),
+        "mult": float(r.get("contract_multiplier") or 100.0),
+        "mark": float(r["mark"]),
+        "t_years": float(r["days_to_expiry"]) / _YEAR_DAYS,
+    }
 
-    s_new = max(0.01, spot * (1.0 + u))
-    sig_new = max(_MIN_VOL, iv + v)
-    t_new = 0.0 if h == "expiry" else max(0.0, t_years - float(h) / _YEAR_DAYS)
 
-    new_price = bs_price(s_new, strike, t_new, risk_free_rate, sig_new, opt_type)
-    return (new_price - mark) * qty * mult
+def _cell_pnl(p: dict[str, Any], u: float, v: float, h: Any, risk_free_rate: float) -> float:
+    """P&L for one pre-parsed contract in one scenario cell (signed by quantity)."""
+    s_new = max(0.01, p["spot"] * (1.0 + u))
+    sig_new = max(_MIN_VOL, p["iv"] + v)
+    t_new = 0.0 if h == "expiry" else max(0.0, p["t_years"] - float(h) / _YEAR_DAYS)
+    new_price = bs_price(s_new, p["strike"], t_new, risk_free_rate, sig_new, p["opt_type"])
+    return (new_price - p["mark"]) * p["qty"] * p["mult"]
 
 
 def scenario_grid(
@@ -89,11 +94,13 @@ def scenario_grid(
         if not _repriceable(r)
     ]
 
+    parsed = [_parse_contract(r) for r in repriceable]
+
     grid: list[dict[str, Any]] = []
     for u in u_axis:
         for v in v_axis:
             for h in h_axis:
-                total = sum(_contract_pnl(r, u, v, h, risk_free_rate) for r in repriceable)
+                total = sum(_cell_pnl(p, u, v, h, risk_free_rate) for p in parsed)
                 grid.append(
                     {
                         "underlying_shock": u,
@@ -112,9 +119,9 @@ def scenario_grid(
                 "strike": r.get("strike"),
                 "expiry": r.get("expiry"),
                 "quantity": r.get("quantity"),
-                "pnl": round(_contract_pnl(r, stress_underlying, stress_iv, 0, risk_free_rate), 2),
+                "pnl": round(_cell_pnl(p, stress_underlying, stress_iv, 0, risk_free_rate), 2),
             }
-            for r in repriceable
+            for r, p in zip(repriceable, parsed)
         ),
         key=lambda x: x["pnl"],  # most negative (biggest loss) first
     )

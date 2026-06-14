@@ -896,6 +896,19 @@ export type OptionContract = {
 };
 
 /**
+ * Option contracts of the user's ACTIVE (default-flagged) portfolio — the book
+ * the risk report scores. Shared by /risk and /portfolios/[id]/risk so the
+ * active-portfolio resolution lives in one place. [] when no portfolio/options.
+ */
+export function activePortfolioOptionContracts(
+  me: PortfoliosMe | undefined,
+): OptionContract[] {
+  const rows = me?.portfolios ?? [];
+  const active = rows.find((p) => p.is_default) ?? rows[0];
+  return optionContractsFromHoldings(active?.holdings);
+}
+
+/**
  * Pull option contracts out of a portfolio's holdings dict (the entries with
  * asset_type === "option"), shaped for POST /options/analyze. Equity holdings
  * are ignored. Returns [] when the book has no options.

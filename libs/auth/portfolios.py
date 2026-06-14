@@ -72,38 +72,28 @@ def _sanitize_holdings(holdings: dict) -> dict:
         shares = _finite_or_zero(h.get("shares"))
         if shares == 0:
             continue
-        pos: dict = {"shares": shares}
-        ac = h.get("avg_cost")
-        if ac not in (None, ""):
-            ac_f = _finite_or_zero(ac)
-            if ac_f > 0:
-                pos["avg_cost"] = ac_f
-        # String passthrough fields, incl. the option-contract identity. Without
-        # underlying/expiry/option_type/option_side the option is unusable on
-        # read-back (the cockpit + analytics drop it), so they MUST survive the
-        # DB write — this rebuild-from-scratch is otherwise lossy.
-        for k in (
-            "sector",
-            "account",
-            "asset_type",
-            "currency",
-            "option_type",
-            "option_side",
-            "underlying",
-            "expiry",
-        ):
-            if h.get(k):
-                pos[k] = h[k]
-        # Numeric option fields — keep finite positives (strike must be > 0;
-        # contract_multiplier defaults to 100 on read if absent).
-        for k in ("strike", "contract_multiplier"):
-            v = h.get(k)
-            if v not in (None, ""):
-                vf = _finite_or_zero(v)
+        # Pass EVERY field through (so the option-contract identity — underlying/
+        # strike/expiry/option_type/option_side — and any field added later
+        # survive the write), then enforce numeric hygiene. A hardcoded
+        # copy-allowlist silently dropped new fields, which is exactly how
+        # options vanished on save.
+        pos: dict = dict(h)
+        pos["shares"] = shares
+        # Fields only meaningful as a finite POSITIVE number — a 0/NaN value is
+        # dropped (e.g. avg_cost 0 would book the whole position as pure profit).
+        for k in ("avg_cost", "strike", "contract_multiplier"):
+            if k in pos:
+                vf = _finite_or_zero(pos[k])
                 if vf > 0:
                     pos[k] = vf
-        if "margin_eligible" in h:
-            pos["margin_eligible"] = bool(h["margin_eligible"])
+                else:
+                    pos.pop(k, None)
+        # Belt-and-suspenders: no NaN/Inf float of any key reaches Supabase.
+        for k, v in list(pos.items()):
+            if isinstance(v, float) and not math.isfinite(v):
+                pos.pop(k, None)
+        if "margin_eligible" in pos:
+            pos["margin_eligible"] = bool(pos["margin_eligible"])
         clean[str(tk).strip().upper()] = pos
     return clean
 
