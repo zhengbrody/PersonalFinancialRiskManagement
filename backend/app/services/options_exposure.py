@@ -27,6 +27,37 @@ _THETA_BURN_30D_FRAC = 0.20
 # Short-put cash collateral exceeding this fraction of net equity is heavy.
 _SHORT_PUT_COLLATERAL_FRAC = 0.50
 
+# Deterministic Health-Score deductions per risk flag (points off the 0–1000
+# score), capped. Documented + tested — never an LLM judgement. A book with no
+# option flags takes zero penalty.
+_PENALTY_BY_CODE: dict[str, dict[str, int]] = {
+    "uncovered_short_call": {"high": 40, "watch": 15},
+    "under_collateralized_short": {"high": 40, "watch": 15},
+    "short_gamma": {"high": 20, "watch": 10},
+    "large_negative_theta": {"watch": 12},
+    "concentrated_expiry": {"watch": 8},
+    "high_single_underlying": {"watch": 8},
+    "missing_option_data": {"info": 5},
+}
+_MAX_PENALTY = 120  # an option book can shave at most this many points
+
+
+def score_penalty(flags: list[dict[str, Any]]) -> tuple[int, list[dict[str, Any]]]:
+    """Deterministic Health-Score penalty from option risk flags.
+
+    Returns ``(total_penalty_capped, breakdown)`` where breakdown is a list of
+    ``{code, severity, points}``. Pure lookup — fully auditable, no model."""
+    breakdown: list[dict[str, Any]] = []
+    total = 0
+    for f in flags or []:
+        code = str(f.get("code") or "")
+        severity = str(f.get("severity") or "")
+        points = _PENALTY_BY_CODE.get(code, {}).get(severity, 0)
+        if points:
+            total += points
+            breakdown.append({"code": code, "severity": severity, "points": points})
+    return min(total, _MAX_PENALTY), breakdown
+
 
 def _num(v: Any) -> Optional[float]:
     try:

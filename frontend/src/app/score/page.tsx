@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs } from "@/components/ui/tabs";
 import { ScoreGauge, scoreBand } from "@/components/score-gauge";
 import { RiskDiagnosis, ActionCards } from "@/components/risk-diagnosis";
+import { OptionScoreModule } from "@/components/option-score-module";
 import { ScoreDrivers } from "@/components/score-drivers";
 import { PortfolioValueSummary } from "@/components/portfolio-value-summary";
 import { BenchmarkContext } from "@/components/benchmark-context";
@@ -360,6 +361,7 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
       {tab === "overview" && (
         <div className="space-y-4">
           <RiskDiagnosis explain={explain.data} loading={explain.isLoading} source="score" />
+          <OptionScoreModule impact={result.options} />
           <PortfolioValueSummary metrics={result.metrics} />
           <BenchmarkContext mine={result.metrics} />
           <MetricsCard result={result} />

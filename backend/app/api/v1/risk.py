@@ -631,6 +631,26 @@ def score_from_active_endpoint(
             "price_provenance": _price_provenance(price_prov, price_frame),
         }
     )
+
+    # Options affect the score deterministically: a capped penalty derived from
+    # the option exposure flags is subtracted, and the impact block is surfaced
+    # so the deduction is transparent (base_score − penalty + the breakdown).
+    equity_shares = {
+        str(tk).upper(): float((h or {}).get("shares") or 0.0)
+        for tk, h in (holdings or {}).items()
+        if not _is_option_holding(h)
+    }
+    net_equity_val = float(account_metrics.get("net_equity") or equity_value)
+    impact = _option_score_impact(
+        holdings,
+        equity_shares=equity_shares,
+        net_equity=net_equity_val,
+        base_score=int(response.overall_score),
+    )
+    if impact is not None:
+        adjusted = max(0, int(response.overall_score) - int(impact["penalty"]))
+        response = response.model_copy(update={"overall_score": adjusted, "options": impact})
+
     return ok(response.model_dump(), request=request, started_at=started)
 
 
@@ -968,6 +988,44 @@ def _apply_option_overlay(
             + " was clamped to zero (long-only engine) — risk shown is conservative."
         )
     return aug_weights, aug_holdings, aug_mv, note
+
+
+def _option_score_impact(
+    holdings: dict, *, equity_shares: dict[str, float], net_equity: float, base_score: int
+) -> dict | None:
+    """Deterministic option-risk impact on the Health Score (transparent, capped).
+
+    Returns the impact block (exposure summary + flags + penalty breakdown) or
+    ``None`` for an option-free book / any fail-soft hiccup. The penalty is a
+    pure lookup over the exposure flags (``options_exposure.score_penalty``) —
+    never an LLM judgement — and is surfaced so users see base_score − penalty."""
+    specs = _option_specs_from_holdings(holdings)
+    if not specs:
+        return None
+    try:
+        from ...services import options_analytics, options_exposure
+
+        results = options_analytics.analyze_contracts(specs).get("results", [])
+        exposure = options_exposure.build_exposure(
+            results, equity_shares_by_underlying=equity_shares, net_equity=net_equity
+        )
+        penalty, breakdown = options_exposure.score_penalty(exposure["flags"])
+    except Exception as exc:  # noqa: BLE001 - never sink the score on option trouble
+        _log.warning("options.score_impact_failed err=%s", type(exc).__name__)
+        return None
+    return {
+        "contracts": exposure["contracts"],
+        "net_delta": exposure["net_delta"],
+        "net_gamma": exposure["net_gamma"],
+        "net_theta": exposure["net_theta"],
+        "net_vega": exposure["net_vega"],
+        "option_notional": exposure["option_notional"],
+        "short_collateral_estimate": exposure["short_collateral_estimate"],
+        "base_score": int(base_score),
+        "penalty": int(penalty),
+        "flags": exposure["flags"],
+        "penalty_breakdown": breakdown,
+    }
 
 
 def _df_or_none_to_rows(df, *, value_col: str = None) -> list[dict]:

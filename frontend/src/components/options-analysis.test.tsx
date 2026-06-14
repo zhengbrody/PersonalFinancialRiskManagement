@@ -79,6 +79,25 @@ function analyzeJson() {
           unrealized_pnl: 7000,
           contracts: 1,
         },
+        exposure: {
+          net_delta: 140,
+          gross_delta: 140,
+          net_gamma: 2,
+          net_theta: -10,
+          net_vega: 40,
+          option_market_value: 8000,
+          option_notional: 25200,
+          short_collateral_estimate: 0,
+          contracts: 1,
+          short_contracts: 0,
+          expiry_ladder: [
+            { expiry: "2027-01-15", days_to_expiry: 200, contracts: 1, net_delta: 140, net_notional: 25200 },
+          ],
+          underlying_exposure: [
+            { underlying: "AAPL", contracts: 1, net_delta: 140, net_notional: 25200, equity_shares: null },
+          ],
+          flags: [{ code: "high_single_underlying", severity: "watch", detail: "Concentrated in AAPL." }],
+        },
         as_of: "2026-06-13",
         warnings: [],
       },
@@ -87,6 +106,35 @@ function analyzeJson() {
     }),
     { status: 200, headers: { "Content-Type": "application/json" } },
   );
+}
+
+function scenariosJson() {
+  return new Response(
+    JSON.stringify({
+      data: {
+        grid: [{ underlying_shock: -0.2, iv_shock: 0.1, horizon: 0, total_pnl: -500 }],
+        top_positions: [{ underlying: "AAPL", option_type: "call", strike: 150, quantity: 2, pnl: -500 }],
+        stress_cell: { underlying_shock: -0.2, iv_shock: 0.1, horizon: 0 },
+        underlying_shocks: [-0.2],
+        iv_shocks: [0.1],
+        horizons: [0, 7, 30, "expiry"],
+        repriced: 1,
+        skipped: [],
+        as_of: "2026-06-13",
+      },
+      error: null,
+      meta: { request_id: "r" },
+    }),
+    { status: 200, headers: { "Content-Type": "application/json" } },
+  );
+}
+
+// Route fetch by URL: /analyze vs /scenarios.
+function mockFetchByUrl() {
+  vi.spyOn(globalThis, "fetch").mockImplementation((input: RequestInfo | URL) => {
+    const url = String(input);
+    return Promise.resolve(url.includes("/scenarios") ? scenariosJson() : analyzeJson());
+  });
 }
 
 afterEach(() => vi.restoreAllMocks());
@@ -123,12 +171,17 @@ describe("OptionsAnalysis", () => {
     expect(container.textContent).not.toContain("Options");
   });
 
-  it("renders Greeks + contract once analytics load", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(analyzeJson());
+  it("renders exposure, flags, stress grid + contract once analytics load", async () => {
+    mockFetchByUrl();
     renderWithQuery(<OptionsAnalysis contracts={[CONTRACT]} />);
-    expect(await screen.findByText("Portfolio Greeks", { exact: false })).toBeInTheDocument();
-    // per-contract delta rendered
+    // exposure summary
+    expect(await screen.findByText("Portfolio option exposure", { exact: false })).toBeInTheDocument();
+    // risk flag surfaced
+    expect(await screen.findByText("Concentrated in AAPL.")).toBeInTheDocument();
+    // per-contract delta + moneyness
     expect(await screen.findByText("0.700")).toBeInTheDocument();
-    expect(screen.getByText("ITM")).toBeInTheDocument();
+    expect(screen.getAllByText("ITM").length).toBeGreaterThan(0);
+    // stress grid repriced
+    expect(await screen.findByText("Stress grid", { exact: false })).toBeInTheDocument();
   });
 });
