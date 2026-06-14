@@ -25,8 +25,13 @@ import {
   ResultSkeleton,
   RiskErrorPanel,
 } from "@/components/risk-report";
+import { OptionsAnalysis } from "@/components/options-analysis";
 import { useAuth } from "@/lib/auth-context";
-import { useMyPortfolios, useRiskReport } from "@/lib/queries";
+import {
+  optionContractsFromHoldings,
+  useMyPortfolios,
+  useRiskReport,
+} from "@/lib/queries";
 
 export default function PortfolioRiskPage() {
   const router = useRouter();
@@ -46,6 +51,14 @@ export default function PortfolioRiskPage() {
     () => portfoliosQuery.data?.portfolios.find((p) => p.id === portfolioId),
     [portfoliosQuery.data, portfolioId],
   );
+
+  // The report is for the DEFAULT portfolio (report_from_active); feed the
+  // options cockpit from the same book so they're consistent.
+  const optionContracts = useMemo(() => {
+    const rows = portfoliosQuery.data?.portfolios ?? [];
+    const active = rows.find((p) => p.is_default) ?? rows[0];
+    return optionContractsFromHoldings(active?.holdings);
+  }, [portfoliosQuery.data]);
 
   if (!configured || authLoading || !user || portfoliosQuery.isLoading) {
     return <PageSkeleton />;
@@ -109,7 +122,10 @@ export default function PortfolioRiskPage() {
         <RiskErrorPanel error={reportMutation.error as Error} />
       )}
       {reportMutation.data && !reportMutation.isPending && (
-        <ReportSections report={reportMutation.data} />
+        <>
+          <ReportSections report={reportMutation.data} />
+          <OptionsAnalysis contracts={optionContracts} />
+        </>
       )}
       {!reportMutation.data && !reportMutation.isPending && !reportMutation.isError && (
         <Card>
