@@ -139,15 +139,7 @@ class OptionExposureOut(BaseModel):
     flags: list[OptionFlagOut] = Field(default_factory=list)
 
 
-class OptionAnalyzeResponse(BaseModel):
-    results: list[OptionAnalyticsOut]
-    totals: OptionTotalsOut
-    exposure: OptionExposureOut
-    as_of: str
-    warnings: list[str] = Field(default_factory=list)
-
-
-# ── scenario grid ─────────────────────────────────────────────────────────────
+# ── Black-Scholes stress grid (nested in the analyze response) ─────────────────
 
 
 class ScenarioCellOut(BaseModel):
@@ -168,14 +160,7 @@ class ScenarioPositionOut(BaseModel):
     pnl: float
 
 
-class OptionScenarioRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    contracts: list[OptionContractIn] = Field(..., min_length=1, max_length=50)
-    risk_free_rate: float = Field(default=0.045, ge=0.0, le=0.20)
-
-
-class OptionScenarioResponse(BaseModel):
+class OptionScenarioGrid(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     grid: list[ScenarioCellOut]
@@ -186,7 +171,16 @@ class OptionScenarioResponse(BaseModel):
     horizons: list[int | str]
     repriced: int
     skipped: list[dict] = Field(default_factory=list)
+    as_of: Optional[str] = None
+
+
+class OptionAnalyzeResponse(BaseModel):
+    results: list[OptionAnalyticsOut]
+    totals: OptionTotalsOut
+    exposure: OptionExposureOut
+    scenarios: OptionScenarioGrid
     as_of: str
+    warnings: list[str] = Field(default_factory=list)
 
 
 # ── AI explanation (deterministic skeleton → optional LLM rephrase) ────────────

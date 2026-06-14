@@ -36,15 +36,13 @@ import {
   type OptionContract,
   type OptionExplain,
   type OptionExposure,
-  type OptionScenarioResponse,
+  type OptionScenarioGrid,
   useOptionAnalytics,
   useOptionExplain,
-  useOptionScenarios,
 } from "@/lib/queries";
 
 export function OptionsAnalysis({ contracts }: { contracts: OptionContract[] }) {
   const analytics = useOptionAnalytics(contracts);
-  const scenarios = useOptionScenarios(contracts);
   const explain = useOptionExplain(analytics.data?.exposure);
 
   if (contracts.length === 0) return null;
@@ -77,7 +75,7 @@ export function OptionsAnalysis({ contracts }: { contracts: OptionContract[] }) 
           <OptionDiagnosis explain={explain.data} loading={explain.isPending} />
           <ExposureSummary exposure={analytics.data.exposure} asOf={analytics.data.as_of} />
           <RiskFlags exposure={analytics.data.exposure} />
-          <StressGrid data={scenarios.data} loading={scenarios.isPending} />
+          <StressGrid data={analytics.data.scenarios} loading={false} />
           <div className="grid gap-3 lg:grid-cols-2">
             <ExpiryLadder exposure={analytics.data.exposure} />
             <MoneynessBar results={analytics.data.results} />
@@ -234,7 +232,7 @@ function StressGrid({
   data,
   loading,
 }: {
-  data: OptionScenarioResponse | undefined;
+  data: OptionScenarioGrid | undefined;
   loading: boolean;
 }) {
   const [horizon, setHorizon] = useState<number | string>(0);

@@ -19,8 +19,6 @@ from ...schemas.options import (
     OptionAnalyzeRequest,
     OptionAnalyzeResponse,
     OptionExplainInput,
-    OptionScenarioRequest,
-    OptionScenarioResponse,
 )
 from ...services import (
     options_analytics,
@@ -47,36 +45,15 @@ def analyze_options_endpoint(
     number is deterministic math over market data."""
     started = time.perf_counter()
     data = options_analytics.analyze_contracts(body.contracts, risk_free_rate=body.risk_free_rate)
-    # Portfolio-level exposure + deterministic risk flags over the same results.
-    data["exposure"] = options_exposure.build_exposure(data.get("results", []))
-    # Validate/normalise through the response schema before enveloping.
+    results = data.get("results", [])
+    # Portfolio-level exposure + the BS stress grid, both over the SAME analyzed
+    # results — so the cockpit gets exposure + scenarios from ONE call (no second
+    # yfinance chain fetch). The grid captures gamma/vega/theta the equity
+    # report's delta overlay can't.
+    data["exposure"] = options_exposure.build_exposure(results)
+    data["scenarios"] = options_scenarios.scenario_grid(results, risk_free_rate=body.risk_free_rate)
+    data["scenarios"]["as_of"] = data.get("as_of")
     payload = OptionAnalyzeResponse.model_validate(data).model_dump()
-    return ok(payload, request=request, started_at=started)
-
-
-@router.post(
-    "/scenarios",
-    summary="Black-Scholes stress grid (underlying × IV × time) for option contracts",
-    response_model=None,
-)
-def option_scenarios_endpoint(
-    body: OptionScenarioRequest,
-    request: Request,
-    user: AuthedUser = Depends(require_user),
-):
-    """Full-reprice option stress grid + the top-5 impacted positions. Deterministic,
-    credit-free; captures gamma/vega/theta that the equity report's delta overlay
-    can't. Each contract is priced from its live analytics, then repriced across the
-    shock axes."""
-    started = time.perf_counter()
-    analytics = options_analytics.analyze_contracts(
-        body.contracts, risk_free_rate=body.risk_free_rate
-    )
-    grid = options_scenarios.scenario_grid(
-        analytics.get("results", []), risk_free_rate=body.risk_free_rate
-    )
-    grid["as_of"] = analytics.get("as_of")
-    payload = OptionScenarioResponse.model_validate(grid).model_dump()
     return ok(payload, request=request, started_at=started)
 
 

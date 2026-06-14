@@ -58,6 +58,15 @@ export function occSymbol(
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+/** Calendar days from today to an ISO date, or null if unparseable / past. */
+function daysUntil(iso?: string): number | null {
+  if (!iso || !ISO_DATE_RE.test(iso)) return null;
+  const d = new Date(iso + "T00:00:00");
+  if (Number.isNaN(d.getTime())) return null;
+  const days = Math.ceil((d.getTime() - Date.now()) / 86_400_000);
+  return days >= 0 ? days : null;
+}
+
 function optionRowComplete(r: Row): boolean {
   const strike = Number(r.strike);
   return (
@@ -504,6 +513,14 @@ function HoldingRow({
           />
           <span className="text-[11px] text-muted-foreground">
             {price ? `underlying $${price.toFixed(2)}` : "premium per share × 100"}
+            {(() => {
+              const d = daysUntil(row.expiry);
+              return d != null && d <= 30 ? (
+                <span className="ml-2 font-medium text-amber-600 dark:text-amber-400">
+                  ⚠ expires in {d}d
+                </span>
+              ) : null;
+            })()}
           </span>
         </div>
       ) : (

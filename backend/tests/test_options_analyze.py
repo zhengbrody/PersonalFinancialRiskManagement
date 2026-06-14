@@ -324,20 +324,9 @@ def test_analyze_route_includes_exposure(test_client, mint_token, monkeypatch):
     assert any(f["code"] == "short_gamma" for f in exp["flags"])  # short call → short gamma
 
 
-def test_scenarios_route_requires_auth(test_client):
-    resp = test_client.post(
-        "/api/v1/options/scenarios",
-        json={
-            "contracts": [
-                {"underlying": "AAPL", "option_type": "call", "strike": 100, "expiry": _FUTURE}
-            ]
-        },
-    )
-    assert resp.status_code == 401
-
-
-def test_scenarios_route_happy(test_client, mint_token, monkeypatch):
-    # Stub analytics (no network) → a repriceable long call → real grid math runs.
+def test_analyze_route_includes_scenario_grid(test_client, mint_token, monkeypatch):
+    # Scenarios are folded into /analyze (one fetch) — a repriceable long call
+    # yields the full 180-cell grid under data.scenarios.
     monkeypatch.setattr(
         "backend.app.api.v1.options.options_analytics.analyze_contracts",
         lambda *a, **k: {
@@ -363,11 +352,12 @@ def test_scenarios_route_happy(test_client, mint_token, monkeypatch):
                     "warnings": [],
                 }
             ],
+            "totals": {},
             "as_of": "2026-06-13",
         },
     )
     resp = test_client.post(
-        "/api/v1/options/scenarios",
+        "/api/v1/options/analyze",
         json={
             "contracts": [
                 {"underlying": "AAPL", "option_type": "call", "strike": 100, "expiry": _FUTURE}
@@ -376,7 +366,7 @@ def test_scenarios_route_happy(test_client, mint_token, monkeypatch):
         headers={"Authorization": f"Bearer {mint_token()}"},
     )
     assert resp.status_code == 200
-    data = resp.json()["data"]
-    assert data["repriced"] == 1
-    assert len(data["grid"]) == 180 and len(data["top_positions"]) == 1
-    assert data["as_of"] == "2026-06-13"
+    sc = resp.json()["data"]["scenarios"]
+    assert sc["repriced"] == 1
+    assert len(sc["grid"]) == 180 and len(sc["top_positions"]) == 1
+    assert sc["as_of"] == "2026-06-13"

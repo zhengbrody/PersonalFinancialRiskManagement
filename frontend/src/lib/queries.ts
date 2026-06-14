@@ -832,16 +832,8 @@ export const optionTotalsSchema = z.looseObject({
 });
 export type OptionTotals = z.infer<typeof optionTotalsSchema>;
 
-export const optionAnalyzeResponseSchema = z.looseObject({
-  results: z.array(optionAnalyticsSchema),
-  totals: optionTotalsSchema,
-  exposure: optionExposureSchema,
-  as_of: z.string(),
-  warnings: z.array(z.string()),
-});
-export type OptionAnalyzeResponse = z.infer<typeof optionAnalyzeResponseSchema>;
-
-// Stress grid (underlying × IV × time) — full Black-Scholes reprice.
+// Stress grid (underlying × IV × time) — full Black-Scholes reprice, nested in
+// the analyze response (one fetch covers analytics + exposure + scenarios).
 export const scenarioCellSchema = z.looseObject({
   underlying_shock: z.number(),
   iv_shock: z.number(),
@@ -850,20 +842,7 @@ export const scenarioCellSchema = z.looseObject({
 });
 export type ScenarioCell = z.infer<typeof scenarioCellSchema>;
 
-// Options AI-explain: deterministic skeleton → optional LLM rephrase.
-export const optionExplainSchema = z.looseObject({
-  severity: z.string(), // low | moderate | elevated | high
-  headline: z.string(),
-  summary_bullets: z.array(z.string()),
-  suggested_actions: z.array(
-    z.looseObject({ title: z.string(), reason: z.string(), next_step: z.string() }),
-  ),
-  caveats: z.array(z.string()),
-  ai_generated: z.boolean(),
-});
-export type OptionExplain = z.infer<typeof optionExplainSchema>;
-
-export const optionScenarioResponseSchema = z.looseObject({
+export const optionScenarioGridSchema = z.looseObject({
   grid: z.array(scenarioCellSchema),
   top_positions: z.array(
     z.looseObject({
@@ -883,7 +862,30 @@ export const optionScenarioResponseSchema = z.looseObject({
   skipped: z.array(z.record(z.string(), z.unknown())),
   as_of: z.string().nullish(),
 });
-export type OptionScenarioResponse = z.infer<typeof optionScenarioResponseSchema>;
+export type OptionScenarioGrid = z.infer<typeof optionScenarioGridSchema>;
+
+export const optionAnalyzeResponseSchema = z.looseObject({
+  results: z.array(optionAnalyticsSchema),
+  totals: optionTotalsSchema,
+  exposure: optionExposureSchema,
+  scenarios: optionScenarioGridSchema,
+  as_of: z.string(),
+  warnings: z.array(z.string()),
+});
+export type OptionAnalyzeResponse = z.infer<typeof optionAnalyzeResponseSchema>;
+
+// Options AI-explain: deterministic skeleton → optional LLM rephrase.
+export const optionExplainSchema = z.looseObject({
+  severity: z.string(), // low | moderate | elevated | high
+  headline: z.string(),
+  summary_bullets: z.array(z.string()),
+  suggested_actions: z.array(
+    z.looseObject({ title: z.string(), reason: z.string(), next_step: z.string() }),
+  ),
+  caveats: z.array(z.string()),
+  ai_generated: z.boolean(),
+});
+export type OptionExplain = z.infer<typeof optionExplainSchema>;
 
 export type OptionContract = {
   underlying: string;
@@ -958,27 +960,6 @@ export function useOptionAnalytics(contracts: OptionContract[]) {
         body: { contracts },
         authToken: accessToken ?? undefined,
         schema: optionAnalyzeResponseSchema,
-      }),
-  });
-}
-
-/**
- * Black-Scholes stress grid (underlying × IV × time) for the book's options.
- * Heavier than /analyze (full reprice across the shock axes), so it's keyed on
- * the same contract set and cached; disabled without options or auth.
- */
-export function useOptionScenarios(contracts: OptionContract[]) {
-  const { accessToken } = useAuth();
-  return useQuery<OptionScenarioResponse, Error>({
-    queryKey: ["options-scenarios", contracts],
-    enabled: Boolean(accessToken) && contracts.length > 0,
-    staleTime: 60_000,
-    queryFn: () =>
-      apiFetch<OptionScenarioResponse>("/api/v1/options/scenarios", {
-        method: "POST",
-        body: { contracts },
-        authToken: accessToken ?? undefined,
-        schema: optionScenarioResponseSchema,
       }),
   });
 }

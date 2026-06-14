@@ -98,29 +98,19 @@ function analyzeJson() {
           ],
           flags: [{ code: "high_single_underlying", severity: "watch", detail: "Concentrated in AAPL." }],
         },
+        scenarios: {
+          grid: [{ underlying_shock: -0.2, iv_shock: 0.1, horizon: 0, total_pnl: -500 }],
+          top_positions: [{ underlying: "AAPL", option_type: "call", strike: 150, quantity: 2, pnl: -500 }],
+          stress_cell: { underlying_shock: -0.2, iv_shock: 0.1, horizon: 0 },
+          underlying_shocks: [-0.2],
+          iv_shocks: [0.1],
+          horizons: [0, 7, 30, "expiry"],
+          repriced: 1,
+          skipped: [],
+          as_of: "2026-06-13",
+        },
         as_of: "2026-06-13",
         warnings: [],
-      },
-      error: null,
-      meta: { request_id: "r" },
-    }),
-    { status: 200, headers: { "Content-Type": "application/json" } },
-  );
-}
-
-function scenariosJson() {
-  return new Response(
-    JSON.stringify({
-      data: {
-        grid: [{ underlying_shock: -0.2, iv_shock: 0.1, horizon: 0, total_pnl: -500 }],
-        top_positions: [{ underlying: "AAPL", option_type: "call", strike: 150, quantity: 2, pnl: -500 }],
-        stress_cell: { underlying_shock: -0.2, iv_shock: 0.1, horizon: 0 },
-        underlying_shocks: [-0.2],
-        iv_shocks: [0.1],
-        horizons: [0, 7, 30, "expiry"],
-        repriced: 1,
-        skipped: [],
-        as_of: "2026-06-13",
       },
       error: null,
       meta: { request_id: "r" },
@@ -149,11 +139,10 @@ function explainJson() {
   );
 }
 
-// Route fetch by URL: /analyze vs /scenarios vs /explain.
+// Route fetch by URL: /explain vs /analyze (which now carries scenarios).
 function mockFetchByUrl() {
   vi.spyOn(globalThis, "fetch").mockImplementation((input: RequestInfo | URL) => {
     const url = String(input);
-    if (url.includes("/scenarios")) return Promise.resolve(scenariosJson());
     if (url.includes("/explain")) return Promise.resolve(explainJson());
     return Promise.resolve(analyzeJson());
   });
