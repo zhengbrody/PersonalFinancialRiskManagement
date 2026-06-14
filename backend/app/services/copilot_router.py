@@ -255,6 +255,100 @@ def _factpack_evidence(fp, prefix: str = "") -> list[EvidenceItem]:
     return items
 
 
+_OPTION_TERMS = (
+    "option",
+    "delta",
+    "gamma",
+    "theta",
+    "vega",
+    "implied vol",
+    "assignment",
+    "covered call",
+    "protective put",
+    "short call",
+    "short put",
+    "strike",
+    "expiry",
+    "premium",
+)
+
+
+def _mentions_options(message: str) -> bool:
+    m = (message or "").lower()
+    return any(t in m for t in _OPTION_TERMS)
+
+
+def _option_specs(holdings: dict) -> list:
+    """Option holdings → analytics specs (signed by long/short). Pure parse."""
+    from types import SimpleNamespace
+
+    specs = []
+    for h in (holdings or {}).values():
+        if not isinstance(h, dict) or str(h.get("asset_type") or "").lower() != "option":
+            continue
+        u = str(h.get("underlying") or "").upper()
+        strike, expiry = h.get("strike"), h.get("expiry")
+        ot = str(h.get("option_type") or "").lower()
+        if not u or strike in (None, 0) or not expiry or ot not in ("call", "put"):
+            continue
+        sign = -1.0 if str(h.get("option_side") or "long").lower() == "short" else 1.0
+        specs.append(
+            SimpleNamespace(
+                underlying=u,
+                option_type=ot,
+                strike=float(strike),
+                expiry=str(expiry),
+                quantity=sign * float(h.get("shares") or 0.0),
+                avg_premium=h.get("avg_cost"),
+                contract_multiplier=float(h.get("contract_multiplier") or 100.0),
+            )
+        )
+    return specs
+
+
+def _option_evidence(message: str, user) -> list[EvidenceItem]:
+    """Deterministic option-exposure evidence (net Greeks + risk flags) for the
+    active book — only when the question is option-related AND the book holds
+    options. Lets the Copilot answer 'am I short gamma?', 'net delta?', 'biggest
+    option risk?' citing computed numbers only."""
+    if not _mentions_options(message):
+        return []
+    from libs.auth.active_portfolio import get_active_holdings
+
+    from . import options_analytics, options_exposure
+
+    holdings = get_active_holdings(access_token=user.access_token) or {}
+    specs = _option_specs(holdings)
+    if not specs:
+        return []
+    results = options_analytics.analyze_contracts(specs).get("results", [])
+    exp = options_exposure.build_exposure(results)
+    gamma_note = (
+        "net short gamma (losses accelerate on a move)"
+        if exp["net_gamma"] < 0
+        else "net long gamma"
+    )
+    items = _compact(
+        [
+            _ev("Option net delta", _num(exp["net_delta"], 1), "engine"),
+            _ev("Option net gamma", f"{exp['net_gamma']:.2f} — {gamma_note}", "engine"),
+            _ev("Option theta / day", _money(exp["net_theta"]), "engine"),
+            _ev("Option net vega (per 1% IV)", _money(exp["net_vega"]), "engine"),
+            _ev("Option notional", _money(exp["option_notional"]), "engine"),
+            _ev(
+                "Option contracts",
+                f"{exp['contracts']} ({exp['short_contracts']} short)",
+                "engine",
+            ),
+        ]
+    )
+    for f in exp["flags"][:2]:
+        items.append(
+            EvidenceItem(label=f"Option risk — {f['code']}", value=f["detail"], source="engine")
+        )
+    return items
+
+
 def _gather(intent: str, message: str, tickers: list[str], *, user) -> list[EvidenceItem]:
     if intent in ("ticker_research", "compare_tickers"):
         from . import research_factpack as rf
@@ -305,6 +399,7 @@ def _gather(intent: str, message: str, tickers: list[str], *, user) -> list[Evid
         return []
     positions, score = score_positions
     ev = _score_evidence(score)
+    ev += safe("options", lambda: _option_evidence(message, user)) or []
     ev += safe("desk_view", lambda: _institutional_evidence(score, positions)) or []
 
     if intent in ("tax_fee_review", "action_plan"):

@@ -189,3 +189,92 @@ def test_answer_english_question_keeps_default_system(monkeypatch):
 
     cr.answer("how risky is my portfolio", user=object(), llm_callable=fake_llm)
     assert "简体中文" not in seen["system"]
+
+
+# ── option-exposure evidence (Copilot option-awareness) ──────────────────────
+
+
+def test_mentions_options_gate():
+    assert cr._mentions_options("am I short gamma?") is True
+    assert cr._mentions_options("what is my net delta?") is True
+    assert cr._mentions_options("how is my portfolio doing?") is False
+
+
+def test_option_specs_signs_short_legs():
+    specs = cr._option_specs(
+        {
+            "AAPL260116C00150000": {
+                "shares": 2,
+                "asset_type": "option",
+                "option_type": "call",
+                "option_side": "short",
+                "underlying": "AAPL",
+                "strike": 150,
+                "expiry": "2027-01-16",
+            },
+            "SPY": {"shares": 10},  # equity ignored
+        }
+    )
+    assert len(specs) == 1
+    assert specs[0].quantity == -2.0  # short → negative
+
+
+def test_option_evidence_emits_greeks_and_flag(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        "libs.auth.active_portfolio.get_active_holdings",
+        lambda access_token=None: {
+            "AAPL260116C00150000": {
+                "shares": 5,
+                "asset_type": "option",
+                "option_type": "call",
+                "option_side": "short",
+                "underlying": "AAPL",
+                "strike": 150,
+                "expiry": "2027-01-16",
+            }
+        },
+    )
+    monkeypatch.setattr(
+        "backend.app.services.options_analytics.analyze_contracts",
+        lambda specs, **k: {
+            "results": [
+                {
+                    "underlying": "AAPL",
+                    "option_type": "call",
+                    "quantity": -5.0,
+                    "contract_multiplier": 100,
+                    "greeks": {
+                        "delta": 0.6,
+                        "gamma": 0.02,
+                        "theta": -0.05,
+                        "vega": 0.15,
+                        "rho": 0.1,
+                    },
+                    "delta_notional": -6000.0,
+                    "market_value": -1000.0,
+                    "warnings": [],
+                }
+            ]
+        },
+    )
+    user = SimpleNamespace(access_token="jwt", id="u-1")
+    ev = cr._option_evidence("am I short gamma?", user)
+    labels = {e.label: e.value for e in ev}
+    assert "Option net delta" in labels
+    assert "short gamma" in labels["Option net gamma"]  # net gamma negative
+    assert any("Option risk" in e.label for e in ev)  # short-gamma flag surfaced
+
+
+def test_option_evidence_skips_non_option_question(monkeypatch):
+    from types import SimpleNamespace
+
+    # No option terms → no holdings lookup, no fetch.
+    called = {"n": 0}
+    monkeypatch.setattr(
+        "libs.auth.active_portfolio.get_active_holdings",
+        lambda access_token=None: called.__setitem__("n", called["n"] + 1) or {},
+    )
+    assert cr._option_evidence("how is my portfolio?", SimpleNamespace(access_token="x")) == []
+    assert called["n"] == 0
