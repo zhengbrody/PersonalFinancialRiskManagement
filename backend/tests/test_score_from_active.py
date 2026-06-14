@@ -411,3 +411,87 @@ def test_drops_zero_share_holdings_silently(
     )
     assert resp.status_code == 422
     assert resp.json()["error"]["code"] == "no_priced_holdings"
+
+
+def test_option_holding_penalizes_score_and_surfaces_impact(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_capital, monkeypatch
+):
+    """An uncovered short call deterministically deducts from the score and the
+    `options` impact block is surfaced (base − penalty + breakdown)."""
+    import backend.app.services.options_analytics as oa
+
+    monkeypatch.setattr(
+        oa,
+        "analyze_contracts",
+        lambda specs, **k: {
+            "results": [
+                {
+                    "underlying": "AAPL",
+                    "option_type": "call",
+                    "strike": 100.0,
+                    "expiry": "2027-06-18",
+                    "quantity": -1.0,  # short call
+                    "contract_multiplier": 100.0,
+                    "days_to_expiry": 300,
+                    "spot": 100.0,
+                    "mark": 10.0,
+                    "iv": 0.3,
+                    "greeks": {
+                        "delta": 0.6,
+                        "gamma": 0.02,
+                        "theta": -0.05,
+                        "vega": 0.15,
+                        "rho": 0.1,
+                    },
+                    "delta_notional": -6000.0,
+                    "market_value": -1000.0,
+                    "moneyness": "ATM",
+                    "warnings": [],
+                }
+            ]
+        },
+    )
+    fake_active_portfolio.set(
+        {
+            "SPY": {"shares": 100, "avg_cost": 400.0},
+            "AAPL270618C00100000": {
+                "shares": 1,
+                "asset_type": "option",
+                "option_type": "call",
+                "option_side": "short",
+                "underlying": "AAPL",
+                "strike": 100,
+                "expiry": "2027-06-18",
+            },
+        }
+    )
+    fake_price_history.set(_make_history(["SPY", "AAPL"]))
+
+    resp = test_client.post(
+        "/api/v1/risk/score_from_active",
+        json={},
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    opt = data["options"]
+    assert opt is not None
+    assert opt["contracts"] == 1
+    assert opt["penalty"] > 0  # short gamma + uncovered short call
+    assert any(f["code"] == "uncovered_short_call" for f in opt["flags"])
+    # overall_score = base_score − penalty (transparent, capped).
+    assert data["overall_score"] == max(0, opt["base_score"] - opt["penalty"])
+
+
+def test_no_options_no_impact_block(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_capital
+):
+    fake_active_portfolio.set({"SPY": {"shares": 100, "avg_cost": 400.0}})
+    fake_price_history.set(_make_history(["SPY"]))
+    resp = test_client.post(
+        "/api/v1/risk/score_from_active",
+        json={},
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["options"] is None  # equity-only → no options block

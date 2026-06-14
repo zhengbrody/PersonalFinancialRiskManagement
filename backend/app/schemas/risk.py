@@ -320,6 +320,31 @@ class PortfolioMetricsOut(BaseModel):
     data_quality_notes: list[str] = Field(default_factory=list)
 
 
+class OptionScorePenaltyRow(BaseModel):
+    code: str
+    severity: str
+    points: int
+
+
+class OptionScoreImpactOut(BaseModel):
+    """How option holdings affect the Health Score — surfaced so the deduction
+    is transparent (base_score − penalty, with the per-flag breakdown)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    contracts: int
+    net_delta: float
+    net_gamma: float
+    net_theta: float
+    net_vega: float
+    option_notional: float
+    short_collateral_estimate: float
+    base_score: int
+    penalty: int
+    flags: list[dict] = Field(default_factory=list)  # {code, severity, detail}
+    penalty_breakdown: list[OptionScorePenaltyRow] = Field(default_factory=list)
+
+
 class ScoreResponse(BaseModel):
     overall_score: int
     risk_preference: int
@@ -327,6 +352,8 @@ class ScoreResponse(BaseModel):
     metrics: PortfolioMetricsOut
     dimensions: dict[str, DimensionScoreOut]
     price_provenance: Optional[PriceProvenanceOut] = None
+    # Present only when the active book contains option contracts.
+    options: Optional[OptionScoreImpactOut] = None
 
 
 # ── /api/v1/risk/benchmarks (public reference context) ──────────────

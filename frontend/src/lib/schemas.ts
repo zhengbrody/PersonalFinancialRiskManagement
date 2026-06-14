@@ -73,6 +73,27 @@ export const portfolioMetricsSchema = z.looseObject({
 });
 export type PortfolioMetrics = z.infer<typeof portfolioMetricsSchema>;
 
+// How option holdings deterministically affect the Health Score. Present only
+// when the active book has option contracts.
+export const optionScoreImpactSchema = z.looseObject({
+  contracts: z.number(),
+  net_delta: z.number(),
+  net_gamma: z.number(),
+  net_theta: z.number(),
+  net_vega: z.number(),
+  option_notional: z.number(),
+  short_collateral_estimate: z.number(),
+  base_score: z.number(),
+  penalty: z.number(),
+  flags: z.array(
+    z.looseObject({ code: z.string(), severity: z.string(), detail: z.string() }),
+  ),
+  penalty_breakdown: z.array(
+    z.looseObject({ code: z.string(), severity: z.string(), points: z.number() }),
+  ),
+});
+export type OptionScoreImpact = z.infer<typeof optionScoreImpactSchema>;
+
 export const scoreResponseSchema = z.looseObject({
   overall_score: z.number(),
   risk_preference: z.number(),
@@ -80,5 +101,6 @@ export const scoreResponseSchema = z.looseObject({
   metrics: portfolioMetricsSchema,
   dimensions: z.record(z.string(), dimensionScoreSchema),
   price_provenance: priceProvenanceSchema.nullish(),
+  options: optionScoreImpactSchema.nullish(),
 });
 export type ScoreResponse = z.infer<typeof scoreResponseSchema>;

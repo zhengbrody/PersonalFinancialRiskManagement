@@ -766,13 +766,59 @@ export const optionAnalyticsSchema = z.looseObject({
   market_value: z.number().nullish(),
   cost_basis: z.number().nullish(),
   unrealized_pnl: z.number().nullish(),
+  intrinsic_value: z.number().nullish(),
+  time_value: z.number().nullish(),
+  max_loss: z.number().nullish(), // null = unbounded
+  max_gain: z.number().nullish(), // null = unbounded
+  assignment_risk: z.string().nullish(), // null | "watch" | "high"
   break_even: z.number().nullish(),
   moneyness: z.string().nullish(),
   payoff: z.array(payoffPointSchema),
-  source: z.string(),
+  source: z.string(), // "market" | "theoretical_fallback"
   warnings: z.array(z.string()),
 });
 export type OptionAnalytics = z.infer<typeof optionAnalyticsSchema>;
+
+// Portfolio-level option exposure + deterministic risk flags.
+export const optionFlagSchema = z.looseObject({
+  code: z.string(),
+  severity: z.string(), // info | watch | high
+  detail: z.string(),
+});
+export type OptionFlag = z.infer<typeof optionFlagSchema>;
+
+export const optionExposureSchema = z.looseObject({
+  net_delta: z.number(),
+  gross_delta: z.number(),
+  net_gamma: z.number(),
+  net_theta: z.number(),
+  net_vega: z.number(),
+  option_market_value: z.number().nullish(),
+  option_notional: z.number(),
+  short_collateral_estimate: z.number(),
+  contracts: z.number(),
+  short_contracts: z.number(),
+  expiry_ladder: z.array(
+    z.looseObject({
+      expiry: z.string(),
+      days_to_expiry: z.number(),
+      contracts: z.number(),
+      net_delta: z.number(),
+      net_notional: z.number(),
+    }),
+  ),
+  underlying_exposure: z.array(
+    z.looseObject({
+      underlying: z.string(),
+      contracts: z.number(),
+      net_delta: z.number(),
+      net_notional: z.number(),
+      equity_shares: z.number().nullish(),
+    }),
+  ),
+  flags: z.array(optionFlagSchema),
+});
+export type OptionExposure = z.infer<typeof optionExposureSchema>;
 
 export const optionTotalsSchema = z.looseObject({
   net_delta: z.number(),
@@ -789,10 +835,55 @@ export type OptionTotals = z.infer<typeof optionTotalsSchema>;
 export const optionAnalyzeResponseSchema = z.looseObject({
   results: z.array(optionAnalyticsSchema),
   totals: optionTotalsSchema,
+  exposure: optionExposureSchema,
   as_of: z.string(),
   warnings: z.array(z.string()),
 });
 export type OptionAnalyzeResponse = z.infer<typeof optionAnalyzeResponseSchema>;
+
+// Stress grid (underlying × IV × time) — full Black-Scholes reprice.
+export const scenarioCellSchema = z.looseObject({
+  underlying_shock: z.number(),
+  iv_shock: z.number(),
+  horizon: z.union([z.number(), z.string()]),
+  total_pnl: z.number(),
+});
+export type ScenarioCell = z.infer<typeof scenarioCellSchema>;
+
+// Options AI-explain: deterministic skeleton → optional LLM rephrase.
+export const optionExplainSchema = z.looseObject({
+  severity: z.string(), // low | moderate | elevated | high
+  headline: z.string(),
+  summary_bullets: z.array(z.string()),
+  suggested_actions: z.array(
+    z.looseObject({ title: z.string(), reason: z.string(), next_step: z.string() }),
+  ),
+  caveats: z.array(z.string()),
+  ai_generated: z.boolean(),
+});
+export type OptionExplain = z.infer<typeof optionExplainSchema>;
+
+export const optionScenarioResponseSchema = z.looseObject({
+  grid: z.array(scenarioCellSchema),
+  top_positions: z.array(
+    z.looseObject({
+      underlying: z.string().nullish(),
+      option_type: z.string().nullish(),
+      strike: z.number().nullish(),
+      expiry: z.string().nullish(),
+      quantity: z.number().nullish(),
+      pnl: z.number(),
+    }),
+  ),
+  stress_cell: z.record(z.string(), z.number()),
+  underlying_shocks: z.array(z.number()),
+  iv_shocks: z.array(z.number()),
+  horizons: z.array(z.union([z.number(), z.string()])),
+  repriced: z.number(),
+  skipped: z.array(z.record(z.string(), z.unknown())),
+  as_of: z.string().nullish(),
+});
+export type OptionScenarioResponse = z.infer<typeof optionScenarioResponseSchema>;
 
 export type OptionContract = {
   underlying: string;
@@ -854,6 +945,48 @@ export function useOptionAnalytics(contracts: OptionContract[]) {
         body: { contracts },
         authToken: accessToken ?? undefined,
         schema: optionAnalyzeResponseSchema,
+      }),
+  });
+}
+
+/**
+ * Black-Scholes stress grid (underlying × IV × time) for the book's options.
+ * Heavier than /analyze (full reprice across the shock axes), so it's keyed on
+ * the same contract set and cached; disabled without options or auth.
+ */
+export function useOptionScenarios(contracts: OptionContract[]) {
+  const { accessToken } = useAuth();
+  return useQuery<OptionScenarioResponse, Error>({
+    queryKey: ["options-scenarios", contracts],
+    enabled: Boolean(accessToken) && contracts.length > 0,
+    staleTime: 60_000,
+    queryFn: () =>
+      apiFetch<OptionScenarioResponse>("/api/v1/options/scenarios", {
+        method: "POST",
+        body: { contracts },
+        authToken: accessToken ?? undefined,
+        schema: optionScenarioResponseSchema,
+      }),
+  });
+}
+
+/**
+ * Plain-language explanation of the option book's risk. Deterministic skeleton
+ * the LLM may only rephrase (severity/actions locked). Keyed on the exposure so
+ * identical exposure is cached; FREE (no credit). Disabled until exposure loads.
+ */
+export function useOptionExplain(exposure: OptionExposure | undefined) {
+  const { accessToken } = useAuth();
+  return useQuery<OptionExplain, Error>({
+    queryKey: ["options-explain", exposure],
+    enabled: Boolean(accessToken) && Boolean(exposure) && (exposure?.contracts ?? 0) > 0,
+    staleTime: 5 * 60_000,
+    queryFn: () =>
+      apiFetch<OptionExplain>("/api/v1/options/explain", {
+        method: "POST",
+        body: { exposure },
+        authToken: accessToken ?? undefined,
+        schema: optionExplainSchema,
       }),
   });
 }

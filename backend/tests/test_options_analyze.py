@@ -16,6 +16,7 @@ from backend.app.services import options_analytics as oa
 # advances during the test session.
 _FUTURE = "2027-06-18"
 _PAST = "2020-01-01"
+_NEAR = "2026-06-17"  # a few days out → assignment-risk window
 
 
 def _spec(**kw):
@@ -87,11 +88,22 @@ def test_put_break_even_and_delta_sign():
 # ── fail-soft ─────────────────────────────────────────────────────────────────
 
 
-def test_chain_unavailable_is_soft():
+def test_chain_unavailable_falls_back_to_theoretical():
+    # No chain → Black-Scholes theoretical fallback (uses _FALLBACK_IV), flagged.
     r = oa.analyze_contract(_spec(), spot_fn=_spot, chain_fn=lambda *a: None)
-    assert r["greeks"] is None and r["mark"] is None
+    assert r["source"] == "theoretical_fallback"
+    assert r["mark"] is not None and r["greeks"] is not None
+    assert r["iv"] == oa._FALLBACK_IV
     assert any("chain unavailable" in w for w in r["warnings"])
-    assert r["spot"] == 100.0  # spot still resolved
+    assert any("theoretical fallback" in w for w in r["warnings"])
+    assert r["spot"] == 100.0
+
+
+def test_chain_unavailable_no_spot_stays_soft():
+    # Without spot we can't model anything → null analytics, no crash.
+    r = oa.analyze_contract(_spec(), spot_fn=lambda _u: None, chain_fn=lambda *a: None)
+    assert r["mark"] is None and r["greeks"] is None
+    assert r["source"] == "market"  # never modelled
 
 
 def test_missing_spot_is_soft():
@@ -210,3 +222,161 @@ def test_analyze_route_happy(test_client, mint_token, monkeypatch):
     data = body["data"]
     assert data["results"][0]["greeks"]["delta"] == 0.6
     assert data["totals"]["contracts"] == 1
+
+
+# ── per-contract risk metrics (intrinsic/time/max-loss-gain/assignment) ────────
+
+
+def test_intrinsic_time_value_and_max_loss_gain_long_call():
+    # S=100, K=95 ITM call, premium 8, mark 10.
+    r = oa.analyze_contract(_spec(strike=95.0, avg_premium=8.0), spot_fn=_spot, chain_fn=_chain)
+    assert r["intrinsic_value"] == 5.0  # max(100-95,0)
+    assert r["time_value"] == 5.0  # mark 10 − intrinsic 5
+    assert r["max_loss"] == 800.0  # premium 8 × 100 (long call risks the premium)
+    assert r["max_gain"] is None  # unbounded upside
+
+
+def test_short_call_max_loss_unbounded_gain_premium():
+    r = oa.analyze_contract(_spec(quantity=-1, avg_premium=8.0), spot_fn=_spot, chain_fn=_chain)
+    assert r["max_loss"] is None  # naked short call: unbounded
+    assert r["max_gain"] == 800.0  # keeps the premium
+
+
+def test_short_put_assignment_risk_when_itm_near_expiry():
+    # short put, K=110 > S=100 → ITM; near-dated expiry → assignment "high".
+    r = oa.analyze_contract(
+        _spec(option_type="put", strike=110.0, expiry=_NEAR, quantity=-1, avg_premium=12.0),
+        spot_fn=_spot,
+        chain_fn=_chain,
+    )
+    assert r["moneyness"] == "ITM"
+    assert r["assignment_risk"] == "high"
+    assert r["max_loss"] == 9800.0  # (110 − 12) × 100, underlying → 0
+
+
+def test_long_option_has_no_assignment_risk():
+    r = oa.analyze_contract(
+        _spec(option_type="put", strike=110.0, expiry=_NEAR, quantity=1, avg_premium=12.0),
+        spot_fn=_spot,
+        chain_fn=_chain,
+    )
+    assert r["assignment_risk"] is None  # holder controls exercise
+
+
+# ── /scenarios route + exposure in /analyze ────────────────────────────────────
+
+
+def test_analyze_route_includes_exposure(test_client, mint_token, monkeypatch):
+    monkeypatch.setattr(
+        "backend.app.api.v1.options.options_analytics.analyze_contracts",
+        lambda *a, **k: {
+            "results": [
+                {
+                    "underlying": "AAPL",
+                    "option_type": "call",
+                    "strike": 100.0,
+                    "expiry": _FUTURE,
+                    "quantity": -1.0,
+                    "contract_multiplier": 100.0,
+                    "days_to_expiry": 300,
+                    "spot": 100.0,
+                    "mark": 10.0,
+                    "iv": 0.3,
+                    "greeks": {
+                        "delta": 0.6,
+                        "gamma": 0.02,
+                        "theta": -0.05,
+                        "vega": 0.15,
+                        "rho": 0.1,
+                    },
+                    "delta_notional": -6000.0,
+                    "market_value": -1000.0,
+                    "moneyness": "ATM",
+                    "warnings": [],
+                }
+            ],
+            "totals": {
+                "net_delta": -60.0,
+                "net_gamma": -2.0,
+                "net_theta": 5.0,
+                "net_vega": -15.0,
+                "delta_notional": -6000.0,
+                "market_value": -1000.0,
+                "unrealized_pnl": None,
+                "contracts": 1,
+            },
+            "as_of": "2026-06-13",
+            "warnings": [],
+        },
+    )
+    resp = test_client.post(
+        "/api/v1/options/analyze",
+        json={
+            "contracts": [
+                {"underlying": "AAPL", "option_type": "call", "strike": 100, "expiry": _FUTURE}
+            ]
+        },
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    assert resp.status_code == 200
+    exp = resp.json()["data"]["exposure"]
+    assert exp["short_contracts"] == 1
+    assert any(f["code"] == "short_gamma" for f in exp["flags"])  # short call → short gamma
+
+
+def test_scenarios_route_requires_auth(test_client):
+    resp = test_client.post(
+        "/api/v1/options/scenarios",
+        json={
+            "contracts": [
+                {"underlying": "AAPL", "option_type": "call", "strike": 100, "expiry": _FUTURE}
+            ]
+        },
+    )
+    assert resp.status_code == 401
+
+
+def test_scenarios_route_happy(test_client, mint_token, monkeypatch):
+    # Stub analytics (no network) → a repriceable long call → real grid math runs.
+    monkeypatch.setattr(
+        "backend.app.api.v1.options.options_analytics.analyze_contracts",
+        lambda *a, **k: {
+            "results": [
+                {
+                    "underlying": "AAPL",
+                    "option_type": "call",
+                    "strike": 100.0,
+                    "expiry": _FUTURE,
+                    "quantity": 1.0,
+                    "contract_multiplier": 100.0,
+                    "days_to_expiry": 300,
+                    "spot": 100.0,
+                    "mark": 10.0,
+                    "iv": 0.3,
+                    "greeks": {
+                        "delta": 0.6,
+                        "gamma": 0.02,
+                        "theta": -0.05,
+                        "vega": 0.15,
+                        "rho": 0.1,
+                    },
+                    "warnings": [],
+                }
+            ],
+            "as_of": "2026-06-13",
+        },
+    )
+    resp = test_client.post(
+        "/api/v1/options/scenarios",
+        json={
+            "contracts": [
+                {"underlying": "AAPL", "option_type": "call", "strike": 100, "expiry": _FUTURE}
+            ]
+        },
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["repriced"] == 1
+    assert len(data["grid"]) == 180 and len(data["top_positions"]) == 1
+    assert data["as_of"] == "2026-06-13"
