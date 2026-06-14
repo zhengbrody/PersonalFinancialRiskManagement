@@ -78,9 +78,30 @@ def _sanitize_holdings(holdings: dict) -> dict:
             ac_f = _finite_or_zero(ac)
             if ac_f > 0:
                 pos["avg_cost"] = ac_f
-        for k in ("sector", "account", "asset_type", "currency"):
+        # String passthrough fields, incl. the option-contract identity. Without
+        # underlying/expiry/option_type/option_side the option is unusable on
+        # read-back (the cockpit + analytics drop it), so they MUST survive the
+        # DB write — this rebuild-from-scratch is otherwise lossy.
+        for k in (
+            "sector",
+            "account",
+            "asset_type",
+            "currency",
+            "option_type",
+            "option_side",
+            "underlying",
+            "expiry",
+        ):
             if h.get(k):
                 pos[k] = h[k]
+        # Numeric option fields — keep finite positives (strike must be > 0;
+        # contract_multiplier defaults to 100 on read if absent).
+        for k in ("strike", "contract_multiplier"):
+            v = h.get(k)
+            if v not in (None, ""):
+                vf = _finite_or_zero(v)
+                if vf > 0:
+                    pos[k] = vf
         if "margin_eligible" in h:
             pos["margin_eligible"] = bool(h["margin_eligible"])
         clean[str(tk).strip().upper()] = pos

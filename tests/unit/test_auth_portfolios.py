@@ -461,3 +461,37 @@ def test_active_owner_with_supabase_outage_still_gets_dev_portfolio(
         meta = ap.get_active_portfolio_meta()
         assert meta["source"] == "owner_default"
     auth_client.reset_client_cache()
+
+
+def test_sanitize_holdings_preserves_option_contract_fields():
+    """An option holding must survive the DB-write sanitize with its contract
+    identity intact — otherwise it's unusable on read-back (regression: the
+    option vanished after save because these fields were stripped)."""
+    from libs.auth.portfolios import _sanitize_holdings
+
+    out = _sanitize_holdings(
+        {
+            "AAPL260116C00150000": {
+                "shares": 1,
+                "avg_cost": 5.2,
+                "asset_type": "option",
+                "option_type": "call",
+                "option_side": "short",
+                "underlying": "AAPL",
+                "strike": 150,
+                "expiry": "2026-01-16",
+                "contract_multiplier": 100,
+            },
+            "SPY": {"shares": 10, "avg_cost": 400.0},
+        }
+    )
+    opt = out["AAPL260116C00150000"]
+    assert opt["asset_type"] == "option"
+    assert opt["option_type"] == "call"
+    assert opt["option_side"] == "short"
+    assert opt["underlying"] == "AAPL"
+    assert opt["strike"] == 150
+    assert opt["expiry"] == "2026-01-16"
+    assert opt["contract_multiplier"] == 100
+    # equity holding still sanitized normally
+    assert out["SPY"]["shares"] == 10
