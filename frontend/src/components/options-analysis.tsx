@@ -34,15 +34,18 @@ import { TickerBadge } from "@/components/ui/ticker-badge";
 import {
   type OptionAnalytics,
   type OptionContract,
+  type OptionExplain,
   type OptionExposure,
   type OptionScenarioResponse,
   useOptionAnalytics,
+  useOptionExplain,
   useOptionScenarios,
 } from "@/lib/queries";
 
 export function OptionsAnalysis({ contracts }: { contracts: OptionContract[] }) {
   const analytics = useOptionAnalytics(contracts);
   const scenarios = useOptionScenarios(contracts);
+  const explain = useOptionExplain(analytics.data?.exposure);
 
   if (contracts.length === 0) return null;
 
@@ -71,6 +74,7 @@ export function OptionsAnalysis({ contracts }: { contracts: OptionContract[] }) 
         </Card>
       ) : analytics.data ? (
         <>
+          <OptionDiagnosis explain={explain.data} loading={explain.isPending} />
           <ExposureSummary exposure={analytics.data.exposure} asOf={analytics.data.as_of} />
           <RiskFlags exposure={analytics.data.exposure} />
           <StressGrid data={scenarios.data} loading={scenarios.isPending} />
@@ -86,6 +90,65 @@ export function OptionsAnalysis({ contracts }: { contracts: OptionContract[] }) 
         </>
       ) : null}
     </section>
+  );
+}
+
+// ── AI diagnosis (deterministic skeleton → optional LLM rephrase) ─────────────
+
+const SEVERITY_TONE: Record<string, string> = {
+  high: "border-red-500/40 bg-red-500/5",
+  elevated: "border-amber-500/40 bg-amber-500/5",
+  moderate: "border-primary/30",
+  low: "border-emerald-500/30 bg-emerald-500/5",
+};
+
+function OptionDiagnosis({
+  explain,
+  loading,
+}: {
+  explain: OptionExplain | undefined;
+  loading: boolean;
+}) {
+  if (loading) return <Skeleton className="h-28" />;
+  if (!explain) return null;
+  return (
+    <Card className={SEVERITY_TONE[explain.severity] ?? ""}>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center justify-between gap-2 text-sm">
+          <span>{explain.headline}</span>
+          <Chip
+            label={explain.ai_generated ? "AI" : "Auto"}
+            tone={explain.ai_generated ? undefined : "muted"}
+          />
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        {explain.summary_bullets.length > 0 && (
+          <ul className="space-y-1">
+            {explain.summary_bullets.map((b, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs">
+                <span className="mt-1 inline-block h-1.5 w-1.5 flex-shrink-0 rounded-full bg-primary" />
+                <span>{b}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {explain.suggested_actions.length > 0 && (
+          <div className="space-y-1.5">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              Inspect before trading
+            </p>
+            {explain.suggested_actions.map((a, i) => (
+              <div key={i} className="rounded-md border border-border bg-muted/30 px-3 py-1.5 text-xs">
+                <span className="font-medium">{a.title}</span>
+                <span className="text-muted-foreground"> — {a.next_step}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="text-[11px] text-muted-foreground">{explain.caveats.join(" · ")}</p>
+      </CardContent>
+    </Card>
   );
 }
 

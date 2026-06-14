@@ -187,3 +187,27 @@ class OptionScenarioResponse(BaseModel):
     repriced: int
     skipped: list[dict] = Field(default_factory=list)
     as_of: str
+
+
+# ── AI explanation (deterministic skeleton → optional LLM rephrase) ────────────
+
+
+class OptionExplainInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    exposure: OptionExposureOut
+
+
+class OptionExplainAction(BaseModel):
+    title: str
+    reason: str
+    next_step: str
+
+
+class OptionExplainOutput(BaseModel):
+    severity: str  # low | moderate | elevated | high
+    headline: str
+    summary_bullets: list[str] = Field(default_factory=list)
+    suggested_actions: list[OptionExplainAction] = Field(default_factory=list)
+    caveats: list[str] = Field(default_factory=list)
+    ai_generated: bool = False

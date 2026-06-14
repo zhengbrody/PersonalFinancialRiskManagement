@@ -850,6 +850,19 @@ export const scenarioCellSchema = z.looseObject({
 });
 export type ScenarioCell = z.infer<typeof scenarioCellSchema>;
 
+// Options AI-explain: deterministic skeleton → optional LLM rephrase.
+export const optionExplainSchema = z.looseObject({
+  severity: z.string(), // low | moderate | elevated | high
+  headline: z.string(),
+  summary_bullets: z.array(z.string()),
+  suggested_actions: z.array(
+    z.looseObject({ title: z.string(), reason: z.string(), next_step: z.string() }),
+  ),
+  caveats: z.array(z.string()),
+  ai_generated: z.boolean(),
+});
+export type OptionExplain = z.infer<typeof optionExplainSchema>;
+
 export const optionScenarioResponseSchema = z.looseObject({
   grid: z.array(scenarioCellSchema),
   top_positions: z.array(
@@ -953,6 +966,27 @@ export function useOptionScenarios(contracts: OptionContract[]) {
         body: { contracts },
         authToken: accessToken ?? undefined,
         schema: optionScenarioResponseSchema,
+      }),
+  });
+}
+
+/**
+ * Plain-language explanation of the option book's risk. Deterministic skeleton
+ * the LLM may only rephrase (severity/actions locked). Keyed on the exposure so
+ * identical exposure is cached; FREE (no credit). Disabled until exposure loads.
+ */
+export function useOptionExplain(exposure: OptionExposure | undefined) {
+  const { accessToken } = useAuth();
+  return useQuery<OptionExplain, Error>({
+    queryKey: ["options-explain", exposure],
+    enabled: Boolean(accessToken) && Boolean(exposure) && (exposure?.contracts ?? 0) > 0,
+    staleTime: 5 * 60_000,
+    queryFn: () =>
+      apiFetch<OptionExplain>("/api/v1/options/explain", {
+        method: "POST",
+        body: { exposure },
+        authToken: accessToken ?? undefined,
+        schema: optionExplainSchema,
       }),
   });
 }

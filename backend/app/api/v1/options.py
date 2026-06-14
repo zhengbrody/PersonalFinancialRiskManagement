@@ -18,10 +18,16 @@ from ...core.responses import ok
 from ...schemas.options import (
     OptionAnalyzeRequest,
     OptionAnalyzeResponse,
+    OptionExplainInput,
     OptionScenarioRequest,
     OptionScenarioResponse,
 )
-from ...services import options_analytics, options_exposure, options_scenarios
+from ...services import (
+    options_analytics,
+    options_explain,
+    options_exposure,
+    options_scenarios,
+)
 
 router = APIRouter(prefix="/api/v1/options", tags=["options"])
 
@@ -72,3 +78,36 @@ def option_scenarios_endpoint(
     grid["as_of"] = analytics.get("as_of")
     payload = OptionScenarioResponse.model_validate(grid).model_dump()
     return ok(payload, request=request, started_at=started)
+
+
+@router.post(
+    "/explain",
+    summary="Plain-language explanation of the option book's risk (deterministic skeleton → LLM)",
+    response_model=None,
+)
+def option_explain_endpoint(
+    body: OptionExplainInput,
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    """Explain the option exposure: a deterministic skeleton (severity, primary
+    driver, educational inspection actions) the LLM may only rephrase — it never
+    invents numbers or changes severity/actions. FREE (no credit gate); cost is
+    logged. Cached by input hash so identical exposure skips the LLM."""
+    import json
+
+    from ...services.ai_cache import explain_cache
+    from ...services.ai_telemetry import input_hash
+    from ...services.llm_client import get_llm_callable
+
+    started = time.perf_counter()
+    cache_key = "opt:" + input_hash(json.dumps(body.model_dump(), default=str, sort_keys=True))
+    cached = explain_cache.get(cache_key)
+    if cached is not None:
+        return ok(cached, request=request, started_at=started)
+
+    llm = get_llm_callable(with_tools=False)
+    out = options_explain.explain(body, llm_callable=llm)
+    if out.ai_generated:
+        explain_cache.put(cache_key, out.model_dump())
+    return ok(out.model_dump(), request=request, started_at=started)

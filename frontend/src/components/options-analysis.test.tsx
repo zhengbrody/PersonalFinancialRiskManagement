@@ -129,11 +129,33 @@ function scenariosJson() {
   );
 }
 
-// Route fetch by URL: /analyze vs /scenarios.
+function explainJson() {
+  return new Response(
+    JSON.stringify({
+      data: {
+        severity: "elevated",
+        headline: "Elevated option risk — Concentrated in AAPL.",
+        summary_bullets: ["Most exposure is one name."],
+        suggested_actions: [
+          { title: "Inspect concentration", reason: "Concentrated in AAPL.", next_step: "Size accordingly." },
+        ],
+        caveats: ["Educational, not financial advice."],
+        ai_generated: false,
+      },
+      error: null,
+      meta: { request_id: "r" },
+    }),
+    { status: 200, headers: { "Content-Type": "application/json" } },
+  );
+}
+
+// Route fetch by URL: /analyze vs /scenarios vs /explain.
 function mockFetchByUrl() {
   vi.spyOn(globalThis, "fetch").mockImplementation((input: RequestInfo | URL) => {
     const url = String(input);
-    return Promise.resolve(url.includes("/scenarios") ? scenariosJson() : analyzeJson());
+    if (url.includes("/scenarios")) return Promise.resolve(scenariosJson());
+    if (url.includes("/explain")) return Promise.resolve(explainJson());
+    return Promise.resolve(analyzeJson());
   });
 }
 
