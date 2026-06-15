@@ -33,6 +33,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { CreditsBadge } from "@/components/credits-badge";
+import { TickerNews } from "@/components/ticker-news";
 import { ApiError } from "@/lib/api";
 import { BETA_LIMIT_MESSAGE, isBillingEnabled } from "@/lib/billing-flag";
 import { useAuth } from "@/lib/auth-context";
@@ -145,7 +146,9 @@ function ResearchWorkbench() {
           <AnalystCard fp={fp} />
           <SignalsCard fp={fp} />
           {fp.peers.length > 0 && <PeersCard fp={fp} />}
-          {fp.news.length > 0 && <NewsCard news={fp.news} />}
+          {/* Unified, source-labeled news (FMP news + press releases + SEC) —
+              richer + multi-source vs the FactPack's FMP-only headlines. */}
+          <TickerNews ticker={fp.ticker} />
         </>
       )}
 
@@ -786,49 +789,6 @@ function PeersCard({ fp }: { fp: FactPack }) {
   );
 }
 
-// ── news ────────────────────────────────────────────────────────────
-
-function NewsCard({ news }: { news: FactPack["news"] }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Recent news</CardTitle>
-        <CardDescription>Headlines — metadata only.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <ul className="space-y-3">
-          {news.map((n, i) => {
-            const body = (
-              <div className="flex flex-col gap-0.5">
-                <span className="text-sm font-medium leading-snug">{n.title}</span>
-                <span className="text-xs text-muted-foreground">
-                  {[n.site, relativeTime(n.published)].filter(Boolean).join(" · ")}
-                </span>
-              </div>
-            );
-            return (
-              <li key={i}>
-                {n.url ? (
-                  <a
-                    href={n.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block rounded-md px-1 py-0.5 hover:bg-muted"
-                  >
-                    {body}
-                  </a>
-                ) : (
-                  body
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </CardContent>
-    </Card>
-  );
-}
-
 // ── shared building blocks ──────────────────────────────────────────
 
 function SectionCard({
@@ -1021,21 +981,6 @@ function formatAsOf(iso: string): string {
     day: "numeric",
     year: "numeric",
   });
-}
-
-function relativeTime(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const diffMs = Date.now() - d.getTime();
-  const mins = Math.round(diffMs / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.round(hrs / 24);
-  if (days < 30) return `${days}d ago`;
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function humanizeWarning(w: string): string {

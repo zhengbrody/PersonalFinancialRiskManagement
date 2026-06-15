@@ -278,3 +278,27 @@ def test_option_evidence_skips_non_option_question(monkeypatch):
     )
     assert cr._option_evidence("how is my portfolio?", SimpleNamespace(access_token="x")) == []
     assert called["n"] == 0
+
+
+# ── source citation (data-intelligence commit 5) ─────────────────────────────
+
+
+def test_evidence_block_cites_human_source_labels():
+    from backend.app.schemas.copilot2 import EvidenceItem
+
+    block = cr._evidence_block(
+        [
+            EvidenceItem(label="Health score", value="720/1000", source="engine"),
+            EvidenceItem(label="ROE", value="15%", source="fmp"),
+            EvidenceItem(label="VIX", value="17.7", source="macro"),
+        ]
+    )
+    assert "[source: MindMarket engine]" in block
+    assert "[source: FMP]" in block
+    assert "[source: Macro]" in block
+
+
+def test_system_prompt_instructs_source_attribution_and_missing():
+    # The LLM must attribute figures + admit missing sources, not invent confidence.
+    assert "ATTRIBUTE" in cr._SYSTEM
+    assert "missing" in cr._SYSTEM.lower()

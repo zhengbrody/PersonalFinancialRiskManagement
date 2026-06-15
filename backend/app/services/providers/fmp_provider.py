@@ -325,6 +325,37 @@ def get_news(ticker: str, *, limit: int = 10) -> ProviderResult[list[NewsItem]]:
     return _cached("news", tk, _TTL_NEWS, _produce)
 
 
+def get_press_releases(ticker: str, *, limit: int = 8) -> ProviderResult[list[NewsItem]]:
+    """Company press releases (FMP /stable/news/press-releases). Same NewsItem
+    shape as get_news; fail-soft to data=None so callers degrade cleanly."""
+    tk = ticker.upper()
+
+    def _produce() -> ProviderResult:
+        raw = _get("news/press-releases", {"symbols": tk, "limit": limit})
+        items = raw if isinstance(raw, list) else []
+        out = []
+        for it in items[:limit]:
+            if not isinstance(it, dict):
+                continue
+            title = _pick(it, "title")
+            if not title:
+                continue
+            out.append(
+                NewsItem(
+                    title=str(title),
+                    site=_pick(it, "site", "publisher", "source"),
+                    published=str(_pick(it, "publishedDate", "date", "published") or "") or None,
+                    url=_pick(it, "url", "link"),
+                    snippet=(str(_pick(it, "text", "snippet") or "")[:280]) or None,
+                )
+            )
+        if not out:
+            return ProviderResult(data=None, warnings=["no_press_releases"])
+        return ProviderResult(data=out, as_of=out[0].published, coverage=1.0)
+
+    return _cached("press", tk, _TTL_NEWS, _produce)
+
+
 def get_price_history(ticker: str, *, days: int = 365) -> ProviderResult[list[PriceBar]]:
     """Best-effort FMP daily closes. Optional — callers already have robust free
     price history via ``market_data`` (yfinance); this just lets FMP serve it

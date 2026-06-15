@@ -169,6 +169,27 @@ function routeFetch(verdict: { body: unknown; status?: number }) {
       if (url.includes("/research/verdict")) {
         return envelope(verdict.body, verdict.status ?? 200);
       }
+      if (url.includes("/research/news/")) {
+        return envelope({
+          data: {
+            items: [
+              {
+                title: "Apple unveils new chips",
+                url: "https://example.com/news",
+                type: "news",
+                source: "fmp",
+                source_label: "FMP",
+                site: "Reuters",
+                published: "2026-06-13",
+              },
+            ],
+            sources: [{ field: "news", provider: "fmp", label: "FMP", role: "primary" }],
+            warnings: [],
+          },
+          error: null,
+          meta: { request_id: "r-news" },
+        });
+      }
       return envelope(billingEnvelope);
     });
 }

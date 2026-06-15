@@ -22,6 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .api.v1 import (
     billing,
     copilot,
+    data,
     feedback,
     health,
     institutions,
@@ -171,6 +172,7 @@ def create_app() -> FastAPI:
     app.include_router(research.router)
     app.include_router(institutions.router)
     app.include_router(feedback.router)
+    app.include_router(data.router)
 
     # Envelope-aware exception handlers. Order matters: register the
     # narrower types first so FastAPI's resolver picks them over the

@@ -15,6 +15,7 @@ from typing import Callable, Optional
 
 from ..schemas.copilot2 import CopilotAnswer, EvidenceItem
 from ._common import safe
+from .providers import registry as reg
 
 _log = logging.getLogger(__name__)
 
@@ -462,11 +463,14 @@ def _optimizer_scans(score, positions) -> dict[str, str]:
 
 _SYSTEM = (
     "You are MindMarket's portfolio Copilot. You receive EVIDENCE: vetted numbers "
-    "computed by the platform's engines and data providers. RULES: use ONLY the "
-    "evidence values — never invent prices, ratios, or figures; if the evidence is "
-    "thin, say so. Answer in EXACTLY these markdown sections, each a bold header:\n"
+    "computed by the platform's engines and data providers. Each evidence line "
+    "ends with [source: NAME]. RULES: use ONLY the evidence values — never invent "
+    "prices, ratios, or figures; ATTRIBUTE figures to their source in prose (e.g. "
+    "'per FMP', 'per the MindMarket engine', 'per FRED'); if a source is missing or "
+    "the evidence is thin, SAY SO plainly rather than implying confidence you don't "
+    "have. Answer in EXACTLY these markdown sections, each a bold header:\n"
     "**Conclusion** — 1-2 direct sentences answering the question.\n"
-    "**Evidence** — bullet the specific numbers you used (from the evidence).\n"
+    "**Evidence** — bullet the specific numbers you used, each tagged with its source.\n"
     "**Risks** — what could go wrong / caveats.\n"
     "**Next Actions** — 2-4 concrete, specific steps.\n"
     "**Disclaimer** — one line: educational, not financial advice.\n"
@@ -476,8 +480,9 @@ _SYSTEM = (
 
 def _evidence_block(evidence: list[EvidenceItem]) -> str:
     if not evidence:
-        return "(no evidence available — likely no active portfolio or data provider offline)"
-    return "\n".join(f"- {e.label}: {e.value} [{e.source}]" for e in evidence)
+        return "(no evidence available — likely no active portfolio or a data provider is offline)"
+    # Tag each figure with its human SOURCE LABEL so the model can attribute it.
+    return "\n".join(f"- {e.label}: {e.value} [source: {reg.label(e.source)}]" for e in evidence)
 
 
 def _deterministic_answer(intent: str, message: str, evidence: list[EvidenceItem]) -> str:
