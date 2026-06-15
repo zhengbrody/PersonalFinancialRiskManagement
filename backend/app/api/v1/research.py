@@ -21,7 +21,9 @@ from fastapi import APIRouter, Depends, Path, Request
 
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import ok, too_many_requests, unprocessable
+from ...schemas.news import TickerNewsResponse
 from ...schemas.research import FactPack, VerdictRequest
+from ...services import news as news_svc
 from ...services import research_factpack as rf
 
 router = APIRouter(prefix="/api/v1/research", tags=["research"])
@@ -50,6 +52,25 @@ def fact_pack(
         raise unprocessable(f"Could not build a FactPack for {ticker!r}.") from exc
 
     return ok({"fact_pack": fp.model_dump()}, request=request, started_at=started)
+
+
+@router.get(
+    "/news/{ticker}",
+    summary="Unified, source-labeled news for a ticker (FMP news + press releases + SEC), no credit",
+    response_model=None,
+)
+def ticker_news(
+    request: Request,
+    ticker: str = Path(min_length=1, max_length=20),
+    user: AuthedUser = Depends(require_user),
+):
+    """Combine FMP stock news + press releases (primary) with a SEC filings link,
+    deduped + classified + source-labeled. Fail-soft — never 500s, always returns
+    at least the SEC entry."""
+    started = time.perf_counter()
+    data = news_svc.get_ticker_news(ticker)
+    payload = TickerNewsResponse.model_validate(data).model_dump()
+    return ok(payload, request=request, started_at=started)
 
 
 @router.post(
