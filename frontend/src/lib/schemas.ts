@@ -37,6 +37,24 @@ export const dimensionScoreSchema = z.looseObject({
 });
 export type DimensionScore = z.infer<typeof dimensionScoreSchema>;
 
+// Unified per-field source provenance (registry-backed). What DataSourceBadges
+// + the "Data Sources Used" panel render across the app.
+export const sourceProvenanceSchema = z.looseObject({
+  field: z.string(),
+  provider: z.string(),
+  label: z.string().nullish(),
+  role: z.string().nullish(), // primary | fallback | computed
+  endpoint: z.string().nullish(),
+  as_of: z.string().nullish(),
+  freshness: z.string().nullish(),
+  confidence: z.number().nullish(),
+  cache_hit: z.boolean().nullish(),
+  latency_ms: z.number().nullish(),
+  fallback_used: z.boolean().nullish(),
+  warning: z.string().nullish(),
+});
+export type SourceProvenance = z.infer<typeof sourceProvenanceSchema>;
+
 // Price-source data quality. Optional/nullable so older backend
 // responses (before this field shipped) still parse. Describes which
 // source priced each holding and any gaps.

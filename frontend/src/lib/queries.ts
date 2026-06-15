@@ -22,6 +22,7 @@ import { useAuth } from "./auth-context";
 import {
   priceProvenanceSchema,
   scoreResponseSchema,
+  sourceProvenanceSchema,
   type ScoreFromActiveRequest,
   type ScoreResponse,
 } from "./schemas";
@@ -1211,6 +1212,42 @@ export const researchVerdictResponseSchema = z.looseObject({
 export type ResearchVerdictResponse = z.infer<
   typeof researchVerdictResponseSchema
 >;
+
+// ── unified ticker news (FMP news + press releases + SEC, source-labeled) ──
+export const unifiedNewsItemSchema = z.looseObject({
+  title: z.string(),
+  url: z.string().nullish(),
+  type: z.string(), // news | press_release | earnings_transcript | filing | macro
+  source: z.string(),
+  source_label: z.string(),
+  site: z.string().nullish(),
+  published: z.string().nullish(),
+  snippet: z.string().nullish(),
+});
+export type UnifiedNewsItem = z.infer<typeof unifiedNewsItemSchema>;
+
+export const tickerNewsSchema = z.looseObject({
+  items: z.array(unifiedNewsItemSchema),
+  sources: z.array(sourceProvenanceSchema),
+  warnings: z.array(z.string()),
+});
+export type TickerNews = z.infer<typeof tickerNewsSchema>;
+
+/** Unified, source-labeled news for a ticker. Authed, no credit; cached. */
+export function useTickerNews(ticker: string | null) {
+  const { accessToken } = useAuth();
+  return useQuery<TickerNews>({
+    queryKey: ["research", "news", ticker],
+    enabled: Boolean(accessToken && ticker),
+    queryFn: () =>
+      apiFetch<TickerNews>(`/api/v1/research/news/${encodeURIComponent(ticker!)}`, {
+        authToken: accessToken!,
+        schema: tickerNewsSchema,
+      }),
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  });
+}
 
 /** Fetch the deterministic FactPack for a ticker (fast, no credit). */
 export function useFactPack() {
