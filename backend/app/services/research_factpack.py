@@ -80,6 +80,7 @@ def build_fact_pack(
     analyst = fmp.get_analyst(tk)
     peers = fmp.get_peers(tk)
     news = fmp.get_news(tk, limit=6)
+    insider = fmp.get_insider(tk)
 
     # ALWAYS enrich from free yfinance, then let FMP win where present (the merge
     # below uses _pref(fmp, yf)). yfinance backfills the fields FMP /stable simply
@@ -97,6 +98,8 @@ def build_fact_pack(
     yf_fund = yf.get("fundamentals", {})
     yf_rate = yf.get("ratings", {})
     yf_tgt = yf_rate.get("price_targets", {})
+    yf_tech = yf.get("technicals", {})
+    yf_own = yf.get("ownership", {})
 
     p = profile.data
     f = fund.data
@@ -171,6 +174,10 @@ def build_fact_pack(
         if n.title
     ]
 
+    momentum = _momentum_block(price, yf_tech)
+    ownership = R.OwnershipBlock(institutional_pct=yf_own.get("institutional_pct"))
+    insider_block = _insider_block(insider.data)
+
     fp = R.FactPack(
         ticker=tk,
         name=_pref(getattr(p, "name", None)),
@@ -185,13 +192,78 @@ def build_fact_pack(
         quality=quality,
         growth=growth_block,
         analyst=analyst_block,
+        momentum=momentum,
+        ownership=ownership,
+        insider=insider_block,
         peers=peer_rows,
         news=news_items,
     )
     fp.drivers = _drivers(fp)
     fp.risk_flags = _risk_flags(fp)
-    fp.data_quality = _data_quality(profile, fund, growth, analyst, peers, news, used_yf=bool(yf))
+    fp.data_quality = _data_quality(
+        profile, fund, growth, analyst, peers, news, insider, used_yf=bool(yf)
+    )
+    # Momentum + ownership ride free yfinance scalars — record their provenance
+    # so the frontend can source-badge those cards too.
+    if any(v is not None for v in (momentum.rsi_14, momentum.sma_50, momentum.fifty_two_week_high)):
+        fp.data_quality.sources.append(
+            R.SourceRef(field="momentum", source="yfinance", as_of=fp.as_of, coverage=1.0)
+        )
+    if ownership.institutional_pct is not None:
+        fp.data_quality.sources.append(
+            R.SourceRef(field="ownership", source="yfinance", as_of=fp.as_of, coverage=1.0)
+        )
     return fp
+
+
+def _momentum_block(price: Optional[float], tech: dict) -> "R.MomentumBlock":
+    """Price-trend technicals + deterministic derived ratios. Fail-soft: any
+    missing input just leaves that field None."""
+    sma50 = tech.get("sma_50")
+    sma200 = tech.get("sma_200")
+    hi = tech.get("fifty_two_week_high")
+    lo = tech.get("fifty_two_week_low")
+
+    # Trend = price relative to BOTH moving averages (no advice, just position).
+    trend = None
+    if price and sma50 and sma200:
+        if price >= sma50 and price >= sma200:
+            trend = "uptrend"
+        elif price < sma50 and price < sma200:
+            trend = "downtrend"
+        else:
+            trend = "mixed"
+
+    return R.MomentumBlock(
+        rsi_14=tech.get("rsi_14"),
+        sma_50=sma50,
+        sma_200=sma200,
+        price_vs_sma50_pct=_pct((price - sma50) if (price and sma50) else None, sma50),
+        price_vs_sma200_pct=_pct((price - sma200) if (price and sma200) else None, sma200),
+        fifty_two_week_high=hi,
+        fifty_two_week_low=lo,
+        pct_from_52w_high=_pct((price - hi) if (price and hi) else None, hi),
+        pct_off_52w_low=_pct((price - lo) if (price and lo) else None, lo),
+        trend=trend,
+    )
+
+
+def _insider_block(summary) -> "R.InsiderBlock":
+    """FMP Form-4 90-day rollup → a balanced/net-buying/net-selling label."""
+    if summary is None:
+        return R.InsiderBlock()
+    buys = int(getattr(summary, "buys_90d", 0) or 0)
+    sells = int(getattr(summary, "sells_90d", 0) or 0)
+    net = getattr(summary, "net_shares_90d", None)
+    signal = None
+    if buys or sells:
+        if net is not None and net > 0:
+            signal = "net buying"
+        elif net is not None and net < 0:
+            signal = "net selling"
+        else:
+            signal = "balanced"
+    return R.InsiderBlock(buys_90d=buys, sells_90d=sells, net_shares_90d=net, signal=signal)
 
 
 def _default_enricher(tk: str) -> dict:
@@ -350,6 +422,11 @@ def _drivers(fp: R.FactPack) -> list[str]:
         )
     if v.band == "cheap":
         out.append((1.0, "Trades at a discount to sector peers"))
+    m = fp.momentum
+    if m.trend == "uptrend" and m.price_vs_sma200_pct:
+        out.append((0.9, f"In an uptrend — {m.price_vs_sma200_pct:+.0%} vs its 200-day average"))
+    if fp.insider.signal == "net buying":
+        out.append((0.8, "Insiders were net buyers over the last 90 days"))
     out.sort(key=lambda t: t[0], reverse=True)
     return [s for _, s in out[:4]]
 
@@ -372,11 +449,18 @@ def _risk_flags(fp: R.FactPack) -> list[str]:
         flags.append("Thin analyst coverage")
     if fp.beta and fp.beta > 1.5:
         flags.append(f"High market sensitivity (beta {fp.beta:.1f})")
+    m = fp.momentum
+    if m.rsi_14 is not None and m.rsi_14 >= 70:
+        flags.append(f"Technically stretched — RSI {m.rsi_14:.0f} (overbought zone)")
+    if m.pct_from_52w_high is not None and m.pct_from_52w_high <= -0.30:
+        flags.append(f"Deep below its 52-week high ({m.pct_from_52w_high:.0%})")
+    if fp.insider.signal == "net selling":
+        flags.append("Insiders were net sellers over the last 90 days")
     return flags
 
 
 def _data_quality(*results, used_yf: bool) -> R.DataQuality:
-    labels = ["profile", "fundamentals", "growth", "analyst", "peers", "news"]
+    labels = ["profile", "fundamentals", "growth", "analyst", "peers", "news", "insider"]
     sources: list[R.SourceRef] = []
     warnings: list[str] = []
     covs: list[float] = []

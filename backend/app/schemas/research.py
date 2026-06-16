@@ -66,6 +66,35 @@ class AnalystBlock(BaseModel):
     implied_upside_pct: Optional[float] = None  # derived vs current price
 
 
+class MomentumBlock(BaseModel):
+    """Price-trend technicals — all deterministic, from free yfinance scalars /
+    price history. No signal here is advice; it only says where price sits."""
+
+    rsi_14: Optional[float] = None
+    sma_50: Optional[float] = None
+    sma_200: Optional[float] = None
+    price_vs_sma50_pct: Optional[float] = None  # derived: price/sma50 - 1
+    price_vs_sma200_pct: Optional[float] = None
+    fifty_two_week_high: Optional[float] = None
+    fifty_two_week_low: Optional[float] = None
+    pct_from_52w_high: Optional[float] = None  # derived: price/high - 1 (≤0)
+    pct_off_52w_low: Optional[float] = None  # derived: price/low - 1 (≥0)
+    trend: Optional[str] = None  # "uptrend" | "downtrend" | "mixed" (vs both SMAs)
+
+
+class OwnershipBlock(BaseModel):
+    institutional_pct: Optional[float] = None  # fraction held by institutions
+
+
+class InsiderBlock(BaseModel):
+    """Form-4 insider activity over the trailing ~90 days (FMP)."""
+
+    buys_90d: int = 0
+    sells_90d: int = 0
+    net_shares_90d: Optional[float] = None
+    signal: Optional[str] = None  # "net buying" | "net selling" | "balanced"
+
+
 class PeerCompareRow(BaseModel):
     ticker: str
     name: str = ""
@@ -110,6 +139,9 @@ class FactPack(BaseModel):
     quality: QualityBlock = Field(default_factory=QualityBlock)
     growth: GrowthBlock = Field(default_factory=GrowthBlock)
     analyst: AnalystBlock = Field(default_factory=AnalystBlock)
+    momentum: MomentumBlock = Field(default_factory=MomentumBlock)
+    ownership: OwnershipBlock = Field(default_factory=OwnershipBlock)
+    insider: InsiderBlock = Field(default_factory=InsiderBlock)
     peers: list[PeerCompareRow] = Field(default_factory=list)
     news: list[NewsHeadline] = Field(default_factory=list)
 

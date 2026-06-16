@@ -105,6 +105,20 @@ const FACT_PACK = {
     target_high: 300,
     implied_upside_pct: 0.197,
   },
+  momentum: {
+    rsi_14: 58.0,
+    sma_50: 190.0,
+    sma_200: 175.0,
+    price_vs_sma50_pct: 0.0553,
+    price_vs_sma200_pct: 0.1457,
+    fifty_two_week_high: 215.0,
+    fifty_two_week_low: 150.0,
+    pct_from_52w_high: -0.0674,
+    pct_off_52w_low: 0.3367,
+    trend: "uptrend",
+  },
+  ownership: { institutional_pct: 0.61 },
+  insider: { buys_90d: 3, sells_90d: 1, net_shares_90d: 5000, signal: "net buying" },
   peers: [
     {
       ticker: "MSFT",
@@ -256,6 +270,12 @@ describe("ResearchPage", () => {
     // Peer comparison + news.
     expect(screen.getByText(/peer comparison/i)).toBeInTheDocument();
     expect(screen.getByText(/apple unveils new chips/i)).toBeInTheDocument();
+    // New depth: momentum + ownership/insider cards.
+    expect(screen.getByText(/price momentum/i)).toBeInTheDocument();
+    expect(screen.getByText(/^uptrend$/i)).toBeInTheDocument();
+    expect(screen.getByText(/ownership & insiders/i)).toBeInTheDocument();
+    expect(screen.getByText(/^net buying$/i)).toBeInTheDocument();
+    expect(screen.getByText("61.0%")).toBeInTheDocument(); // institutional held
   });
 
   it("shows the upgrade CTA on a quota_exceeded verdict, keeping the data", async () => {

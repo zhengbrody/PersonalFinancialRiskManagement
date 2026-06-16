@@ -145,6 +145,8 @@ function ResearchWorkbench() {
           <QualityCard fp={fp} />
           <GrowthCard fp={fp} />
           <AnalystCard fp={fp} />
+          <MomentumCard fp={fp} />
+          <OwnershipInsiderCard fp={fp} />
           <SignalsCard fp={fp} />
           {fp.peers.length > 0 && <PeersCard fp={fp} />}
           {/* Unified, source-labeled news (FMP news + press releases + SEC) —
@@ -484,6 +486,105 @@ function BulletCard({
 }
 
 // ── valuation / quality / growth / analyst cards ────────────────────
+
+function MomentumCard({ fp }: { fp: FactPack }) {
+  const m = fp.momentum;
+  if (!m) return null;
+  const has =
+    m.rsi_14 != null ||
+    m.sma_50 != null ||
+    m.fifty_two_week_high != null ||
+    m.price_vs_sma200_pct != null;
+  if (!has) return null;
+
+  return (
+    <SectionCard
+      title="Price momentum"
+      source={sourceFor(fp, "momentum")}
+      headerExtra={<TrendBadge trend={m.trend ?? null} />}
+    >
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Stat label="RSI (14)" value={num(m.rsi_14)} />
+        <Stat label="vs 50-day" value={signedPct(m.price_vs_sma50_pct)} />
+        <Stat label="vs 200-day" value={signedPct(m.price_vs_sma200_pct)} />
+        <Stat label="From 52w high" value={signedPct(m.pct_from_52w_high)} />
+        <Stat label="Off 52w low" value={signedPct(m.pct_off_52w_low)} />
+        <Stat label="50-day avg" value={money(m.sma_50)} />
+        <Stat label="200-day avg" value={money(m.sma_200)} />
+        <Stat label="52w range" value={range52w(m.fifty_two_week_low, m.fifty_two_week_high)} />
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">
+        Where price sits versus its own history — descriptive, not a buy/sell
+        signal.
+      </p>
+    </SectionCard>
+  );
+}
+
+function TrendBadge({ trend }: { trend: string | null }) {
+  if (!trend) return null;
+  const tone =
+    trend === "uptrend"
+      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+      : trend === "downtrend"
+        ? "bg-red-500/15 text-red-600 dark:text-red-400"
+        : "bg-muted text-muted-foreground";
+  return (
+    <span
+      className={`rounded-md px-2.5 py-1 text-xs font-semibold capitalize ${tone}`}
+      title="Price relative to its 50- and 200-day moving averages"
+    >
+      {trend}
+    </span>
+  );
+}
+
+function OwnershipInsiderCard({ fp }: { fp: FactPack }) {
+  const own = fp.ownership;
+  const ins = fp.insider;
+  const hasOwn = own?.institutional_pct != null;
+  const hasIns = ins != null && ((ins.buys_90d ?? 0) > 0 || (ins.sells_90d ?? 0) > 0);
+  if (!hasOwn && !hasIns) return null;
+
+  return (
+    <SectionCard
+      title="Ownership & insiders"
+      source={sourceFor(fp, "ownership", "insider")}
+      headerExtra={ins?.signal ? <InsiderSignalBadge signal={ins.signal} /> : null}
+    >
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Stat label="Institutional held" value={pct(own?.institutional_pct)} />
+        <Stat label="Insider buys (90d)" value={hasIns ? String(ins!.buys_90d ?? 0) : "—"} />
+        <Stat label="Insider sells (90d)" value={hasIns ? String(ins!.sells_90d ?? 0) : "—"} />
+        <Stat label="Net shares (90d)" value={num(ins?.net_shares_90d)} />
+      </div>
+    </SectionCard>
+  );
+}
+
+function InsiderSignalBadge({ signal }: { signal: string }) {
+  const tone =
+    signal === "net buying"
+      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+      : signal === "net selling"
+        ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+        : "bg-muted text-muted-foreground";
+  return (
+    <span className={`rounded-md px-2.5 py-1 text-xs font-semibold capitalize ${tone}`}>
+      {signal}
+    </span>
+  );
+}
+
+function signedPct(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return "—";
+  return `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%`;
+}
+
+function range52w(lo: number | null | undefined, hi: number | null | undefined): string {
+  if (lo == null && hi == null) return "—";
+  return `${money(lo)} – ${money(hi)}`;
+}
 
 function ValuationCard({ fp }: { fp: FactPack }) {
   const v = fp.valuation;

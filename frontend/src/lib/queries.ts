@@ -1131,6 +1131,30 @@ const factPackAnalystSchema = z.looseObject({
   implied_upside_pct: fnum,
 });
 
+const factPackMomentumSchema = z.looseObject({
+  rsi_14: fnum,
+  sma_50: fnum,
+  sma_200: fnum,
+  price_vs_sma50_pct: fnum,
+  price_vs_sma200_pct: fnum,
+  fifty_two_week_high: fnum,
+  fifty_two_week_low: fnum,
+  pct_from_52w_high: fnum,
+  pct_off_52w_low: fnum,
+  trend: fstr, // "uptrend" | "downtrend" | "mixed"
+});
+
+const factPackOwnershipSchema = z.looseObject({
+  institutional_pct: fnum,
+});
+
+const factPackInsiderSchema = z.looseObject({
+  buys_90d: z.number().nullish(),
+  sells_90d: z.number().nullish(),
+  net_shares_90d: fnum,
+  signal: fstr, // "net buying" | "net selling" | "balanced"
+});
+
 const factPackPeerSchema = z.looseObject({
   ticker: z.string(),
   name: fstr,
@@ -1175,6 +1199,9 @@ export const factPackSchema = z.looseObject({
   quality: factPackQualitySchema,
   growth: factPackGrowthSchema,
   analyst: factPackAnalystSchema,
+  momentum: factPackMomentumSchema.nullish(),
+  ownership: factPackOwnershipSchema.nullish(),
+  insider: factPackInsiderSchema.nullish(),
   peers: z.array(factPackPeerSchema),
   news: z.array(factPackNewsSchema),
   drivers: z.array(z.string()),
