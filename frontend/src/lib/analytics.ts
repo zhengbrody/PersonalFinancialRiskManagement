@@ -24,7 +24,9 @@ export function initAnalytics(): void {
       capture_pageview: false, // App Router → manual pageviews (see provider)
       capture_pageleave: true,
       person_profiles: "identified_only",
-      autocapture: true,
+      // Finance UX can expose sensitive text through buttons, forms, and URLs.
+      // Keep analytics to explicit, reviewed `track(...)` calls only.
+      autocapture: false,
     });
     started = true;
   } catch {
@@ -62,8 +64,23 @@ export function resetAnalytics(): void {
 export function capturePageview(url: string): void {
   if (!started) return;
   try {
-    posthog.capture("$pageview", { $current_url: url });
+    const safeUrl = sanitizePageviewUrl(url);
+    posthog.capture("$pageview", { $current_url: safeUrl });
   } catch {
     /* ignore */
+  }
+}
+
+/**
+ * Strip query strings and hashes before analytics. This prevents OAuth
+ * callback codes, future ticker query params, or campaign/user identifiers
+ * from leaking into PostHog while preserving route-level funnel analysis.
+ */
+export function sanitizePageviewUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return url.split("#", 1)[0]?.split("?", 1)[0] ?? url;
   }
 }

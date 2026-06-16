@@ -46,7 +46,7 @@ http://localhost:8000/docs
 | `ANTHROPIC_API_KEY` | Server-side LLM key. |
 | `STRIPE_SECRET_KEY` | Stripe server key. |
 | `FMP_API_KEY` | Fundamentals and equity research data. |
-| `MASSIVE_API_KEY` | Optional fallback market-data provider. |
+| `MASSIVE_API_KEY` | Primary market price/history provider when configured; Yahoo Finance remains fallback. |
 | `SENTRY_DSN` | Backend error reporting. |
 
 ## Endpoint Groups

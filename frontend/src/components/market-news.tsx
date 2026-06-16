@@ -1,11 +1,12 @@
 "use client";
 
 /**
- * Macro news list (public, fail-soft). Free RSS + yfinance headlines from
- * /api/v1/macro/news. Renders an empty note rather than erroring if the feed
- * is down.
+ * Macro news list (public, fail-soft). Shows source-labeled headlines from the
+ * macro news service so the user can see the publisher mix, not just a generic
+ * "Yahoo" feed. Renders an empty note rather than erroring if the feed is down.
  */
 
+import { DataSourceBadges } from "@/components/data-source-badges";
 import {
   Card,
   CardContent,
@@ -25,6 +26,7 @@ export function MarketNews() {
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Market news</CardTitle>
         <CardDescription>The macro headlines moving markets right now.</CardDescription>
+        {q.data?.sources && <DataSourceBadges sources={q.data.sources} />}
       </CardHeader>
       <CardContent className="space-y-2">
         {q.isLoading && (

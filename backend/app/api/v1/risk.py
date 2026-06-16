@@ -111,6 +111,10 @@ def _price_provenance(price_prov: dict, price_frame) -> PriceProvenanceOut:
     from ...services import market_data
 
     return PriceProvenanceOut(
+        by_ticker=dict(price_prov.get("by_ticker", {})),
+        yfinance_fallback_used=market_data.yfinance_fallback_tickers(
+            price_prov.get("by_ticker", {})
+        ),
         massive_fallback_used=market_data.massive_fallback_tickers(price_prov.get("by_ticker", {})),
         missing=price_prov.get("missing", []),
         trading_days=int(len(price_frame)),

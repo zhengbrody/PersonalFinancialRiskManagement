@@ -61,6 +61,8 @@ export type SourceProvenance = z.infer<typeof sourceProvenanceSchema>;
 export const priceProvenanceSchema = z.looseObject({
   primary: z.string().nullish(),
   fallback: z.string().nullish(),
+  by_ticker: z.record(z.string(), z.string()).nullish(),
+  yfinance_fallback_used: z.array(z.string()).nullish(),
   massive_fallback_used: z.array(z.string()).nullish(),
   missing: z.array(z.string()).nullish(),
   trading_days: z.number().nullish(),

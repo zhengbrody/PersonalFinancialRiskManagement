@@ -11,15 +11,18 @@ class PriceRow(BaseModel):
     ticker: str
     price: float
     as_of: str = Field(..., description="ISO date (YYYY-MM-DD) of the bar")
-    source: str = Field("yfinance", description='Price provenance: "yfinance" | "massive".')
+    source: str = Field("massive", description='Price provenance: "massive" | "yfinance".')
 
 
 class PriceProvenance(BaseModel):
     """Where each priced ticker's data came from, plus what stayed missing."""
 
-    primary: str = "yfinance"
-    fallback: str = "massive"
+    primary: str = "massive"
+    fallback: str = "yfinance"
     by_ticker: dict[str, str] = Field(default_factory=dict)
+    yfinance_fallback_used: list[str] = Field(default_factory=list)
+    # Deprecated compatibility field. Historically meant "Massive fallback";
+    # now means "Massive-sourced tickers" because Massive is primary.
     massive_fallback_used: list[str] = Field(default_factory=list)
     missing: list[str] = Field(default_factory=list)
 

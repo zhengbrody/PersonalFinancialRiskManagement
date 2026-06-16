@@ -196,10 +196,13 @@ def get_movers_endpoint(request: Request):
     return ok(payload.model_dump(), request=request, started_at=started)
 
 
-@router.get("/news", summary="Latest macro market news (free RSS + yfinance)")
+@router.get("/news", summary="Latest source-labeled macro market news")
 def get_news_endpoint(request: Request):
     """Aggregated macro headlines. Public, free, fail-soft to an empty list."""
     started = time.perf_counter()
-    items = market_news.get_macro_news()
-    payload = NewsResponse(items=[NewsItemOut(**it) for it in items])
+    data = market_news.get_macro_news()
+    payload = NewsResponse(
+        items=[NewsItemOut(**it) for it in data.get("items", [])],
+        sources=data.get("sources", []),
+    )
     return ok(payload.model_dump(), request=request, started_at=started)

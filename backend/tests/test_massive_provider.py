@@ -1,9 +1,8 @@
-"""Massive provider (fallback market data) + the market_data fallback wiring.
+"""Massive provider (primary market data) + the market_data fallback wiring.
 
 All HTTP is mocked — no real network. Covers: missing key, successful price +
-history, 429 rate-limit, bad ticker, cache hit, and the market_data path that
-backfills yfinance gaps from Massive (and degrades to a data-quality warning,
-never a 500, when Massive also fails).
+history, 429 rate-limit, bad ticker, cache hit, and the legacy market_data test
+path that backfills explicit yfinance cache gaps from Massive.
 """
 
 from __future__ import annotations

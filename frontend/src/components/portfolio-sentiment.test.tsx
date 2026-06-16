@@ -76,12 +76,16 @@ describe("MarketNews", () => {
   it("renders public headlines", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       mockJson({
-        data: { items: [{ source: "Reuters", title: "Fed holds rates", link: "http://x", published: "today" }] },
+        data: {
+          items: [{ source: "Reuters", title: "Fed holds rates", link: "http://x", published: "today" }],
+          sources: [{ field: "macro_news", provider: "rss_reuters", label: "Reuters", role: "primary" }],
+        },
         error: null,
         meta: {},
       }),
     );
     renderWithQuery(<MarketNews />);
     expect(await screen.findByText("Fed holds rates")).toBeInTheDocument();
+    expect(screen.getByText("Reuters")).toBeInTheDocument();
   });
 });

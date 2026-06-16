@@ -499,7 +499,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Latest macro market news (free RSS + yfinance)
+         * Latest source-labeled macro market news
          * @description Aggregated macro headlines. Public, free, fail-soft to an empty list.
          */
         get: operations["get_news_endpoint_api_v1_macro_news_get"];

@@ -10,9 +10,11 @@ FastAPI layer never reaches the network directly. Two public helpers:
   trailing window. Used internally by ``/api/v1/risk/score_from_active``
   to compute both ``market_value`` and the returns matrix in one shot.
 
-Both calls go through the same per-ticker cache (default 24h TTL,
-configurable on the underlying provider). That means the second user
-to ask for SPY's price within a day pays no network cost.
+When Massive is configured, daily history is attempted there first because it
+is the registry's primary price/OHLC source. yfinance stays as the free
+fallback and still backs local tests through the optional ``cache_provider``
+hook. Both paths cache aggressively, so the second user to ask for SPY's price
+within the TTL pays no network cost.
 
 This module is the only place that talks to ``data_provider``
 internals; routes and schemas don't import yfinance / pandas
@@ -105,9 +107,11 @@ _TICKER_RE = re.compile(r"^[A-Z0-9.\^=\-]{1,20}$")
 MAX_TICKERS_PER_CALL = 50
 
 
-# How many yfinance-missing tickers we'll try to backfill from Massive in one
-# call. Massive Basic is 5 calls/min; each fallback ticker is one history call
-# (then cached), so we cap and LOG the overflow rather than silently truncating.
+# How many yfinance-missing tickers we'll try to backfill from Massive in the
+# legacy/test path. Normal production flow is Massive-first, then yfinance
+# fallback. Massive Basic is 5 calls/min; each fallback ticker is one history
+# call (then cached), so we cap and LOG the overflow rather than silently
+# truncating.
 _MAX_MASSIVE_FALLBACK = 5
 
 
@@ -118,14 +122,20 @@ class LatestPrice:
     ticker: str
     price: float
     as_of: str  # ISO date YYYY-MM-DD of the bar
-    source: str = "yfinance"  # "yfinance" | "massive" — price provenance
+    source: str = "massive"  # "massive" | "yfinance" — price provenance
 
 
 def massive_fallback_tickers(by_ticker: dict) -> list[str]:
-    """The (sorted) tickers a provenance ``by_ticker`` map served from Massive —
-    the single source for the 'massive_fallback_used' field shared by the
-    /market/prices, score, and report responses."""
+    """Deprecated compatibility helper for the old ``massive_fallback_used``
+    field. It now means "Massive-sourced tickers" because Massive is the
+    primary source when configured."""
     return sorted(t for t, s in by_ticker.items() if s == "massive")
+
+
+def yfinance_fallback_tickers(by_ticker: dict) -> list[str]:
+    """The tickers served by yfinance because Massive was unavailable, capped,
+    or missing that symbol."""
+    return sorted(t for t, s in by_ticker.items() if s == "yfinance")
 
 
 def _normalise_tickers(tickers: Iterable[str]) -> list[str]:
@@ -220,6 +230,32 @@ def _massive_fallback(missing: list[str], days: int, frames: dict, src_map: dict
                 src_map[t] = "massive"
 
 
+def _massive_primary(tickers: list[str], days: int, frames: dict, src_map: dict) -> None:
+    """Populate ``frames`` from Massive first. Fail-soft per ticker; yfinance
+    fills whatever remains missing. This is the production path when
+    ``MASSIVE_API_KEY`` is configured and no explicit test cache provider is
+    supplied."""
+    try:
+        from .providers import massive_provider as massive
+    except Exception:  # noqa: BLE001 - provider import must never break pricing
+        return
+    if not tickers or not massive.is_configured():
+        return
+    for t in tickers:
+        try:
+            res = massive.get_daily_history(t, days=days)
+        except Exception as exc:  # noqa: BLE001 - provider should fail-soft; double-guard anyway
+            _logger.warning(
+                "market_data.massive_primary_error ticker=%s err=%s", t, type(exc).__name__
+            )
+            continue
+        if res.ok and res.data:
+            series = _bars_to_series(res.data)
+            if series is not None and not series.empty:
+                frames[t] = series
+                src_map[t] = "massive"
+
+
 def get_price_history(
     tickers: Iterable[str],
     *,
@@ -230,11 +266,11 @@ def get_price_history(
     """Return a date-indexed DataFrame of adjusted close, one column
     per ticker.
 
-    yfinance is the source; tickers it can't price are backfilled from Massive
-    (fallback only) when ``MASSIVE_API_KEY`` is set. Pass a ``provenance`` dict
-    to receive ``{"by_ticker": {tk: "yfinance"|"massive"}, "missing": [...]}``
-    (the param is additive — existing callers are unaffected). We do NOT raise
-    on partial coverage — most risk-engine math handles missing columns.
+    Massive is attempted first when configured; yfinance fills whatever remains
+    missing. Pass a ``provenance`` dict to receive
+    ``{"by_ticker": {tk: "massive"|"yfinance"}, "missing": [...]}`` (the param
+    is additive — existing callers are unaffected). We do NOT raise on partial
+    coverage — most risk-engine math handles missing columns.
     """
     tk = _normalise_tickers(tickers)
     end = pd.Timestamp.today().normalize()
@@ -242,11 +278,21 @@ def get_price_history(
     start_s = start.strftime("%Y-%m-%d")
     end_s = end.strftime("%Y-%m-%d")
 
-    provider = cache_provider or _build_cache_provider()
-
     frames: dict[str, pd.Series] = {}
-    with ThreadPoolExecutor(max_workers=min(8, len(tk))) as pool:
-        futures = {pool.submit(_fetch_one_history, provider, t, start_s, end_s): t for t in tk}
+    src_map: dict[str, str] = {}
+
+    # Production: configured Massive is the primary OHLC source. Tests and
+    # callers that pass an explicit cache_provider keep the old deterministic
+    # yfinance-first path so provider tests stay hermetic.
+    if cache_provider is None:
+        _massive_primary(tk, max(days, 30), frames, src_map)
+
+    provider = cache_provider or _build_cache_provider()
+    yf_tickers = [t for t in tk if t not in frames]
+    with ThreadPoolExecutor(max_workers=min(8, len(yf_tickers) or 1)) as pool:
+        futures = {
+            pool.submit(_fetch_one_history, provider, t, start_s, end_s): t for t in yf_tickers
+        }
         for fut in as_completed(futures):
             t = futures[fut]
             df = fut.result()
@@ -255,11 +301,13 @@ def get_price_history(
             series = _extract_close_series(df)
             if series is not None and not series.empty:
                 frames[t] = series
+                src_map[t] = "yfinance"
 
-    # Provenance + Massive fallback for whatever yfinance couldn't price.
-    src_map = {t: "yfinance" for t in frames}
+    # Legacy/test path: if a test cache provider produced gaps and Massive is
+    # configured, preserve the old backfill behaviour.
     missing = [t for t in tk if t not in frames]
-    _massive_fallback(missing, max(days, 30), frames, src_map)
+    if cache_provider is not None:
+        _massive_fallback(missing, max(days, 30), frames, src_map)
     if provenance is not None:
         provenance["by_ticker"] = src_map
         provenance["missing"] = [t for t in tk if t not in frames]
@@ -315,9 +363,9 @@ def get_latest_prices(
     via ``get_price_history`` — only this display endpoint goes intraday.
 
     Each ``LatestPrice`` carries its ``source`` ("yfinance" | "massive"). A
-    Massive-sourced (fallback) ticker keeps its EOD close — no intraday overlay,
-    since Massive Basic has no live intraday. Pass ``provenance`` to also receive
-    the by-ticker/missing summary.
+    Massive-sourced tickers keep their EOD close — no intraday overlay, since
+    Massive Basic has no live intraday. Pass ``provenance`` to also receive the
+    by-ticker/missing summary.
     """
     inner_prov: dict = {}
     frame = get_price_history(

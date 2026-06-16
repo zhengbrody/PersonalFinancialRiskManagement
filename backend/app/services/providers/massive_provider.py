@@ -1,9 +1,9 @@
-"""Massive Stocks (Basic, free tier) provider — market-price/history FALLBACK.
+"""Massive Stocks provider — primary market price/history when configured.
 
-Deliberately NOT a production primary source. yfinance stays the default free
-market-data source; this adapter only fills gaps (a yfinance symbol that came
-back empty/NaN/errored). FMP keeps fundamentals/analyst/peers — Massive never
-touches those.
+Massive is the registry's primary source for US stock prices, daily OHLC,
+volume/ADV, and ticker metadata. yfinance remains the no-key fallback so the
+product stays usable when Massive is missing, rate-limited, or unavailable. FMP
+keeps fundamentals/analyst/peers — Massive never touches those.
 
 Free Basic is rate-limited to ~5 calls/min, so this module:
 * caches aggressively in-process (price ~20m, history ~12h, reference ~24h),
@@ -15,10 +15,8 @@ Free Basic is rate-limited to ~5 calls/min, so this module:
   return ``ProviderResult(data=None, warnings=[...])`` so the page never 500s.
 
 The HTTP contract (base URL, endpoint paths, JSON field names) is intentionally
-overridable via env + tolerant parsing, because the exact Massive Basic schema
-must be confirmed against the live API/key before it returns live data. Until
-then every leg fail-softs to ``None`` and yfinance remains the source — zero
-regression.
+overridable via env + tolerant parsing. Every leg fail-softs to ``None`` so
+yfinance can fill the gap — zero regression.
 """
 
 from __future__ import annotations
@@ -171,7 +169,7 @@ def _cached(domain: str, ticker: str, ttl: int, producer) -> ProviderResult:
 
 
 def get_latest_price(ticker: str) -> ProviderResult[PriceBar]:
-    """Most recent end-of-day close + date for one ticker (fallback)."""
+    """Most recent end-of-day close + date for one ticker."""
     tk = (ticker or "").strip().upper()
     if not tk:
         return ProviderResult(data=None, source="massive", warnings=["bad_ticker"])
