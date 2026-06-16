@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { MacroSnapshot } from "@/components/macro-snapshot";
+import { SampleCockpit } from "@/components/sample-cockpit";
 
 const PRODUCT_JSON_LD = {
   "@context": "https://schema.org",
@@ -103,9 +104,14 @@ export function MarketingLanding() {
               Get started — free
             </Button>
           </Link>
+          <Link href="#sample-cockpit">
+            <Button size="lg" variant="outline" className="w-full sm:w-auto">
+              See a sample cockpit
+            </Button>
+          </Link>
           {isBillingEnabled() && (
             <Link href="/pricing">
-              <Button size="lg" variant="outline" className="w-full sm:w-auto">
+              <Button size="lg" variant="ghost" className="w-full sm:w-auto">
                 See plans
               </Button>
             </Link>
@@ -120,6 +126,9 @@ export function MarketingLanding() {
 
       {/* ── live macro panel ─────────────────────────────────── */}
       <MacroSnapshot />
+
+      {/* ── interactive sample cockpit (pre-login, deterministic) ── */}
+      <SampleCockpit />
 
       {/* ── SEO-readable product category ────────────────────── */}
       <section className="grid gap-6 md:grid-cols-[1.2fr_0.8fr]">

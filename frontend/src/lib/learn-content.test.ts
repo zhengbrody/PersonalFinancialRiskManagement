@@ -8,7 +8,7 @@ import { LEARN_BY_SLUG, LEARN_SLUGS, LEARN_TOPICS } from "./learn-content";
 
 describe("learn-content", () => {
   it("has the seven brief topics with unique slugs", () => {
-    expect(LEARN_SLUGS).toEqual([...new Set(LEARN_SLUGS)]); // unique
+    expect(LEARN_SLUGS).toEqual(Array.from(new Set(LEARN_SLUGS))); // unique
     for (const slug of [
       "portfolio-risk-management",
       "var-cvar-explained",
