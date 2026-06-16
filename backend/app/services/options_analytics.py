@@ -301,6 +301,9 @@ def analyze_contract(
             warnings.append("no usable quote (bid/ask/last all empty)")
         else:
             result["mark"] = round(mark, 4)
+            # Free chains (yfinance) are delayed / end-of-day, not a live quote —
+            # label honestly so the user never mistakes it for real-time.
+            result["source"] = "stale_eod"
         # Prefer the chain's own IV; fall back to solving from the mark.
         chain_iv = row.get("implied_volatility")
         if chain_iv is not None and chain_iv > 0:
@@ -318,6 +321,7 @@ def analyze_contract(
         if override not in (None, 0, 0.0) and float(override) > 0:
             mark = float(override)
             result["mark"] = round(mark, 4)
+            result["source"] = "manual"
             if iv is None and spot is not None and T > 0:
                 iv = implied_volatility(mark, spot, strike, T, risk_free_rate, option_type)
                 if iv is not None:

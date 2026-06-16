@@ -7,6 +7,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { renderWithQuery } from "@/test-utils";
 
 vi.mock("@/lib/auth-context", () => ({
@@ -40,33 +41,49 @@ const CONTRACT: OptionContract = {
   contract_multiplier: 100,
 };
 
+const LEG = {
+  contract_symbol: "AAPL270115C00150000",
+  underlying: "AAPL",
+  option_type: "call",
+  strike: 150,
+  expiry: "2027-01-15",
+  quantity: 2,
+  contract_multiplier: 100,
+  days_to_expiry: 200,
+  spot: 180,
+  mark: 40,
+  iv: 0.3,
+  greeks: { delta: 0.7, gamma: 0.01, theta: -0.05, vega: 0.2, rho: 0.1 },
+  delta_notional: 25200,
+  market_value: 8000,
+  cost_basis: 1000,
+  unrealized_pnl: 7000,
+  break_even: 155,
+  moneyness: "ITM",
+  payoff: [{ price: 150, pnl: -1000 }, { price: 200, pnl: 9000 }],
+  source: "stale_eod",
+  warnings: [],
+};
+
 function analyzeJson() {
   return new Response(
     JSON.stringify({
       data: {
-        results: [
+        results: [LEG],
+        strategies: [
           {
-            contract_symbol: "AAPL270115C00150000",
             underlying: "AAPL",
-            option_type: "call",
-            strike: 150,
             expiry: "2027-01-15",
-            quantity: 2,
-            contract_multiplier: 100,
-            days_to_expiry: 200,
-            spot: 180,
-            mark: 40,
-            iv: 0.3,
-            greeks: { delta: 0.7, gamma: 0.01, theta: -0.05, vega: 0.2, rho: 0.1 },
-            delta_notional: 25200,
-            market_value: 8000,
-            cost_basis: 1000,
-            unrealized_pnl: 7000,
-            break_even: 155,
-            moneyness: "ITM",
+            name: "Long call",
+            leg_count: 1,
+            net_debit: 1000,
+            net_pnl: 7000,
+            max_loss: 1000,
+            max_gain: null, // unbounded upside
+            break_evens: [155],
+            net_greeks: { delta: 140, gamma: 2, theta: -10, vega: 40 },
             payoff: [{ price: 150, pnl: -1000 }, { price: 200, pnl: 9000 }],
-            source: "yfinance",
-            warnings: [],
+            legs: [LEG],
           },
         ],
         totals: {
@@ -182,17 +199,26 @@ describe("OptionsAnalysis", () => {
     expect(container.textContent).not.toContain("Options");
   });
 
-  it("renders exposure, flags, stress grid + contract once analytics load", async () => {
+  it("renders exposure, flags, stress grid + the netted strategy once analytics load", async () => {
+    const user = userEvent.setup();
     mockFetchByUrl();
     renderWithQuery(<OptionsAnalysis contracts={[CONTRACT]} />);
     // exposure summary
     expect(await screen.findByText("Portfolio option exposure", { exact: false })).toBeInTheDocument();
     // risk flag surfaced
     expect(await screen.findByText("Concentrated in AAPL.")).toBeInTheDocument();
-    // per-contract delta + moneyness
-    expect(await screen.findByText("0.700")).toBeInTheDocument();
-    expect(screen.getAllByText("ITM").length).toBeGreaterThan(0);
     // stress grid repriced
     expect(await screen.findByText("Stress grid", { exact: false })).toBeInTheDocument();
+
+    // NEW: the netted strategy card (name + bounded max loss). Legs are
+    // collapsed by default — the scary per-leg numbers don't shout.
+    expect(await screen.findByText("Long call")).toBeInTheDocument();
+    expect(screen.getByText("Combined P&L at expiry", { exact: false })).toBeInTheDocument();
+    // delta lives inside the leg, hidden until expanded.
+    expect(screen.queryByText("0.700")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /show 1 leg/i }));
+    expect(await screen.findByText("0.700")).toBeInTheDocument();
+    // honest price-quality label (yfinance is delayed/EOD).
+    expect(screen.getByText(/delayed \/ eod/i)).toBeInTheDocument();
   });
 });

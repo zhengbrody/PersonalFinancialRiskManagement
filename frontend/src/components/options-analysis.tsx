@@ -37,6 +37,7 @@ import {
   type OptionExplain,
   type OptionExposure,
   type OptionScenarioGrid,
+  type OptionStrategy,
   useOptionAnalytics,
   useOptionExplain,
 } from "@/lib/queries";
@@ -80,11 +81,10 @@ export function OptionsAnalysis({ contracts }: { contracts: OptionContract[] }) 
             <ExpiryLadder exposure={analytics.data.exposure} />
             <MoneynessBar results={analytics.data.results} />
           </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            {analytics.data.results.map((r, i) => (
-              <ContractCard key={r.contract_symbol ?? `${r.underlying}-${i}`} a={r} />
-            ))}
-          </div>
+          <StrategyList
+            strategies={analytics.data.strategies ?? []}
+            results={analytics.data.results}
+          />
         </>
       ) : null}
     </section>
@@ -439,6 +439,169 @@ function MoneynessBar({ results }: { results: OptionAnalytics[] }) {
 
 // ── per-contract card ─────────────────────────────────────────────────────────
 
+// ── strategy view (netted multi-leg) ──────────────────────────────────────────
+
+function StrategyList({
+  strategies,
+  results,
+}: {
+  strategies: OptionStrategy[];
+  results: OptionAnalytics[];
+}) {
+  // Fallback: if the backend didn't send strategies (older build), show per-leg.
+  if (strategies.length === 0) {
+    return (
+      <div className="grid gap-3 md:grid-cols-2">
+        {results.map((r, i) => (
+          <ContractCard key={r.contract_symbol ?? `${r.underlying}-${i}`} a={r} />
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
+        Your positions, grouped into strategies
+      </p>
+      {strategies.map((s, i) => (
+        <StrategyCard key={`${s.underlying}-${s.expiry}-${i}`} s={s} />
+      ))}
+    </div>
+  );
+}
+
+function StrategyCard({ s }: { s: OptionStrategy }) {
+  const [open, setOpen] = useState(false);
+  const credit = s.net_debit < 0;
+  const g = s.net_greeks;
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
+          <Chip label={s.name} tone={credit ? "up" : undefined} />
+          <TickerBadge ticker={s.underlying} />
+          <span className="text-muted-foreground">{shortExpiry(s.expiry)}</span>
+          <span className="text-[11px] text-muted-foreground">
+            {s.leg_count} leg{s.leg_count === 1 ? "" : "s"}
+          </span>
+          {s.net_pnl != null && (
+            <span className="ml-auto">
+              <Chip label={`P&L ${usd(s.net_pnl)}`} tone={s.net_pnl >= 0 ? "up" : "down"} />
+            </span>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
+          <Stat label={credit ? "Net credit" : "Net debit"} value={usd(Math.abs(s.net_debit))} />
+          <Stat
+            label="Max loss"
+            value={s.max_loss == null ? "Unbounded" : usd(s.max_loss)}
+            tone={s.max_loss == null ? "down" : undefined}
+          />
+          <Stat
+            label="Max gain"
+            value={s.max_gain == null ? "Unbounded" : usd(s.max_gain)}
+            tone={s.max_gain == null ? "up" : undefined}
+          />
+          <Stat
+            label="Break-even"
+            value={s.break_evens.length ? s.break_evens.map((b) => usd(b)).join(" / ") : "—"}
+          />
+        </div>
+
+        {(g.delta != null || g.gamma != null) && (
+          <div className="grid grid-cols-4 gap-2 text-xs">
+            <Stat label="Net Δ" value={num(g.delta ?? 0, 1)} />
+            <Stat label="Net Γ" value={num(g.gamma ?? 0, 2)} />
+            <Stat
+              label="Net Θ/day"
+              value={num(g.theta ?? 0, 1)}
+              tone={(g.theta ?? 0) < 0 ? "down" : undefined}
+            />
+            <Stat label="Net ν/1%" value={num(g.vega ?? 0, 1)} />
+          </div>
+        )}
+
+        {s.payoff.length > 0 && <StrategyPayoffChart s={s} />}
+
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="text-xs text-primary hover:underline"
+          aria-expanded={open}
+        >
+          {open ? "Hide legs" : `Show ${s.leg_count} leg${s.leg_count === 1 ? "" : "s"}`}
+        </button>
+        {open && (
+          <div className="grid gap-3 md:grid-cols-2">
+            {s.legs.map((leg, i) => (
+              <ContractCard key={leg.contract_symbol ?? `${leg.underlying}-${i}`} a={leg} />
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function StrategyPayoffChart({ s }: { s: OptionStrategy }) {
+  return (
+    <div>
+      <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+        Combined P&amp;L at expiry
+      </p>
+      <ResponsiveContainer width="100%" height={130}>
+        <LineChart data={s.payoff} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+          <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="2 4" vertical={false} />
+          <XAxis
+            dataKey="price"
+            tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+            tickFormatter={(v: number) => `$${Math.round(v)}`}
+            type="number"
+            domain={["dataMin", "dataMax"]}
+          />
+          <YAxis
+            tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+            tickFormatter={(v: number) =>
+              Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : `${Math.round(v)}`
+            }
+            width={34}
+          />
+          <Tooltip
+            contentStyle={{
+              background: "hsl(var(--popover))",
+              border: "1px solid hsl(var(--border))",
+              borderRadius: 6,
+              fontSize: 11,
+            }}
+            formatter={(v) => [usd(Number(v ?? 0)), "P&L"]}
+            labelFormatter={(v) => `Underlying $${Number(v).toFixed(0)}`}
+          />
+          <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeWidth={1} />
+          {s.break_evens.map((b, i) => (
+            <ReferenceLine key={i} x={b} stroke="hsl(var(--primary))" strokeDasharray="3 3" />
+          ))}
+          <Line type="monotone" dataKey="pnl" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+const SOURCE_CHIP: Record<string, { label: string; tone?: "up" | "down" | "muted" }> = {
+  market: { label: "Market price", tone: "up" },
+  manual: { label: "Manual mark" },
+  stale_eod: { label: "Delayed / EOD", tone: "muted" },
+  theoretical_fallback: { label: "Theoretical", tone: "muted" },
+};
+
+function SourceChip({ source }: { source: string | undefined }) {
+  const c = source ? SOURCE_CHIP[source] : undefined;
+  if (!c) return null;
+  return <Chip label={c.label} tone={c.tone} />;
+}
+
 function ContractCard({ a }: { a: OptionAnalytics }) {
   const dir = a.option_type === "call" ? "CALL" : "PUT";
   const isShort = a.quantity < 0;
@@ -462,7 +625,7 @@ function ContractCard({ a }: { a: OptionAnalytics }) {
           {a.assignment_risk && (
             <Chip label={`assign ${a.assignment_risk}`} tone="down" />
           )}
-          {a.source === "theoretical_fallback" && <Chip label="modelled" tone="muted" />}
+          <SourceChip source={a.source} />
           <span className="ml-auto text-[11px] tabular-nums text-muted-foreground">
             {a.days_to_expiry}d
           </span>
