@@ -3,6 +3,7 @@
 // two in sync when adding public pages — this file is what local dev and
 // any non-Caddy deployment will serve.
 import type { MetadataRoute } from "next";
+import { LEARN_SLUGS } from "@/lib/learn-content";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
 
@@ -13,6 +14,8 @@ const PUBLIC_ROUTES: Array<{
 }> = [
   { path: "/", changeFrequency: "weekly", priority: 1.0 },
   { path: "/score", changeFrequency: "weekly", priority: 0.85 },
+  { path: "/product", changeFrequency: "monthly", priority: 0.9 },
+  { path: "/learn", changeFrequency: "weekly", priority: 0.9 },
   { path: "/markets", changeFrequency: "daily", priority: 0.8 },
   { path: "/pricing", changeFrequency: "monthly", priority: 0.7 },
   { path: "/portfolio-risk-management", changeFrequency: "monthly", priority: 0.9 },
@@ -38,10 +41,19 @@ const PUBLIC_ROUTES: Array<{
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
-  return PUBLIC_ROUTES.map((route) => ({
-    url: `${SITE_URL}${route.path}`,
+  const learn: MetadataRoute.Sitemap = LEARN_SLUGS.map((slug) => ({
+    url: `${SITE_URL}/learn/${slug}`,
     lastModified: now,
-    changeFrequency: route.changeFrequency,
-    priority: route.priority,
+    changeFrequency: "monthly" as const,
+    priority: 0.8,
   }));
+  return [
+    ...PUBLIC_ROUTES.map((route) => ({
+      url: `${SITE_URL}${route.path}`,
+      lastModified: now,
+      changeFrequency: route.changeFrequency,
+      priority: route.priority,
+    })),
+    ...learn,
+  ];
 }

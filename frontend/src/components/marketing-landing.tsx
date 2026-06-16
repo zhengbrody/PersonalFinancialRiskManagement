@@ -284,7 +284,17 @@ export function MarketingLanding() {
           and adds nothing for full-page navigations. They give crawlers an
           in-content path to the topic pages (previously sitemap-only). */}
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Learn portfolio risk</h2>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-lg font-semibold">Learn portfolio risk</h2>
+          <div className="flex gap-3 text-sm">
+            <Link href="/product" className="text-primary hover:underline">
+              How it works →
+            </Link>
+            <Link href="/learn" className="text-primary hover:underline">
+              All guides →
+            </Link>
+          </div>
+        </div>
         <ul className="grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2 lg:grid-cols-3">
           {LEARN_LINKS.map((l) => (
             <li key={l.href}>
