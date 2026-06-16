@@ -44,6 +44,13 @@ def test_news_public_and_shaped(test_client, monkeypatch):
                 "summary": "s",
             },
             {
+                "source": "Yahoo Finance (SPY)",
+                "title": "Stocks drift after Fed decision",
+                "link": "http://y",
+                "published": "t",
+                "summary": "s",
+            },
+            {
                 "source": "",
                 "title": "",
                 "link": "",
@@ -54,9 +61,13 @@ def test_news_public_and_shaped(test_client, monkeypatch):
     )
     resp = test_client.get("/api/v1/macro/news")
     assert resp.status_code == 200, resp.json()
-    items = resp.json()["data"]["items"]
-    assert len(items) == 1
+    data = resp.json()["data"]
+    items = data["items"]
+    assert len(items) == 2
     assert items[0]["title"] == "Fed holds rates"
+    sources = data["sources"]
+    assert {s["label"] for s in sources} == {"Reuters", "Yahoo Finance"}
+    assert any(s["role"] == "fallback" and s["provider"] == "yfinance" for s in sources)
 
 
 def test_news_fail_soft(test_client, monkeypatch):
@@ -69,6 +80,7 @@ def test_news_fail_soft(test_client, monkeypatch):
     resp = test_client.get("/api/v1/macro/news")
     assert resp.status_code == 200
     assert resp.json()["data"]["items"] == []
+    assert resp.json()["data"]["sources"] == []
 
 
 # ── sentiment (authed + credit-gated) ───────────────────────────────

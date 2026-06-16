@@ -85,8 +85,12 @@ class PriceProvenanceOut(BaseModel):
     """Where the portfolio's price history came from + how deep it is. Surfaced
     in the Health Score / Risk Report 'data quality' area."""
 
-    primary: str = "yfinance"
-    fallback: str = "massive"
+    primary: str = "massive"
+    fallback: str = "yfinance"
+    by_ticker: dict[str, str] = Field(default_factory=dict)
+    yfinance_fallback_used: list[str] = Field(default_factory=list)
+    # Deprecated compatibility field. Historically meant "Massive fallback";
+    # now means "Massive-sourced tickers" because Massive is primary.
     massive_fallback_used: list[str] = Field(default_factory=list)
     missing: list[str] = Field(default_factory=list)
     trading_days: Optional[int] = None

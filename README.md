@@ -58,8 +58,9 @@ MindMarket sits between those worlds:
   scenario losses, and drawdown are computed in Python, not by the LLM.
 - **Grounded AI layer**: summaries and copilot answers use compact evidence
   packets and fallback templates when the model is unavailable.
-- **Provider provenance**: price rows identify whether data came from yfinance,
-  Massive fallback, or remained missing.
+- **Provider provenance**: price rows identify whether data came from Massive,
+  Yahoo fallback, or remained missing; research and macro fields carry their
+  own source labels.
 - **Production SaaS plumbing**: Supabase Auth/RLS, Stripe billing, Sentry,
   PostHog, GitHub Actions, GHCR, Docker Compose, and Caddy.
 - **Agent-ready backend**: MCP tools expose scoring, market data, macro data,
@@ -83,7 +84,7 @@ flowchart TD
   API --> Auth["Supabase Auth + RLS"]
   API --> Portfolio["Portfolio Service"]
   API --> Quant["Quant Engine<br/>score, VaR, stress, factors"]
-  API --> Data["Market Data<br/>yfinance + Massive fallback"]
+  API --> Data["Market Data<br/>Massive primary + Yahoo fallback"]
   API --> Research["Research Data<br/>FMP, SEC, FRED, Treasury"]
   API --> AI["AI Services<br/>Claude + deterministic fallback"]
   API --> Billing["Stripe Billing"]
@@ -113,7 +114,7 @@ small EC2 instance never runs a memory-heavy `next build`.
 | Frontend | Next.js 14 App Router, TypeScript, Tailwind CSS, shadcn-style primitives, React Query, Zod |
 | Backend | FastAPI, Pydantic, typed response envelope, PyJWT/JWKS auth verification |
 | Quant | NumPy, pandas, SciPy, custom portfolio scoring and risk engine |
-| Data | yfinance, Massive Stocks fallback, FMP, FRED CSV, Treasury CSV, SEC EDGAR |
+| Data | Massive Stocks, Yahoo Finance fallback, FMP, FRED CSV, Treasury CSV, SEC EDGAR |
 | Auth + DB | Supabase Auth, Postgres, Row Level Security |
 | AI | Anthropic Claude, deterministic fallback templates, MCP tool surface |
 | Payments | Stripe Checkout, Customer Portal, Supabase webhook sync |
@@ -217,7 +218,7 @@ Variables/Secrets, or the EC2 `.env` file.
 | `STRIPE_SECRET_KEY` | Billing | Server-side only. |
 | `STRIPE_PRICE_BASIC`, `STRIPE_PRICE_PRO` | Billing | Stripe price ids. |
 | `FMP_API_KEY` | Research | Fundamentals, analyst, peers, valuation data. |
-| `MASSIVE_API_KEY` | Market fallback | Optional fallback for price/history when yfinance fails. |
+| `MASSIVE_API_KEY` | Market data | Primary price/history source when configured; Yahoo Finance remains fallback. |
 | `SENTRY_DSN` | Observability | Backend Sentry DSN. |
 
 ---
@@ -228,13 +229,13 @@ MindMarket separates market data by job:
 
 | Provider | Role |
 | --- | --- |
-| yfinance | Default free price/history provider. |
-| Massive Stocks | Fallback-only provider for prices/history when yfinance is empty, stale, or errors. |
+| Massive Stocks | Primary price/history/OHLC provider when configured. |
+| Yahoo Finance | Free fallback for prices/history when Massive is missing, rate-limited, or unavailable. |
 | FMP | Fundamentals, valuation, analyst, profile, peers, and research context. |
 | FRED + Treasury | Macro rates, inflation, unemployment, and yield curve snapshots. |
 
 Every market price row carries provenance so the UI and API can report whether a
-number came from `yfinance`, `massive`, or a missing-data fallback. Missing data
+number came from `massive`, `yfinance`, or a missing-data fallback. Missing data
 should degrade gracefully; it should not become fabricated data.
 
 ---

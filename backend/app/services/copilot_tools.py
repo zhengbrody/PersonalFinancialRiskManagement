@@ -246,10 +246,11 @@ def _exec_market_sentiment() -> str:
 
 
 def _exec_macro_news() -> str:
-    import market_intelligence as mi
+    from . import market_news
 
     try:
-        items = mi.get_all_macro_news(max_items=8) or []
+        data = market_news.get_macro_news(max_items=8) or {}
+        items = data.get("items", [])
     except Exception as exc:
         _log.warning("copilot_tool.macro_news_failed err=%s", type(exc).__name__)
         return "Macro news unavailable right now."

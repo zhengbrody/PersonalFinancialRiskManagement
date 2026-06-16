@@ -6,6 +6,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from .provenance import SourceProvenance
+
 
 class SeriesPointOut(BaseModel):
     date: str
@@ -143,3 +145,4 @@ class NewsItemOut(BaseModel):
 
 class NewsResponse(BaseModel):
     items: list[NewsItemOut] = Field(default_factory=list)
+    sources: list[SourceProvenance] = Field(default_factory=list)

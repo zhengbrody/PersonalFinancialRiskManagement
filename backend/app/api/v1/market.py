@@ -121,6 +121,7 @@ def get_prices(
         requested=normalised,
         provenance=PriceProvenance(
             by_ticker=by_ticker,
+            yfinance_fallback_used=market_data.yfinance_fallback_tickers(by_ticker),
             massive_fallback_used=market_data.massive_fallback_tickers(by_ticker),
             missing=prov.get("missing", []),
         ),

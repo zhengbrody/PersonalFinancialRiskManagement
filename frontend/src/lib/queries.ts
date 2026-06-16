@@ -1760,7 +1760,10 @@ const newsItemSchema = z.looseObject({
   published: z.string().nullish(),
   summary: z.string().nullish(),
 });
-export const newsSchema = z.looseObject({ items: z.array(newsItemSchema) });
+export const newsSchema = z.looseObject({
+  items: z.array(newsItemSchema),
+  sources: z.array(sourceProvenanceSchema).nullish(),
+});
 export type NewsItem = z.infer<typeof newsItemSchema>;
 
 /** Public macro news headlines. Fail-soft to {items:[]} server-side. */

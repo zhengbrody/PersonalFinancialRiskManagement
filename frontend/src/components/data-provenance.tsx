@@ -8,6 +8,19 @@
 
 import type { PriceProvenance } from "@/lib/schemas";
 
+function displaySource(source?: string | null): string {
+  if (!source) return "Unknown";
+  if (source === "massive") return "Massive";
+  if (source === "yfinance") return "Yahoo Finance";
+  return source;
+}
+
+function sourceRank(source?: string): number {
+  if (source === "massive") return 0;
+  if (source === "yfinance") return 1;
+  return 2;
+}
+
 export function DataProvenance({
   asOf,
   source,
@@ -30,19 +43,41 @@ export function DataProvenance({
   if (coverage != null) parts.push(`${(coverage * 100).toFixed(0)}% coverage`);
 
   const pp = priceProvenance;
-  const fallbackUsed = pp?.massive_fallback_used ?? [];
+  const sourceCounts = new Map<string, number>();
+  for (const source of Object.values(pp?.by_ticker ?? {})) {
+    sourceCounts.set(source, (sourceCounts.get(source) ?? 0) + 1);
+  }
+  const yfinanceFallback = pp?.yfinance_fallback_used ?? [];
+  const legacyMassiveFallback = pp?.massive_fallback_used ?? [];
   const missing = pp?.missing ?? [];
   const priceSourceParts: { text: string; title?: string }[] = [];
   if (pp) {
-    const primary = pp.primary ?? "yfinance";
-    if (fallbackUsed.length > 0) {
-      const fallbackName = pp.fallback ?? "Massive";
+    if (sourceCounts.size > 0) {
+      const items = Array.from(sourceCounts.entries())
+        .sort(([a], [b]) => sourceRank(a) - sourceRank(b) || a.localeCompare(b))
+        .map(([sourceName, count]) => {
+          if (sourceName === "yfinance") return `Yahoo fallback (${count})`;
+          if (sourceName === "massive") return `Massive (${count})`;
+          return `${sourceName} (${count})`;
+        });
       priceSourceParts.push({
-        text: `Price source: ${primary} + ${fallbackName} fallback (${fallbackUsed.length})`,
-        title: fallbackUsed.join(", "),
+        text: `Price sources: ${items.join(" · ")}`,
+        title: Object.entries(pp.by_ticker ?? {})
+          .map(([ticker, sourceName]) => `${ticker}: ${displaySource(sourceName)}`)
+          .join(", "),
+      });
+    } else if (yfinanceFallback.length > 0) {
+      priceSourceParts.push({
+        text: `Price source: ${displaySource(pp.primary ?? "massive")} + Yahoo fallback (${yfinanceFallback.length})`,
+        title: yfinanceFallback.join(", "),
+      });
+    } else if (legacyMassiveFallback.length > 0) {
+      priceSourceParts.push({
+        text: `Price source: Massive (${legacyMassiveFallback.length})`,
+        title: legacyMassiveFallback.join(", "),
       });
     } else {
-      priceSourceParts.push({ text: `Price source: ${primary}` });
+      priceSourceParts.push({ text: `Price source: ${displaySource(pp.primary ?? "massive")}` });
     }
     if (pp.trading_days != null) {
       priceSourceParts.push({ text: `Historical coverage: ${pp.trading_days} trading days` });

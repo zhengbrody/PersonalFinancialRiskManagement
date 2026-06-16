@@ -115,6 +115,74 @@ def test_get_price_history_assembles_dataframe_from_multiindex_inputs(monkeypatc
     assert frame["SPY"].iloc[0] == pytest.approx(100.0)
 
 
+def test_get_price_history_prefers_massive_when_configured(monkeypatch):
+    """Production path: Massive is the primary OHLC source; yfinance is not
+    called when Massive resolves every requested ticker."""
+    from backend.app.schemas.providers import PriceBar, ProviderResult
+    from backend.app.services import market_data as md
+    from backend.app.services.providers import massive_provider as mp
+
+    monkeypatch.setattr(mp, "is_configured", lambda: True)
+
+    def fake_massive_history(ticker, *, days=365):
+        return ProviderResult(
+            data=[
+                PriceBar(date="2026-06-01", close=10.0),
+                PriceBar(date="2026-06-02", close=11.0),
+            ],
+            source="massive",
+        )
+
+    class _NoYfinance:
+        def fetch_with_cache(self, *a, **k):
+            raise AssertionError("yfinance should not be called when Massive has coverage")
+
+    monkeypatch.setattr(mp, "get_daily_history", fake_massive_history)
+    monkeypatch.setattr(md, "_build_cache_provider", lambda: _NoYfinance())
+
+    prov: dict = {}
+    frame = md.get_price_history(["SPY", "BND"], days=30, provenance=prov)
+
+    assert sorted(frame.columns) == ["BND", "SPY"]
+    assert prov["by_ticker"] == {"BND": "massive", "SPY": "massive"}
+    assert prov["missing"] == []
+
+
+def test_get_price_history_falls_back_to_yfinance_when_massive_missing(monkeypatch):
+    """If Massive misses or is rate-limited for a ticker, yfinance fills that
+    ticker and the provenance marks it as fallback."""
+    from backend.app.schemas.providers import PriceBar, ProviderResult
+    from backend.app.services import market_data as md
+    from backend.app.services.providers import massive_provider as mp
+
+    monkeypatch.setattr(mp, "is_configured", lambda: True)
+
+    def fake_massive_history(ticker, *, days=365):
+        if ticker == "SPY":
+            return ProviderResult(
+                data=[
+                    PriceBar(date="2026-06-01", close=100.0),
+                    PriceBar(date="2026-06-02", close=101.0),
+                ],
+                source="massive",
+            )
+        return ProviderResult(data=None, source="massive", warnings=["no_history"])
+
+    class _FallbackYfinance:
+        def fetch_with_cache(self, ticker, start, end, **kw):
+            return _make_simple_close_df(ticker, n=2)
+
+    monkeypatch.setattr(mp, "get_daily_history", fake_massive_history)
+    monkeypatch.setattr(md, "_build_cache_provider", lambda: _FallbackYfinance())
+
+    prov: dict = {}
+    frame = md.get_price_history(["SPY", "BND"], days=30, provenance=prov)
+
+    assert sorted(frame.columns) == ["BND", "SPY"]
+    assert prov["by_ticker"] == {"SPY": "massive", "BND": "yfinance"}
+    assert md.yfinance_fallback_tickers(prov["by_ticker"]) == ["BND"]
+
+
 def test_get_price_history_returns_empty_when_no_ticker_resolves(monkeypatch):
     """Cache returns None for every ticker — the route must see
     ``frame.empty`` so it can emit a clean 422 envelope."""

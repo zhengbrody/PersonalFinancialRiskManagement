@@ -68,17 +68,20 @@ def test_market_sentiment_fails_soft_per_source(monkeypatch):
 
 
 def test_macro_news_truncates_titles(monkeypatch):
-    import market_intelligence as mi
+    from backend.app.services import market_news
 
     long_title = "A" * 300
     monkeypatch.setattr(
-        mi,
-        "get_all_macro_news",
-        lambda max_items=8: [
-            {"source": "Reuters", "title": long_title},
-            {"source": "WSJ", "title": "Fed holds rates"},
-            {"source": "X", "title": ""},  # dropped (empty)
-        ],
+        market_news,
+        "get_macro_news",
+        lambda max_items=8: {
+            "items": [
+                {"source": "Reuters", "title": long_title},
+                {"source": "WSJ", "title": "Fed holds rates"},
+                {"source": "X", "title": ""},  # dropped (empty)
+            ],
+            "sources": [],
+        },
     )
 
     out = ct.execute_tool("get_macro_news", {})
@@ -90,12 +93,12 @@ def test_macro_news_truncates_titles(monkeypatch):
 
 
 def test_macro_news_fails_soft(monkeypatch):
-    import market_intelligence as mi
+    from backend.app.services import market_news
 
     def _boom(max_items=8):
         raise RuntimeError("rss down")
 
-    monkeypatch.setattr(mi, "get_all_macro_news", _boom)
+    monkeypatch.setattr(market_news, "get_macro_news", _boom)
     out = ct.execute_tool("get_macro_news", {})
     assert "unavailable" in out.lower()
 

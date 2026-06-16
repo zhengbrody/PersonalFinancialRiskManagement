@@ -24,8 +24,8 @@ _INTEGRATIONS: list[tuple[str, list[str]]] = [
 
 
 def _massive_status(live: bool) -> "IntegrationStatus":
-    """Massive is an OPTIONAL fallback market-data source. Presence-only by
-    default; the opt-in live check reuses the 20-min-cached price call so
+    """Massive is the primary market-data source when configured. Presence-only
+    by default; the opt-in live check reuses the 20-min-cached price call so
     clicking 'live' doesn't burn the free-tier 5 calls/min budget, and maps a
     429 to a distinct 'Rate limited' state."""
     name = "Massive (market data)"
@@ -35,14 +35,14 @@ def _massive_status(live: bool) -> "IntegrationStatus":
         return IntegrationStatus(
             name=name,
             state="Missing",
-            detail="Missing: MASSIVE_API_KEY (optional — yfinance remains the source).",
+            detail="Missing: MASSIVE_API_KEY (optional — Yahoo Finance fallback remains available).",
             configured=False,
         )
     if not live:
         return IntegrationStatus(
             name=name,
             state="Configured",
-            detail="MASSIVE_API_KEY present — fallback market-data source.",
+            detail="MASSIVE_API_KEY present — primary price/history source.",
             configured=True,
         )
     res = massive.get_latest_price("AAPL")
@@ -54,7 +54,7 @@ def _massive_status(live: bool) -> "IntegrationStatus":
         return IntegrationStatus(
             name=name,
             state="Rate limited",
-            detail="HTTP 429 — free tier 5 calls/min exceeded; falls back to yfinance.",
+            detail="HTTP 429 — free tier 5 calls/min exceeded; falls back to Yahoo Finance.",
             configured=True,
         )
     return IntegrationStatus(
