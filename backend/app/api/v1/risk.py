@@ -147,6 +147,9 @@ def _serialize_score(score) -> ScoreResponse:
         data_coverage=metrics_dict.get("data_coverage"),
         observations=metrics_dict.get("observations"),
         data_quality_notes=list(metrics_dict.get("data_quality_notes") or []),
+        leverage=metrics_dict.get("leverage"),
+        gross_annual_return=metrics_dict.get("gross_annual_return"),
+        margin_cost_annual=metrics_dict.get("margin_cost_annual"),
     )
     return ScoreResponse(
         overall_score=int(score.overall_score),

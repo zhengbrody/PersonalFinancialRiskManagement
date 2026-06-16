@@ -90,6 +90,11 @@ export const portfolioMetricsSchema = z.looseObject({
   data_coverage: z.number().nullable(),
   observations: z.number().nullable(),
   data_quality_notes: z.array(z.string()),
+  // Margin/cash transparency. sharpe_ratio is the leverage-invariant ASSET-MIX
+  // Sharpe; these expose the leverage cost separately (margin books only).
+  leverage: z.number().nullish(),
+  gross_annual_return: z.number().nullish(),
+  margin_cost_annual: z.number().nullish(),
 });
 export type PortfolioMetrics = z.infer<typeof portfolioMetricsSchema>;
 

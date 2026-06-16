@@ -403,7 +403,10 @@ function MetricsCard({ result }: { result: ScoreResponse }) {
         <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm md:grid-cols-3">
           <MetricRow label="Annual return" value={fmtPct(result.metrics.annual_return)} />
           <MetricRow label="Annual vol" value={fmtPct(result.metrics.annual_volatility)} />
-          <MetricRow label="Sharpe" value={fmtNum(result.metrics.sharpe_ratio, 2)} />
+          <MetricRow
+            label="Sharpe (asset-mix quality)"
+            value={fmtNum(result.metrics.sharpe_ratio, 2)}
+          />
           <MetricRow label="Max DD" value={fmtPct(result.metrics.max_drawdown)} />
           <MetricRow label="VaR 95 (daily)" value={fmtPct(result.metrics.var_95_daily)} />
           <MetricRow label="CVaR 95 (daily)" value={fmtPct(result.metrics.cvar_95_daily)} />
@@ -423,6 +426,8 @@ function MetricsCard({ result }: { result: ScoreResponse }) {
           />
           <MetricRow label="Observations" value={String(result.metrics.observations ?? "—")} />
         </div>
+
+        <MarginImpact metrics={result.metrics} />
 
         {result.metrics.data_quality_notes.length > 0 && (
           <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-xs text-muted-foreground">
@@ -548,6 +553,34 @@ function WhatChanged({
         </table>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Margin & cash impact — shown only for a leveraged book. Keeps the borrow
+ * drag visible (transparency) so the leverage-invariant asset-mix Sharpe above
+ * isn't mistaken for "no leverage risk".
+ */
+function MarginImpact({ metrics }: { metrics: ScoreResponse["metrics"] }) {
+  const lev = metrics.leverage ?? 1;
+  if (!lev || lev <= 1.0001) return null;
+  return (
+    <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs">
+      <div className="font-medium text-amber-600 dark:text-amber-400">
+        Margin &amp; cash impact
+      </div>
+      <div className="mt-1 grid grid-cols-2 gap-x-6 gap-y-1 text-muted-foreground sm:grid-cols-3">
+        <MetricRow label="Leverage" value={`${lev.toFixed(2)}×`} />
+        <MetricRow label="Margin cost / yr" value={fmtPct(-(metrics.margin_cost_annual ?? 0))} />
+        <MetricRow label="Asset-mix return" value={fmtPct(metrics.gross_annual_return)} />
+        <MetricRow label="Equity return" value={fmtPct(metrics.annual_return)} />
+      </div>
+      <p className="mt-1.5 text-muted-foreground">
+        Sharpe above is the leverage-invariant asset-mix Sharpe (portfolio
+        quality). Margin amplifies vol/VaR and the borrow cost drags your
+        equity-level return — shown here so the leverage risk stays visible.
+      </p>
+    </div>
   );
 }
 
