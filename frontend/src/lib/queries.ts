@@ -865,11 +865,28 @@ export const optionScenarioGridSchema = z.looseObject({
 });
 export type OptionScenarioGrid = z.infer<typeof optionScenarioGridSchema>;
 
+export const optionStrategySchema = z.looseObject({
+  underlying: z.string(),
+  expiry: z.string(),
+  name: z.string(),
+  leg_count: z.number(),
+  net_debit: z.number(), // >0 debit paid, <0 credit received
+  net_pnl: z.number().nullish(),
+  max_loss: z.number().nullish(), // null = unbounded
+  max_gain: z.number().nullish(), // null = unbounded
+  break_evens: z.array(z.number()),
+  net_greeks: z.record(z.string(), z.number()),
+  payoff: z.array(payoffPointSchema),
+  legs: z.array(optionAnalyticsSchema),
+});
+export type OptionStrategy = z.infer<typeof optionStrategySchema>;
+
 export const optionAnalyzeResponseSchema = z.looseObject({
   results: z.array(optionAnalyticsSchema),
   totals: optionTotalsSchema,
   exposure: optionExposureSchema,
   scenarios: optionScenarioGridSchema,
+  strategies: z.array(optionStrategySchema).nullish(),
   as_of: z.string(),
   warnings: z.array(z.string()),
 });

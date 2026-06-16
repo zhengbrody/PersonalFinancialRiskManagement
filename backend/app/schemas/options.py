@@ -78,7 +78,9 @@ class OptionAnalyticsOut(BaseModel):
     break_even: Optional[float] = None
     moneyness: Optional[str] = None
     payoff: list[PayoffPointOut] = Field(default_factory=list)
-    source: str = "market"  # "market" | "theoretical_fallback"
+    # Price-quality state: "market" (live) | "stale_eod" (delayed/EOD chain) |
+    # "manual" (user override) | "theoretical_fallback" (Black-Scholes, no quote).
+    source: str = "market"
     warnings: list[str] = Field(default_factory=list)
 
 
@@ -174,11 +176,33 @@ class OptionScenarioGrid(BaseModel):
     as_of: Optional[str] = None
 
 
+class OptionStrategyOut(BaseModel):
+    """A recognized multi-leg (or single-leg) strategy with NET, bounded
+    economics — the netted view that stops a spread's short leg showing an
+    unreal unbounded loss."""
+
+    model_config = ConfigDict(extra="allow")
+
+    underlying: str
+    expiry: str
+    name: str  # "Bull call spread" | "Long straddle" | "Custom (N legs)" | …
+    leg_count: int
+    net_debit: float  # >0 = net debit paid, <0 = net credit received
+    net_pnl: Optional[float] = None
+    max_loss: Optional[float] = None  # None = unbounded
+    max_gain: Optional[float] = None  # None = unbounded
+    break_evens: list[float] = Field(default_factory=list)
+    net_greeks: dict[str, float] = Field(default_factory=dict)
+    payoff: list[PayoffPointOut] = Field(default_factory=list)
+    legs: list[OptionAnalyticsOut] = Field(default_factory=list)
+
+
 class OptionAnalyzeResponse(BaseModel):
     results: list[OptionAnalyticsOut]
     totals: OptionTotalsOut
     exposure: OptionExposureOut
     scenarios: OptionScenarioGrid
+    strategies: list[OptionStrategyOut] = Field(default_factory=list)
     as_of: str
     warnings: list[str] = Field(default_factory=list)
 

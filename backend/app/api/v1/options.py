@@ -25,6 +25,7 @@ from ...services import (
     options_explain,
     options_exposure,
     options_scenarios,
+    options_strategies,
 )
 
 router = APIRouter(prefix="/api/v1/options", tags=["options"])
@@ -53,6 +54,10 @@ def analyze_options_endpoint(
     data["exposure"] = options_exposure.build_exposure(results)
     data["scenarios"] = options_scenarios.scenario_grid(results, risk_free_rate=body.risk_free_rate)
     data["scenarios"]["as_of"] = data.get("as_of")
+    # Net multi-leg legs into recognized strategies (bull call spread, etc.) with
+    # BOUNDED max-loss/gain/break-evens — so a spread's short leg never shows an
+    # unreal "unbounded loss". Same analyzed results; no extra fetch.
+    data["strategies"] = options_strategies.build_strategies(results)
     payload = OptionAnalyzeResponse.model_validate(data).model_dump()
     return ok(payload, request=request, started_at=started)
 
