@@ -17,6 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { track } from "@/lib/analytics";
 import type { PortfolioMetrics } from "@/lib/schemas";
 
 const SHOCKS = [-10, -20, -30] as const;
@@ -56,7 +57,11 @@ export function ScoreMiniScenario({ metrics }: { metrics: PortfolioMetrics }) {
             <button
               key={sh}
               type="button"
-              onClick={() => setShock(sh)}
+              onClick={() => {
+                setShock(sh);
+                // Safe: only the shock %, never the portfolio value or beta.
+                track("scenario_shock_selected", { shock_pct: sh / 100, source: "score_mini" });
+              }}
               aria-pressed={shock === sh}
               className={`rounded-md border px-3 py-1.5 text-sm font-medium tabular-nums transition ${
                 shock === sh

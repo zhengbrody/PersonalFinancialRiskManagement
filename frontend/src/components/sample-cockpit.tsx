@@ -18,6 +18,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ScoreGauge, scoreBand } from "@/components/score-gauge";
 import { HorizontalBarChart, type BarDatum } from "@/components/ui/bar-chart";
+import { track } from "@/lib/analytics";
 
 const NOTIONAL = 100_000; // sample book size, $
 
@@ -173,7 +174,11 @@ export function SampleCockpit() {
               <button
                 key={sh}
                 type="button"
-                onClick={() => setShock(sh)}
+                onClick={() => {
+                  setShock(sh);
+                  // Safe: only the shock %, no portfolio data (this is a fixed demo).
+                  track("scenario_shock_selected", { shock_pct: sh / 100, source: "sample" });
+                }}
                 aria-pressed={shock === sh}
                 className={`rounded-md border px-3 py-1.5 text-sm font-medium tabular-nums transition ${
                   shock === sh

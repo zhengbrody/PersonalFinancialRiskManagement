@@ -187,6 +187,7 @@ function CopilotHandoff({ fp }: { fp: FactPack }) {
           <Link
             key={q}
             href={`/copilot?q=${encodeURIComponent(q)}`}
+            onClick={() => track("copilot_handoff_clicked", { source: "research" })}
             className="rounded-full border border-border bg-muted px-3 py-1.5 text-xs text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
           >
             {q}
