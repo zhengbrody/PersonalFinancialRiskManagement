@@ -17,6 +17,7 @@ import { ScoreGauge, scoreBand } from "@/components/score-gauge";
 import { RiskDiagnosis, ActionCards } from "@/components/risk-diagnosis";
 import { OptionScoreModule } from "@/components/option-score-module";
 import { ScoreDrivers } from "@/components/score-drivers";
+import { ScoreMiniScenario } from "@/components/score-mini-scenario";
 import { PortfolioValueSummary } from "@/components/portfolio-value-summary";
 import { BenchmarkContext } from "@/components/benchmark-context";
 import { DataProvenance } from "@/components/data-provenance";
@@ -361,6 +362,7 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
       {tab === "overview" && (
         <div className="space-y-4">
           <RiskDiagnosis explain={explain.data} loading={explain.isLoading} source="score" />
+          <ScoreMiniScenario metrics={result.metrics} />
           <OptionScoreModule impact={result.options} />
           <PortfolioValueSummary metrics={result.metrics} />
           <BenchmarkContext mine={result.metrics} />

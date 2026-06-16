@@ -26,6 +26,7 @@ import { PortfolioValueSummary } from "@/components/portfolio-value-summary";
 import { BenchmarkContext } from "@/components/benchmark-context";
 import { DataProvenance } from "@/components/data-provenance";
 import { VarBacktest } from "@/components/var-backtest";
+import { LearnHint } from "@/components/learn-hint";
 import { MetricTrend } from "@/components/metric-trend";
 import { track } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
@@ -178,7 +179,8 @@ function ConcentrationCard({
         <CardDescription>
           How much of the book rides on a few names. &ldquo;Effective
           holdings&rdquo; is the equally-weighted equivalent — 10 positions
-          that behave like 3 are 3.
+          that behave like 3 are 3.{" "}
+          <LearnHint topic="portfolio-risk-management" label="Why concentration matters" />
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
@@ -251,7 +253,7 @@ function RiskDrivers({ report }: { report: RiskReport }) {
         <CardTitle className="text-base">Risk drivers</CardTitle>
         <CardDescription>
           Where your portfolio risk actually comes from — ranked by share of
-          total VaR.
+          total VaR. <LearnHint topic="var-cvar-explained" label="What is VaR" />
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4 p-4 md:grid-cols-2">
@@ -410,7 +412,8 @@ function FactorBetasTable({ report }: { report: RiskReport }) {
         <CardTitle className="text-base">Factor betas</CardTitle>
         <CardDescription>
           Regression of portfolio returns on each factor (SPY / QQQ / GLD / TLT /
-          IWM / VTV). Sort any column; the bars show beta magnitude.
+          IWM / VTV). Sort any column; the bars show beta magnitude.{" "}
+          <LearnHint topic="factor-exposure" label="What factor exposure means" />
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-4 p-4 md:grid-cols-2">
@@ -509,7 +512,7 @@ function StressSummary({ report }: { report: RiskReport }) {
         <CardTitle className="text-base">Stress test</CardTitle>
         <CardDescription>
           Portfolio P&amp;L if every holding takes the market shock applied to its
-          market beta.
+          market beta. <LearnHint topic="stress-testing" label="How stress tests work" />
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 p-4">

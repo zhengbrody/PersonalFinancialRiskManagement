@@ -15,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { HorizontalBarChart, type BarDatum } from "@/components/ui/bar-chart";
 import type { ScoreResponse } from "@/lib/schemas";
 import { cn } from "@/lib/utils";
 
@@ -46,11 +47,42 @@ export function ScoreDrivers({ score }: { score: ScoreResponse }) {
     ...Object.keys(score.dimensions).filter((k) => !ORDER.includes(k)),
   ];
 
+  // Dimension scores (0–10) as bars — the lowest bar is the score's weakest
+  // link, visible at a glance. Pure display of returned scores, red when ≤3.5
+  // (the backend's weak-dimension threshold).
+  const bars: BarDatum[] = keys.map((k) => {
+    const d = score.dimensions[k];
+    return {
+      label: d.name,
+      value: Number(d.score.toFixed(1)),
+      color: d.score <= 3.5 ? "hsl(var(--destructive))" : "hsl(var(--primary))",
+    };
+  });
+
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {keys.map((key) => (
-        <DriverCard key={key} dimKey={key} score={score} />
-      ))}
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-1">
+          <CardTitle className="text-base">Score composition</CardTitle>
+          <CardDescription>
+            Each dimension out of 10 — the shortest bar is dragging your score
+            down the most.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <HorizontalBarChart
+            data={bars}
+            valueFormatter={(v) => v.toFixed(1)}
+            ariaLabel="Health dimensions out of 10"
+          />
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {keys.map((key) => (
+          <DriverCard key={key} dimKey={key} score={score} />
+        ))}
+      </div>
     </div>
   );
 }

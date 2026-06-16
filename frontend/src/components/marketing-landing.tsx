@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { MacroSnapshot } from "@/components/macro-snapshot";
+import { SampleCockpit } from "@/components/sample-cockpit";
 
 const PRODUCT_JSON_LD = {
   "@context": "https://schema.org",
@@ -103,9 +104,14 @@ export function MarketingLanding() {
               Get started — free
             </Button>
           </Link>
+          <Link href="#sample-cockpit">
+            <Button size="lg" variant="outline" className="w-full sm:w-auto">
+              See a sample cockpit
+            </Button>
+          </Link>
           {isBillingEnabled() && (
             <Link href="/pricing">
-              <Button size="lg" variant="outline" className="w-full sm:w-auto">
+              <Button size="lg" variant="ghost" className="w-full sm:w-auto">
                 See plans
               </Button>
             </Link>
@@ -120,6 +126,9 @@ export function MarketingLanding() {
 
       {/* ── live macro panel ─────────────────────────────────── */}
       <MacroSnapshot />
+
+      {/* ── interactive sample cockpit (pre-login, deterministic) ── */}
+      <SampleCockpit />
 
       {/* ── SEO-readable product category ────────────────────── */}
       <section className="grid gap-6 md:grid-cols-[1.2fr_0.8fr]">
@@ -284,7 +293,17 @@ export function MarketingLanding() {
           and adds nothing for full-page navigations. They give crawlers an
           in-content path to the topic pages (previously sitemap-only). */}
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Learn portfolio risk</h2>
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-lg font-semibold">Learn portfolio risk</h2>
+          <div className="flex gap-3 text-sm">
+            <Link href="/product" className="text-primary hover:underline">
+              How it works →
+            </Link>
+            <Link href="/learn" className="text-primary hover:underline">
+              All guides →
+            </Link>
+          </div>
+        </div>
         <ul className="grid gap-x-6 gap-y-1.5 text-sm sm:grid-cols-2 lg:grid-cols-3">
           {LEARN_LINKS.map((l) => (
             <li key={l.href}>

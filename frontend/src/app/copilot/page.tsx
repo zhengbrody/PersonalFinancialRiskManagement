@@ -12,9 +12,9 @@
  * facts, draft trades, the "Thinking…" skeleton and friendly errors.
  */
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -73,11 +73,20 @@ export default function CopilotPage() {
         <CreditsBadge />
       </header>
 
-      <CopilotAsk />
+      <Suspense fallback={<CopilotAsk />}>
+        <CopilotAskWithPrefill />
+      </Suspense>
 
       <CopilotConversation variant="page" />
     </div>
   );
+}
+
+/** Reads ?q= (e.g. the Research → Copilot handoff) to prefill the ask box. */
+function CopilotAskWithPrefill() {
+  const params = useSearchParams();
+  const q = params.get("q") ?? undefined;
+  return <CopilotAsk initialQuestion={q} />;
 }
 
 function ConfigureSupabaseNotice() {

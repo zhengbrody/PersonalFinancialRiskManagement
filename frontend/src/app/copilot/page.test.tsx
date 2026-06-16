@@ -18,6 +18,7 @@ import { renderWithQuery } from "@/test-utils";
 const replaceMock = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: replaceMock, push: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 const useAuthMock = vi.fn();

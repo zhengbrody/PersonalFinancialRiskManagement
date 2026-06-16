@@ -49,8 +49,11 @@ function sourceClass(source: string): string {
   return SOURCE_STYLE[source] ?? SOURCE_STYLE.glossary;
 }
 
-export function CopilotAsk() {
-  const [message, setMessage] = useState("");
+export function CopilotAsk({ initialQuestion }: { initialQuestion?: string } = {}) {
+  // Prefill from a deep-link (e.g. the Research → Copilot handoff). We DON'T
+  // auto-run — the user clicks "Get answer", so a credit is never spent by a
+  // navigation alone.
+  const [message, setMessage] = useState(initialQuestion ?? "");
   const ask = useCopilotAsk();
 
   function run(q: string) {
