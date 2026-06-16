@@ -113,126 +113,136 @@ export default function ScorePage() {
     }
   }
 
+  const whatIfForm = (
+    <form onSubmit={onSubmit} className="space-y-4">
+      <div className="space-y-2">
+        {rows.map((row, i) => (
+          <div key={i} className="flex gap-2">
+            <Input
+              aria-label="Ticker"
+              placeholder="SPY"
+              value={row.ticker}
+              onChange={(e) => updateRow(i, { ticker: e.target.value })}
+              className="font-mono"
+            />
+            <Input
+              aria-label="Market value"
+              type="number"
+              inputMode="decimal"
+              placeholder="60000"
+              value={row.market_value}
+              onChange={(e) => updateRow(i, { market_value: e.target.value })}
+              className="font-mono"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => removeRow(i)}
+              aria-label="Remove row"
+            >
+              ×
+            </Button>
+          </div>
+        ))}
+        <Button type="button" variant="outline" size="sm" onClick={addRow}>
+          + add holding
+        </Button>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <label htmlFor="risk-pref" className="text-sm text-muted-foreground">
+          Risk preference (1–5)
+        </label>
+        <Input
+          id="risk-pref"
+          type="number"
+          min={1}
+          max={5}
+          value={riskPref}
+          onChange={(e) => setRiskPref(Number(e.target.value) || 3)}
+          className="w-20 font-mono"
+        />
+      </div>
+
+      <Button type="submit" disabled={loading} className="w-full">
+        {loading ? "Scoring…" : "Run score"}
+      </Button>
+    </form>
+  );
+
+  const resultArea = (
+    <div className="space-y-4">
+      {signedIn && !result && active.data && (
+        <p className="text-xs text-muted-foreground">
+          Scored from your saved Holdings.{" "}
+          <Link href="/portfolios" className="text-primary hover:underline">
+            Edit holdings →
+          </Link>
+        </p>
+      )}
+      {showLoading && <ResultSkeleton />}
+      {showError && !showLoading && <ScoreError error={showError} />}
+      {shown && !showLoading && <ResultPanel result={shown} />}
+      {!showLoading && !showError && !shown && (
+        <Card>
+          <CardHeader>
+            <CardTitle>No score yet</CardTitle>
+            <CardDescription>
+              {signedIn
+                ? "Add holdings to your portfolio, or run a what-if below."
+                : "Hit Run score — this public sandbox uses the same scoring engine as the signed-in workflow."}
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-8">
       <header className="space-y-1">
         <p className="text-xs font-medium uppercase tracking-widest text-primary">
-          POST /api/v1/risk/score
+          Portfolio Health Score
         </p>
-        <h1 className="text-3xl font-semibold tracking-tight">Portfolio score</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">
+          {signedIn ? "Your portfolio health" : "Score any portfolio"}
+        </h1>
         <p className="text-sm text-muted-foreground">
-          Synthesised returns matrix when none supplied; same deterministic
-          engine the Streamlit Copilot uses.
+          {signedIn
+            ? "A 0–1000 score across risk match, risk-adjusted return, and downside protection — with the drivers, what changed, and what to do."
+            : "A 0–1000 institutional-grade health score from the same engine signed-in members use. Edit the holdings and run it."}
         </p>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
-        {/* ── form ──────────────────────────────────────────── */}
-        <Card>
-          <CardHeader>
-            <CardTitle>{signedIn ? "What-if sandbox" : "Holdings"}</CardTitle>
-            <CardDescription>
-              {signedIn
-                ? "Try a hypothetical mix — your saved portfolio is scored on the right."
-                : "Edit, then run."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={onSubmit} className="space-y-4">
-              <div className="space-y-2">
-                {rows.map((row, i) => (
-                  <div key={i} className="flex gap-2">
-                    <Input
-                      aria-label="Ticker"
-                      placeholder="SPY"
-                      value={row.ticker}
-                      onChange={(e) => updateRow(i, { ticker: e.target.value })}
-                      className="font-mono"
-                    />
-                    <Input
-                      aria-label="Market value"
-                      type="number"
-                      inputMode="decimal"
-                      placeholder="60000"
-                      value={row.market_value}
-                      onChange={(e) =>
-                        updateRow(i, { market_value: e.target.value })
-                      }
-                      className="font-mono"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeRow(i)}
-                      aria-label="Remove row"
-                    >
-                      ×
-                    </Button>
-                  </div>
-                ))}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addRow}
-                >
-                  + add holding
-                </Button>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <label
-                  htmlFor="risk-pref"
-                  className="text-sm text-muted-foreground"
-                >
-                  Risk preference (1–5)
-                </label>
-                <Input
-                  id="risk-pref"
-                  type="number"
-                  min={1}
-                  max={5}
-                  value={riskPref}
-                  onChange={(e) => setRiskPref(Number(e.target.value) || 3)}
-                  className="w-20 font-mono"
-                />
-              </div>
-
-              <Button type="submit" disabled={loading} className="w-full">
-                {loading ? "Scoring…" : "Run score"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        {/* ── result panel ───────────────────────────────────── */}
-        <div className="space-y-4">
-          {signedIn && !result && active.data && (
-            <p className="text-xs text-muted-foreground">
-              Scored from your saved Holdings.{" "}
-              <Link href="/portfolios" className="text-primary hover:underline">
-                Edit holdings →
-              </Link>
-            </p>
-          )}
-          {showLoading && <ResultSkeleton />}
-          {showError && !showLoading && <ScoreError error={showError} />}
-          {shown && !showLoading && <ResultPanel result={shown} />}
-          {!showLoading && !showError && !shown && (
-            <Card>
-              <CardHeader>
-                <CardTitle>No score yet</CardTitle>
-                <CardDescription>
-                  {signedIn
-                    ? "Add holdings to your portfolio, or run a what-if on the left."
-                    : "Hit Run score on the left — this public sandbox uses the same scoring engine as the signed-in workflow."}
-                </CardDescription>
-              </CardHeader>
-            </Card>
-          )}
+      {signedIn ? (
+        // Full-width cockpit — the saved book is the primary surface; the
+        // what-if form is demoted to a collapsible panel so it no longer
+        // dominates like a data-entry sandbox.
+        <div className="space-y-6">
+          {resultArea}
+          <details className="group rounded-xl border border-border bg-card">
+            <summary className="flex cursor-pointer items-center gap-2 px-5 py-3 text-sm font-medium">
+              <span>Try a what-if scenario</span>
+              <span className="text-xs font-normal text-muted-foreground">
+                — score a hypothetical mix without touching your saved holdings
+              </span>
+            </summary>
+            <div className="border-t border-border p-5">{whatIfForm}</div>
+          </details>
         </div>
-      </div>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
+          <Card>
+            <CardHeader>
+              <CardTitle>Holdings</CardTitle>
+              <CardDescription>Edit, then run.</CardDescription>
+            </CardHeader>
+            <CardContent>{whatIfForm}</CardContent>
+          </Card>
+          <div>{resultArea}</div>
+        </div>
+      )}
     </div>
   );
 }
