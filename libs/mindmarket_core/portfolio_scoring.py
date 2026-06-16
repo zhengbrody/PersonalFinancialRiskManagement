@@ -96,6 +96,14 @@ class PortfolioMetrics:
     data_coverage: float
     observations: int
     data_quality_notes: tuple[str, ...]
+    # Margin/cash transparency (additive; defaults keep equity-only books
+    # byte-identical). `sharpe_ratio` above is the leverage- and cash-invariant
+    # ASSET-MIX Sharpe (portfolio-construction quality). `annual_return` above is
+    # the EQUITY-LEVEL (levered) account return. The fields below let the UI show
+    # the margin/cash impact separately instead of corrupting the Sharpe.
+    leverage: float = 1.0
+    gross_annual_return: float = float("nan")  # unlevered asset-mix return
+    margin_cost_annual: float = 0.0  # annualized borrow drag = (L−1)·risk_free
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -380,15 +388,32 @@ def compute_portfolio_metrics(
     )
     notes = list(notes)
 
-    # Apply leverage to lift the asset-level series to the equity level.
+    # ── Asset-mix Sharpe (leverage- & cash-invariant) ──────────────────────
+    # Sharpe must measure the QUALITY of the asset mix, not be corrupted by
+    # margin financing. We compute it on the PRE-leverage series; cash is a
+    # constant risk-free sleeve, so it scales the excess return and vol by the
+    # same factor and is Sharpe-neutral — leaving exactly the equity-mix Sharpe,
+    # which matches the Risk Report's leverage-invariant Sharpe. The borrow drag
+    # (which made this go negative for margin books) is reported separately below.
+    asset_return = float(port_returns.mean() * TRADING_DAYS)
+    asset_vol = float(port_returns.std(ddof=1) * np.sqrt(TRADING_DAYS))
+    sharpe = float(sharpe_ratio(asset_return, asset_vol, risk_free_rate))
+
+    # Apply leverage to lift the asset-level series to the equity level. This
+    # amplifies the MAGNITUDE risk (vol/VaR/CVaR/drawdown) and drags the
+    # equity-level RETURN by the borrow carry — but does NOT touch the Sharpe
+    # above (that's the whole point of the split).
     lev = float(leverage) if leverage and np.isfinite(leverage) else 1.0
     lev = _clamp(lev, 1.0, 10.0)
+    margin_cost_annual = (lev - 1.0) * float(risk_free_rate)
     if lev > 1.0:
         daily_borrow = float(risk_free_rate) / TRADING_DAYS
         port_returns = lev * port_returns - (lev - 1.0) * daily_borrow
         notes.append(
-            f"Leverage {lev:.2f}× applied from margin loan; risk metrics are "
-            "equity-level (amplified by leverage, net of borrow carry)."
+            f"Leverage {lev:.2f}× applied from margin loan; vol/VaR are "
+            f"equity-level (amplified by leverage). Margin financing costs "
+            f"~{margin_cost_annual:.1%}/yr, dragging the equity return — but the "
+            "Sharpe shown is the leverage-invariant asset-mix Sharpe."
         )
 
     observations = int(port_returns.shape[0])
@@ -402,7 +427,6 @@ def compute_portfolio_metrics(
 
     annual_return = float(port_returns.mean() * TRADING_DAYS)
     annual_volatility = float(port_returns.std(ddof=1) * np.sqrt(TRADING_DAYS))
-    sharpe = float(sharpe_ratio(annual_return, annual_volatility, risk_free_rate))
 
     cumulative = (1.0 + port_returns).cumprod()
     drawdown = cumulative / cumulative.cummax() - 1.0
@@ -442,11 +466,29 @@ def compute_portfolio_metrics(
         data_coverage=float(coverage),
         observations=observations,
         data_quality_notes=tuple(notes),
+        leverage=float(lev),
+        gross_annual_return=asset_return,
+        margin_cost_annual=float(margin_cost_annual),
     )
 
 
 def _clamp(value: float, low: float, high: float) -> float:
     return float(min(max(value, low), high))
+
+
+def _risk_adjusted_detail(metrics: "PortfolioMetrics") -> str:
+    """Risk-adjusted-return dimension blurb. For a margin book it states the
+    asset-mix (leverage-invariant) Sharpe AND the separate margin drag, so the
+    leverage cost is transparent rather than hidden in a corrupted Sharpe.
+    An unlevered book keeps the original wording (byte-identical)."""
+    if metrics.leverage > 1.0:
+        return (
+            f"Sharpe {metrics.sharpe_ratio:.2f} (leverage-invariant asset-mix); "
+            f"asset-mix return {metrics.gross_annual_return:.1%}. Margin "
+            f"{metrics.leverage:.2f}× costs ~{metrics.margin_cost_annual:.1%}/yr → "
+            f"equity return {metrics.annual_return:.1%}."
+        )
+    return f"Sharpe {metrics.sharpe_ratio:.2f}; annual return {metrics.annual_return:.1%}."
 
 
 def _interp_descending(value: float, thresholds: list[float], scores: list[float]) -> float:
@@ -541,7 +583,7 @@ def score_portfolio(
             name="Risk-adjusted Return",
             score=round(sharpe_score, 1),
             status=score_status(sharpe_score),
-            detail=f"Sharpe {metrics.sharpe_ratio:.2f}; annual return {metrics.annual_return:.1%}.",
+            detail=_risk_adjusted_detail(metrics),
         ),
         "downside_protection": DimensionScore(
             name="Downside Protection",

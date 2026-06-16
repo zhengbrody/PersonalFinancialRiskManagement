@@ -74,6 +74,39 @@ def test_leverage_amplifies_volatility_and_var():
     assert not any("everage" in n for n in base.data_quality_notes)
 
 
+def test_sharpe_is_leverage_invariant_and_margin_cost_disclosed():
+    """The headline Sharpe is the ASSET-MIX Sharpe — leverage must NOT change it
+    (the old bug applied borrow drag to the Sharpe basis, turning it negative for
+    margin books). Leverage instead surfaces a separate, positive margin cost."""
+    positions = demo_asset_positions(100_000)
+    returns = _sample_returns()
+
+    base = compute_portfolio_metrics(positions, returns, risk_free_rate=0.04)
+    levered = compute_portfolio_metrics(positions, returns, risk_free_rate=0.04, leverage=2.5)
+
+    # Sharpe is identical regardless of leverage (asset-mix quality).
+    assert levered.sharpe_ratio == pytest.approx(base.sharpe_ratio, rel=1e-9)
+    # Margin cost is exposed separately: (L-1)*rf = 1.5 * 0.04 = 0.06.
+    assert levered.margin_cost_annual == pytest.approx(1.5 * 0.04, rel=1e-9)
+    assert levered.leverage == pytest.approx(2.5)
+    # The unlevered asset-mix return is reported and matches the base book.
+    assert levered.gross_annual_return == pytest.approx(base.annual_return, rel=1e-9)
+    # Unlevered book: no margin cost, gross == levered return.
+    assert base.margin_cost_annual == 0.0
+    assert base.leverage == pytest.approx(1.0)
+
+
+def test_levered_sharpe_stays_positive_when_asset_mix_is_sound():
+    """Regression for the reported bug: a sound (positive-Sharpe) asset mix held
+    on margin must NOT show a negative Sharpe on the score path."""
+    positions = demo_asset_positions(100_000)
+    returns = _sample_returns()
+    levered = compute_portfolio_metrics(positions, returns, risk_free_rate=0.04, leverage=3.0)
+    base = compute_portfolio_metrics(positions, returns, risk_free_rate=0.04)
+    if base.sharpe_ratio > 0:
+        assert levered.sharpe_ratio > 0
+
+
 def test_leverage_is_clamped_and_defaults_noop():
     positions = demo_asset_positions(100_000)
     returns = _sample_returns()

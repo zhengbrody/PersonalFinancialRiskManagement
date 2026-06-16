@@ -112,6 +112,50 @@ describe("ScorePage", () => {
     expect(await screen.findByText(/no earlier snapshot yet/i)).toBeInTheDocument();
   });
 
+  it("shows the Margin & cash impact callout for a leveraged book", async () => {
+    mockEnvelope({
+      data: {
+        overall_score: 640,
+        risk_preference: 3,
+        risk_target: {},
+        metrics: {
+          annual_return: 0.04, // levered/equity-level return (dragged by borrow)
+          annual_volatility: 0.3,
+          sharpe_ratio: 0.9, // POSITIVE asset-mix Sharpe despite leverage
+          max_drawdown: -0.2,
+          var_95_daily: -0.03,
+          cvar_95_daily: -0.04,
+          beta_to_benchmark: 1.4,
+          total_value: 200000,
+          cash_weight: 0,
+          data_coverage: 1,
+          observations: 252,
+          data_quality_notes: [],
+          leverage: 2.0,
+          gross_annual_return: 0.085, // unlevered asset-mix return
+          margin_cost_annual: 0.045,
+        },
+        dimensions: {
+          risk_match: { name: "Risk Match", score: 5, status: "ok", detail: "" },
+          risk_adjusted_return: { name: "Risk-Adjusted Return", score: 6, status: "ok", detail: "" },
+          downside_protection: { name: "Downside Protection", score: 4, status: "watch", detail: "" },
+        },
+      },
+      error: null,
+      meta: { request_id: "rid", elapsed_ms: 10 },
+    });
+
+    const user = userEvent.setup();
+    renderWithQuery(<ScorePage />);
+    await user.click(screen.getByRole("button", { name: /run score/i }));
+
+    // Sharpe is labeled as asset-mix quality and stays positive.
+    expect(await screen.findByText(/asset-mix quality/i)).toBeInTheDocument();
+    // The leverage cost is surfaced separately, not hidden in the Sharpe.
+    expect(screen.getByText(/margin & cash impact/i)).toBeInTheDocument();
+    expect(screen.getByText("2.00×")).toBeInTheDocument();
+  });
+
   it("renders the error panel when the backend rejects", async () => {
     mockEnvelope(
       {

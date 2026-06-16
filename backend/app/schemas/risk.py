@@ -322,6 +322,12 @@ class PortfolioMetricsOut(BaseModel):
     data_coverage: Optional[float] = None
     observations: Optional[int] = None
     data_quality_notes: list[str] = Field(default_factory=list)
+    # Margin/cash transparency. `sharpe_ratio` above is the leverage-invariant
+    # ASSET-MIX Sharpe; these expose the leverage cost separately so it isn't
+    # hidden. Present (>1 / non-zero) only for margin books.
+    leverage: Optional[float] = None
+    gross_annual_return: Optional[float] = None  # unlevered asset-mix return
+    margin_cost_annual: Optional[float] = None  # annualized borrow drag
 
 
 class OptionScorePenaltyRow(BaseModel):
