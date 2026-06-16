@@ -108,6 +108,45 @@ def fmp_full(monkeypatch):
             ]
         ),
     )
+    monkeypatch.setattr(
+        fp,
+        "get_insider",
+        lambda t: _pr(fp.InsiderSummary(buys_90d=4, sells_90d=1, net_shares_90d=12000.0)),
+    )
+
+
+def test_factpack_momentum_ownership_insider(fmp_full):
+    """Momentum derivations + ownership + insider signal compose deterministically
+    from injected yfinance technicals/ownership + the stubbed FMP insider rollup."""
+    yf = {
+        "technicals": {
+            "rsi_14": 72.0,
+            "sma_50": 190.0,
+            "sma_200": 170.0,
+            "fifty_two_week_high": 210.0,
+            "fifty_two_week_low": 150.0,
+        },
+        "ownership": {"institutional_pct": 0.62},
+    }
+    fp_obj = rf.build_fact_pack("aapl", yf_enricher=lambda t: yf)
+    m = fp_obj.momentum
+    # price 200 vs sma50 190 -> +5.26%, vs sma200 170 -> +17.6%; both above -> uptrend
+    assert m.price_vs_sma50_pct == pytest.approx((200 - 190) / 190)
+    assert m.price_vs_sma200_pct == pytest.approx((200 - 170) / 170)
+    assert m.trend == "uptrend"
+    # 200 vs 52w high 210 -> -4.76%; vs low 150 -> +33%
+    assert m.pct_from_52w_high == pytest.approx((200 - 210) / 210)
+    assert m.pct_off_52w_low == pytest.approx((200 - 150) / 150)
+    assert fp_obj.ownership.institutional_pct == 0.62
+    # net_shares > 0 -> net buying
+    assert fp_obj.insider.signal == "net buying"
+    assert fp_obj.insider.buys_90d == 4 and fp_obj.insider.sells_90d == 1
+    # RSI 72 (≥70) -> a stretched risk flag; net buying -> a driver
+    assert any("RSI" in f for f in fp_obj.risk_flags)
+    assert any("net buyers" in d for d in fp_obj.drivers)
+    # provenance records the yfinance-sourced + insider fields
+    fields = {s.field for s in fp_obj.data_quality.sources}
+    assert {"momentum", "ownership", "insider"} <= fields
 
 
 def test_factpack_full_composition_and_derivations(fmp_full):
