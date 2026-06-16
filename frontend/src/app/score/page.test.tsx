@@ -45,7 +45,7 @@ describe("ScorePage", () => {
   it("renders the empty state by default", () => {
     renderWithQuery(<ScorePage />);
     expect(
-      screen.getByRole("heading", { name: /portfolio score/i }),
+      screen.getByRole("heading", { name: /score any portfolio/i }),
     ).toBeInTheDocument();
     expect(screen.getByText(/no score yet/i)).toBeInTheDocument();
   });
