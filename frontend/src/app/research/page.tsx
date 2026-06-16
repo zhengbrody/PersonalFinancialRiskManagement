@@ -34,6 +34,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { CreditsBadge } from "@/components/credits-badge";
 import { TickerNews } from "@/components/ticker-news";
+import { LearnHint } from "@/components/learn-hint";
 import { ApiError } from "@/lib/api";
 import { BETA_LIMIT_MESSAGE, isBillingEnabled } from "@/lib/billing-flag";
 import { useAuth } from "@/lib/auth-context";
@@ -149,11 +150,50 @@ function ResearchWorkbench() {
           {/* Unified, source-labeled news (FMP news + press releases + SEC) —
               richer + multi-source vs the FactPack's FMP-only headlines. */}
           <TickerNews ticker={fp.ticker} />
+          <CopilotHandoff fp={fp} />
         </>
       )}
 
       {!fp && !factM.isPending && !factM.error && <EmptyState />}
     </div>
+  );
+}
+
+// ── Copilot handoff ─────────────────────────────────────────────────
+
+/**
+ * Cross-feature handoff: take the ticker into the Copilot with a pre-filled,
+ * risk-first question. Deep-links to /copilot?q=… (the box is prefilled, not
+ * auto-run, so no credit is spent by navigating). Pure frontend.
+ */
+function CopilotHandoff({ fp }: { fp: FactPack }) {
+  const t = fp.ticker;
+  const prompts = [
+    `What are the key risks of holding ${t}?`,
+    `How would ${t} affect my portfolio's risk?`,
+    `Compare ${t} to its peers`,
+  ];
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Dig deeper with Copilot</CardTitle>
+        <CardDescription>
+          Take {t} into your Copilot for a portfolio-aware, source-grounded
+          answer. <LearnHint topic="stock-research" label="How to research a stock" />
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-wrap gap-2">
+        {prompts.map((q) => (
+          <Link
+            key={q}
+            href={`/copilot?q=${encodeURIComponent(q)}`}
+            className="rounded-full border border-border bg-muted px-3 py-1.5 text-xs text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
+          >
+            {q}
+          </Link>
+        ))}
+      </CardContent>
+    </Card>
   );
 }
 
