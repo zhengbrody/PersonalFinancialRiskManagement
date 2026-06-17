@@ -380,7 +380,7 @@ function ClosingCTA() {
   return (
     <Band id="cta">
       <Reveal>
-        <div style={{ position: "relative", borderRadius: 28, overflow: "hidden", border: `1px solid ${C.hair}`, background: "linear-gradient(160deg, #0C1117, #07090C)", padding: "72px 40px", textAlign: "center" }}>
+        <div style={{ position: "relative", borderRadius: 28, overflow: "hidden", border: `1px solid ${C.hair}`, background: `linear-gradient(160deg, ${C.panel}, ${C.ink})`, padding: "72px 40px", textAlign: "center" }}>
           <svg viewBox="0 0 1200 300" preserveAspectRatio="none" aria-hidden style={{ position: "absolute", inset: 0, zIndex: 0, opacity: 0.5, width: "100%", height: "100%" }}>
             <path d="M0 230 L240 230 L330 196 L470 214 L620 150 L760 176 L920 96 L1200 40" fill="none" stroke={C.gold} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" opacity={0.85} />
             <circle cx={1200} cy={40} r={5} fill={C.gold} />
