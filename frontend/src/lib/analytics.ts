@@ -34,10 +34,50 @@ export function initAnalytics(): void {
   }
 }
 
+// Defense-in-depth: even though every call site is reviewed to pass only safe,
+// aggregate props, we ALSO scrub any property whose key looks like investment
+// content (a ticker, a dollar value, a raw prompt, an id). So a future careless
+// `track("x", { ticker })` can never leak — analytics stays funnel-only.
+const _DENY_KEY_SUBSTRINGS = [
+  "ticker",
+  "symbol",
+  "holding",
+  "prompt",
+  "question",
+  "message",
+  "query",
+  "portfolio_id",
+  "portfolioid",
+  "email",
+  "dollar",
+  "usd",
+  "amount",
+  "balance",
+  "equity",
+  "notional",
+  "price",
+  "premium",
+  "strike",
+  "cost",
+];
+
+export function redactProps(
+  props?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  if (!props) return props;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(props)) {
+    const k = key.toLowerCase();
+    if (_DENY_KEY_SUBSTRINGS.some((d) => k.includes(d))) continue; // drop sensitive
+    out[key] = value;
+  }
+  return out;
+}
+
 export function track(event: string, props?: Record<string, unknown>): void {
   if (!started) return;
   try {
-    posthog.capture(event, props);
+    posthog.capture(event, redactProps(props));
   } catch {
     /* ignore */
   }

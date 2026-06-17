@@ -89,6 +89,7 @@ export function ReportSections({ report }: { report: RiskReport }) {
       fired.current = true;
       scenarios.mutate();
       varBacktest.mutate();
+      track("risk_report_opened"); // safe: no portfolio data
     }
   }, [scenarios, varBacktest]);
 
