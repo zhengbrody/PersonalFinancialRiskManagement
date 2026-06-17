@@ -196,6 +196,7 @@ def copilot_ask_endpoint(
 def _record_ask_cost(user_id: str, result, started: float) -> None:
     from libs.billing.costs import estimate_tokens
 
+    from ...services.ai_eval import eval_signals
     from ...services.ai_telemetry import input_hash, record_ai_call
 
     ev_text = "\n".join(f"{e.label}:{e.value}" for e in result.evidence)
@@ -207,6 +208,14 @@ def _record_ask_cost(user_id: str, result, started: float) -> None:
         tokens_out=estimate_tokens(result.answer_markdown or ""),
         latency_ms=(time.perf_counter() - started) * 1000,
         input_hash=input_hash(result.intent + "|" + ev_text),
+        # Privacy-safe AI-quality eval signals (no tickers/$/prompt) for
+        # monitoring the assistant over time — see services/ai_eval.py.
+        eval_metadata=eval_signals(
+            text=result.answer_markdown,
+            evidence_count=len(result.evidence),
+            intent=result.intent,
+            fallback_used=bool(result.data_only),
+        ),
     )
 
 

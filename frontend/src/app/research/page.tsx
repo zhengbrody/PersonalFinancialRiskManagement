@@ -97,7 +97,7 @@ function ResearchWorkbench() {
     verdictM.reset();
     // Privacy: never send the ticker itself to analytics — searching a
     // symbol can reveal what the user holds.
-    track("research_searched");
+    track("research_started");
     try {
       const { fact_pack } = await factM.mutateAsync({ ticker });
       verdictM.mutate({ fact_pack });
