@@ -13,6 +13,7 @@ const PUBLIC_ROUTES: Array<{
   priority: number;
 }> = [
   { path: "/", changeFrequency: "weekly", priority: 1.0 },
+  { path: "/demo", changeFrequency: "weekly", priority: 0.95 },
   { path: "/score", changeFrequency: "weekly", priority: 0.85 },
   { path: "/product", changeFrequency: "monthly", priority: 0.9 },
   { path: "/learn", changeFrequency: "weekly", priority: 0.9 },

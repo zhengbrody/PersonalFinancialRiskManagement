@@ -3,12 +3,14 @@
 /**
  * Pre-login interactive Sample Risk Cockpit (anchor #sample-cockpit).
  *
- * Fully deterministic + self-contained: a fixed sample portfolio with
- * pre-computed metrics, an interactive market-shock selector, and ranked
- * risk-driver bars. NO network, NO auth, NO AI — every figure is a constant
- * or derived in plain TS from the constants here, so a visitor (and Google)
- * sees a real, honest cockpit before signing in. The scenario math is a
- * transparent first-order beta×shock approximation, labelled as such.
+ * Fully deterministic + self-contained: TWO fixed sample portfolios — a
+ * Balanced book (default, the "normal" baseline) and a High-growth book you can
+ * one-click "stress" — each with pre-computed metrics, an interactive
+ * market-shock selector, ranked risk-driver bars, and a one-line takeaway. NO
+ * network, NO auth, NO AI — every figure is a constant or derived in plain TS
+ * from the constants here, so a visitor (and Google) sees a real, honest
+ * cockpit before signing in. The scenario math is a transparent first-order
+ * beta×shock approximation, labelled as such.
  *
  * Reuses the real cockpit primitives (<ScoreGauge>, <HorizontalBarChart>) so
  * what you see here is what the signed-in product renders.
@@ -30,31 +32,94 @@ type SampleHolding = {
   varContribPct: number; // share of total portfolio VaR (deterministic)
 };
 
-// A realistic, slightly tech-concentrated sample book — the kind of portfolio
-// the Health Score is most useful on. Weights sum to 1.0.
-const SAMPLE: SampleHolding[] = [
-  { ticker: "NVDA", name: "NVIDIA", weight: 0.22, beta: 1.75, varContribPct: 31 },
-  { ticker: "AAPL", name: "Apple", weight: 0.2, beta: 1.2, varContribPct: 19 },
-  { ticker: "MSFT", name: "Microsoft", weight: 0.18, beta: 1.1, varContribPct: 16 },
-  { ticker: "TSLA", name: "Tesla", weight: 0.12, beta: 1.9, varContribPct: 18 },
-  { ticker: "SPY", name: "S&P 500 ETF", weight: 0.18, beta: 1.0, varContribPct: 11 },
-  { ticker: "TLT", name: "20Y Treasuries", weight: 0.1, beta: -0.25, varContribPct: 5 },
-];
+type DemoMetrics = {
+  score: number;
+  dimensions: { label: string; value: number }[];
+  annualVol: number;
+  var95: number; // 1-day 95% VaR, fraction
+  cvar95: number;
+  maxDrawdown: number;
+  sharpe: number;
+};
 
-// Pre-computed headline metrics for this exact book (deterministic constants,
-// the values the engine would return — not live).
-const METRICS = {
-  score: 612,
-  dimensions: [
-    { label: "Risk match", value: 5.4 },
-    { label: "Risk-adj. return", value: 7.1 },
-    { label: "Downside protection", value: 4.2 },
+type DemoBook = {
+  id: "balanced" | "growth";
+  holdings: SampleHolding[];
+  metrics: DemoMetrics;
+  takeaway: string; // the one-line headline insight
+  diagnosisTitle: string;
+  diagnosisTone: "ok" | "warn";
+  diagnosisBullets: string[]; // the top 3 risks/notes
+  concentration?: string; // shown only when concentration is the story
+};
+
+// ── Balanced book (default — the "normal" baseline) ─────────────────────────
+const BALANCED: DemoBook = {
+  id: "balanced",
+  holdings: [
+    { ticker: "SPY", name: "S&P 500 ETF", weight: 0.45, beta: 1.0, varContribPct: 88 },
+    { ticker: "BND", name: "US Aggregate Bonds", weight: 0.3, beta: 0.08, varContribPct: 5 },
+    { ticker: "GLD", name: "Gold", weight: 0.1, beta: 0.15, varContribPct: 7 },
+    { ticker: "CASH", name: "Cash", weight: 0.15, beta: 0.0, varContribPct: 0 },
   ],
-  annualVol: 0.243, // 24.3%
-  var95: 0.0252, // 1-day 95% VaR, fraction
-  cvar95: 0.0331,
-  maxDrawdown: -0.418,
-  sharpe: 0.94,
+  metrics: {
+    score: 784,
+    dimensions: [
+      { label: "Risk match", value: 8.4 },
+      { label: "Risk-adj. return", value: 7.2 },
+      { label: "Downside protection", value: 8.1 },
+    ],
+    annualVol: 0.094,
+    var95: 0.0098,
+    cvar95: 0.0135,
+    maxDrawdown: -0.172,
+    sharpe: 1.08,
+  },
+  takeaway:
+    "This balanced book spreads risk across stocks, bonds, gold, and cash — its downside is moderate and mostly broad-market, not single-name.",
+  diagnosisTitle: "Healthy — diversified across asset classes",
+  diagnosisTone: "ok",
+  diagnosisBullets: [
+    "No single position drives more than ~half the risk; the bond + cash sleeve cushions drawdowns.",
+    "~9% annualized volatility is reasonable for a long-term core book.",
+    "A market drop hits it roughly in line with its ~0.5 beta — far less than a growth-tilted book.",
+  ],
+};
+
+// ── High-growth book ("Stress a high-growth portfolio") ─────────────────────
+const GROWTH: DemoBook = {
+  id: "growth",
+  holdings: [
+    { ticker: "QQQ", name: "Nasdaq-100 ETF", weight: 0.25, beta: 1.15, varContribPct: 14 },
+    { ticker: "NVDA", name: "NVIDIA", weight: 0.22, beta: 1.75, varContribPct: 27 },
+    { ticker: "TSLA", name: "Tesla", weight: 0.15, beta: 1.9, varContribPct: 22 },
+    { ticker: "SMH", name: "Semiconductors", weight: 0.16, beta: 1.6, varContribPct: 17 },
+    { ticker: "BITO", name: "Bitcoin proxy", weight: 0.12, beta: 2.4, varContribPct: 18 },
+    { ticker: "CASH", name: "Cash", weight: 0.1, beta: 0.0, varContribPct: 2 },
+  ],
+  metrics: {
+    score: 541,
+    dimensions: [
+      { label: "Risk match", value: 3.9 },
+      { label: "Risk-adj. return", value: 6.1 },
+      { label: "Downside protection", value: 2.8 },
+    ],
+    annualVol: 0.312,
+    var95: 0.0345,
+    cvar95: 0.0461,
+    maxDrawdown: -0.541,
+    sharpe: 0.81,
+  },
+  takeaway:
+    "This portfolio looks diversified by ticker count, but its largest risk is concentrated high-beta growth — a tech-and-crypto selloff hits it about 3× harder than the balanced book.",
+  diagnosisTitle: "Watch — concentrated high-beta growth + crypto",
+  diagnosisTone: "warn",
+  diagnosisBullets: [
+    "The top 5 names (NVDA, TSLA, semis, crypto, QQQ) are ~90% of the book and nearly all of the risk.",
+    "~31% annualized volatility and a ~−54% modelled max drawdown — a real growth-stock tail.",
+    "The crypto sleeve (beta ~2.4) amplifies both the upside and the crash.",
+  ],
+  concentration: "5 high-beta names ≈ 90% of the book — single-theme (AI / semis / crypto) concentration.",
 };
 
 const SHOCKS = [-5, -10, -20, -30] as const;
@@ -67,24 +132,30 @@ function pct(n: number, digits = 1): string {
 }
 
 export function SampleCockpit() {
+  const [variant, setVariant] = useState<DemoBook["id"]>("balanced");
   const [shock, setShock] = useState<(typeof SHOCKS)[number]>(-10);
-  const band = scoreBand(METRICS.score);
+  const book = variant === "balanced" ? BALANCED : GROWTH;
+  const m = book.metrics;
+  const band = scoreBand(m.score);
   const s = shock / 100;
 
   // First-order scenario: each holding moves beta × shock; portfolio $ loss is
   // the weighted sum. Transparent + deterministic (not a Monte-Carlo claim).
-  const perHolding = SAMPLE.map((h) => ({
-    ...h,
-    loss: NOTIONAL * h.weight * h.beta * s,
-  }));
+  const perHolding = book.holdings.map((h) => ({ ...h, loss: NOTIONAL * h.weight * h.beta * s }));
   const portfolioLoss = perHolding.reduce((a, h) => a + h.loss, 0);
   const topImpact = [...perHolding].sort((a, b) => a.loss - b.loss).slice(0, 3);
-
-  const driverBars: BarDatum[] = SAMPLE.map((h) => ({
+  const driverBars: BarDatum[] = book.holdings.map((h) => ({
     label: h.ticker,
     value: h.varContribPct,
     color: "hsl(var(--primary))",
   }));
+
+  function selectVariant(next: DemoBook["id"]) {
+    if (next === variant) return;
+    setVariant(next);
+    // Safe: only the variant label, never any portfolio/$ data (fixed demo books).
+    track("demo_stress_toggled", { variant: next });
+  }
 
   return (
     <section
@@ -100,9 +171,9 @@ export function SampleCockpit() {
             See a real risk cockpit in 30 seconds
           </h2>
           <p className="max-w-xl text-sm text-muted-foreground">
-            A tech-tilted $100k sample book, scored with the same engine your own
-            portfolio would use. Move the crash slider — every number is computed,
-            nothing is invented.
+            A $100k sample book, scored with the same engine your own portfolio would
+            use. Toggle the high-growth book and move the crash slider — every number
+            is computed, nothing is invented.
           </p>
         </div>
         <Link
@@ -112,6 +183,23 @@ export function SampleCockpit() {
           Score your own →
         </Link>
       </div>
+
+      {/* portfolio toggle — the headline interaction */}
+      <div className="flex flex-wrap items-center gap-2">
+        <VariantButton
+          active={variant === "balanced"}
+          onClick={() => selectVariant("balanced")}
+          label="Balanced portfolio"
+        />
+        <VariantButton
+          active={variant === "growth"}
+          onClick={() => selectVariant("growth")}
+          label="Stress a high-growth portfolio"
+        />
+      </div>
+
+      {/* one-line takeaway */}
+      <p className="text-base font-medium leading-snug">{book.takeaway}</p>
 
       {/* score hero */}
       <div className="grid gap-5 md:grid-cols-[0.9fr_1.1fr]">
@@ -125,12 +213,12 @@ export function SampleCockpit() {
             </span>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="font-mono text-4xl font-semibold tabular-nums">{METRICS.score}</span>
+            <span className="font-mono text-4xl font-semibold tabular-nums">{m.score}</span>
             <span className="text-sm text-muted-foreground">/ 1000</span>
           </div>
-          <ScoreGauge score={METRICS.score} />
+          <ScoreGauge score={m.score} />
           <div className="grid grid-cols-3 gap-2 pt-1">
-            {METRICS.dimensions.map((d) => (
+            {m.dimensions.map((d) => (
               <div key={d.label} className="rounded-lg bg-background/60 p-2 text-center">
                 <p className="font-mono text-lg font-semibold tabular-nums">{d.value.toFixed(1)}</p>
                 <p className="text-[10px] leading-tight text-muted-foreground">{d.label}</p>
@@ -141,25 +229,42 @@ export function SampleCockpit() {
 
         {/* KPI tiles */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Kpi label="Annualized vol" value={pct(METRICS.annualVol)} tone="warn" />
-          <Kpi label="1-day VaR 95%" value={pct(METRICS.var95, 2)} tone="warn" />
-          <Kpi label="1-day CVaR 95%" value={pct(METRICS.cvar95, 2)} tone="bad" />
-          <Kpi label="Max drawdown" value={pct(METRICS.maxDrawdown)} tone="bad" />
-          <Kpi label="Sharpe" value={METRICS.sharpe.toFixed(2)} tone="ok" />
-          <Kpi label="Holdings" value={String(SAMPLE.length)} tone="neutral" />
+          <Kpi label="Annualized vol" value={pct(m.annualVol)} tone={m.annualVol > 0.2 ? "warn" : "neutral"} />
+          <Kpi label="1-day VaR 95%" value={pct(m.var95, 2)} tone={m.var95 > 0.02 ? "warn" : "neutral"} />
+          <Kpi label="1-day CVaR 95%" value={pct(m.cvar95, 2)} tone={m.cvar95 > 0.03 ? "bad" : "neutral"} />
+          <Kpi label="Max drawdown" value={pct(m.maxDrawdown)} tone={m.maxDrawdown < -0.35 ? "bad" : "warn"} />
+          <Kpi label="Sharpe" value={m.sharpe.toFixed(2)} tone="ok" />
+          <Kpi label="Holdings" value={String(book.holdings.length)} tone="neutral" />
         </div>
       </div>
 
-      {/* diagnosis */}
-      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
-        <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">
-          Watch — concentrated in high-beta tech
+      {/* diagnosis — the top 3 risks/notes */}
+      <div
+        className={`rounded-xl border p-4 ${
+          book.diagnosisTone === "ok"
+            ? "border-emerald-500/30 bg-emerald-500/5"
+            : "border-amber-500/30 bg-amber-500/5"
+        }`}
+      >
+        <p
+          className={`text-sm font-semibold ${
+            book.diagnosisTone === "ok"
+              ? "text-emerald-600 dark:text-emerald-400"
+              : "text-amber-600 dark:text-amber-400"
+          }`}
+        >
+          {book.diagnosisTitle}
         </p>
         <ul className="mt-1.5 space-y-1 text-sm text-muted-foreground">
-          <li>• Top 4 names are ~72% of the book; NVDA + TSLA carry the most VaR.</li>
-          <li>• 24% annualized volatility is high for a long-term core book.</li>
-          <li>• The 10% Treasury sleeve is the only real downside cushion.</li>
+          {book.diagnosisBullets.map((b, i) => (
+            <li key={i}>• {b}</li>
+          ))}
         </ul>
+        {book.concentration && (
+          <p className="mt-2 rounded-md bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+            ⚠ {book.concentration}
+          </p>
+        )}
         <p className="mt-2 text-xs text-muted-foreground">
           Inspect first, not a buy/sell call — educational only.
         </p>
@@ -176,8 +281,8 @@ export function SampleCockpit() {
                 type="button"
                 onClick={() => {
                   setShock(sh);
-                  // Safe: only the shock %, no portfolio data (this is a fixed demo).
-                  track("scenario_shock_selected", { shock_pct: sh / 100, source: "sample" });
+                  // Safe: only the shock % + which demo book, no real holdings/$.
+                  track("scenario_shock_selected", { shock_pct: sh / 100, source: `demo_${book.id}` });
                 }}
                 aria-pressed={shock === sh}
                 className={`rounded-md border px-3 py-1.5 text-sm font-medium tabular-nums transition ${
@@ -230,7 +335,7 @@ export function SampleCockpit() {
 
       <div className="flex flex-col items-start justify-between gap-3 border-t border-border pt-4 sm:flex-row sm:items-center">
         <p className="text-xs text-muted-foreground">
-          Sample data · illustrative metrics for a fixed demo book, not live prices.
+          Sample data · illustrative metrics for fixed demo books, not live prices.
           Your own cockpit uses real market data with full source provenance.
         </p>
         <Link
@@ -241,6 +346,31 @@ export function SampleCockpit() {
         </Link>
       </div>
     </section>
+  );
+}
+
+function VariantButton({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition ${
+        active
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-border hover:bg-accent"
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 

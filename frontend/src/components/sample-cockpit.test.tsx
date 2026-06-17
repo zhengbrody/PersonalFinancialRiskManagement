@@ -8,20 +8,31 @@ vi.mock("./ui/bar-chart", () => ({
 }));
 
 describe("SampleCockpit", () => {
-  it("renders the deterministic score + anchor", () => {
+  it("defaults to the Balanced book (healthy score) + anchor", () => {
     const { container } = render(<SampleCockpit />);
     expect(container.querySelector("#sample-cockpit")).toBeTruthy();
-    expect(screen.getByText("612")).toBeInTheDocument();
+    expect(screen.getByText("784")).toBeInTheDocument(); // balanced default
     expect(screen.getByText(/Score your own/)).toBeInTheDocument();
+  });
+
+  it("toggles to the high-growth book → different score + concentration warning", () => {
+    render(<SampleCockpit />);
+    expect(screen.getByText("784")).toBeInTheDocument();
+    // no concentration warning on the balanced book
+    expect(screen.queryByText(/single-theme/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /stress a high-growth/i }));
+    expect(screen.getByText("541")).toBeInTheDocument(); // growth book
+    expect(screen.queryByText("784")).not.toBeInTheDocument();
+    // the growth book surfaces a concentration warning
+    expect(screen.getByText(/single-theme/i)).toBeInTheDocument();
   });
 
   it("recomputes scenario loss when a deeper shock is selected", () => {
     render(<SampleCockpit />);
-    // default -10% impact
     const before = screen.getByText(/of a .* book/).textContent ?? "";
     fireEvent.click(screen.getByRole("button", { name: "-30%" }));
     const after = screen.getByText(/of a .* book/).textContent ?? "";
-    // -30% is 3x the -10% default → percentage string must change.
     expect(after).not.toEqual(before);
     expect(after).toMatch(/%/);
   });
