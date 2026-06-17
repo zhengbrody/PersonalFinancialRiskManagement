@@ -14,8 +14,8 @@ vi.mock("@/lib/auth-context", () => ({ useAuth: () => useAuthMock() }));
 vi.mock("@/components/dashboard", () => ({
   Dashboard: () => <div>DASHBOARD_VIEW</div>,
 }));
-vi.mock("@/components/marketing-landing", () => ({
-  MarketingLanding: () => <div>LANDING_VIEW</div>,
+vi.mock("@/components/marketing-landing-v2", () => ({
+  MarketingLandingV2: () => <div>LANDING_VIEW</div>,
 }));
 
 import Home from "./page";
