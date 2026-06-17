@@ -9,15 +9,18 @@
 
 import { type CSSProperties } from "react";
 
+// Canonical brand-mark palette (MindMarket design system — tokens/colors.css +
+// guidelines/colors-brand.card.html). These exact hexes also paint the logo, so
+// the marketing surfaces and the mark stay one coherent brand.
 export const C = {
-  ink: "#07090C",
-  panel: "#10161D",
-  paper: "#F8FAFC",
-  slate: "#AAB4C2",
+  ink: "#0B0E11", // brand-ink (logo background / near-black)
+  panel: "#10171D", // brand-ink-2 (gradient companion)
+  paper: "#F8FAFC", // brand-paper (logo white)
+  slate: "#AAB4C2", // brand-slate (muted caption)
   slateDim: "rgba(170,180,194,.72)",
-  teal: "#2FA7BC",
-  tealDeep: "#0B7285",
-  gold: "#E0AE2A",
+  teal: "#39A3B5", // brand-teal-light (text/accent)
+  tealDeep: "#0B7285", // brand-teal (the "M" disc)
+  gold: "#D4A017", // brand-gold (rising chart line)
   up: "#38D39F",
   down: "#FF6B6B",
   hair: "rgba(255,255,255,0.09)",

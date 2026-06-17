@@ -10,6 +10,7 @@ import { FloatingCopilot } from "@/components/floating-copilot";
 import { FeedbackWidget } from "@/components/feedback-widget";
 import { MarketStatusBar } from "@/components/market-status-bar";
 import { Logo } from "@/components/ui/logo";
+import { Badge } from "@/components/ui/badge";
 
 /**
  * Top-level page shell with sticky header + max-w container.
@@ -80,9 +81,9 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
           >
             <Logo size={20} />
             MindMarket
-            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">
+            <Badge tone="neutral" uppercase>
               alpha
-            </span>
+            </Badge>
           </Link>
           {/* Desktop nav */}
           <nav className="hidden items-center gap-1 text-sm md:flex">
@@ -302,9 +303,9 @@ function AccountMenu() {
         className="flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
       >
         {isBillingEnabled() && plan && (
-          <span className="rounded-full border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
+          <Badge tone="primary" uppercase>
             {plan}
-          </span>
+          </Badge>
         )}
         <span className="hidden max-w-[12ch] truncate font-mono text-xs text-muted-foreground sm:inline">
           {user.email ?? user.id}
