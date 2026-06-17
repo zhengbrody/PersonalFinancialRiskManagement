@@ -23,7 +23,15 @@ _GRID = 41  # at-expiry payoff resolution per strategy
 
 def build_strategies(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Group per-contract analytics into strategies. Stable order by
-    underlying then expiry. Single legs pass through as a one-leg 'strategy'."""
+    underlying then expiry. Single legs pass through as a one-leg 'strategy'.
+
+    Scope: legs are grouped by (underlying, expiry), so detection covers
+    same-expiry shapes (verticals, straddles, strangles). Multi-expiry
+    strategies (calendar/diagonal spreads) land in separate groups, and 3-4 leg
+    shapes (butterfly, iron condor) fall through to 'Custom (N legs)'. The
+    payoff netting (grid, bounded max-loss/gain, Greeks) stays correct for any
+    grouped legs — only the human name is generic. To extend, generalize the
+    grouping key + add cases to `_detect_strategy`."""
     groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for r in results:
         underlying = str(r.get("underlying") or "").upper()
@@ -47,8 +55,20 @@ def _premium_per_share(leg: dict[str, Any]) -> Optional[float]:
 
 
 def _build_group(underlying: str, expiry: str, legs: list[dict[str, Any]]) -> dict[str, Any]:
-    strikes = [float(leg["strike"]) for leg in legs if leg.get("strike") is not None]
     spot = next((leg.get("spot") for leg in legs if leg.get("spot") is not None), None)
+    # Per-leg pricing constants, computed ONCE (hoisted out of the 41-point grid
+    # loop): (qty, mult, strike, option_type, premium_per_share).
+    specs = [
+        (
+            float(leg.get("quantity") or 0),
+            float(leg.get("contract_multiplier") or 100),
+            leg.get("strike"),
+            str(leg.get("option_type") or "call"),
+            _premium_per_share(leg),
+        )
+        for leg in legs
+    ]
+    strikes = [float(s) for _, _, s, _, _ in specs if s is not None]
     anchors = strikes + ([float(spot)] if spot else [])
 
     payoff: list[dict[str, float]] = []
@@ -56,31 +76,23 @@ def _build_group(underlying: str, expiry: str, legs: list[dict[str, Any]]) -> di
     max_gain: Optional[float] = None
     breakevens: list[float] = []
 
-    priceable = bool(anchors) and all(
-        _premium_per_share(leg) is not None and leg.get("strike") is not None for leg in legs
-    )
+    priceable = bool(anchors) and all(s is not None and p is not None for _, _, s, _, p in specs)
     if priceable:
+        pricing = [(q, m, float(s), ot, float(p)) for q, m, s, ot, p in specs]
         lo = max(0.01, min(anchors) * 0.5)
         hi = max(anchors) * 1.5
         grid = [lo + (hi - lo) * i / (_GRID - 1) for i in range(_GRID)]
-        pnls = [_group_pnl_at(s, legs) for s in grid]
-        payoff = [{"price": round(s, 2), "pnl": round(p, 2)} for s, p in zip(grid, pnls)]
+        pnls = [_group_pnl_at(x, pricing) for x in grid]
+        payoff = [{"price": round(x, 2), "pnl": round(p, 2)} for x, p in zip(grid, pnls)]
 
         # The UP side can be unbounded from net call exposure; the DOWN side
         # (S→0) is always finite. Net call quantity decides the unbounded side.
-        net_call_qty = sum(
-            float(leg.get("quantity") or 0) for leg in legs if leg.get("option_type") == "call"
-        )
+        net_call_qty = sum(q for q, _, _, ot, _ in pricing if ot == "call")
         b_min, b_max = min(pnls), max(pnls)
-        if net_call_qty > 0:  # net long calls → upside gain unbounded
-            max_gain = None
-            max_loss = round(-b_min, 2) if b_min < 0 else 0.0
-        elif net_call_qty < 0:  # net short calls → upside loss unbounded
-            max_loss = None
-            max_gain = round(b_max, 2) if b_max > 0 else 0.0
-        else:  # fully bounded (e.g. a vertical spread)
-            max_loss = round(-b_min, 2) if b_min < 0 else 0.0
-            max_gain = round(b_max, 2) if b_max > 0 else 0.0
+        loss_val = round(-b_min, 2) if b_min < 0 else 0.0
+        gain_val = round(b_max, 2) if b_max > 0 else 0.0
+        max_loss = None if net_call_qty < 0 else loss_val
+        max_gain = None if net_call_qty > 0 else gain_val
 
         for i in range(1, len(grid)):
             a, b = pnls[i - 1], pnls[i]
@@ -95,12 +107,10 @@ def _build_group(underlying: str, expiry: str, legs: list[dict[str, Any]]) -> di
     net_pnl = round(sum(float(v) for v in pnl_vals), 2) if pnl_vals else None
 
     net_greeks = {"delta": 0.0, "gamma": 0.0, "theta": 0.0, "vega": 0.0}
-    for leg in legs:
+    for (qty, mult, _, _, _), leg in zip(specs, legs):
         g = leg.get("greeks")
         if not g:
             continue
-        qty = float(leg.get("quantity") or 0)
-        mult = float(leg.get("contract_multiplier") or 100)
         for k in net_greeks:
             net_greeks[k] += float(g.get(k, 0.0)) * qty * mult
     net_greeks = {k: round(v, 4) for k, v in net_greeks.items()}
@@ -121,15 +131,12 @@ def _build_group(underlying: str, expiry: str, legs: list[dict[str, Any]]) -> di
     }
 
 
-def _group_pnl_at(spot: float, legs: list[dict[str, Any]]) -> float:
-    """Combined at-expiry P&L of the group at underlying price ``spot``."""
+def _group_pnl_at(spot: float, pricing: list[tuple[float, float, float, str, float]]) -> float:
+    """Combined at-expiry P&L at underlying price ``spot``. ``pricing`` is the
+    per-leg (qty, mult, strike, option_type, premium) precomputed once by the
+    caller so this hot loop does no per-point parsing."""
     total = 0.0
-    for leg in legs:
-        qty = float(leg.get("quantity") or 0)
-        mult = float(leg.get("contract_multiplier") or 100)
-        strike = float(leg.get("strike") or 0.0)
-        option_type = str(leg.get("option_type") or "call")
-        premium = _premium_per_share(leg) or 0.0
+    for qty, mult, strike, option_type, premium in pricing:
         intrinsic = _intrinsic_value(option_type, spot, strike)
         total += (intrinsic - premium) * qty * mult
     return total

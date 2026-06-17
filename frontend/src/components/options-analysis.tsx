@@ -547,45 +547,12 @@ function StrategyCard({ s }: { s: OptionStrategy }) {
 
 function StrategyPayoffChart({ s }: { s: OptionStrategy }) {
   return (
-    <div>
-      <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-        Combined P&amp;L at expiry
-      </p>
-      <ResponsiveContainer width="100%" height={130}>
-        <LineChart data={s.payoff} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-          <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="2 4" vertical={false} />
-          <XAxis
-            dataKey="price"
-            tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-            tickFormatter={(v: number) => `$${Math.round(v)}`}
-            type="number"
-            domain={["dataMin", "dataMax"]}
-          />
-          <YAxis
-            tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-            tickFormatter={(v: number) =>
-              Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : `${Math.round(v)}`
-            }
-            width={34}
-          />
-          <Tooltip
-            contentStyle={{
-              background: "hsl(var(--popover))",
-              border: "1px solid hsl(var(--border))",
-              borderRadius: 6,
-              fontSize: 11,
-            }}
-            formatter={(v) => [usd(Number(v ?? 0)), "P&L"]}
-            labelFormatter={(v) => `Underlying $${Number(v).toFixed(0)}`}
-          />
-          <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeWidth={1} />
-          {s.break_evens.map((b, i) => (
-            <ReferenceLine key={i} x={b} stroke="hsl(var(--primary))" strokeDasharray="3 3" />
-          ))}
-          <Line type="monotone" dataKey="pnl" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
+    <PayoffLineChart
+      label="Combined P&L at expiry"
+      data={s.payoff}
+      breakEvens={s.break_evens}
+      height={130}
+    />
   );
 }
 
@@ -664,10 +631,34 @@ function ContractCard({ a }: { a: OptionAnalytics }) {
 
 function PayoffChart({ a }: { a: OptionAnalytics }) {
   return (
+    <PayoffLineChart
+      label="P&L at expiry"
+      data={a.payoff}
+      breakEvens={a.break_even != null ? [a.break_even] : []}
+    />
+  );
+}
+
+/**
+ * Shared P&L-at-expiry line chart for a single contract or a netted strategy.
+ * Data points are {price, pnl}; break-even reference lines are caller-supplied.
+ */
+function PayoffLineChart({
+  label,
+  data,
+  breakEvens,
+  height = 120,
+}: {
+  label: string;
+  data: { price: number; pnl: number }[];
+  breakEvens: number[];
+  height?: number;
+}) {
+  return (
     <div>
-      <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">P&amp;L at expiry</p>
-      <ResponsiveContainer width="100%" height={120}>
-        <LineChart data={a.payoff} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+      <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <ResponsiveContainer width="100%" height={height}>
+        <LineChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
           <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="2 4" vertical={false} />
           <XAxis
             dataKey="price"
@@ -678,7 +669,9 @@ function PayoffChart({ a }: { a: OptionAnalytics }) {
           />
           <YAxis
             tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-            tickFormatter={(v: number) => (Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : `${Math.round(v)}`)}
+            tickFormatter={(v: number) =>
+              Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : `${Math.round(v)}`
+            }
             width={34}
           />
           <Tooltip
@@ -692,9 +685,9 @@ function PayoffChart({ a }: { a: OptionAnalytics }) {
             labelFormatter={(v) => `Underlying $${Number(v).toFixed(0)}`}
           />
           <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeWidth={1} />
-          {a.break_even != null && (
-            <ReferenceLine x={a.break_even} stroke="hsl(var(--primary))" strokeDasharray="3 3" />
-          )}
+          {breakEvens.map((b, i) => (
+            <ReferenceLine key={i} x={b} stroke="hsl(var(--primary))" strokeDasharray="3 3" />
+          ))}
           <Line type="monotone" dataKey="pnl" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
         </LineChart>
       </ResponsiveContainer>

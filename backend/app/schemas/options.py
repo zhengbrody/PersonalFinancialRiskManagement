@@ -80,6 +80,7 @@ class OptionAnalyticsOut(BaseModel):
     payoff: list[PayoffPointOut] = Field(default_factory=list)
     # Price-quality state: "market" (live) | "stale_eod" (delayed/EOD chain) |
     # "manual" (user override) | "theoretical_fallback" (Black-Scholes, no quote).
+    # Default "market" is a sentinel; analyze_contract overwrites it per leg.
     source: str = "market"
     warnings: list[str] = Field(default_factory=list)
 
