@@ -18,7 +18,7 @@
 
 import { useEffect, useState } from "react";
 import { Dashboard } from "@/components/dashboard";
-import { MarketingLanding } from "@/components/marketing-landing";
+import { MarketingLandingV2 } from "@/components/marketing-landing-v2";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/lib/auth-context";
 
@@ -57,9 +57,9 @@ export default function Home() {
         </div>
       );
     }
-    return <MarketingLanding />;
+    return <MarketingLandingV2 />;
   }
 
   if (configured && user) return <Dashboard />;
-  return <MarketingLanding />;
+  return <MarketingLandingV2 />;
 }

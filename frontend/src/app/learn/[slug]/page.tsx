@@ -114,7 +114,7 @@ export default function LearnTopicPage({ params }: { params: { slug: string } })
         </div>
         <div className="flex gap-2">
           <Link
-            href="/#sample-cockpit"
+            href="/demo-risk-check"
             className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent"
           >
             Run a sample portfolio

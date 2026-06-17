@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { Icon, type IconName } from "@/components/ui/icon";
 import {
   Card,
   CardContent,
@@ -269,11 +270,11 @@ function CopilotCard({ credits }: { credits?: { unlimited?: boolean; credits_rem
 }
 
 function QuickLinks() {
-  const links = [
-    { href: "/portfolios", label: "Holdings", desc: "Edit your positions" },
-    { href: "/research", label: "Stock research", desc: "Any-ticker deep dive" },
-    { href: "/quant", label: "Backtest", desc: "How a strategy held up" },
-    { href: "/markets", label: "Markets", desc: "The risk climate today" },
+  const links: { href: string; label: string; desc: string; icon: IconName }[] = [
+    { href: "/portfolios", label: "Holdings", desc: "Edit your positions", icon: "holdings" },
+    { href: "/research", label: "Stock research", desc: "Any-ticker deep dive", icon: "research" },
+    { href: "/quant", label: "Backtest", desc: "How a strategy held up", icon: "scenarios" },
+    { href: "/markets", label: "Markets", desc: "The risk climate today", icon: "trend-up" },
   ];
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -283,7 +284,8 @@ function QuickLinks() {
           href={l.href}
           className="rounded-lg border border-border p-4 transition hover:border-primary/40 hover:bg-accent/40"
         >
-          <div className="text-sm font-medium">{l.label}</div>
+          <Icon name={l.icon} className="h-5 w-5 text-primary" />
+          <div className="mt-2 text-sm font-medium">{l.label}</div>
           <div className="mt-0.5 text-xs text-muted-foreground">{l.desc}</div>
         </Link>
       ))}

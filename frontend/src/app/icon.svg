@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="MindMarket">
+  <g transform="translate(0,0)">
+    <rect width="64" height="64" rx="16" fill="#0B0E11"></rect>
+    <rect x="0.75" y="0.75" width="62.5" height="62.5" rx="15.25" fill="none" stroke="#223039" stroke-width="1.5"></rect>
+    <circle cx="32" cy="28" r="20" fill="#0B7285" opacity="0.16"></circle>
+    <path d="M14 46 V20 L32 38 L50 20 V46" fill="none" stroke="#F8FAFC" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"></path>
+    <path d="M13 50 L31 42 L50 30" fill="none" stroke="#D4A017" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"></path>
+    <circle cx="50" cy="30" r="3.1" fill="#D4A017"></circle>
+  </g>
+</svg>

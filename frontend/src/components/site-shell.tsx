@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { isBillingEnabled } from "@/lib/billing-flag";
 import { useAuth } from "@/lib/auth-context";
 import { useBillingMe } from "@/lib/queries";
 import { FloatingCopilot } from "@/components/floating-copilot";
 import { FeedbackWidget } from "@/components/feedback-widget";
 import { MarketStatusBar } from "@/components/market-status-bar";
+import { Logo } from "@/components/ui/logo";
 
 /**
  * Top-level page shell with sticky header + max-w container.
@@ -50,6 +52,14 @@ function accountLinks(isOwner: boolean): NavItem[] {
 }
 
 export function SiteShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const { user, configured } = useAuth();
+  // The anonymous home is the full-bleed premium marketing landing, which owns
+  // its own fixed nav + footer — render it bare (no app header / max-w main).
+  // The signed-in dashboard at "/" and every other route keep the normal shell.
+  if (pathname === "/" && !(configured && user)) {
+    return <>{children}</>;
+  }
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
@@ -58,7 +68,7 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
             href="/"
             className="flex items-center gap-2 text-sm font-semibold tracking-tight"
           >
-            <span className="inline-block h-2 w-2 rounded-full bg-primary" />
+            <Logo size={20} />
             MindMarket
             <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase text-muted-foreground">
               alpha

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { Instrument_Serif } from "next/font/google";
 import "./globals.css";
 import { SiteShell } from "@/components/site-shell";
 import { MarketThemeSync } from "@/components/market-theme-sync";
@@ -35,6 +36,15 @@ const geistMono = localFont({
   src: "./fonts/GeistMonoVF.woff",
   variable: "--font-geist-mono",
   weight: "100 900",
+});
+// Display serif for marketing headlines only (the "Citadel" editorial look).
+// Geist stays the UI/body font.
+const instrumentSerif = Instrument_Serif({
+  weight: "400",
+  style: ["normal", "italic"],
+  subsets: ["latin"],
+  variable: "--font-display",
+  display: "swap",
 });
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
@@ -97,6 +107,7 @@ export const metadata: Metadata = {
       "max-video-preview": -1,
     },
   },
+  manifest: "/site.webmanifest",
 };
 
 // Structured data for search engines. Static + deterministic (no user data),
@@ -109,7 +120,7 @@ const JSON_LD = JSON.stringify({
       "@id": `${SITE_URL}/#org`,
       name: "MindMarket AI",
       url: SITE_URL,
-      logo: `${SITE_URL}/favicon-512.png`,
+      logo: `${SITE_URL}/icons/icon-512.png`,
     },
     {
       "@type": "SoftwareApplication",
@@ -140,7 +151,7 @@ export default function RootLayout({
   // because that script mutates the <html> class before React hydrates.
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable}`}>
+      <body className={`${geistSans.variable} ${geistMono.variable} ${instrumentSerif.variable}`}>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON_LD }} />
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
         <MarketThemeSync />
