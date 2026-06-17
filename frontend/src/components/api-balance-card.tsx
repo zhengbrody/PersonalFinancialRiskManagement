@@ -7,10 +7,11 @@
  * (and a header banner) when any provider is low. Pure display of /admin/balances.
  */
 
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import type { AdminBalances, BalanceProvider } from "@/lib/queries";
+import { useSetAnthropicTopup, type AdminBalances, type BalanceProvider } from "@/lib/queries";
 
 const BALANCE_TEXT: Record<string, string> = {
   ok: "text-emerald-600 dark:text-emerald-400",
@@ -113,6 +114,65 @@ function ProviderBalance({ p }: { p: BalanceProvider }) {
           {p.low && <p className={cn("mt-1.5 text-xs font-medium", tone)}>⚠ 余量偏低 — 建议充值</p>}
         </>
       )}
+      {/* Claude has no balance API → owner enters the new balance after a top-up
+          (no env edit / restart); spend then counts down from here live. */}
+      {p.source === "estimate" && <ClaudeTopupEditor />}
     </div>
+  );
+}
+
+function ClaudeTopupEditor() {
+  const [open, setOpen] = useState(false);
+  const [val, setVal] = useState("");
+  const mut = useSetAnthropicTopup();
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-2 text-xs text-primary hover:underline"
+      >
+        ✎ 充值后更新余额
+      </button>
+    );
+  }
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        const n = parseFloat(val);
+        if (!Number.isNaN(n) && n >= 0) {
+          mut.mutate(n, { onSuccess: () => setOpen(false) });
+        }
+      }}
+      className="mt-2 flex flex-wrap items-center gap-1.5"
+    >
+      <input
+        type="number"
+        step="0.01"
+        min="0"
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        placeholder="新余额 $"
+        autoFocus
+        className="w-28 rounded border border-border bg-background px-2 py-1 text-sm tabular-nums"
+      />
+      <button
+        type="submit"
+        disabled={mut.isPending}
+        className="rounded bg-primary px-2 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
+      >
+        {mut.isPending ? "…" : "保存"}
+      </button>
+      <button
+        type="button"
+        onClick={() => setOpen(false)}
+        className="text-xs text-muted-foreground hover:underline"
+      >
+        取消
+      </button>
+      {mut.isError && <span className="text-xs text-red-600 dark:text-red-400">保存失败</span>}
+    </form>
   );
 }

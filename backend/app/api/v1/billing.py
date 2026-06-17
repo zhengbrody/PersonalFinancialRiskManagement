@@ -28,6 +28,7 @@ from fastapi import APIRouter, Depends, Request
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import APIError, ok
 from ...schemas.billing import (
+    AnthropicTopupRequest,
     BillingMeResponse,
     CheckoutSessionRequest,
     CheckoutSessionResponse,
@@ -217,6 +218,35 @@ def billing_admin_balances(request: Request, user: AuthedUser = Depends(require_
 
     from ...services import api_balance
 
+    return ok(api_balance.balances(), request=request, started_at=started)
+
+
+@router.post(
+    "/admin/anthropic-topup",
+    summary="Owner-only: set the current Claude balance (after a top-up)",
+)
+def billing_admin_set_anthropic_topup(
+    body: AnthropicTopupRequest,
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    """Record the owner's current Claude balance from the dashboard — no env edit
+    or restart. Anthropic exposes no balance API, so this snapshot is what we
+    count Claude spend down from (re-set it after each top-up). Returns the
+    refreshed balances. 403 for non-owners."""
+    started = time.perf_counter()
+
+    from libs.admin.status import is_owner_email
+
+    if not is_owner_email(user.email):
+        raise APIError(status=403, code="forbidden", message="Owner only.")
+
+    from libs.billing.usage import set_anthropic_topup
+
+    from ...services import api_balance
+
+    set_anthropic_topup(user.id, float(body.balance))
+    api_balance.invalidate()
     return ok(api_balance.balances(), request=request, started_at=started)
 
 

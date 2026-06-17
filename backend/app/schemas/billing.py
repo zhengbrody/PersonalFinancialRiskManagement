@@ -79,3 +79,10 @@ class PortalSessionRequest(BaseModel):
 
 class PortalSessionResponse(BaseModel):
     portal_url: str
+
+
+class AnthropicTopupRequest(BaseModel):
+    """Body for ``POST /api/v1/billing/admin/anthropic-topup`` — the owner's
+    current Claude balance after a top-up (since Anthropic has no balance API)."""
+
+    balance: float = Field(ge=0, le=1_000_000)
