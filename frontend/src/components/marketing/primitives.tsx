@@ -40,8 +40,8 @@ export function CTA({
   };
   const v =
     variant === "primary"
-      ? { background: C.paper, color: "#0A0D11", boxShadow: "0 10px 30px -10px rgba(224,174,42,.35)" }
-      : { background: "rgba(255,255,255,0.04)", color: C.paper, borderColor: C.hairStrong };
+      ? { background: C.ctaBg, color: C.ctaFg, boxShadow: "0 10px 30px -10px rgba(212,160,23,.35)" }
+      : { background: C.surfaceFaint, color: C.paper, borderColor: C.hairStrong };
   const style = { ...base, ...v };
   if (href.startsWith("/")) {
     return (
@@ -129,7 +129,7 @@ export function MarketingCard({
     display: "block",
     borderRadius: 16,
     border: `1px solid ${C.hair}`,
-    background: "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.008))",
+    background: C.cardGrad,
     padding: 22,
     height: "100%",
     textDecoration: "none",
@@ -205,7 +205,7 @@ export function CTABox({
         gap: 18,
         borderRadius: 18,
         border: `1px solid ${C.hair}`,
-        background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.012))",
+        background: C.cardGrad,
         padding: "24px 26px",
       }}
     >

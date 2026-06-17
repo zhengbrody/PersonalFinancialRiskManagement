@@ -25,8 +25,10 @@ export function MarketingShell({
   minimal?: boolean;
 }) {
   return (
+    // No forced `dark` class — the marketing palette (--mm-*) flips with the
+    // app's market-synced `.dark` on <html>, so pre-login is light during the
+    // trading day and dark overnight, just like the signed-in product.
     <div
-      className="dark"
       style={{
         background: C.ink,
         color: C.paper,
@@ -94,7 +96,7 @@ function MarketingNav({ minimal }: { minimal: boolean }) {
         alignItems: "center",
         justifyContent: "space-between",
         padding: scrolled ? "12px 32px" : "16px 32px",
-        background: scrolled ? "rgba(7,9,12,0.72)" : "transparent",
+        background: scrolled ? C.navBg : "transparent",
         backdropFilter: scrolled ? "blur(14px)" : "none",
         borderBottom: `1px solid ${scrolled ? C.hair : "transparent"}`,
         transition: "all .3s",

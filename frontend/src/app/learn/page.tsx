@@ -91,7 +91,7 @@ export default function LearnHubPage() {
           style={{
             borderRadius: 20,
             border: `1px solid ${C.hair}`,
-            background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.012))",
+            background: C.cardGrad,
             padding: "40px 28px",
             textAlign: "center",
           }}
