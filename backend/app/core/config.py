@@ -39,6 +39,15 @@ def _env_str(key: str, default: str = "") -> str:
     return val.strip() if isinstance(val, str) and val.strip() else default
 
 
+def _env_float(key: str, default: float = 0.0) -> float:
+    """Read an env var as a float, returning ``default`` when unset or invalid."""
+    raw = _env_str(key)
+    try:
+        return float(raw) if raw else default
+    except ValueError:
+        return default
+
+
 def _env_csv(key: str) -> list[str]:
     """Read a comma-separated env var as a clean list."""
     raw = _env_str(key)
@@ -109,6 +118,35 @@ class Settings:
     deepseek_model: str = field(default_factory=lambda: _env_str("DEEPSEEK_MODEL", "deepseek-chat"))
 
     anthropic_api_key: str = field(default_factory=lambda: _env_str("ANTHROPIC_API_KEY"))
+
+    # ── API-balance tracking (owner /admin "API balance" card) ──────────
+    # DeepSeek exposes a real balance API (`/user/balance`); Anthropic does NOT,
+    # so the owner records the Claude credit they topped up here and we count
+    # down our tracked Claude spend from `*_SINCE`. Update TOPUP (+ SINCE) after
+    # each Anthropic top-up. All optional → the card degrades to "not configured".
+    anthropic_topup_usd: float = field(default_factory=lambda: _env_float("ANTHROPIC_TOPUP_USD"))
+    anthropic_topup_since: str = field(
+        default_factory=lambda: _env_str("ANTHROPIC_TOPUP_SINCE")
+    )  # ISO date; blank → start of current month
+    deepseek_balance_url: str = field(
+        default_factory=lambda: _env_str(
+            "DEEPSEEK_BALANCE_URL", "https://api.deepseek.com/user/balance"
+        )
+    )
+    # DeepSeek's API gives the live remaining but not the original top-up, so its
+    # low-balance alert is an ABSOLUTE floor in the account currency (CNY/USD):
+    # warn when remaining < floor, critical when < 40% of it.
+    deepseek_low_balance: float = field(
+        default_factory=lambda: _env_float("DEEPSEEK_LOW_BALANCE", 5.0)
+    )
+    # Claude has a known top-up (the owner set it), so its alert is a fraction of
+    # that top-up.
+    anthropic_warn_pct: float = field(
+        default_factory=lambda: _env_float("ANTHROPIC_WARN_PCT", 0.20)
+    )
+    anthropic_critical_pct: float = field(
+        default_factory=lambda: _env_float("ANTHROPIC_CRITICAL_PCT", 0.08)
+    )
 
     # FMP (Financial Modeling Prep) key for the equity dossier fetch. Optional:
     # when blank the dossier still builds from the free (yfinance) legs and FMP

@@ -491,6 +491,48 @@ export function useAdminMetrics(enabled: boolean) {
   });
 }
 
+// ── owner: LLM provider remaining balance / top-up ──────────────────
+const balanceProviderSchema = z.looseObject({
+  provider: z.string(),
+  configured: z.boolean(),
+  source: z.string(), // "live" (DeepSeek) | "estimate" (Claude)
+  status: z.string(), // ok | warn | critical | unknown
+  low: z.boolean().optional(),
+  currency: z.string().optional(),
+  remaining: z.number().nullish(),
+  topped_up: z.number().nullish(),
+  spent: z.number().nullish(),
+  pct: z.number().nullish(),
+  granted: z.number().nullish(),
+  is_available: z.boolean().optional(),
+  since: z.string().nullish(),
+  error: z.string().optional(),
+});
+export const adminBalancesSchema = z.looseObject({
+  deepseek: balanceProviderSchema,
+  anthropic: balanceProviderSchema,
+});
+export type AdminBalances = z.infer<typeof adminBalancesSchema>;
+export type BalanceProvider = z.infer<typeof balanceProviderSchema>;
+
+/** Owner-only LLM provider balances (DeepSeek live + Claude estimate). Server-
+ * cached 60s; poll slowly — balances don't move second-to-second. */
+export function useAdminBalances(enabled: boolean) {
+  const { accessToken } = useAuth();
+  return useQuery<AdminBalances>({
+    queryKey: ["billing", "admin", "balances"],
+    enabled: enabled && Boolean(accessToken),
+    queryFn: () =>
+      apiFetch<AdminBalances>("/api/v1/billing/admin/balances", {
+        authToken: accessToken!,
+        schema: adminBalancesSchema,
+      }),
+    refetchInterval: 45_000,
+    refetchIntervalInBackground: false,
+    retry: false,
+  });
+}
+
 /** Plan + subscription snapshot for the signed-in user. */
 export function useBillingMe() {
   const { accessToken, user } = useAuth();

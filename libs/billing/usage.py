@@ -390,6 +390,34 @@ def get_cost_since(user_id: str, since_iso: str) -> float:
         return float("inf")
 
 
+def get_cost_since_for_model_prefix(since_iso: str, model_prefix: str) -> float:
+    """Platform-wide summed cost_usd since a timestamp for models whose name
+    starts with ``model_prefix`` (case-insensitive; e.g. ``"claude"`` for
+    Anthropic, ``"deepseek"`` for DeepSeek). For the owner API-balance card, so
+    it fails SOFT to 0.0 (a read blip must not invent spend) — unlike the
+    fail-closed ``get_cost_since`` used for quota gating.
+    """
+    try:
+        sb, _ = _cost_client()
+        resp = (
+            sb.table("usage_events")
+            .select("cost_usd")
+            .gte("created_at", since_iso)
+            .ilike("model", f"{model_prefix}%")
+            .limit(50_000)
+            .execute()
+        )
+        total = 0.0
+        for row in resp.data or []:
+            try:
+                total += float(row.get("cost_usd") or 0.0)
+            except (TypeError, ValueError):
+                continue
+        return total
+    except Exception:
+        return 0.0
+
+
 def get_spend_status(user_id: str, *, estimated_cost_usd: float = 0.0) -> dict[str, Any]:
     """Return current daily/monthly spend against owner-configured limits."""
     daily_limit = _secret_float("MINDMARKET_DAILY_COST_LIMIT_USD", 2.0)

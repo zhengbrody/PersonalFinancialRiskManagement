@@ -199,6 +199,27 @@ def billing_admin_metrics(request: Request, user: AuthedUser = Depends(require_u
     return ok(metrics.snapshot(), request=request, started_at=started)
 
 
+# ── GET /admin/balances — owner-only LLM provider balances ─────────
+
+
+@router.get("/admin/balances", summary="Owner-only: LLM provider remaining balance / top-up")
+def billing_admin_balances(request: Request, user: AuthedUser = Depends(require_user)):
+    """Remaining LLM credit per provider for the owner "API balance" card:
+    DeepSeek live balance (its real `/user/balance` API) + a Claude ESTIMATE
+    (owner-set top-up − tracked Claude spend, since Anthropic exposes no
+    balance API). Server-cached, so safe to poll. 403 for non-owners."""
+    started = time.perf_counter()
+
+    from libs.admin.status import is_owner_email
+
+    if not is_owner_email(user.email):
+        raise APIError(status=403, code="forbidden", message="Owner only.")
+
+    from ...services import api_balance
+
+    return ok(api_balance.balances(), request=request, started_at=started)
+
+
 # ── GET /admin/status — owner-only integration diagnostics ─────────
 
 
