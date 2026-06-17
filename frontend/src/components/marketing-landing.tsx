@@ -99,23 +99,21 @@ export function MarketingLanding() {
           without paying $40k for a Bloomberg Terminal.
         </p>
         <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-center md:justify-start">
-          <Link href="/signup">
+          <Link href="/demo">
             <Button size="lg" className="w-full sm:w-auto">
-              Get started — free
+              Try a Demo Risk Check
             </Button>
           </Link>
-          <Link href="#sample-cockpit">
+          <Link href="/signup">
             <Button size="lg" variant="outline" className="w-full sm:w-auto">
-              See a sample cockpit
+              Analyze my portfolio
             </Button>
           </Link>
-          {isBillingEnabled() && (
-            <Link href="/pricing">
-              <Button size="lg" variant="ghost" className="w-full sm:w-auto">
-                See plans
-              </Button>
-            </Link>
-          )}
+          <Link href="/research">
+            <Button size="lg" variant="ghost" className="w-full sm:w-auto">
+              Research a stock
+            </Button>
+          </Link>
         </div>
         <p className="text-xs text-muted-foreground">
           {isBillingEnabled()
