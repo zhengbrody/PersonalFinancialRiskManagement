@@ -11,7 +11,7 @@ import { notFound } from "next/navigation";
 import { LEARN_BY_SLUG, LEARN_SLUGS } from "@/lib/learn-content";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { C, display } from "@/components/marketing/theme";
-import { CTA, Disclaimer } from "@/components/marketing/primitives";
+import { CTA, CTABox, Disclaimer } from "@/components/marketing/primitives";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
 
@@ -163,32 +163,16 @@ export default function LearnTopicPage({ params }: { params: { slug: string } })
         </div>
 
         {/* CTA */}
-        <div
-          style={{
-            marginTop: 44,
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 18,
-            alignItems: "center",
-            justifyContent: "space-between",
-            borderRadius: 18,
-            border: `1px solid ${C.hair}`,
-            background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.012))",
-            padding: "24px 26px",
-          }}
-        >
-          <div>
-            <p style={{ fontWeight: 600, fontSize: 17, margin: 0, color: C.paper }}>See it on a real book</p>
-            <p style={{ fontSize: 14, color: C.slate, margin: "4px 0 0" }}>
-              Run a sample portfolio, or score your own in seconds.
-            </p>
-          </div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ marginTop: 44 }}>
+          <CTABox
+            headline="See it on a real book"
+            lede="Run a sample portfolio, or score your own in seconds."
+          >
             <CTA href="/demo-risk-check" variant="ghost">
               Run a sample portfolio
             </CTA>
             <CTA href="/signup">Create free account</CTA>
-          </div>
+          </CTABox>
         </div>
 
         {/* FAQ */}

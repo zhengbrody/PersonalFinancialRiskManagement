@@ -184,7 +184,38 @@ export function Disclaimer({ children }: { children: ReactNode }) {
   );
 }
 
-/* Themed body paragraph for prose-heavy pages. */
-export function P({ children }: { children: ReactNode }) {
-  return <p style={bodyText}>{children}</p>;
+/* Row CTA panel — headline + lede on the left, action buttons on the right.
+   The shared "convert here" card used at the foot of the content pages. */
+export function CTABox({
+  headline,
+  lede,
+  children,
+}: {
+  headline: ReactNode;
+  lede?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 18,
+        borderRadius: 18,
+        border: `1px solid ${C.hair}`,
+        background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.012))",
+        padding: "24px 26px",
+      }}
+    >
+      <div>
+        <p style={{ fontWeight: 600, fontSize: 17, margin: 0, color: C.paper }}>{headline}</p>
+        {lede && (
+          <p style={{ fontSize: 14, color: C.slate, margin: "4px 0 0", maxWidth: "42em" }}>{lede}</p>
+        )}
+      </div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{children}</div>
+    </div>
+  );
 }

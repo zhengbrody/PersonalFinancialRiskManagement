@@ -12,7 +12,7 @@ import { SampleCockpit } from "@/components/sample-cockpit";
 import { DemoStartedPing } from "@/components/demo-started-ping";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { C } from "@/components/marketing/theme";
-import { CTA, Disclaimer, Em, MarketingHero } from "@/components/marketing/primitives";
+import { CTA, CTABox, Disclaimer, Em, MarketingHero } from "@/components/marketing/primitives";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
 
@@ -58,35 +58,15 @@ export default function DemoRiskCheckPage() {
       </div>
 
       <div style={{ maxWidth: 920, margin: "0 auto", padding: "16px 24px 64px" }}>
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 18,
-            borderRadius: 18,
-            border: `1px solid ${C.hair}`,
-            background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.012))",
-            padding: "24px 26px",
-          }}
+        <CTABox
+          headline="Want this for your own portfolio?"
+          lede="Add your holdings (or import a CSV) and get a real Health Score, risk report, and AI copilot — free during beta."
         >
-          <div>
-            <p style={{ fontWeight: 600, fontSize: 17, margin: 0, color: C.paper }}>
-              Want this for your own portfolio?
-            </p>
-            <p style={{ fontSize: 14, color: C.slate, margin: "4px 0 0", maxWidth: "40em" }}>
-              Add your holdings (or import a CSV) and get a real Health Score, risk report, and AI
-              copilot — free during beta.
-            </p>
-          </div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <CTA href="/signup">Analyze my portfolio</CTA>
-            <CTA href="/research" variant="ghost">
-              Research a stock
-            </CTA>
-          </div>
-        </div>
+          <CTA href="/signup">Analyze my portfolio</CTA>
+          <CTA href="/research" variant="ghost">
+            Research a stock
+          </CTA>
+        </CTABox>
         <div style={{ marginTop: 18 }}>
           <Disclaimer>
             Sample data for illustration — not live prices and not investment advice. Your own
