@@ -1,7 +1,13 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { ApiBalanceCard } from "./api-balance-card";
 import type { AdminBalances, BalanceProvider } from "@/lib/queries";
+
+// The card's Claude tile has an inline top-up editor (a mutation hook) — stub it.
+const { mutate } = vi.hoisted(() => ({ mutate: vi.fn() }));
+vi.mock("@/lib/queries", () => ({
+  useSetAnthropicTopup: () => ({ mutate, isPending: false, isError: false }),
+}));
 
 const prov = (over: Partial<BalanceProvider>): BalanceProvider => ({
   provider: "DeepSeek",
@@ -57,6 +63,14 @@ describe("ApiBalanceCard", () => {
       />,
     );
     expect(screen.getByText(/ANTHROPIC_TOPUP_USD/)).toBeInTheDocument();
+  });
+
+  it("lets the owner set the Claude balance inline (no env / restart)", () => {
+    render(<ApiBalanceCard data={data()} loading={false} />);
+    fireEvent.click(screen.getByText("✎ 充值后更新余额"));
+    fireEvent.change(screen.getByPlaceholderText("新余额 $"), { target: { value: "30" } });
+    fireEvent.click(screen.getByText("保存"));
+    expect(mutate).toHaveBeenCalledWith(30, expect.anything());
   });
 
   it("renders nothing without data", () => {

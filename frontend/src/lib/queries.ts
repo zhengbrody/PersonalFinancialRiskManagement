@@ -533,6 +533,23 @@ export function useAdminBalances(enabled: boolean) {
   });
 }
 
+/** Owner sets the current Claude balance from the dashboard (after a top-up) —
+ * no env edit / restart. Returns the refreshed balances + invalidates the card. */
+export function useSetAnthropicTopup() {
+  const { accessToken } = useAuth();
+  const qc = useQueryClient();
+  return useMutation<AdminBalances, Error, number>({
+    mutationFn: (balance) =>
+      apiFetch<AdminBalances>("/api/v1/billing/admin/anthropic-topup", {
+        method: "POST",
+        body: { balance },
+        authToken: accessToken!,
+        schema: adminBalancesSchema,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["billing", "admin", "balances"] }),
+  });
+}
+
 /** Plan + subscription snapshot for the signed-in user. */
 export function useBillingMe() {
   const { accessToken, user } = useAuth();

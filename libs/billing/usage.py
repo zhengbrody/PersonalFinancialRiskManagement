@@ -634,6 +634,46 @@ def record_event(
         logging.getLogger(__name__).warning("usage.record_failed kind=%s err=%s", kind, e)
 
 
+def set_anthropic_topup(user_id: str, balance: float) -> None:
+    """Owner records the Claude balance they just topped up to, from the /admin
+    dashboard (no env edit / restart). Stored as a marker usage_events row
+    (kind='anthropic_topup', cost_usd=0, balance in metadata) so NO schema
+    migration is needed; Claude spend then counts from this row's created_at, so
+    re-entering after a top-up resets the count-down to the new balance."""
+    record_event(
+        user_id,
+        "anthropic_topup",
+        model="(topup)",
+        cost_usd=0.0,
+        metadata={"balance": float(balance)},
+    )
+
+
+def get_anthropic_topup() -> dict[str, Any] | None:
+    """Latest owner-set Claude balance snapshot → {balance, set_at} or None."""
+    try:
+        sb, _ = _cost_client()
+        rows = (
+            sb.table("usage_events")
+            .select("metadata,created_at")
+            .eq("kind", "anthropic_topup")
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+        if not rows:
+            return None
+        md = rows[0].get("metadata") or {}
+        bal = md.get("balance")
+        if bal is None:
+            return None
+        return {"balance": float(bal), "set_at": rows[0].get("created_at")}
+    except Exception:
+        return None
+
+
 def check_quota(
     user_id: str,
     kind: str,

@@ -75,8 +75,26 @@ def _deepseek(s: Settings) -> dict[str, Any]:
 
 
 def _anthropic(s: Settings) -> dict[str, Any]:
-    """Claude estimate: owner-set top-up − tracked Claude spend since `since`."""
-    topup = float(s.anthropic_topup_usd or 0.0)
+    """Claude estimate: balance snapshot − tracked Claude spend since it was set.
+    Prefers the owner's DASHBOARD-set balance (no env / restart) and counts spend
+    from when they set it; falls back to the env (`ANTHROPIC_TOPUP_USD/SINCE`)."""
+    dash = None
+    try:
+        from libs.billing.usage import get_anthropic_topup
+
+        dash = get_anthropic_topup()
+    except Exception:  # noqa: BLE001
+        dash = None
+
+    if dash and float(dash.get("balance") or 0.0) > 0:
+        topup = float(dash["balance"])
+        since = dash.get("set_at") or _start_of_month_iso()
+        set_via = "dashboard"
+    else:
+        topup = float(s.anthropic_topup_usd or 0.0)
+        since = s.anthropic_topup_since or _start_of_month_iso()
+        set_via = "env"
+
     if topup <= 0:
         return {
             "provider": "Claude (Anthropic)",
@@ -84,7 +102,6 @@ def _anthropic(s: Settings) -> dict[str, Any]:
             "source": "estimate",
             "status": "unknown",
         }
-    since = s.anthropic_topup_since or _start_of_month_iso()
     try:
         from libs.billing.usage import get_cost_since_for_model_prefix
 
@@ -108,6 +125,7 @@ def _anthropic(s: Settings) -> dict[str, Any]:
         "remaining": remaining,
         "pct": pct,
         "since": since,
+        "set_via": set_via,
         "status": status,
         "low": status != "ok",
     }
@@ -126,3 +144,9 @@ def balances() -> dict[str, Any]:
     _cache["at"] = now
     _cache["data"] = data
     return data
+
+
+def invalidate() -> None:
+    """Drop the cache so the next read reflects a just-set Claude balance."""
+    _cache["at"] = 0.0
+    _cache["data"] = None

@@ -35,26 +35,45 @@ class _Resp:
 # ── Claude estimate (top-up − tracked spend) ──────────────────────
 
 
-def test_anthropic_estimate_counts_down_the_topup(monkeypatch):
+def test_anthropic_estimate_counts_down_the_env_topup(monkeypatch):
     import libs.billing.usage as usage
 
+    monkeypatch.setattr(usage, "get_anthropic_topup", lambda: None)  # no dashboard value
     monkeypatch.setattr(usage, "get_cost_since_for_model_prefix", lambda since, prefix: 2.5)
     b = ab._anthropic(_settings(anthropic_topup_usd=20.0))
-    assert b["configured"] is True and b["source"] == "estimate"
+    assert b["configured"] is True and b["source"] == "estimate" and b["set_via"] == "env"
     assert b["topped_up"] == 20.0 and b["spent"] == 2.5 and b["remaining"] == 17.5
     assert b["status"] == "ok" and b["low"] is False
+
+
+def test_anthropic_prefers_the_dashboard_balance(monkeypatch):
+    import libs.billing.usage as usage
+
+    monkeypatch.setattr(
+        usage,
+        "get_anthropic_topup",
+        lambda: {"balance": 30.0, "set_at": "2026-06-17T00:00:00+00:00"},
+    )
+    monkeypatch.setattr(usage, "get_cost_since_for_model_prefix", lambda since, prefix: 5.0)
+    # env has a different number — the dashboard value must win.
+    b = ab._anthropic(_settings(anthropic_topup_usd=20.0))
+    assert b["set_via"] == "dashboard" and b["topped_up"] == 30.0 and b["remaining"] == 25.0
 
 
 def test_anthropic_flags_low_when_mostly_spent(monkeypatch):
     import libs.billing.usage as usage
 
+    monkeypatch.setattr(usage, "get_anthropic_topup", lambda: None)
     monkeypatch.setattr(usage, "get_cost_since_for_model_prefix", lambda since, prefix: 19.0)
     b = ab._anthropic(_settings(anthropic_topup_usd=20.0))
     assert b["remaining"] == 1.0  # 5% of the top-up
     assert b["status"] == "critical" and b["low"] is True
 
 
-def test_anthropic_unconfigured_without_a_topup():
+def test_anthropic_unconfigured_without_a_topup(monkeypatch):
+    import libs.billing.usage as usage
+
+    monkeypatch.setattr(usage, "get_anthropic_topup", lambda: None)
     b = ab._anthropic(_settings(anthropic_topup_usd=0.0))
     assert b["configured"] is False and b["status"] == "unknown"
 
