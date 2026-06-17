@@ -291,21 +291,69 @@ def _quarterly_earnings(tk: Any, limit: int = 6) -> list[dict[str, Any]]:
     return points
 
 
-def _rsi_14(tk: Any) -> Optional[float]:
-    """14-day RSI from ~3 months of daily closes (Wilders-style SMA). None on
-    any failure — RSI is a nice-to-have, never a blocker."""
+def _rsi_from_closes(closes) -> Optional[float]:
+    """14-day RSI (Wilders-style SMA) from a daily-close series. None when too
+    short — RSI is a nice-to-have, never a blocker."""
+    if closes is None or len(closes) < 15:
+        return None
     try:
-        closes = tk.history(period="3mo")["Close"].dropna()
-        if len(closes) < 15:
-            return None
         delta = closes.diff()
         gain = delta.clip(lower=0).rolling(14).mean()
         loss = (-delta.clip(upper=0)).rolling(14).mean()
         last_gain, last_loss = float(gain.iloc[-1]), float(loss.iloc[-1])
         if last_loss == 0:
             return 100.0
-        rs = last_gain / last_loss
-        return _finite(100.0 - 100.0 / (1.0 + rs))
+        return _finite(100.0 - 100.0 / (1.0 + (last_gain / last_loss)))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _realized_vol(closes, window: int) -> Optional[float]:
+    """Annualized realized volatility over the last ``window`` daily returns."""
+    try:
+        rets = closes.pct_change().dropna()
+        if len(rets) < window:
+            return None
+        return _finite(float(rets.tail(window).std(ddof=1)) * math.sqrt(252.0))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _price_technicals(tk: Any) -> dict[str, Optional[float]]:
+    """RSI + 20d/60d realized vol from ONE 6-month daily-close fetch (so the two
+    don't each hit the network). Fail-soft: all None on any error."""
+    try:
+        closes = tk.history(period="6mo")["Close"].dropna()
+    except Exception:  # noqa: BLE001
+        return {"rsi_14": None, "realized_vol_20d": None, "realized_vol_60d": None}
+    return {
+        "rsi_14": _rsi_from_closes(closes),
+        "realized_vol_20d": _realized_vol(closes, 20),
+        "realized_vol_60d": _realized_vol(closes, 60),
+    }
+
+
+def _fcf_cagr(tk: Any) -> Optional[float]:
+    """Free-cash-flow CAGR from yfinance's annual cash-flow statement. Needs ≥2
+    strictly-positive endpoints (negatives make the root undefined). Fail-soft —
+    yfinance financials can be sparse, so this is best-effort and never raises."""
+    try:
+        cf = getattr(tk, "cashflow", None)
+        if cf is None or getattr(cf, "empty", True):
+            return None
+        row = None
+        for label in ("Free Cash Flow", "FreeCashFlow"):
+            if label in cf.index:
+                row = cf.loc[label]
+                break
+        if row is None:
+            return None
+        # Columns are newest→oldest; reverse to oldest→newest and drop gaps.
+        series = [_finite(float(v)) for v in reversed(list(row.values))]
+        vals = [v for v in series if v is not None]
+        if len(vals) < 2 or vals[0] <= 0 or vals[-1] <= 0:
+            return None
+        return _finite((vals[-1] / vals[0]) ** (1.0 / (len(vals) - 1)) - 1.0)
     except Exception:  # noqa: BLE001
         return None
 
@@ -349,6 +397,9 @@ def _enrich_from_yfinance(ticker: str) -> dict[str, Any]:
     fcf, mcap = g("freeCashflow"), g("marketCap")
     fcf_yield = (fcf / mcap) if (fcf is not None and mcap) else None
 
+    # One price-history fetch feeds RSI + realized vol (no double network hit).
+    tech = _price_technicals(tk)
+
     return {
         "market": {
             "current_price": price,
@@ -375,13 +426,16 @@ def _enrich_from_yfinance(ticker: str) -> dict[str, Any]:
             "current_ratio": g("currentRatio"),
             "free_cash_flow": fcf,
             "fcf_yield": fcf_yield,
+            "fcf_cagr": _fcf_cagr(tk),
         },
         "technicals": {
-            "rsi_14": _rsi_14(tk),
+            "rsi_14": tech["rsi_14"],
             "sma_50": g("fiftyDayAverage"),
             "sma_200": g("twoHundredDayAverage"),
             "fifty_two_week_high": g("fiftyTwoWeekHigh"),
             "fifty_two_week_low": g("fiftyTwoWeekLow"),
+            "realized_vol_20d": tech["realized_vol_20d"],
+            "realized_vol_60d": tech["realized_vol_60d"],
         },
         "ratings": {
             "analyst_rating": info.get("recommendationKey"),

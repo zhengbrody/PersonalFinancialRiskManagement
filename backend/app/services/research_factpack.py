@@ -132,6 +132,7 @@ def build_fact_pack(
     growth_block = R.GrowthBlock(
         revenue_cagr=_cagr([g.revenue for g in grows]),
         eps_cagr=_cagr([g.eps for g in grows]),
+        fcf_cagr=yf_fund.get("fcf_cagr"),  # free yfinance cash-flow statement
         revenue_growth_yoy=yf_fund.get("revenue_growth_yoy"),
         earnings_growth_yoy=yf_fund.get("earnings_growth_yoy"),
         periods=len(grows),
@@ -245,6 +246,8 @@ def _momentum_block(price: Optional[float], tech: dict) -> "R.MomentumBlock":
         fifty_two_week_low=lo,
         pct_from_52w_high=_pct((price - hi) if (price and hi) else None, hi),
         pct_off_52w_low=_pct((price - lo) if (price and lo) else None, lo),
+        realized_vol_20d=tech.get("realized_vol_20d"),
+        realized_vol_60d=tech.get("realized_vol_60d"),
         trend=trend,
     )
 

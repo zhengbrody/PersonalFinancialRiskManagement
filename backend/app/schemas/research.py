@@ -52,6 +52,7 @@ class QualityBlock(BaseModel):
 class GrowthBlock(BaseModel):
     revenue_cagr: Optional[float] = None  # derived from the income-statement series
     eps_cagr: Optional[float] = None
+    fcf_cagr: Optional[float] = None  # free-cash-flow CAGR (cash-flow statement)
     revenue_growth_yoy: Optional[float] = None
     earnings_growth_yoy: Optional[float] = None
     periods: int = 0  # how many annual rows backed the CAGR
@@ -79,6 +80,8 @@ class MomentumBlock(BaseModel):
     fifty_two_week_low: Optional[float] = None
     pct_from_52w_high: Optional[float] = None  # derived: price/high - 1 (≤0)
     pct_off_52w_low: Optional[float] = None  # derived: price/low - 1 (≥0)
+    realized_vol_20d: Optional[float] = None  # annualized, from daily returns
+    realized_vol_60d: Optional[float] = None
     trend: Optional[str] = None  # "uptrend" | "downtrend" | "mixed" (vs both SMAs)
 
 

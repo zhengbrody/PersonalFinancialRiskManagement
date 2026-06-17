@@ -125,11 +125,17 @@ def test_factpack_momentum_ownership_insider(fmp_full):
             "sma_200": 170.0,
             "fifty_two_week_high": 210.0,
             "fifty_two_week_low": 150.0,
+            "realized_vol_20d": 0.28,
+            "realized_vol_60d": 0.31,
         },
+        "fundamentals": {"fcf_cagr": 0.18},
         "ownership": {"institutional_pct": 0.62},
     }
     fp_obj = rf.build_fact_pack("aapl", yf_enricher=lambda t: yf)
     m = fp_obj.momentum
+    # new: realized volatility + FCF CAGR flow through from free yfinance.
+    assert m.realized_vol_20d == 0.28 and m.realized_vol_60d == 0.31
+    assert fp_obj.growth.fcf_cagr == 0.18
     # price 200 vs sma50 190 -> +5.26%, vs sma200 170 -> +17.6%; both above -> uptrend
     assert m.price_vs_sma50_pct == pytest.approx((200 - 190) / 190)
     assert m.price_vs_sma200_pct == pytest.approx((200 - 170) / 170)
