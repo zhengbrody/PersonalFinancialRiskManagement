@@ -578,7 +578,9 @@ def render_shared_sidebar():
             if _os_admin.environ.get("DEEPSEEK_API_KEY") or _safe_get_secret("DEEPSEEK_API_KEY"):
                 st.session_state._model_provider = "DeepSeek API"
                 _key_ok = True
-            elif _os_admin.environ.get("ANTHROPIC_API_KEY") or _safe_get_secret("ANTHROPIC_API_KEY"):
+            elif _os_admin.environ.get("ANTHROPIC_API_KEY") or _safe_get_secret(
+                "ANTHROPIC_API_KEY"
+            ):
                 st.session_state._model_provider = "Anthropic Claude"
                 _key_ok = True
             st.session_state._llm_configured = _key_ok
