@@ -41,6 +41,19 @@ const REASONS: Record<
 
 const ORDER = ["risk_match", "risk_adjusted_return", "downside_protection"];
 
+/** Read the user's risk target (vol / beta / label) from the score response.
+ * risk_target is a loose dict ({label, annual_volatility, beta}); pull numbers
+ * safely so a shape change degrades to "no target" instead of crashing. */
+function riskTarget(score: ScoreResponse): { label?: string; vol?: number; beta?: number } {
+  const rt = (score.risk_target ?? {}) as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+  return {
+    label: typeof rt.label === "string" ? rt.label : undefined,
+    vol: num(rt.annual_volatility),
+    beta: num(rt.beta),
+  };
+}
+
 export function ScoreDrivers({ score }: { score: ScoreResponse }) {
   const keys = [
     ...ORDER.filter((k) => k in score.dimensions),
@@ -89,6 +102,8 @@ export function ScoreDrivers({ score }: { score: ScoreResponse }) {
 
 function DriverCard({ dimKey, score }: { dimKey: string; score: ScoreResponse }) {
   const dim = score.dimensions[dimKey];
+  const tgt = riskTarget(score);
+  const showTarget = dimKey === "risk_match" && (tgt.vol != null || tgt.beta != null);
   const reasons = (REASONS[dimKey] ?? [])
     .map((r) => ({
       label: r.label,
@@ -110,15 +125,37 @@ function DriverCard({ dimKey, score }: { dimKey: string; score: ScoreResponse })
         </span>
       </CardHeader>
       <CardContent className="flex grow flex-col gap-3">
-        {reasons.length > 0 && (
-          <dl className="space-y-1 text-sm">
-            {reasons.map((r) => (
-              <div key={r.label} className="flex justify-between gap-2">
-                <dt className="text-muted-foreground">{r.label}</dt>
-                <dd className="font-mono">{r.value}</dd>
-              </div>
-            ))}
+        {showTarget ? (
+          <dl className="space-y-1.5 text-sm">
+            {tgt.label && (
+              <p className="text-xs text-muted-foreground">
+                Your profile: <span className="font-medium text-foreground">{tgt.label}</span>
+              </p>
+            )}
+            <TargetRow
+              label="Volatility"
+              actual={score.metrics.annual_volatility}
+              target={tgt.vol}
+              kind="pct"
+            />
+            <TargetRow
+              label="Beta to market"
+              actual={score.metrics.beta_to_benchmark}
+              target={tgt.beta}
+              kind="num"
+            />
           </dl>
+        ) : (
+          reasons.length > 0 && (
+            <dl className="space-y-1 text-sm">
+              {reasons.map((r) => (
+                <div key={r.label} className="flex justify-between gap-2">
+                  <dt className="text-muted-foreground">{r.label}</dt>
+                  <dd className="font-mono">{r.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )
         )}
         {dim.detail && (
           <details className="mt-auto text-sm">
@@ -141,6 +178,41 @@ function statusTone(status: string): string {
     return "text-red-600 dark:text-red-400";
   if (/(watch|moderate|fair|ok)/.test(s)) return "text-amber-600 dark:text-amber-400";
   return "text-muted-foreground";
+}
+
+/** A metric shown against the user's risk target. Amber when meaningfully ABOVE
+ * target (taking more risk than the stated preference), emerald when on target. */
+function TargetRow({
+  label,
+  actual,
+  target,
+  kind,
+}: {
+  label: string;
+  actual: number | null | undefined;
+  target: number | undefined;
+  kind: "pct" | "num";
+}) {
+  const a = typeof actual === "number" && Number.isFinite(actual) ? actual : null;
+  if (a === null) return null;
+  const off = target != null ? (a > target * 1.1 ? "above" : a < target * 0.9 ? "below" : "on") : null;
+  const tone =
+    off === "above"
+      ? "text-amber-600 dark:text-amber-400"
+      : off === "on"
+        ? "text-emerald-600 dark:text-emerald-400"
+        : "";
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="font-mono">
+        <span className={tone}>{fmt(a, kind)}</span>
+        {target != null && (
+          <span className="text-muted-foreground"> · target {fmt(target, kind)}</span>
+        )}
+      </dd>
+    </div>
+  );
 }
 
 function fmt(v: number | null | undefined, kind: "pct" | "num"): string {
