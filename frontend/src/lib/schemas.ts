@@ -119,6 +119,24 @@ export const optionScoreImpactSchema = z.looseObject({
 });
 export type OptionScoreImpact = z.infer<typeof optionScoreImpactSchema>;
 
+/** Concentration diagnostics over the invested equity book. Shared by the
+ * score response and the risk report (re-exported from queries for the latter). */
+export const concentrationSchema = z.looseObject({
+  num_holdings: z.number(),
+  top_holding_ticker: z.string().nullable().optional(),
+  top_holding_weight: z.number().nullable().optional(),
+  top5_weight: z.number().nullable().optional(),
+  hhi: z.number().nullable().optional(),
+  effective_holdings: z.number().nullable().optional(),
+  sectors: z
+    .array(z.looseObject({ sector: z.string(), weight: z.number() }))
+    .optional()
+    .default([]),
+  top_sector: z.string().nullable().optional(),
+  top_sector_weight: z.number().nullable().optional(),
+});
+export type Concentration = z.infer<typeof concentrationSchema>;
+
 export const scoreResponseSchema = z.looseObject({
   overall_score: z.number(),
   risk_preference: z.number(),
@@ -127,5 +145,8 @@ export const scoreResponseSchema = z.looseObject({
   dimensions: z.record(z.string(), dimensionScoreSchema),
   price_provenance: priceProvenanceSchema.nullish(),
   options: optionScoreImpactSchema.nullish(),
+  // Top-name / top-5 / HHI / sector roll-up over the equity book (cheap; lets
+  // the score page show "what's dragging it" without the full report).
+  concentration: concentrationSchema.nullish(),
 });
 export type ScoreResponse = z.infer<typeof scoreResponseSchema>;

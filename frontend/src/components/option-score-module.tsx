@@ -44,6 +44,12 @@ export function OptionScoreModule({ impact }: { impact: OptionScoreImpact | null
           <span className="font-mono text-foreground">{impact.base_score}</span> → adjusted{" "}
           <span className="font-mono text-foreground">{impact.base_score - impact.penalty}</span>.
         </p>
+        <div className="grid grid-cols-4 gap-2 text-center">
+          <Greek label="Net Δ" value={impact.net_delta} />
+          <Greek label="Γ" value={impact.net_gamma} />
+          <Greek label="Θ / day" value={impact.net_theta} />
+          <Greek label="ν" value={impact.net_vega} />
+        </div>
         <ul className="space-y-1">
           {top.map((d, i) => (
             <li key={i} className="flex items-center gap-2 text-xs">
@@ -61,5 +67,18 @@ export function OptionScoreModule({ impact }: { impact: OptionScoreImpact | null
         </p>
       </CardContent>
     </Card>
+  );
+}
+
+/** A single net-Greek tile (signed, tabular). */
+function Greek({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-md border border-border bg-background/40 p-1.5">
+      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="font-mono text-sm tabular-nums">
+        {value >= 0 ? "+" : ""}
+        {value.toFixed(2)}
+      </p>
+    </div>
   );
 }

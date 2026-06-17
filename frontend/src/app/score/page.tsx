@@ -17,6 +17,8 @@ import { ScoreGauge, scoreBand } from "@/components/score-gauge";
 import { RiskDiagnosis, ActionCards } from "@/components/risk-diagnosis";
 import { OptionScoreModule } from "@/components/option-score-module";
 import { ScoreDrivers } from "@/components/score-drivers";
+import { ScoreConcentration } from "@/components/score-concentration";
+import { ImproveScore } from "@/components/improve-score";
 import { ScoreMiniScenario } from "@/components/score-mini-scenario";
 import { RiskAlertsCard } from "@/components/risk-alerts-card";
 import { PortfolioValueSummary } from "@/components/portfolio-value-summary";
@@ -374,6 +376,7 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
             </span>
           </div>
           <ScoreGauge score={result.overall_score} />
+          <HeroMeta metrics={result.metrics} />
         </CardContent>
       </Card>
 
@@ -390,6 +393,8 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
         <div className="space-y-4">
           <RiskDiagnosis explain={explain.data} loading={explain.isLoading} source="score" />
           <RiskAlertsCard input={alertsInput} source="score" />
+          <ScoreConcentration concentration={result.concentration} />
+          <ImproveScore score={result} />
           <ScoreMiniScenario metrics={result.metrics} />
           <OptionScoreModule impact={result.options} />
           <PortfolioValueSummary metrics={result.metrics} />
@@ -397,7 +402,12 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
           <MetricsCard result={result} />
         </div>
       )}
-      {tab === "drivers" && <ScoreDrivers score={result} />}
+      {tab === "drivers" && (
+        <div className="space-y-4">
+          <ScoreDrivers score={result} />
+          <ImproveScore score={result} />
+        </div>
+      )}
       {tab === "changed" && (
         <div className="space-y-4">
           <MetricTrend
@@ -416,6 +426,36 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
         </div>
       )}
       {tab === "actions" && <ActionCards explain={explain.data} loading={explain.isLoading} />}
+
+      <p className="pt-1 text-sm">
+        <Link href="/risk" className="text-primary hover:underline">
+          See the full Risk Report → factor exposures, per-holding VaR, stress &amp; liquidity
+        </Link>
+      </p>
+    </div>
+  );
+}
+
+/** Small hero meta — surfaces margin (hidden risk) + a cash note up top, not
+ * buried in the metrics table. Renders nothing for an unlevered, cash-light book. */
+function HeroMeta({ metrics }: { metrics: ScoreResponse["metrics"] }) {
+  const lev = typeof metrics.leverage === "number" ? metrics.leverage : 1;
+  const cashW = typeof metrics.cash_weight === "number" ? metrics.cash_weight : 0;
+  const levered = lev > 1.0001;
+  const cash = cashW > 0.05;
+  if (!levered && !cash) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      {levered && (
+        <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-300">
+          {lev.toFixed(2)}× margin — amplifies gains and losses
+        </span>
+      )}
+      {cash && (
+        <span className="rounded-full border border-border bg-muted/50 px-2 py-0.5 text-muted-foreground">
+          {(cashW * 100).toFixed(0)}% cash
+        </span>
+      )}
     </div>
   );
 }

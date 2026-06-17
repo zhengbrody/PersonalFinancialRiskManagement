@@ -364,6 +364,11 @@ class ScoreResponse(BaseModel):
     price_provenance: Optional[PriceProvenanceOut] = None
     # Present only when the active book contains option contracts.
     options: Optional[OptionScoreImpactOut] = None
+    # Concentration over the invested equity book (top name / top-5 / HHI /
+    # sectors). Cheap (weights + sector resolver, no Monte-Carlo); lets /score
+    # show "what's dragging it" without the full risk report. None for an
+    # empty/uncomputable book.
+    concentration: Optional[ConcentrationOut] = None
 
 
 # ── /api/v1/risk/benchmarks (public reference context) ──────────────

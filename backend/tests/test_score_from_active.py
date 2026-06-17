@@ -495,3 +495,31 @@ def test_no_options_no_impact_block(
     )
     assert resp.status_code == 200
     assert resp.json()["data"]["options"] is None  # equity-only → no options block
+
+
+def test_score_surfaces_concentration_of_the_equity_book(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_capital
+):
+    # A dominant single name (≈80% by share count, equal-ish prices) must show
+    # up in the score's concentration block so /score can say "what's dragging it".
+    fake_active_portfolio.set(
+        {
+            "NVDA": {"shares": 800, "avg_cost": 100.0},
+            "SPY": {"shares": 200, "avg_cost": 100.0},
+        }
+    )
+    fake_price_history.set(_make_history(["NVDA", "SPY"]))
+    resp = test_client.post(
+        "/api/v1/risk/score_from_active",
+        json={},
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    assert resp.status_code == 200, resp.json()
+    conc = resp.json()["data"]["concentration"]
+    assert conc is not None
+    assert conc["num_holdings"] == 2
+    assert conc["top_holding_ticker"] == "NVDA"
+    assert conc["top_holding_weight"] > 0.7  # dominant
+    assert conc["top5_weight"] == pytest.approx(1.0, abs=1e-6)  # only 2 names
+    assert conc["effective_holdings"] is not None
+    assert conc["sectors"]  # deterministic sector roll-up present

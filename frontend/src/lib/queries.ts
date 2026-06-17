@@ -20,9 +20,11 @@ import { z } from "zod";
 import { apiFetch } from "./api";
 import { useAuth } from "./auth-context";
 import {
+  concentrationSchema,
   priceProvenanceSchema,
   scoreResponseSchema,
   sourceProvenanceSchema,
+  type Concentration,
   type ScoreFromActiveRequest,
   type ScoreResponse,
 } from "./schemas";
@@ -582,21 +584,9 @@ export const liquidityRowSchema = z.looseObject({
 });
 export type LiquidityRow = z.infer<typeof liquidityRowSchema>;
 
-export const concentrationSchema = z.looseObject({
-  num_holdings: z.number(),
-  top_holding_ticker: z.string().nullable().optional(),
-  top_holding_weight: z.number().nullable().optional(),
-  top5_weight: z.number().nullable().optional(),
-  hhi: z.number().nullable().optional(),
-  effective_holdings: z.number().nullable().optional(),
-  sectors: z
-    .array(z.looseObject({ sector: z.string(), weight: z.number() }))
-    .optional()
-    .default([]),
-  top_sector: z.string().nullable().optional(),
-  top_sector_weight: z.number().nullable().optional(),
-});
-export type Concentration = z.infer<typeof concentrationSchema>;
+// concentrationSchema + Concentration now live in ./schemas (shared with the
+// score response); re-exported here for existing importers of the report API.
+export { concentrationSchema, type Concentration };
 
 export const riskReportSchema = z.looseObject({
   annual_return: z.number().nullable(),

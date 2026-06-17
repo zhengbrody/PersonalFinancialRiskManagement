@@ -630,6 +630,11 @@ def score_from_active_endpoint(
         top_positions=top_positions,
     )
 
+    # Concentration over the invested equity book (cash excluded; options aren't
+    # in positions_input — they're priced separately). Cheap weights+sector math,
+    # so the score page can show "what's dragging it" without the full report.
+    equity_mv = {p.ticker: float(p.market_value) for p in positions_input if p.asset_type != "cash"}
+
     response = _serialize_score(score)
     response = response.model_copy(
         update={
@@ -637,6 +642,7 @@ def score_from_active_endpoint(
                 update={k: v for k, v in account_metrics.items() if v is not None}
             ),
             "price_provenance": _price_provenance(price_prov, price_frame),
+            "concentration": _concentration_from_values(equity_mv, holdings),
         }
     )
 
@@ -1073,6 +1079,53 @@ def _df_or_none_to_rows(df, *, value_col: str = None) -> list[dict]:
     return []
 
 
+def _concentration_from_values(
+    values: dict[str, float] | None,
+    holdings: dict | None = None,
+) -> ConcentrationOut | None:
+    """Deterministic concentration over an invested book's market values
+    (cash excluded by the caller). HHI = Σ weight²; 1/HHI is the
+    equally-weighted-equivalent position count. Sectors via the deterministic
+    ``infer_sector`` resolver (holding override → SECTOR_MAP → asset-type
+    default → Unclassified) — no network, fail-soft. Returns None for an
+    empty/zero book. Shared by the risk report and the score response.
+    """
+    mv = {t: f for t, v in (values or {}).items() if (f := _finite_float(v)) and f > 0}
+    invested = sum(mv.values())
+    if not mv or invested <= 0:
+        return None
+    weights_desc = sorted((v / invested for v in mv.values()), reverse=True)
+    top_ticker = max(mv, key=mv.__getitem__)
+    hhi = sum(w * w for w in weights_desc)
+
+    sector_rows: list[SectorWeightOut] = []
+    try:
+        from portfolio_config import infer_sector
+
+        by_sector: dict[str, float] = {}
+        for tk, value in mv.items():
+            sector = infer_sector(tk, (holdings or {}).get(tk))
+            by_sector[sector] = by_sector.get(sector, 0.0) + value / invested
+        sector_rows = [
+            SectorWeightOut(sector=s, weight=w)
+            for s, w in sorted(by_sector.items(), key=lambda kv: kv[1], reverse=True)
+        ]
+    except Exception:  # noqa: BLE001
+        sector_rows = []
+
+    return ConcentrationOut(
+        num_holdings=len(mv),
+        top_holding_ticker=top_ticker,
+        top_holding_weight=weights_desc[0],
+        top5_weight=sum(weights_desc[:5]),
+        hhi=hhi,
+        effective_holdings=(1.0 / hhi) if hhi > 0 else None,
+        sectors=sector_rows,
+        top_sector=sector_rows[0].sector if sector_rows else None,
+        top_sector_weight=sector_rows[0].weight if sector_rows else None,
+    )
+
+
 def _serialize_report(
     report,
     market_values: dict[str, float],
@@ -1169,44 +1222,7 @@ def _serialize_report(
     # when supplied, so a big call position shows up as concentrated; falls
     # back to plain market_values for an option-free book.
     conc_source = concentration_values if concentration_values is not None else market_values
-    concentration: ConcentrationOut | None = None
-    mv = {t: f for t, v in (conc_source or {}).items() if (f := _finite(v)) and f > 0}
-    invested = sum(mv.values())
-    if mv and invested > 0:
-        weights_desc = sorted((v / invested for v in mv.values()), reverse=True)
-        top_ticker = max(mv, key=mv.__getitem__)
-        hhi = sum(w * w for w in weights_desc)
-
-        # Sector roll-up via the deterministic resolver (holding override →
-        # canonical SECTOR_MAP → asset-type default → Unclassified). No
-        # network; fail-soft to "no sector data" rather than sinking the
-        # report.
-        sector_rows: list[SectorWeightOut] = []
-        try:
-            from portfolio_config import infer_sector
-
-            by_sector: dict[str, float] = {}
-            for tk, value in mv.items():
-                sector = infer_sector(tk, (holdings or {}).get(tk))
-                by_sector[sector] = by_sector.get(sector, 0.0) + value / invested
-            sector_rows = [
-                SectorWeightOut(sector=s, weight=w)
-                for s, w in sorted(by_sector.items(), key=lambda kv: kv[1], reverse=True)
-            ]
-        except Exception:  # noqa: BLE001
-            sector_rows = []
-
-        concentration = ConcentrationOut(
-            num_holdings=len(mv),
-            top_holding_ticker=top_ticker,
-            top_holding_weight=weights_desc[0],
-            top5_weight=sum(weights_desc[:5]),
-            hhi=hhi,
-            effective_holdings=(1.0 / hhi) if hhi > 0 else None,
-            sectors=sector_rows,
-            top_sector=sector_rows[0].sector if sector_rows else None,
-            top_sector_weight=sector_rows[0].weight if sector_rows else None,
-        )
+    concentration = _concentration_from_values(conc_source, holdings)
 
     # The engine's stress test substitutes β=1.0 (market-like) for any
     # holding whose benchmark beta is NaN (e.g. <30 days of overlapping
