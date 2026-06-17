@@ -20,6 +20,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ScoreGauge, scoreBand } from "@/components/score-gauge";
 import { HorizontalBarChart, type BarDatum } from "@/components/ui/bar-chart";
+import { Kpi } from "@/components/ui/kpi";
 import { track } from "@/lib/analytics";
 
 const NOTIONAL = 100_000; // sample book size, $
@@ -374,25 +375,3 @@ function VariantButton({
   );
 }
 
-function Kpi({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone: "ok" | "warn" | "bad" | "neutral";
-}) {
-  const toneClass = {
-    ok: "text-emerald-600 dark:text-emerald-400",
-    warn: "text-amber-600 dark:text-amber-400",
-    bad: "text-red-600 dark:text-red-400",
-    neutral: "text-foreground",
-  }[tone];
-  return (
-    <div className="rounded-xl border border-border bg-background/40 p-3">
-      <p className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</p>
-      <p className={`font-mono text-xl font-semibold tabular-nums ${toneClass}`}>{value}</p>
-    </div>
-  );
-}

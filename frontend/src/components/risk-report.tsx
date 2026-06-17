@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { HorizontalBarChart, type BarDatum } from "@/components/ui/bar-chart";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { TickerBadge } from "@/components/ui/ticker-badge";
+import { Kpi } from "@/components/ui/kpi";
 import { RiskDiagnosis } from "@/components/risk-diagnosis";
 import { PortfolioValueSummary } from "@/components/portfolio-value-summary";
 import { BenchmarkContext } from "@/components/benchmark-context";
@@ -151,9 +152,9 @@ function KpiGrid({ report }: { report: RiskReport }) {
         <Kpi label="Annual vol" value={fmtPct(report.annual_volatility)} />
         <Kpi label="Sharpe" value={fmtNum(report.sharpe_ratio, 2)} />
         <Kpi label="Max DD" value={fmtPct(report.max_drawdown)} />
-        <Kpi label="VaR 95 (1d)" value={fmtPct(report.var_95)} accent="destructive" />
-        <Kpi label="VaR 99 (1d)" value={fmtPct(report.var_99)} accent="destructive" />
-        <Kpi label="CVaR 95 (1d)" value={fmtPct(report.cvar_95)} accent="destructive" />
+        <Kpi label="VaR 95 (1d)" value={fmtPct(report.var_95)} tone="bad" />
+        <Kpi label="VaR 99 (1d)" value={fmtPct(report.var_99)} tone="bad" />
+        <Kpi label="CVaR 95 (1d)" value={fmtPct(report.cvar_95)} tone="bad" />
         <Kpi label="Risk-free" value={fmtPct(report.risk_free_rate)} />
       </div>
       <DataProvenance
@@ -168,33 +169,6 @@ function KpiGrid({ report }: { report: RiskReport }) {
         </ul>
       )}
     </section>
-  );
-}
-
-function Kpi({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string;
-  accent?: "destructive";
-}) {
-  return (
-    <Card>
-      <CardContent className="space-y-1 p-4">
-        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-          {label}
-        </p>
-        <p
-          className={`font-mono text-2xl ${
-            accent === "destructive" ? "text-destructive" : ""
-          }`}
-        >
-          {value}
-        </p>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -226,7 +200,7 @@ function ConcentrationCard({
                 ? `${c.top_holding_ticker} ${fmtPct(topWeight)}`
                 : "—"
             }
-            accent={highSingleName ? "destructive" : undefined}
+            tone={highSingleName ? "bad" : undefined}
           />
           <Kpi label="Top 5 weight" value={fmtPct(c.top5_weight)} />
           <Kpi
@@ -385,7 +359,7 @@ function ScenarioExplorer({
               <Kpi
                 label="Portfolio P&L"
                 value={fmtPct(point.pnl_pct)}
-                accent={point.pnl_pct < 0 ? "destructive" : undefined}
+                tone={point.pnl_pct < 0 ? "bad" : undefined}
               />
               <Kpi label="Projected value" value={fmtUSD(point.portfolio_value)} />
             </div>
