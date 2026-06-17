@@ -18,6 +18,7 @@ import { RiskDiagnosis, ActionCards } from "@/components/risk-diagnosis";
 import { OptionScoreModule } from "@/components/option-score-module";
 import { ScoreDrivers } from "@/components/score-drivers";
 import { ScoreMiniScenario } from "@/components/score-mini-scenario";
+import { RiskAlertsCard } from "@/components/risk-alerts-card";
 import { PortfolioValueSummary } from "@/components/portfolio-value-summary";
 import { BenchmarkContext } from "@/components/benchmark-context";
 import { DataProvenance } from "@/components/data-provenance";
@@ -336,6 +337,22 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
   );
   const explain = useRiskExplain(explainInput);
 
+  // Proactive risk-alert input from the score we already have (score-level
+  // fields + option flags). The report-level fields fill in on /risk.
+  const alertsInput = useMemo(() => {
+    const m = result.metrics;
+    return {
+      annual_volatility: m.annual_volatility,
+      var_95_daily: m.var_95_daily,
+      max_drawdown: m.max_drawdown,
+      sharpe_ratio: m.sharpe_ratio,
+      beta_to_benchmark: m.beta_to_benchmark,
+      leverage: m.leverage,
+      margin_cost_annual: m.margin_cost_annual,
+      option_flags: (result.options?.flags ?? []).map((f) => f.code),
+    };
+  }, [result]);
+
   const band = scoreBand(result.overall_score);
 
   return (
@@ -372,6 +389,7 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
       {tab === "overview" && (
         <div className="space-y-4">
           <RiskDiagnosis explain={explain.data} loading={explain.isLoading} source="score" />
+          <RiskAlertsCard input={alertsInput} source="score" />
           <ScoreMiniScenario metrics={result.metrics} />
           <OptionScoreModule impact={result.options} />
           <PortfolioValueSummary metrics={result.metrics} />

@@ -1500,6 +1500,41 @@ export function useRiskExplain(input: RiskExplainInput | null) {
   });
 }
 
+// ── proactive risk alerts (deterministic, credit-free) ──────────────
+export const riskAlertSchema = z.looseObject({
+  type: z.string(),
+  severity: z.string(), // low | moderate | elevated | high
+  headline: z.string(),
+  detail: z.string(),
+  metric: z.string(),
+  ask_copilot: z.string(),
+});
+export type RiskAlert = z.infer<typeof riskAlertSchema>;
+
+const riskAlertsResponseSchema = z.looseObject({ alerts: z.array(riskAlertSchema) });
+
+/** The numbers the page already has — score-level always, report-level on /risk. */
+export type RiskAlertsInput = Record<string, unknown>;
+
+export function useRiskAlerts(input: RiskAlertsInput | null) {
+  const { accessToken, user } = useAuth();
+  return useQuery<RiskAlert[]>({
+    queryKey: ["risk", "alerts", user?.id ?? null, input ? JSON.stringify(input) : null],
+    enabled: Boolean(accessToken && input),
+    queryFn: async () => {
+      const res = await apiFetch<{ alerts: RiskAlert[] }>("/api/v1/risk/alerts", {
+        method: "POST",
+        body: input!,
+        authToken: accessToken!,
+        schema: riskAlertsResponseSchema,
+      });
+      return res.alerts;
+    },
+    staleTime: 30 * 60 * 1000,
+    retry: false,
+  });
+}
+
 // ── institutions: SEC 13F smart money ───────────────────────────────
 export const smartMoneySignalSchema = z.looseObject({
   ticker: z.string(),

@@ -35,9 +35,10 @@ _SONNET_MODEL = "claude-sonnet-4-6"
 
 # Tool-use loop bound. Each turn is one extra Anthropic round-trip plus
 # the (possibly slow) tool executors, so we cap iterations to keep
-# Copilot latency + cost bounded. 5 turns is comfortably more than any
-# of our 5 tools needs (the model rarely chains more than 2-3).
-MAX_TOOL_TURNS = 5
+# Copilot latency + cost bounded. 3 turns covers the common chains (the model
+# rarely needs more than 2-3 tools); on the final turn tools are withheld so the
+# model must synthesize text rather than dangle on a tool_use.
+MAX_TOOL_TURNS = 3
 
 # Module-level cache: build the SDK client once per process. ``None``
 # means "not yet attempted"; we (re)build lazily in get_llm_callable.

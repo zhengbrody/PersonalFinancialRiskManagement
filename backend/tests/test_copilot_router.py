@@ -37,6 +37,14 @@ def test_extract_tickers_drops_acronyms_and_intent_words():
         ("how are interest rates and the fed looking", "macro_rates"),
         ("how risky is my portfolio", "portfolio_diagnosis"),
         ("what should I do to improve", "action_plan"),
+        ("am I over-leveraged on margin", "margin_risk"),
+        ("how much buying power am I using", "margin_risk"),
+        ("how risky are my options positions before expiry", "options_risk"),
+        ("what's my theta decay this week", "options_risk"),
+        # 'explain my options' legitimately routes to explain_metric ('explain').
+        ("explain my options exposure", "explain_metric"),
+        # substring safety: 'put' hides in 'input' — must NOT trip options_risk.
+        ("what is my input for the model", "explain_metric"),
     ],
 )
 def test_classify(msg, expected):

@@ -155,6 +155,32 @@ _KW = {
         "am i diversified",
         "concentration",
     ),
+    # Safe tokens only — avoid substrings that hide in common words (e.g. "put"
+    # in "input", "loan" in "download", bare "call" in a ticker question).
+    "margin_risk": (
+        "margin",
+        "leverage",
+        "leveraged",
+        "over-leveraged",
+        "over leveraged",
+        "borrowed money",
+        "buying power",
+        "maintenance",
+    ),
+    "options_risk": (
+        "option",
+        "options",
+        "greeks",
+        "gamma",
+        "theta",
+        "vega",
+        "covered call",
+        "call spread",
+        "put spread",
+        "iron condor",
+        "expiry",
+        "assignment",
+    ),
 }
 
 _METRIC_GLOSSARY = {
@@ -182,6 +208,12 @@ def classify(message: str, tickers: list[str]) -> str:
         return "explain_metric"
     if has("tax_fee_review"):
         return "tax_fee_review"
+    # Margin / options questions are portfolio-grounded — check before scenario
+    # and ticker_research so "am I over-leveraged" / "my options risk" route here.
+    if has("margin_risk"):
+        return "margin_risk"
+    if has("options_risk") and n_tk == 0:
+        return "options_risk"
     if has("scenario_simulation"):
         return "scenario_simulation"
     if has("macro_rates") and n_tk == 0:
@@ -231,6 +263,26 @@ def _score_evidence(score) -> list[EvidenceItem]:
             _ev("Daily VaR (95%)", _pct(m.var_95_daily), "engine"),
             _ev("Beta to market", _num(m.beta_to_benchmark), "engine"),
             _ev("Portfolio value", _money(m.total_value), "engine"),
+            # Margin context — present (>1) only for a leveraged book, so
+            # margin_risk questions are grounded in the real leverage + carry.
+            _ev(
+                "Leverage",
+                (
+                    f"{getattr(m, 'leverage', 1.0):.2f}×"
+                    if getattr(m, "leverage", None) and m.leverage > 1.0001
+                    else None
+                ),
+                "engine",
+            ),
+            _ev(
+                "Margin cost / yr",
+                (
+                    _pct(getattr(m, "margin_cost_annual", None))
+                    if getattr(m, "margin_cost_annual", None)
+                    else None
+                ),
+                "engine",
+            ),
         ]
     )
 
