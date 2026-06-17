@@ -93,6 +93,7 @@ const FACT_PACK = {
   growth: {
     revenue_cagr: 0.08,
     eps_cagr: 0.12,
+    fcf_cagr: 0.15,
     revenue_growth_yoy: 0.06,
     earnings_growth_yoy: 0.1,
     periods: 5,
@@ -115,6 +116,8 @@ const FACT_PACK = {
     fifty_two_week_low: 150.0,
     pct_from_52w_high: -0.0674,
     pct_off_52w_low: 0.3367,
+    realized_vol_20d: 0.27,
+    realized_vol_60d: 0.31,
     trend: "uptrend",
   },
   ownership: { institutional_pct: 0.61 },
@@ -247,35 +250,44 @@ describe("ResearchPage", () => {
     );
     await user.click(screen.getByRole("button", { name: /research/i }));
 
-    // Header + identity.
+    // ── above the tabs (always visible): identity + one-line verdict + dims.
     expect(
       (await screen.findAllByText(/apple inc\./i)).length,
     ).toBeGreaterThanOrEqual(1);
-    // Valuation band pill.
-    expect(screen.getByText(/^rich$/i)).toBeInTheDocument();
-    // A source badge (free data → "Yahoo (free)").
-    expect(screen.getAllByText(/yahoo \(free\)/i).length).toBeGreaterThanOrEqual(1);
-    // A pre-written driver string, rendered verbatim.
-    expect(
-      screen.getByText(/high gross margins and durable franchise/i),
-    ).toBeInTheDocument();
-    // Unit-correctness of a couple of ratio fields.
-    expect(screen.getByText("2.5%")).toBeInTheDocument(); // dividend yield
-    expect(screen.getByText("0.32")).toBeInTheDocument(); // debt/equity ratio
-    // AI verdict.
     expect(
       await screen.findByText(/durable franchise at a fair multiple/i),
     ).toBeInTheDocument();
-    expect(screen.getByText("88/100")).toBeInTheDocument(); // quality dimension
-    // Peer comparison + news.
+    expect(screen.getByText("88/100")).toBeInTheDocument(); // quality dimension bar
+    // ── Overview tab (default): the deterministic driver string.
+    expect(
+      screen.getByText(/high gross margins and durable franchise/i),
+    ).toBeInTheDocument();
+
+    // ── Valuation tab: band pill + dividend yield + peers.
+    await user.click(screen.getByRole("tab", { name: /valuation/i }));
+    expect(await screen.findByText(/^rich$/i)).toBeInTheDocument();
+    expect(screen.getByText("2.5%")).toBeInTheDocument(); // dividend yield
     expect(screen.getByText(/peer comparison/i)).toBeInTheDocument();
-    expect(screen.getByText(/apple unveils new chips/i)).toBeInTheDocument();
-    // New depth: momentum + ownership/insider cards.
-    expect(screen.getByText(/price momentum/i)).toBeInTheDocument();
-    expect(screen.getByText(/^uptrend$/i)).toBeInTheDocument();
+
+    // ── Fundamentals tab: debt/equity + ownership/insider.
+    await user.click(screen.getByRole("tab", { name: /fundamentals/i }));
+    expect(await screen.findByText("0.32")).toBeInTheDocument(); // debt/equity
     expect(screen.getByText(/ownership & insiders/i)).toBeInTheDocument();
     expect(screen.getByText(/^net buying$/i)).toBeInTheDocument();
-    expect(screen.getByText("61.0%")).toBeInTheDocument(); // institutional held
+
+    // ── Technicals tab: momentum (incl. the new realized-vol stat).
+    await user.click(screen.getByRole("tab", { name: /technicals/i }));
+    expect(await screen.findByText(/price momentum/i)).toBeInTheDocument();
+    expect(screen.getByText(/^uptrend$/i)).toBeInTheDocument();
+    expect(screen.getByText(/realized vol 20d/i)).toBeInTheDocument();
+
+    // ── News tab.
+    await user.click(screen.getByRole("tab", { name: /news & events/i }));
+    expect(await screen.findByText(/apple unveils new chips/i)).toBeInTheDocument();
+
+    // ── Sources tab: provenance table.
+    await user.click(screen.getByRole("tab", { name: /sources/i }));
+    expect(await screen.findByText(/data sources & provenance/i)).toBeInTheDocument();
   });
 
   it("shows the upgrade CTA on a quota_exceeded verdict, keeping the data", async () => {

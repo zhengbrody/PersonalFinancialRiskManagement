@@ -32,6 +32,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable, type Column } from "@/components/ui/data-table";
+import { Tabs } from "@/components/ui/tabs";
 import { CreditsBadge } from "@/components/credits-badge";
 import { TickerNews } from "@/components/ticker-news";
 import { LearnHint } from "@/components/learn-hint";
@@ -135,23 +136,16 @@ function ResearchWorkbench() {
 
       {fp && !factM.isPending && (
         <>
+          {/* Identity + the one-line verdict + dimensions stay above the tabs;
+              the detail (valuation/fundamentals/technicals/news/risks/sources)
+              is organized into tabs below. */}
           <FactPackHeader fp={fp} />
           <VerdictSection
             pending={verdictM.isPending}
             error={verdictM.error}
             verdict={verdictM.data?.verdict}
           />
-          <ValuationCard fp={fp} />
-          <QualityCard fp={fp} />
-          <GrowthCard fp={fp} />
-          <AnalystCard fp={fp} />
-          <MomentumCard fp={fp} />
-          <OwnershipInsiderCard fp={fp} />
-          <SignalsCard fp={fp} />
-          {fp.peers.length > 0 && <PeersCard fp={fp} />}
-          {/* Unified, source-labeled news (FMP news + press releases + SEC) —
-              richer + multi-source vs the FactPack's FMP-only headlines. */}
-          <TickerNews ticker={fp.ticker} />
+          <ResearchTabs fp={fp} verdict={verdictM.data?.verdict} />
           <CopilotHandoff fp={fp} />
         </>
       )}
@@ -162,6 +156,124 @@ function ResearchWorkbench() {
 }
 
 // ── Copilot handoff ─────────────────────────────────────────────────
+
+// ── tabbed cockpit (groups the existing cards; no card appears twice) ───────
+
+const RESEARCH_TABS = [
+  { value: "overview", label: "Overview" },
+  { value: "valuation", label: "Valuation" },
+  { value: "fundamentals", label: "Fundamentals" },
+  { value: "technicals", label: "Technicals" },
+  { value: "news", label: "News & Events" },
+  { value: "risks", label: "Risks" },
+  { value: "sources", label: "Sources" },
+];
+
+function ResearchTabs({ fp, verdict }: { fp: FactPack; verdict?: ResearchVerdict }) {
+  const [tab, setTab] = useState("overview");
+  return (
+    <div className="space-y-4">
+      <Tabs
+        items={RESEARCH_TABS}
+        value={tab}
+        onValueChange={(v) => {
+          setTab(v);
+          track("research_tab_changed", { tab: v }); // safe: tab label only
+        }}
+      />
+      {tab === "overview" && (
+        <div className="space-y-4">
+          <SignalsCard fp={fp} />
+          <AnalystCard fp={fp} />
+        </div>
+      )}
+      {tab === "valuation" && (
+        <div className="space-y-4">
+          <ValuationCard fp={fp} />
+          {fp.peers.length > 0 && <PeersCard fp={fp} />}
+        </div>
+      )}
+      {tab === "fundamentals" && (
+        <div className="space-y-4">
+          <QualityCard fp={fp} />
+          <GrowthCard fp={fp} />
+          <OwnershipInsiderCard fp={fp} />
+        </div>
+      )}
+      {tab === "technicals" && <MomentumCard fp={fp} />}
+      {tab === "news" && <TickerNews ticker={fp.ticker} />}
+      {tab === "risks" &&
+        (verdict ? (
+          <VerdictCasework verdict={verdict} />
+        ) : (
+          <Card>
+            <CardContent className="py-6 text-sm text-muted-foreground">
+              The bull/bear case loads with the AI verdict. The deterministic risk
+              flags are in the Overview tab.
+            </CardContent>
+          </Card>
+        ))}
+      {tab === "sources" && <SourcesCard fp={fp} />}
+    </div>
+  );
+}
+
+/** Per-field provenance table — every FactPack figure with its source + coverage. */
+function SourcesCard({ fp }: { fp: FactPack }) {
+  const sources = fp.data_quality?.sources ?? [];
+  const warnings = fp.data_quality?.warnings ?? [];
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Data sources & provenance</CardTitle>
+        <CardDescription>
+          Every figure above carries its source. {fp.as_of ? `As of ${formatAsOf(fp.as_of)}.` : ""}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {warnings.length > 0 && (
+          <ul className="space-y-1 text-xs">
+            {warnings.map((w, i) => (
+              <li key={i} className="text-amber-600 dark:text-amber-400">
+                {humanizeWarning(w)}
+              </li>
+            ))}
+          </ul>
+        )}
+        {sources.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No per-field source detail available.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <th className="py-1 font-medium">Field</th>
+                <th className="py-1 font-medium">Source</th>
+                <th className="py-1 text-right font-medium">Coverage</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sources.map((s) => (
+                <tr key={s.field} className="border-t border-border/40">
+                  <td className="py-1.5 text-muted-foreground">{s.field}</td>
+                  <td className="py-1.5">
+                    <SourceBadge source={s.source} />
+                  </td>
+                  <td className="py-1.5 text-right tabular-nums text-muted-foreground">
+                    {s.coverage != null ? `${Math.round(s.coverage * 100)}%` : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <p className="text-xs text-muted-foreground">
+          Sources: Massive · FMP · Yahoo Finance (free fallback) · SEC. Missing or
+          stale fields are flagged, never faked.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
 
 /**
  * Cross-feature handoff: take the ticker into the Copilot with a pre-filled,
@@ -396,33 +508,33 @@ function VerdictSection({
           </div>
         )}
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <BulletCard
-            title="Catalysts"
-            items={verdict.catalysts}
-            empty="No near-term catalysts flagged."
-          />
-          <BulletCard
-            title="Key risks"
-            items={verdict.risks}
-            empty="No standout risks flagged."
-            tone="danger"
-          />
-        </div>
-
-        {verdict.what_would_change_my_mind.length > 0 && (
-          <BulletCard
-            title="What would change my mind"
-            items={verdict.what_would_change_my_mind}
-          />
-        )}
-
         <p className="text-xs text-muted-foreground">
           Educational analysis, not investment advice. Confirm the numbers
-          before acting.
+          before acting. The bull/bear case is in the Risks tab below.
         </p>
       </CardContent>
     </Card>
+  );
+}
+
+/** Catalysts / key risks / what-would-change — the verdict's casework, shown in
+ * the Risks tab (the headline rating + dimensions stay above the tabs). */
+function VerdictCasework({ verdict }: { verdict: ResearchVerdict }) {
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <BulletCard title="Catalysts" items={verdict.catalysts} empty="No near-term catalysts flagged." />
+        <BulletCard
+          title="Key risks"
+          items={verdict.risks}
+          empty="No standout risks flagged."
+          tone="danger"
+        />
+      </div>
+      {verdict.what_would_change_my_mind.length > 0 && (
+        <BulletCard title="What would change my mind" items={verdict.what_would_change_my_mind} />
+      )}
+    </div>
   );
 }
 
@@ -512,10 +624,12 @@ function MomentumCard({ fp }: { fp: FactPack }) {
         <Stat label="50-day avg" value={money(m.sma_50)} />
         <Stat label="200-day avg" value={money(m.sma_200)} />
         <Stat label="52w range" value={range52w(m.fifty_two_week_low, m.fifty_two_week_high)} />
+        <Stat label="Realized vol 20d" value={pct(m.realized_vol_20d)} />
+        <Stat label="Realized vol 60d" value={pct(m.realized_vol_60d)} />
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
-        Where price sits versus its own history — descriptive, not a buy/sell
-        signal.
+        Where price sits versus its own history + how much it has been moving
+        (annualized realized volatility) — descriptive, not a buy/sell signal.
       </p>
     </SectionCard>
   );
@@ -671,6 +785,7 @@ function GrowthCard({ fp }: { fp: FactPack }) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Revenue CAGR" value={pct(g.revenue_cagr)} />
         <Stat label="EPS CAGR" value={pct(g.eps_cagr)} />
+        <Stat label="FCF CAGR" value={pct(g.fcf_cagr)} />
         <Stat label="Revenue (YoY)" value={pct(g.revenue_growth_yoy)} />
         <Stat label="Earnings (YoY)" value={pct(g.earnings_growth_yoy)} />
       </div>

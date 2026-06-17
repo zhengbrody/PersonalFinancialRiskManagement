@@ -1134,6 +1134,7 @@ const factPackQualitySchema = z.looseObject({
 const factPackGrowthSchema = z.looseObject({
   revenue_cagr: fnum,
   eps_cagr: fnum,
+  fcf_cagr: fnum,
   revenue_growth_yoy: fnum,
   earnings_growth_yoy: fnum,
   periods: z.number().nullish(),
@@ -1158,6 +1159,8 @@ const factPackMomentumSchema = z.looseObject({
   fifty_two_week_low: fnum,
   pct_from_52w_high: fnum,
   pct_off_52w_low: fnum,
+  realized_vol_20d: fnum,
+  realized_vol_60d: fnum,
   trend: fstr, // "uptrend" | "downtrend" | "mixed"
 });
 
