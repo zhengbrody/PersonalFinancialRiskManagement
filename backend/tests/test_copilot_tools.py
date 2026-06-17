@@ -343,11 +343,20 @@ class _FakeAnthropicClient:
         self.messages = _Messages()
 
 
+class _Settings:
+    llm_provider = "anthropic"
+    anthropic_api_key = "sk-ant-test"
+    deepseek_api_key = ""
+    deepseek_base_url = "https://api.deepseek.com/v1"
+    deepseek_model = "deepseek-chat"
+
+
 def test_tool_loop_invokes_executor_and_returns_text(monkeypatch):
     from backend.app.services import llm_client as lc
 
     fake = _FakeAnthropicClient()
-    monkeypatch.setattr(lc, "_get_client", lambda: fake)
+    monkeypatch.setattr(lc, "get_settings", lambda: _Settings())
+    monkeypatch.setattr(lc, "_get_anthropic_client", lambda: fake)
 
     invoked = {}
 
@@ -400,7 +409,8 @@ def test_tool_loop_caps_iterations(monkeypatch):
             self.messages = _M()
 
     fake = _AlwaysToolClient()
-    monkeypatch.setattr(lc, "_get_client", lambda: fake)
+    monkeypatch.setattr(lc, "get_settings", lambda: _Settings())
+    monkeypatch.setattr(lc, "_get_anthropic_client", lambda: fake)
     monkeypatch.setattr(
         __import__("backend.app.services.copilot_tools", fromlist=["execute_tool"]),
         "execute_tool",
@@ -433,7 +443,8 @@ def test_tool_loop_falls_back_to_plain_on_error(monkeypatch):
             self.messages = _M()
 
     fake = _ExplodingThenPlainClient()
-    monkeypatch.setattr(lc, "_get_client", lambda: fake)
+    monkeypatch.setattr(lc, "get_settings", lambda: _Settings())
+    monkeypatch.setattr(lc, "_get_anthropic_client", lambda: fake)
 
     llm = lc.get_llm_callable(with_tools=True)
     out = llm("x", "y", 2000, 0.2)
@@ -447,7 +458,8 @@ def test_get_llm_callable_degrades_to_none_without_key(monkeypatch):
     """No client → None, for BOTH the plain and tool paths."""
     from backend.app.services import llm_client as lc
 
-    monkeypatch.setattr(lc, "_get_client", lambda: None)
+    monkeypatch.setattr(lc, "get_settings", lambda: _Settings())
+    monkeypatch.setattr(lc, "_get_anthropic_client", lambda: None)
     assert lc.get_llm_callable() is None
     assert lc.get_llm_callable(with_tools=True) is None
 
@@ -466,6 +478,52 @@ def test_with_tools_default_preserves_plain_path(monkeypatch):
 
             self.messages = _M()
 
-    monkeypatch.setattr(lc, "_get_client", lambda: _PlainClient())
+    monkeypatch.setattr(lc, "get_settings", lambda: _Settings())
+    monkeypatch.setattr(lc, "_get_anthropic_client", lambda: _PlainClient())
     llm = lc.get_llm_callable()  # default
     assert llm("p", "s", 500, 0.1) == "hi"
+
+
+def test_deepseek_provider_uses_openai_compatible_chat_client(monkeypatch):
+    from backend.app.services import llm_client as lc
+
+    class _DeepSeekSettings(_Settings):
+        llm_provider = "deepseek"
+        deepseek_api_key = "sk-deepseek-test"
+
+    class _Message:
+        content = "deepseek answer"
+
+    class _Choice:
+        message = _Message()
+
+    class _Resp:
+        choices = [_Choice()]
+
+    class _DeepSeekClient:
+        def __init__(self):
+            self.calls = []
+
+            class _Completions:
+                def create(_s, **kwargs):
+                    self.calls.append(kwargs)
+                    return _Resp()
+
+            class _Chat:
+                pass
+
+            _Chat.completions = _Completions()
+            self.chat = _Chat()
+
+    fake = _DeepSeekClient()
+    monkeypatch.setattr(lc, "get_settings", lambda: _DeepSeekSettings())
+    monkeypatch.setattr(lc, "_get_deepseek_client", lambda: fake)
+
+    llm = lc.get_llm_callable(with_tools=True)
+    assert llm is not None
+    assert llm("portfolio?", "be grounded", 700, 0.2) == "deepseek answer"
+    assert fake.calls[0]["model"] == "deepseek-chat"
+    assert fake.calls[0]["messages"] == [
+        {"role": "system", "content": "be grounded"},
+        {"role": "user", "content": "portfolio?"},
+    ]

@@ -597,7 +597,7 @@ def call_llm(prompt: str, system: str = "", max_tokens: int = 400, temperature: 
     _admin_mode = str(
         _os.environ.get("MINDMARKET_ADMIN_MODE", "") or _safe_get_secret("MINDMARKET_ADMIN_MODE")
     ).strip().lower() in ("1", "true", "yes", "on")
-    model_provider = st.session_state.get("_model_provider", "Ollama (Local)")
+    model_provider = st.session_state.get("_model_provider", "DeepSeek API")
     system_prompt = (
         system.strip()
         if system
@@ -1025,7 +1025,7 @@ def score_sentiment_ollama(ticker: str, headlines: list[str], model: str, lang: 
 
     headlines_text = "\n".join(f"- {h}" for h in headlines)
 
-    model_provider = st.session_state.get("_model_provider", "Ollama (Local)")
+    model_provider = st.session_state.get("_model_provider", "DeepSeek API")
     _is_ollama = model_provider == "Ollama (Local)"
     if _is_ollama:
         prompt = (

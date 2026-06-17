@@ -91,8 +91,13 @@ services:
       - STRIPE_PRO_PRICE_ID=${STRIPE_PRO_PRICE_ID:-}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
       - SENTRY_DSN=${SENTRY_DSN:-}
-      # Anthropic key powers Copilot and AI-backed analysis; optional
-      # by design because deterministic fallbacks keep the app usable.
+      # DeepSeek is the default AI provider while Anthropic quota is constrained.
+      - MINDMARKET_LLM_PROVIDER=${MINDMARKET_LLM_PROVIDER:-deepseek}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-}
+      - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-}
+      # Anthropic is optional fallback/configurable provider; deterministic
+      # fallbacks keep the app usable when no LLM key is present.
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     healthcheck:
       test: ["CMD", "python", "-c",

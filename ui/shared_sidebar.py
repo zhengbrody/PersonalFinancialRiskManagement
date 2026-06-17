@@ -531,12 +531,12 @@ def render_shared_sidebar():
             # Dynamically build the provider list — hide Ollama if unreachable
             # so cloud/preview users can't accidentally select it
             if st.session_state._ollama_reachable:
-                _provider_options = ["Anthropic Claude", "DeepSeek API", "Ollama (Local)"]
+                _provider_options = ["DeepSeek API", "Anthropic Claude", "Ollama (Local)"]
             else:
-                _provider_options = ["Anthropic Claude", "DeepSeek API"]
+                _provider_options = ["DeepSeek API", "Anthropic Claude"]
                 # If previously selected Ollama but now unreachable, force reset
                 if st.session_state.get("model_provider_sidebar") == "Ollama (Local)":
-                    st.session_state["model_provider_sidebar"] = "Anthropic Claude"
+                    st.session_state["model_provider_sidebar"] = "DeepSeek API"
 
             if st.session_state._ollama_reachable:
                 model_provider = st.selectbox(
@@ -566,7 +566,7 @@ def render_shared_sidebar():
         else:
             # End users should not see provider routing; owner controls it
             # via server-side env/secrets.
-            model_provider = "Anthropic Claude"
+            model_provider = "DeepSeek API"
 
         # API Key inputs based on provider
         import os
@@ -575,11 +575,11 @@ def render_shared_sidebar():
         if not _api_ui_mode:
             # End-user mode: read keys from server env/secrets only,
             # never let user input. Show quota card instead.
-            if _os_admin.environ.get("ANTHROPIC_API_KEY") or _safe_get_secret("ANTHROPIC_API_KEY"):
-                st.session_state._model_provider = "Anthropic Claude"
-                _key_ok = True
-            elif _os_admin.environ.get("DEEPSEEK_API_KEY") or _safe_get_secret("DEEPSEEK_API_KEY"):
+            if _os_admin.environ.get("DEEPSEEK_API_KEY") or _safe_get_secret("DEEPSEEK_API_KEY"):
                 st.session_state._model_provider = "DeepSeek API"
+                _key_ok = True
+            elif _os_admin.environ.get("ANTHROPIC_API_KEY") or _safe_get_secret("ANTHROPIC_API_KEY"):
+                st.session_state._model_provider = "Anthropic Claude"
                 _key_ok = True
             st.session_state._llm_configured = _key_ok
 

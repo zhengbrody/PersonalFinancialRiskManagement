@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 Environment = Literal["dev", "staging", "production"]
+LLMProvider = Literal["deepseek", "anthropic"]
 
 
 def _env_str(key: str, default: str = "") -> str:
@@ -57,6 +58,18 @@ def _detect_environment() -> Environment:
     return "dev"
 
 
+def _detect_llm_provider() -> LLMProvider:
+    """Default to DeepSeek while Claude/Anthropic quota is constrained.
+
+    Operators can temporarily restore Claude with
+    ``MINDMARKET_LLM_PROVIDER=anthropic`` without a code change.
+    """
+    provider = _env_str("MINDMARKET_LLM_PROVIDER", "deepseek").lower()
+    if provider in ("anthropic", "claude"):
+        return "anthropic"
+    return "deepseek"
+
+
 @dataclass(frozen=True)
 class Settings:
     """Immutable settings snapshot. Read once at app startup."""
@@ -83,10 +96,18 @@ class Settings:
     # We surface it here so the same Settings object is reusable.
     supabase_anon_key: str = field(default_factory=lambda: _env_str("SUPABASE_ANON_KEY"))
 
-    # Anthropic API key for the Copilot chat. Inherited from the host
-    # environment (same ``ANTHROPIC_API_KEY`` the Streamlit era used).
-    # Optional by design: when blank, the Copilot degrades to the
-    # orchestrator's deterministic templates (see services/llm_client.py).
+    # AI provider for Copilot / AI-backed explanations. DeepSeek is the default
+    # because Anthropic quota can be exhausted independently of beta demand.
+    llm_provider: LLMProvider = field(default_factory=_detect_llm_provider)
+
+    # Provider API keys. Optional by design: when the selected provider key is
+    # blank, the app degrades to deterministic templates instead of 500ing.
+    deepseek_api_key: str = field(default_factory=lambda: _env_str("DEEPSEEK_API_KEY"))
+    deepseek_base_url: str = field(
+        default_factory=lambda: _env_str("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+    )
+    deepseek_model: str = field(default_factory=lambda: _env_str("DEEPSEEK_MODEL", "deepseek-chat"))
+
     anthropic_api_key: str = field(default_factory=lambda: _env_str("ANTHROPIC_API_KEY"))
 
     # FMP (Financial Modeling Prep) key for the equity dossier fetch. Optional:

@@ -1,4 +1,4 @@
-"""Stateless Anthropic wrapper for the Copilot agent layer.
+"""Stateless LLM wrapper for the Copilot agent layer.
 
 The orchestrator (``agents.orchestrator.route_message``) accepts an
 optional ``llm_callable`` with the signature
@@ -8,8 +8,8 @@ grounded in the engine's exact metrics — a fully functional (if less
 fluent) Copilot.
 
 **Degrade-to-None contract.** ``get_llm_callable()`` returns ``None``
-whenever we *can't* safely call Anthropic — missing API key OR the
-``anthropic`` SDK isn't importable. Callers pass the result straight
+whenever we *can't* safely call the configured provider — missing API key OR
+the SDK isn't importable. Callers pass the result straight
 through to ``route_message(..., llm_callable=...)``; ``None`` simply
 selects the template path. This keeps the endpoint up even on a box
 with no key configured, and means tests can exercise both modes by
@@ -40,16 +40,17 @@ _SONNET_MODEL = "claude-sonnet-4-6"
 # model must synthesize text rather than dangle on a tool_use.
 MAX_TOOL_TURNS = 3
 
-# Module-level cache: build the SDK client once per process. ``None``
-# means "not yet attempted"; we (re)build lazily in get_llm_callable.
-_client = None
+# Module-level caches: build SDK clients once per process. ``None`` means "not
+# yet attempted"; we (re)build lazily in get_llm_callable.
+_anthropic_client = None
+_deepseek_client = None
 
 
-def _get_client():
+def _get_anthropic_client():
     """Return the cached Anthropic client, or ``None`` if we can't build
     one (no key / SDK import failure). This is the single gate behind the
     degrade-to-None contract used by both the plain and tool-use paths."""
-    global _client
+    global _anthropic_client
 
     api_key = get_settings().anthropic_api_key
     if not api_key:
@@ -58,15 +59,43 @@ def _get_client():
         _log.debug("llm_client.no_api_key — Copilot will use templates")
         return None
 
-    if _client is None:
+    if _anthropic_client is None:
         try:
             import anthropic
         except Exception as exc:  # pragma: no cover - SDK installed in CI
             _log.warning("llm_client.sdk_import_failed err=%s", type(exc).__name__)
             return None
-        _client = anthropic.Anthropic(api_key=api_key)
+        _anthropic_client = anthropic.Anthropic(api_key=api_key)
 
-    return _client
+    return _anthropic_client
+
+
+def _get_deepseek_client():
+    """Return the cached OpenAI-compatible DeepSeek client, or ``None``."""
+    global _deepseek_client
+
+    settings = get_settings()
+    if not settings.deepseek_api_key:
+        _log.debug("llm_client.no_deepseek_key — Copilot will use templates")
+        return None
+
+    if _deepseek_client is None:
+        try:
+            from openai import OpenAI
+        except Exception as exc:  # pragma: no cover - SDK installed in CI
+            _log.warning("llm_client.openai_sdk_import_failed err=%s", type(exc).__name__)
+            return None
+        _deepseek_client = OpenAI(
+            api_key=settings.deepseek_api_key,
+            base_url=settings.deepseek_base_url,
+        )
+
+    return _deepseek_client
+
+
+def _get_client():
+    """Backward-compatible alias used by older tests for the Anthropic path."""
+    return _get_anthropic_client()
 
 
 def _text_of(resp) -> str:
@@ -92,6 +121,29 @@ def _make_plain_callable(client) -> Callable[[str, str, int, float], str]:
             messages=[{"role": "user", "content": prompt}],
         )
         return resp.content[0].text
+
+    return _call
+
+
+def _make_deepseek_plain_callable(client) -> Callable[[str, str, int, float], str]:
+    """Build an OpenAI-compatible DeepSeek callable."""
+    settings = get_settings()
+    model = settings.deepseek_model
+
+    def _call(prompt: str, system: str, max_tokens: int, temperature: float) -> str:
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+        resp = client.chat.completions.create(
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            messages=messages,
+        )
+        choice = (getattr(resp, "choices", None) or [None])[0]
+        message = getattr(choice, "message", None)
+        return (getattr(message, "content", "") or "").strip()
 
     return _call
 
@@ -181,7 +233,17 @@ def get_llm_callable(
             (default — preserves the original behaviour + call sites),
             return the plain Haiku/Sonnet-by-size callable.
     """
-    client = _get_client()
+    settings = get_settings()
+
+    if settings.llm_provider == "deepseek":
+        client = _get_deepseek_client()
+        if client is None:
+            return None
+        if with_tools:
+            _log.info("llm_client.deepseek_plain_fallback_for_tool_request")
+        return _make_deepseek_plain_callable(client)
+
+    client = _get_anthropic_client()
     if client is None:
         return None
 
@@ -201,7 +263,20 @@ def get_answer_streamer():
     yielded live; if the turn ends by requesting tools, we execute them and
     stream the next turn. The final (end_turn) turn's deltas ARE the answer.
     """
-    client = _get_client()
+    settings = get_settings()
+    if settings.llm_provider == "deepseek":
+        callable_ = get_llm_callable(with_tools=False)
+        if callable_ is None:
+            return None
+
+        def _deepseek_stream(prompt: str, system: str, max_tokens: int, temperature: float):
+            # DeepSeek's OpenAI-compatible path is kept non-streaming for now;
+            # yield once so callers keep the same iterator contract.
+            yield callable_(prompt, system, max_tokens, temperature)
+
+        return _deepseek_stream
+
+    client = _get_anthropic_client()
     if client is None:
         return None
 
