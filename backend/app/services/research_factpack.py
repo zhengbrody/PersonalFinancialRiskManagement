@@ -203,16 +203,17 @@ def build_fact_pack(
     fp.data_quality = _data_quality(
         profile, fund, growth, analyst, peers, news, insider, used_yf=bool(yf)
     )
+
     # Momentum + ownership ride free yfinance scalars — record their provenance
     # so the frontend can source-badge those cards too.
-    if any(v is not None for v in (momentum.rsi_14, momentum.sma_50, momentum.fifty_two_week_high)):
-        fp.data_quality.sources.append(
-            R.SourceRef(field="momentum", source="yfinance", as_of=fp.as_of, coverage=1.0)
-        )
-    if ownership.institutional_pct is not None:
-        fp.data_quality.sources.append(
-            R.SourceRef(field="ownership", source="yfinance", as_of=fp.as_of, coverage=1.0)
-        )
+    def _yf_source(field: str, *values) -> None:
+        if any(v is not None for v in values):
+            fp.data_quality.sources.append(
+                R.SourceRef(field=field, source="yfinance", as_of=fp.as_of, coverage=1.0)
+            )
+
+    _yf_source("momentum", momentum.rsi_14, momentum.sma_50, momentum.fifty_two_week_high)
+    _yf_source("ownership", ownership.institutional_pct)
     return fp
 
 
