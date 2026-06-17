@@ -36,6 +36,7 @@ import { Tabs } from "@/components/ui/tabs";
 import { CreditsBadge } from "@/components/credits-badge";
 import { TickerNews } from "@/components/ticker-news";
 import { LearnHint } from "@/components/learn-hint";
+import { ReportExportButton } from "@/components/report-export-button";
 import { ApiError } from "@/lib/api";
 import { BETA_LIMIT_MESSAGE, isBillingEnabled } from "@/lib/billing-flag";
 import { useAuth } from "@/lib/auth-context";
@@ -140,6 +141,13 @@ function ResearchWorkbench() {
               the detail (valuation/fundamentals/technicals/news/risks/sources)
               is organized into tabs below. */}
           <FactPackHeader fp={fp} />
+          <div className="flex justify-end">
+            <ReportExportButton
+              kind="ticker"
+              payload={{ fact_pack: fp, verdict: verdictM.data?.verdict ?? null }}
+              label="Export research report"
+            />
+          </div>
           <VerdictSection
             pending={verdictM.isPending}
             error={verdictM.error}

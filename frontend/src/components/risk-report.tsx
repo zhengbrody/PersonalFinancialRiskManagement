@@ -28,6 +28,7 @@ import { DataProvenance } from "@/components/data-provenance";
 import { VarBacktest } from "@/components/var-backtest";
 import { LearnHint } from "@/components/learn-hint";
 import { RiskAlertsCard } from "@/components/risk-alerts-card";
+import { ReportExportButton } from "@/components/report-export-button";
 import { MetricTrend } from "@/components/metric-trend";
 import { track } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
@@ -93,6 +94,13 @@ export function ReportSections({ report }: { report: RiskReport }) {
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <ReportExportButton
+          kind="portfolio"
+          payload={{ report, diagnosis: explain.data ?? null }}
+          label="Export risk report"
+        />
+      </div>
       <RiskDiagnosis
         explain={explain.data}
         loading={explain.isLoading}

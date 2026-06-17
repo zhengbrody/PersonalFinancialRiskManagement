@@ -31,6 +31,7 @@ from .api.v1 import (
     options,
     portfolios,
     quant,
+    reports,
     research,
     risk,
 )
@@ -170,6 +171,7 @@ def create_app() -> FastAPI:
     app.include_router(quant.router)
     app.include_router(options.router)
     app.include_router(research.router)
+    app.include_router(reports.router)
     app.include_router(institutions.router)
     app.include_router(feedback.router)
     app.include_router(data.router)

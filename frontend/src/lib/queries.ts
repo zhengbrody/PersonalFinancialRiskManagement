@@ -1503,6 +1503,15 @@ export function useRiskExplain(input: RiskExplainInput | null) {
   });
 }
 
+// ── exportable HTML reports (server-rendered, deterministic) ────────
+export const reportResponseSchema = z.looseObject({
+  html: z.string(),
+  input_hash: z.string(),
+  as_of: z.string(),
+  kind: z.string(),
+});
+export type ReportResponse = z.infer<typeof reportResponseSchema>;
+
 // ── proactive risk alerts (deterministic, credit-free) ──────────────
 export const riskAlertSchema = z.looseObject({
   type: z.string(),

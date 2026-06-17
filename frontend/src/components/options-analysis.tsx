@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TickerBadge } from "@/components/ui/ticker-badge";
+import { ReportExportButton } from "@/components/report-export-button";
 import {
   type OptionAnalytics,
   type OptionContract,
@@ -50,11 +51,20 @@ export function OptionsAnalysis({ contracts }: { contracts: OptionContract[] }) 
 
   return (
     <section className="space-y-3">
-      <div className="flex items-baseline justify-between">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-lg font-semibold tracking-tight">Options risk</h2>
-        <span className="text-[11px] uppercase tracking-widest text-muted-foreground">
-          Black-Scholes · deterministic
-        </span>
+        <div className="flex items-center gap-3">
+          {analytics.data && (
+            <ReportExportButton
+              kind="options"
+              payload={{ analysis: analytics.data }}
+              label="Export options report"
+            />
+          )}
+          <span className="text-[11px] uppercase tracking-widest text-muted-foreground">
+            Black-Scholes · deterministic
+          </span>
+        </div>
       </div>
 
       {analytics.isPending ? (
