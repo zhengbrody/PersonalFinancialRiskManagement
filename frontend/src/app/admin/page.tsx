@@ -22,7 +22,9 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { ApiBalanceCard } from "@/components/api-balance-card";
 import {
+  useAdminBalances,
   useAdminMetrics,
   useAdminStatus,
   useAdminUsage,
@@ -41,6 +43,7 @@ export default function AdminPage() {
   // owner — otherwise a non-owner would 403 every 4s.
   const isOwner = Boolean(usage.data) && !usage.isError;
   const metrics = useAdminMetrics(isOwner);
+  const balances = useAdminBalances(isOwner);
 
   useEffect(() => {
     if (!configured) return;
@@ -92,6 +95,8 @@ export default function AdminPage() {
           value={fmtTokens((totals.tokens_in ?? 0) + (totals.tokens_out ?? 0))}
         />
       </div>
+
+      <ApiBalanceCard data={balances.data} loading={balances.isLoading} />
 
       <LiveActivity data={metrics.data} loading={metrics.isLoading} />
 
