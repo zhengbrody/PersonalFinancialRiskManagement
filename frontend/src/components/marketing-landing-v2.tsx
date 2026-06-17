@@ -3,12 +3,14 @@
 /**
  * MindMarket — animated marketing landing (V2).
  *
- * An always-dark, premium ("Citadel × Robinhood") anonymous marketing view.
- * Zero new deps — motion is CSS transitions + IntersectionObserver + rAF
- * (shared with the other pre-login pages via components/marketing/*).
+ * A premium ("Citadel × Robinhood") anonymous marketing view. Market-synced:
+ * the --mm-* palette (via the C tokens) flips light/dark with the app theme, so
+ * it's light during the trading day and dark overnight. Zero new deps — motion
+ * is CSS transitions + IntersectionObserver + rAF (shared with the other
+ * pre-login pages via components/marketing/*).
  *
  * Rendered full-bleed by SiteShell (no app header) for anonymous visitors; the
- * shared <MarketingShell/> owns the fixed nav + footer + dark background. This
+ * shared <MarketingShell/> owns the fixed nav + footer + themed background. This
  * file is just the landing's body sections + its SEO JSON-LD.
  */
 
@@ -113,8 +115,8 @@ function Hero() {
 
   return (
     <header id="top" style={{ position: "relative", padding: "150px 32px 80px", maxWidth: 1200, margin: "0 auto" }}>
-      <Glow style={{ width: 620, height: 620, top: -120, right: -160, background: "radial-gradient(circle, rgba(47,167,188,.20), transparent 65%)" }} />
-      <Glow style={{ width: 460, height: 460, bottom: -160, left: -120, background: "radial-gradient(circle, rgba(224,174,42,.12), transparent 65%)" }} />
+      <Glow style={{ width: 620, height: 620, top: -120, right: -160, background: `radial-gradient(circle, ${C.glowTeal}, transparent 65%)` }} />
+      <Glow style={{ width: 460, height: 460, bottom: -160, left: -120, background: `radial-gradient(circle, ${C.glowGold}, transparent 65%)` }} />
       <div className="mm-hero-grid" style={{ display: "grid", gridTemplateColumns: "1.05fr 0.95fr", gap: 56, alignItems: "center" }}>
         <div>
           <Reveal>
@@ -137,7 +139,7 @@ function Hero() {
               <CTA href="/signup" lg>Score my portfolio — free</CTA>
               <CTA href="#demo" variant="ghost" lg>See a live demo</CTA>
             </div>
-            <p style={{ marginTop: 18, fontSize: 13, color: "rgba(170,180,194,.75)" }}>No credit card · numbers are computed, never invented.</p>
+            <p style={{ marginTop: 18, fontSize: 13, color: C.slateDim }}>No credit card · numbers are computed, never invented.</p>
           </Reveal>
         </div>
 
@@ -145,7 +147,7 @@ function Hero() {
           <FloatChip style={{ top: 128, left: -42 }} label="1-day VaR 95%" value="−2.52%" />
           <FloatChip style={{ bottom: 92, right: -34 }} label="Annualized vol" value="24.3%" />
           <Reveal delay={0.08}>
-            <div style={{ borderRadius: 22, border: `1px solid ${C.hair}`, background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.012))", boxShadow: "0 40px 90px -40px rgba(0,0,0,.8)", padding: "26px 26px 22px" }}>
+            <div style={{ borderRadius: 22, border: `1px solid ${C.hair}`, background: C.cardGrad, boxShadow: "0 40px 90px -40px rgba(0,0,0,.8)", padding: "26px 26px 22px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <span style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: ".15em", color: C.slate }}>Portfolio Health Score</span>
                 <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".08em", color: C.gold, border: "1px solid rgba(224,174,42,.4)", background: "rgba(224,174,42,.1)", padding: "4px 9px", borderRadius: 999 }}>Watch</span>
@@ -154,21 +156,21 @@ function Hero() {
                 <svg viewBox="0 0 240 138" style={{ display: "block", width: "100%", height: "auto" }}>
                   <defs>
                     <linearGradient id="mmArc" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0" stopColor={C.down} /><stop offset="0.5" stopColor="#FFC24B" /><stop offset="1" stopColor={C.up} />
+                      <stop offset="0" stopColor={C.down} /><stop offset="0.5" stopColor={C.gold} /><stop offset="1" stopColor={C.up} />
                     </linearGradient>
                   </defs>
-                  <path d="M28 120 A92 92 0 0 1 212 120" fill="none" stroke="rgba(255,255,255,0.09)" strokeWidth={16} strokeLinecap="round" />
+                  <path d="M28 120 A92 92 0 0 1 212 120" fill="none" stroke={C.track} strokeWidth={16} strokeLinecap="round" />
                   <path d="M28 120 A92 92 0 0 1 212 120" fill="none" stroke="url(#mmArc)" strokeWidth={16} strokeLinecap="round" strokeDasharray={arc} strokeDashoffset={arc * (1 - frac)} />
-                  <circle r={9} fill="#fff" stroke={C.ink} strokeWidth={3} cx={CX + R * Math.cos(ang)} cy={CY - R * Math.sin(ang)} />
+                  <circle r={9} fill={C.paper} stroke={C.ink} strokeWidth={3} cx={CX + R * Math.cos(ang)} cy={CY - R * Math.sin(ang)} />
                 </svg>
                 <div style={{ position: "absolute", insetInline: 0, bottom: 6, textAlign: "center" }}>
-                  <div style={{ ...mono, fontSize: 56, fontWeight: 600, lineHeight: 1, color: "#FFC24B" }}>{Math.round(score)}</div>
+                  <div style={{ ...mono, fontSize: 56, fontWeight: 600, lineHeight: 1, color: C.gold }}>{Math.round(score)}</div>
                   <div style={{ fontSize: 14, color: C.slate, marginTop: 4 }}>/ 1000 · health band</div>
                 </div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginTop: 12 }}>
                 {[["Risk match", dims[0]], ["Risk-adj. return", dims[1]], ["Downside prot.", dims[2]]].map(([l, v]) => (
-                  <div key={l as string} style={{ textAlign: "center", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: `1px solid ${C.hair}`, padding: "10px 6px" }}>
+                  <div key={l as string} style={{ textAlign: "center", borderRadius: 12, background: C.surfaceFaint, border: `1px solid ${C.hair}`, padding: "10px 6px" }}>
                     <div style={{ ...mono, fontSize: 19, fontWeight: 600 }}>{(v as number).toFixed(1)}</div>
                     <div style={{ fontSize: 10.5, color: C.slate, marginTop: 2 }}>{l as string}</div>
                   </div>
@@ -187,9 +189,9 @@ function Glow({ style }: { style: CSSProperties }) {
 }
 function FloatChip({ style, label, value }: { style: CSSProperties; label: string; value: string }) {
   return (
-    <div className="mm-float-chip" style={{ position: "absolute", zIndex: 2, borderRadius: 13, border: `1px solid ${C.hairStrong}`, background: "rgba(16,22,29,.82)", backdropFilter: "blur(8px)", padding: "11px 14px", boxShadow: "0 20px 40px -20px rgba(0,0,0,.9)", ...style }}>
+    <div className="mm-float-chip" style={{ position: "absolute", zIndex: 2, borderRadius: 13, border: `1px solid ${C.hairStrong}`, background: C.chipBg, backdropFilter: "blur(8px)", padding: "11px 14px", boxShadow: "0 20px 40px -20px rgba(0,0,0,.9)", ...style }}>
       <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".14em", color: C.slate }}>{label}</div>
-      <div style={{ ...mono, fontSize: 17, fontWeight: 600, marginTop: 2, color: "#FFC24B" }}>{value}</div>
+      <div style={{ ...mono, fontSize: 17, fontWeight: 600, marginTop: 2, color: C.gold }}>{value}</div>
     </div>
   );
 }
@@ -198,7 +200,7 @@ function FloatChip({ style, label, value }: { style: CSSProperties; label: strin
 function Ticker() {
   const items = [...TICKERS, ...TICKERS];
   return (
-    <div style={{ overflow: "hidden", borderBlock: `1px solid ${C.hair}`, background: "rgba(255,255,255,0.015)" }}>
+    <div style={{ overflow: "hidden", borderBlock: `1px solid ${C.hair}`, background: C.surfaceFaint }}>
       <div style={{ display: "inline-flex", gap: 40, padding: "9px 0", whiteSpace: "nowrap", ...mono, fontSize: 12.5, animation: "mm-scroll 38s linear infinite" }}>
         {items.map(([t, p, d], i) => (
           <span key={i} style={{ color: C.slate }}>
@@ -239,7 +241,7 @@ function Stats() {
       <div ref={ref} style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 24 }} className="mm-pillars">
         {vals.map((v, i) => (
           <div key={i}>
-            <div style={{ ...mono, fontSize: "clamp(32px,3.4vw,46px)", fontWeight: 600, letterSpacing: "-0.02em", background: "linear-gradient(180deg,#fff,#9fb0c0)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>
+            <div style={{ ...mono, fontSize: "clamp(32px,3.4vw,46px)", fontWeight: 600, letterSpacing: "-0.02em", background: C.statGrad, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>
               {Math.round(v).toLocaleString("en-US")}{suffix[i]}
             </div>
             <div style={{ fontSize: 14, color: C.slate, marginTop: 6 }}>{labels[i]}</div>
@@ -273,7 +275,7 @@ function Demo() {
             {[-5, -10, -20, -30].map((sh) => (
               <button key={sh} onClick={() => setShock(sh)} style={{
                 ...mono, fontSize: 15, fontWeight: 600, padding: "10px 16px", borderRadius: 10, cursor: "pointer",
-                border: `1px solid ${shock === sh ? C.teal : C.hairStrong}`, background: shock === sh ? C.teal : "rgba(255,255,255,0.03)", color: shock === sh ? "#04121a" : C.paper,
+                border: `1px solid ${shock === sh ? C.teal : C.hairStrong}`, background: shock === sh ? C.teal : C.surfaceFaint, color: shock === sh ? "#fff" : C.paper,
               }}>{sh}%</button>
             ))}
           </div>
@@ -289,7 +291,7 @@ function Demo() {
           </div>
         </div>
         <Reveal delay={0.08}>
-          <div style={{ borderRadius: 22, border: `1px solid ${C.hair}`, background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.012))", padding: 26 }}>
+          <div style={{ borderRadius: 22, border: `1px solid ${C.hair}`, background: C.cardGrad, padding: 26 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 16 }}>
               <span style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: ".15em", color: C.slate }}>What drives the risk</span>
               <span style={{ ...mono, fontSize: 12, color: C.slate }}>share of total VaR</span>
@@ -298,7 +300,7 @@ function Demo() {
               {SAMPLE.map((h) => <BarRow key={h.t} t={h.t} pct={(h.varPct / maxVar) * 100} value={`${h.varPct}%`} animate={seen} />)}
             </div>
             <div style={{ marginTop: 20, padding: "14px 16px", borderRadius: 12, border: "1px solid rgba(224,174,42,.28)", background: "rgba(224,174,42,.07)" }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "#FFC24B" }}>Watch — concentrated in high-beta tech</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: C.gold }}>Watch — concentrated in high-beta tech</div>
               <div style={{ fontSize: 13.5, color: C.slate, marginTop: 4, lineHeight: 1.55 }}>Top 4 names are ~72% of the book. The 10% Treasury sleeve is the only real downside cushion.</div>
             </div>
           </div>
@@ -311,8 +313,8 @@ function Demo() {
 function BarRow({ t, pct, value, red, animate }: { t: string; pct: number; value: string; red?: boolean; animate: boolean }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-      <span style={{ width: 56, ...mono, fontSize: 11, letterSpacing: ".04em", color: C.paper, border: `1px solid ${C.hair}`, background: "rgba(255,255,255,0.04)", padding: "3px 7px", borderRadius: 5, textAlign: "center" }}>{t}</span>
-      <div style={{ flex: 1, height: 9, borderRadius: 999, background: "rgba(255,255,255,0.07)", overflow: "hidden" }}>
+      <span style={{ width: 56, ...mono, fontSize: 11, letterSpacing: ".04em", color: C.paper, border: `1px solid ${C.hair}`, background: C.surfaceFaint, padding: "3px 7px", borderRadius: 5, textAlign: "center" }}>{t}</span>
+      <div style={{ flex: 1, height: 9, borderRadius: 999, background: C.track, overflow: "hidden" }}>
         <div style={{ height: "100%", width: animate ? `${pct}%` : 0, borderRadius: 999, background: red ? "linear-gradient(90deg,#7a1f1f,#FF6B6B)" : `linear-gradient(90deg,${C.tealDeep},${C.teal})`, transition: "width 1s cubic-bezier(.16,1,.3,1)" }} />
       </div>
       <span style={{ width: 44, textAlign: "right", ...mono, fontSize: 12, color: red ? C.down : C.slate }}>{value}</span>
@@ -334,7 +336,7 @@ function Pillars() {
       <div className="mm-pillars" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20, marginTop: 44 }}>
         {cards.map((c, i) => (
           <Reveal key={c.h} delay={i * 0.08}>
-            <div style={{ borderRadius: 18, border: `1px solid ${C.hair}`, background: "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.008))", padding: 26, height: "100%" }}>
+            <div style={{ borderRadius: 18, border: `1px solid ${C.hair}`, background: C.cardGrad, padding: 26, height: "100%" }}>
               <div style={{ width: 46, height: 46, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", background: `linear-gradient(135deg, ${C.teal}, ${C.tealDeep})`, marginBottom: 18, boxShadow: "0 8px 20px -8px rgba(47,167,188,.5)" }}>
                 <Icon name={c.ic} style={{ width: 23, height: 23, color: "#06151c" }} />
               </div>
@@ -364,7 +366,7 @@ function Steps() {
         {steps.map(([h, p], i) => (
           <Reveal key={h} delay={i * 0.08}>
             <div style={{ borderRadius: 16, border: `1px solid ${C.hair}`, padding: 26, height: "100%" }}>
-              <div style={{ ...mono, fontSize: 13, fontWeight: 600, color: C.ink, background: C.gold, width: 30, height: 30, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>{i + 1}</div>
+              <div style={{ ...mono, fontSize: 13, fontWeight: 600, color: "#0B0E11", background: C.gold, width: 30, height: 30, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>{i + 1}</div>
               <h4 style={{ fontSize: 17, margin: "0 0 6px" }}>{h}</h4>
               <p style={{ fontSize: 14, color: C.slate, lineHeight: 1.55, margin: 0 }}>{p}</p>
             </div>

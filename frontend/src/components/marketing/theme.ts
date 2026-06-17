@@ -9,22 +9,36 @@
 
 import { type CSSProperties } from "react";
 
-// Canonical brand-mark palette (MindMarket design system — tokens/colors.css +
-// guidelines/colors-brand.card.html). These exact hexes also paint the logo, so
-// the marketing surfaces and the mark stay one coherent brand.
+// Marketing palette — MARKET-SYNCED. Each token is a CSS var (--mm-*) defined
+// light + dark in globals.css, so every pre-login surface flips with the same
+// `.dark` the app uses (light during the trading day, dark overnight). Dark =
+// the canonical brand-mark palette (tokens/colors.css); light = a paper variant.
+// Names are kept (ink/paper/…) for call-site stability; semantically `ink` is the
+// page background and `paper` is the primary text — both flip with the theme.
 export const C = {
-  ink: "#0B0E11", // brand-ink (logo background / near-black)
-  panel: "#10171D", // brand-ink-2 (gradient companion)
-  paper: "#F8FAFC", // brand-paper (logo white)
-  slate: "#AAB4C2", // brand-slate (muted caption)
-  slateDim: "rgba(170,180,194,.72)",
-  teal: "#39A3B5", // brand-teal-light (text/accent)
-  tealDeep: "#0B7285", // brand-teal (the "M" disc)
-  gold: "#D4A017", // brand-gold (rising chart line)
-  up: "#38D39F",
-  down: "#FF6B6B",
-  hair: "rgba(255,255,255,0.09)",
-  hairStrong: "rgba(255,255,255,0.16)",
+  ink: "var(--mm-bg)", // page background
+  panel: "var(--mm-panel)", // raised panel / gradient companion
+  paper: "var(--mm-text)", // primary text
+  slate: "var(--mm-text-dim)", // secondary text
+  slateDim: "var(--mm-text-faint)",
+  teal: "var(--mm-teal)", // accent (text/links)
+  tealDeep: "var(--mm-teal-deep)", // the "M" disc
+  gold: "var(--mm-gold)", // signal accent
+  up: "var(--mm-up)",
+  down: "var(--mm-down)",
+  hair: "var(--mm-hairline)", // hairline border
+  hairStrong: "var(--mm-hairline-strong)",
+  // Surfaces / effects that must invert between light & dark:
+  cardGrad: "var(--mm-card-grad)", // hairline card fill
+  navBg: "var(--mm-nav-bg)", // scrolled fixed-nav backdrop
+  chipBg: "var(--mm-chip-bg)", // floating stat chip
+  glowTeal: "var(--mm-glow-teal)", // hero radial glow
+  glowGold: "var(--mm-glow-gold)",
+  statGrad: "var(--mm-stat-grad)", // big gradient numerals
+  ctaBg: "var(--mm-cta-bg)", // primary button (inverts: dark btn on light)
+  ctaFg: "var(--mm-cta-fg)",
+  track: "var(--mm-track)", // bar/progress track
+  surfaceFaint: "var(--mm-surface-faint)", // faint inset surface
 } as const;
 
 /** Instrument Serif (wired in layout.tsx as --font-display) for headlines. */

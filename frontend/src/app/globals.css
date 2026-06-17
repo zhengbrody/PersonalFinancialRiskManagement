@@ -31,6 +31,63 @@
     --warning: 38 92% 50%;
     --radius: 0.5rem;
   }
+  /*
+   * Marketing-surface palette — the premium "Citadel × Robinhood" look used by
+   * every pre-login page (landing / product / learn / demo / auth). MARKET-SYNCED:
+   * these flip with the same `.dark` the app uses (light during the trading day,
+   * dark overnight). Dark = the canonical brand-mark palette; light = a clean
+   * paper variant. Kept as `--mm-*` (distinct from the app's shadcn tokens) so the
+   * marketing aesthetic stays its own thing. Consumed via the `C` object in
+   * components/marketing/theme.ts.
+   */
+  :root {
+    --mm-bg: #f5f7fa;
+    --mm-panel: #ffffff;
+    --mm-text: #0b0e11;
+    --mm-text-dim: #4d5763;
+    --mm-text-faint: rgba(77, 87, 99, 0.7);
+    --mm-teal: #0b7285;
+    --mm-teal-deep: #0b5563;
+    --mm-gold: #a8780c;
+    --mm-up: #15803d;
+    --mm-down: #dc2626;
+    --mm-hairline: rgba(11, 14, 17, 0.1);
+    --mm-hairline-strong: rgba(11, 14, 17, 0.18);
+    --mm-card-grad: linear-gradient(180deg, rgba(11, 14, 17, 0.025), rgba(11, 14, 17, 0.006));
+    --mm-nav-bg: rgba(245, 247, 250, 0.8);
+    --mm-chip-bg: rgba(255, 255, 255, 0.92);
+    --mm-glow-teal: rgba(11, 114, 133, 0.1);
+    --mm-glow-gold: rgba(168, 120, 12, 0.08);
+    --mm-stat-grad: linear-gradient(180deg, #0b0e11, #3a4654);
+    --mm-cta-bg: #0b0e11;
+    --mm-cta-fg: #f8fafc;
+    --mm-track: rgba(11, 14, 17, 0.07);
+    --mm-surface-faint: rgba(11, 14, 17, 0.03);
+  }
+  .dark {
+    --mm-bg: #0b0e11;
+    --mm-panel: #10171d;
+    --mm-text: #f8fafc;
+    --mm-text-dim: #aab4c2;
+    --mm-text-faint: rgba(170, 180, 194, 0.72);
+    --mm-teal: #39a3b5;
+    --mm-teal-deep: #0b7285;
+    --mm-gold: #d4a017;
+    --mm-up: #38d39f;
+    --mm-down: #ff6b6b;
+    --mm-hairline: rgba(255, 255, 255, 0.09);
+    --mm-hairline-strong: rgba(255, 255, 255, 0.16);
+    --mm-card-grad: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012));
+    --mm-nav-bg: rgba(7, 9, 12, 0.72);
+    --mm-chip-bg: rgba(16, 22, 29, 0.82);
+    --mm-glow-teal: rgba(47, 167, 188, 0.2);
+    --mm-glow-gold: rgba(224, 174, 42, 0.12);
+    --mm-stat-grad: linear-gradient(180deg, #fff, #9fb0c0);
+    --mm-cta-bg: #f8fafc;
+    --mm-cta-fg: #0a0d11;
+    --mm-track: rgba(255, 255, 255, 0.07);
+    --mm-surface-faint: rgba(255, 255, 255, 0.03);
+  }
   .dark {
     /* Bloomberg-ish near-black background; slate cards; sky-blue primary. */
     --background: 222 47% 5%;

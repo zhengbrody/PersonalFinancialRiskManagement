@@ -54,18 +54,19 @@ function accountLinks(isOwner: boolean): NavItem[] {
 
 /**
  * Pre-login marketing/content + auth routes are full-bleed: they wear the
- * premium dark <MarketingShell/> (its own fixed nav + footer), NOT the app
- * header. The anonymous home is also full-bleed; the signed-in dashboard at
- * "/" keeps the normal shell.
+ * premium <MarketingShell/> (its own fixed nav + footer), NOT the app header.
+ * "/" and "/markets" are AUTH-CONDITIONAL — anonymous → full-bleed marketing
+ * (the landing / the markets intro), signed-in → the normal app shell.
  */
 const FULL_BLEED_ROUTES = new Set(["/product", "/learn", "/demo-risk-check", "/login", "/signup"]);
+const ANON_FULL_BLEED_ROUTES = new Set(["/", "/markets"]);
 
 export function SiteShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, configured } = useAuth();
-  const isAnonHome = pathname === "/" && !(configured && user);
+  const isAnonFullBleed = ANON_FULL_BLEED_ROUTES.has(pathname) && !(configured && user);
   if (
-    isAnonHome ||
+    isAnonFullBleed ||
     FULL_BLEED_ROUTES.has(pathname) ||
     pathname.startsWith("/learn/")
   ) {

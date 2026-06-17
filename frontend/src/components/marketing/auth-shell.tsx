@@ -42,7 +42,7 @@ export function AuthShell({
           style={{
             borderRadius: 18,
             border: `1px solid ${C.hair}`,
-            background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.012))",
+            background: C.cardGrad,
             padding: 26,
           }}
         >
