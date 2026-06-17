@@ -7,6 +7,11 @@ vi.mock("@/components/macro-snapshot", () => ({
   MacroSnapshot: () => <div data-testid="macro" />,
 }));
 
+// The shared <MarketingShell> nav is auth-aware (useAuth) — stub anon.
+vi.mock("@/lib/auth-context", () => ({
+  useAuth: () => ({ user: null, configured: false, loading: false }),
+}));
+
 import { MarketingLandingV2 } from "./marketing-landing-v2";
 
 beforeEach(() => {

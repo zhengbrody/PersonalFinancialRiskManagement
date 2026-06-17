@@ -51,13 +51,23 @@ function accountLinks(isOwner: boolean): NavItem[] {
   ];
 }
 
+/**
+ * Pre-login marketing/content + auth routes are full-bleed: they wear the
+ * premium dark <MarketingShell/> (its own fixed nav + footer), NOT the app
+ * header. The anonymous home is also full-bleed; the signed-in dashboard at
+ * "/" keeps the normal shell.
+ */
+const FULL_BLEED_ROUTES = new Set(["/product", "/learn", "/demo-risk-check", "/login", "/signup"]);
+
 export function SiteShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, configured } = useAuth();
-  // The anonymous home is the full-bleed premium marketing landing, which owns
-  // its own fixed nav + footer — render it bare (no app header / max-w main).
-  // The signed-in dashboard at "/" and every other route keep the normal shell.
-  if (pathname === "/" && !(configured && user)) {
+  const isAnonHome = pathname === "/" && !(configured && user);
+  if (
+    isAnonHome ||
+    FULL_BLEED_ROUTES.has(pathname) ||
+    pathname.startsWith("/learn/")
+  ) {
     return <>{children}</>;
   }
   return (

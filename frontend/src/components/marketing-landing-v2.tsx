@@ -3,61 +3,26 @@
 /**
  * MindMarket — animated marketing landing (V2).
  *
- * Port of the design handoff prototype: an always-dark, premium
- * ("Citadel × Robinhood") anonymous marketing view. Zero new deps — motion is
- * CSS transitions + IntersectionObserver + requestAnimationFrame.
+ * An always-dark, premium ("Citadel × Robinhood") anonymous marketing view.
+ * Zero new deps — motion is CSS transitions + IntersectionObserver + rAF
+ * (shared with the other pre-login pages via components/marketing/*).
  *
- * Rendered full-bleed by SiteShell (no app header) for anonymous visitors; it
- * owns its own fixed nav + footer. Reads var(--font-display) (Instrument Serif,
- * wired in layout.tsx) for headlines and var(--font-geist-mono) for numbers.
- * The root carries `dark` so the embedded <MacroSnapshot/> (which uses theme
- * tokens) resolves the dark palette regardless of the market-hours theme.
- *
- * Colors are intentional marketing literals (distinct from the app .dark
- * tokens); they're centralised in C below.
+ * Rendered full-bleed by SiteShell (no app header) for anonymous visitors; the
+ * shared <MarketingShell/> owns the fixed nav + footer + dark background. This
+ * file is just the landing's body sections + its SEO JSON-LD.
  */
 
-import { useEffect, useRef, useState, type ReactNode, type CSSProperties } from "react";
-import Link from "next/link";
+import { useEffect, useState, type CSSProperties } from "react";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { MacroSnapshot } from "@/components/macro-snapshot";
+import { MarketingShell } from "@/components/marketing/marketing-shell";
+import { C, display, mono, eyebrow, secTitle } from "@/components/marketing/theme";
+import { Reveal, useReveal, useCountUp } from "@/components/marketing/motion";
+import { CTA, Band } from "@/components/marketing/primitives";
 
-/* palette ------------------------------------------------------------------ */
-const C = {
-  ink: "#07090C",
-  panel: "#10161D",
-  paper: "#F8FAFC",
-  slate: "#AAB4C2",
-  teal: "#2FA7BC",
-  tealDeep: "#0B7285",
-  gold: "#E0AE2A",
-  up: "#38D39F",
-  down: "#FF6B6B",
-  hair: "rgba(255,255,255,0.09)",
-  hairStrong: "rgba(255,255,255,0.16)",
-};
-const display: CSSProperties = { fontFamily: "var(--font-display, Georgia, serif)" };
-const mono: CSSProperties = {
-  fontFamily: "var(--font-geist-mono, ui-monospace, monospace)",
-  fontVariantNumeric: "tabular-nums",
-};
-
-/* SEO — preserved from the prior landing (global Org/SoftwareApp JSON-LD lives
-   in layout.tsx; these add the product offers + FAQ rich result). */
-const PRODUCT_JSON_LD = {
-  "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  name: "MindMarket",
-  applicationCategory: "FinanceApplication",
-  operatingSystem: "Web",
-  url: "https://mindmarket.app/",
-  description:
-    "AI portfolio risk analytics for individual investors, including portfolio health score, VaR, CVaR, stress tests, factor exposure, and live US rates data.",
-  offers: [
-    { "@type": "Offer", name: "Free", price: "0", priceCurrency: "USD" },
-    { "@type": "Offer", name: "Basic", price: "10", priceCurrency: "USD" },
-  ],
-};
+/* SEO — the authoritative Organization + SoftwareApplication JSON-LD ships on
+   every page from layout.tsx; the homepage adds only this FAQ rich result (no
+   duplicate SoftwareApplication). */
 const FAQ_JSON_LD = {
   "@context": "https://schema.org",
   "@type": "FAQPage",
@@ -93,77 +58,6 @@ const LEARN_LINKS = [
   { href: "/about", label: "About MindMarket" },
 ];
 
-/* helpers ------------------------------------------------------------------ */
-const reducedMotion = () =>
-  typeof window === "undefined" ||
-  !window.matchMedia ||
-  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-function useReveal<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
-  const [seen, setSeen] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    // No IntersectionObserver (SSR/jsdom) or reduced motion → show final state.
-    if (typeof IntersectionObserver === "undefined" || reducedMotion()) {
-      setSeen(true);
-      return;
-    }
-    const io = new IntersectionObserver(
-      (es) =>
-        es.forEach((e) => {
-          if (e.isIntersecting) {
-            setSeen(true);
-            io.disconnect();
-          }
-        }),
-      { threshold: 0.16 },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-  return { ref, seen };
-}
-
-function Reveal({ children, delay = 0 }: { children: ReactNode; delay?: number }) {
-  const { ref, seen } = useReveal<HTMLDivElement>();
-  return (
-    <div
-      ref={ref}
-      style={{
-        opacity: seen ? 1 : 0,
-        transform: seen ? "none" : "translateY(24px)",
-        transition: `opacity .9s cubic-bezier(.16,1,.3,1) ${delay}s, transform .9s cubic-bezier(.16,1,.3,1) ${delay}s`,
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-/** Count a number up to `to` once `start` flips true. */
-function useCountUp(to: number, start: boolean, dur = 1500) {
-  const [v, setV] = useState(0);
-  useEffect(() => {
-    if (!start) return;
-    if (reducedMotion() || typeof requestAnimationFrame === "undefined") {
-      setV(to);
-      return;
-    }
-    let raf = 0;
-    const t0 = performance.now();
-    const tick = (now: number) => {
-      const p = Math.min(1, (now - t0) / dur);
-      setV(to * (1 - Math.pow(1 - p, 3)));
-      if (p < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [to, start, dur]);
-  return v;
-}
-
 /* data --------------------------------------------------------------------- */
 const SAMPLE = [
   { t: "NVDA", w: 0.22, b: 1.75, varPct: 31 },
@@ -182,73 +76,15 @@ const TICKERS: [string, string, number][] = [
 ];
 const fmtUsd = (n: number) => (n < 0 ? "−$" : "$") + Math.abs(Math.round(n)).toLocaleString("en-US");
 
-/* buttons (marketing-local treatment) ------------------------------------- */
-function CTA({
-  children,
-  variant = "primary",
-  href = "#",
-  lg,
-}: {
-  children: ReactNode;
-  variant?: "primary" | "ghost";
-  href?: string;
-  lg?: boolean;
-}) {
-  const base: CSSProperties = {
-    display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8,
-    fontWeight: 500, borderRadius: lg ? 12 : 10, height: lg ? 52 : 44, padding: lg ? "0 28px" : "0 20px",
-    fontSize: lg ? 16 : 15, border: "1px solid transparent", cursor: "pointer",
-    transition: "transform .15s, box-shadow .25s, background .2s", whiteSpace: "nowrap", textDecoration: "none",
-  };
-  const v =
-    variant === "primary"
-      ? { background: C.paper, color: "#0A0D11", boxShadow: "0 10px 30px -10px rgba(224,174,42,.35)" }
-      : { background: "rgba(255,255,255,0.04)", color: C.paper, borderColor: C.hairStrong };
-  const style = { ...base, ...v };
-  // Internal routes → next/link; in-page anchors → plain <a>.
-  if (href.startsWith("/")) {
-    return (
-      <Link href={href} style={style}>
-        {children}
-      </Link>
-    );
-  }
-  return (
-    <a href={href} style={style}>
-      {children}
-    </a>
-  );
-}
-
 /* ───────────────────────────────────────────────────────────────────────── */
 export function MarketingLandingV2() {
-  const [scrolled, setScrolled] = useState(false);
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 12);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
   return (
-    <div
-      className="dark"
-      style={{
-        background: C.ink, color: C.paper,
-        fontFamily: "var(--font-geist-sans, system-ui, sans-serif)", overflowX: "hidden",
-      }}
-    >
-      <script
-        type="application/ld+json"
-        suppressHydrationWarning
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(PRODUCT_JSON_LD) }}
-      />
+    <MarketingShell>
       <script
         type="application/ld+json"
         suppressHydrationWarning
         dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_JSON_LD) }}
       />
-      <Nav scrolled={scrolled} />
       <Hero />
       <Ticker />
       <MacroBand />
@@ -258,56 +94,7 @@ export function MarketingLandingV2() {
       <Steps />
       <ClosingCTA />
       <LearnRow />
-      <Footer />
-    </div>
-  );
-}
-
-/* nav ---------------------------------------------------------------------- */
-function Nav({ scrolled }: { scrolled: boolean }) {
-  return (
-    <nav
-      style={{
-        position: "fixed", insetInline: 0, top: 0, zIndex: 50, display: "flex", alignItems: "center",
-        justifyContent: "space-between", padding: scrolled ? "12px 32px" : "16px 32px",
-        background: scrolled ? "rgba(7,9,12,0.72)" : "transparent",
-        backdropFilter: scrolled ? "blur(14px)" : "none",
-        borderBottom: `1px solid ${scrolled ? C.hair : "transparent"}`, transition: "all .3s",
-      }}
-    >
-      <a
-        href="#top"
-        style={{
-          display: "flex", alignItems: "center", gap: 10, fontWeight: 600, fontSize: 15,
-          color: C.paper, textDecoration: "none", letterSpacing: "-0.02em",
-        }}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo-mark.svg" alt="" width={26} height={26} style={{ borderRadius: 7 }} />
-        MindMarket
-      </a>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <div className="mm-nav-links" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {[
-            ["How it works", "#how"],
-            ["Live demo", "#demo"],
-            ["Why us", "#why"],
-          ].map(([l, href]) => (
-            <a
-              key={l}
-              href={href}
-              style={{ color: C.slate, fontSize: 14, padding: "8px 14px", borderRadius: 8, textDecoration: "none" }}
-            >
-              {l}
-            </a>
-          ))}
-        </div>
-        <CTA variant="ghost" href="/login">
-          Sign in
-        </CTA>
-        <CTA href="/signup">Get started</CTA>
-      </div>
-    </nav>
+    </MarketingShell>
   );
 }
 
@@ -629,32 +416,5 @@ function LearnRow() {
     </Band>
   );
 }
-
-function Footer() {
-  return (
-    <footer style={{ padding: "48px 32px 60px", borderTop: `1px solid ${C.hair}` }}>
-      <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 18 }}>
-        <a href="#top" style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 600, color: C.paper, textDecoration: "none" }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-mark.svg" alt="" width={26} height={26} style={{ borderRadius: 7 }} />MindMarket
-        </a>
-        <p style={{ fontSize: 12.5, color: "rgba(170,180,194,.65)", maxWidth: "46em", lineHeight: 1.5 }}>
-          MindMarket provides educational portfolio analytics and software demonstrations. It does not provide investment, tax, legal, or financial advice. Sample figures are illustrative for a fixed demo book, not live prices.
-        </p>
-      </div>
-    </footer>
-  );
-}
-
-/* shared section bits ------------------------------------------------------ */
-function Band({ children, id }: { children: ReactNode; id?: string }) {
-  return (
-    <section id={id} style={{ borderTop: `1px solid ${C.hair}` }}>
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "96px 32px" }}>{children}</div>
-    </section>
-  );
-}
-const eyebrow: CSSProperties = { fontSize: 12, fontWeight: 500, textTransform: "uppercase", letterSpacing: ".18em", color: C.teal, margin: "0 0 14px" };
-const secTitle: CSSProperties = { ...display, fontWeight: 400, fontSize: "clamp(30px,3.6vw,46px)", lineHeight: 1.08, letterSpacing: "-0.01em", margin: 0 };
 
 export default MarketingLandingV2;

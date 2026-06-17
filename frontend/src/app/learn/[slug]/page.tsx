@@ -1,13 +1,17 @@
 /**
  * /learn/[slug] — one educational topic. Server component (SSR): Googlebot sees
  * the full text without hydration. Per-topic metadata + FAQPage + BreadcrumbList
- * JSON-LD. Content lives in lib/learn-content.ts; this file is just the shell.
+ * JSON-LD. Content lives in lib/learn-content.ts; this file is the dark-themed
+ * reading shell on <MarketingShell/>.
  */
 
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LEARN_BY_SLUG, LEARN_SLUGS } from "@/lib/learn-content";
+import { MarketingShell } from "@/components/marketing/marketing-shell";
+import { C, display } from "@/components/marketing/theme";
+import { CTA, Disclaimer } from "@/components/marketing/primitives";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
 
@@ -35,6 +39,8 @@ export function generateMetadata({ params }: { params: { slug: string } }): Meta
   };
 }
 
+const linkStyle = { color: C.teal, textDecoration: "none" };
+
 export default function LearnTopicPage({ params }: { params: { slug: string } }) {
   const topic = LEARN_BY_SLUG[params.slug];
   if (!topic) notFound();
@@ -59,114 +65,191 @@ export default function LearnTopicPage({ params }: { params: { slug: string } })
   };
 
   return (
-    <article className="mx-auto max-w-3xl space-y-8 py-4">
+    <MarketingShell>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(faqLd) }} />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }}
       />
 
-      <nav className="text-xs text-muted-foreground">
-        <Link href="/" className="hover:underline">
-          Home
-        </Link>{" "}
-        ›{" "}
-        <Link href="/learn" className="hover:underline">
-          Learn
-        </Link>{" "}
-        › <span className="text-foreground">{topic.title}</span>
-      </nav>
+      <article style={{ maxWidth: 760, margin: "0 auto", padding: "120px 24px 48px" }}>
+        <nav style={{ fontSize: 13, color: C.slate, marginBottom: 24 }}>
+          <Link href="/" style={linkStyle}>
+            Home
+          </Link>{" "}
+          ›{" "}
+          <Link href="/learn" style={linkStyle}>
+            Learn
+          </Link>{" "}
+          › <span style={{ color: C.paper }}>{topic.title}</span>
+        </nav>
 
-      <header className="space-y-3">
-        <p className="text-xs font-medium uppercase tracking-widest text-primary">{topic.eyebrow}</p>
-        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">{topic.title}</h1>
-        <p className="text-lg text-muted-foreground">{topic.intro}</p>
-      </header>
-
-      <div className="space-y-8">
-        {topic.sections.map((s, i) => (
-          <section key={i} className="space-y-3">
-            <h2 className="text-xl font-semibold tracking-tight">{s.heading}</h2>
-            {s.paragraphs.map((p, j) => (
-              <p key={j} className="leading-relaxed text-foreground/90">
-                {p}
-              </p>
-            ))}
-            {s.example && (
-              <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-primary">
-                  {s.example.label}
-                </p>
-                <p className="mt-1 text-sm text-foreground/90">{s.example.body}</p>
-              </div>
-            )}
-          </section>
-        ))}
-      </div>
-
-      {/* CTAs */}
-      <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-6 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="font-semibold">See it on a real book</p>
-          <p className="text-sm text-muted-foreground">
-            Run a sample portfolio, or score your own in seconds.
+        <header style={{ marginBottom: 36 }}>
+          <p
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: ".18em",
+              color: C.teal,
+              margin: "0 0 14px",
+            }}
+          >
+            {topic.eyebrow}
           </p>
-        </div>
-        <div className="flex gap-2">
-          <Link
-            href="/demo-risk-check"
-            className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent"
+          <h1
+            style={{
+              ...display,
+              fontWeight: 400,
+              fontSize: "clamp(34px,4.6vw,52px)",
+              lineHeight: 1.06,
+              letterSpacing: "-0.01em",
+              margin: "0 0 18px",
+              color: C.paper,
+            }}
           >
-            Run a sample portfolio
-          </Link>
-          <Link
-            href="/signup"
-            className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90"
-          >
-            Create free account
-          </Link>
-        </div>
-      </div>
+            {topic.title}
+          </h1>
+          <p style={{ fontSize: 19, lineHeight: 1.6, color: C.slate, margin: 0 }}>{topic.intro}</p>
+        </header>
 
-      {/* FAQ */}
-      <section className="space-y-4">
-        <h2 className="text-xl font-semibold tracking-tight">Frequently asked</h2>
-        <div className="divide-y divide-border rounded-lg border border-border">
-          {topic.faqs.map((f, i) => (
-            <div key={i} className="p-4">
-              <p className="font-medium">{f.q}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{f.a}</p>
-            </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 36 }}>
+          {topic.sections.map((s, i) => (
+            <section key={i}>
+              <h2
+                style={{
+                  fontSize: 24,
+                  fontWeight: 600,
+                  letterSpacing: "-0.01em",
+                  margin: "0 0 14px",
+                  color: C.paper,
+                }}
+              >
+                {s.heading}
+              </h2>
+              {s.paragraphs.map((p, j) => (
+                <p key={j} style={{ fontSize: 16.5, lineHeight: 1.7, color: C.slate, margin: "0 0 14px" }}>
+                  {p}
+                </p>
+              ))}
+              {s.example && (
+                <div
+                  style={{
+                    borderRadius: 12,
+                    border: "1px solid rgba(47,167,188,.28)",
+                    background: "rgba(47,167,188,.07)",
+                    padding: "16px 18px",
+                  }}
+                >
+                  <p
+                    style={{
+                      fontSize: 11.5,
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: ".12em",
+                      color: C.teal,
+                      margin: 0,
+                    }}
+                  >
+                    {s.example.label}
+                  </p>
+                  <p style={{ fontSize: 15, lineHeight: 1.6, color: C.paper, margin: "6px 0 0" }}>
+                    {s.example.body}
+                  </p>
+                </div>
+              )}
+            </section>
           ))}
         </div>
-      </section>
 
-      {/* Related */}
-      {topic.related.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            Keep learning
+        {/* CTA */}
+        <div
+          style={{
+            marginTop: 44,
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 18,
+            alignItems: "center",
+            justifyContent: "space-between",
+            borderRadius: 18,
+            border: `1px solid ${C.hair}`,
+            background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.012))",
+            padding: "24px 26px",
+          }}
+        >
+          <div>
+            <p style={{ fontWeight: 600, fontSize: 17, margin: 0, color: C.paper }}>See it on a real book</p>
+            <p style={{ fontSize: 14, color: C.slate, margin: "4px 0 0" }}>
+              Run a sample portfolio, or score your own in seconds.
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <CTA href="/demo-risk-check" variant="ghost">
+              Run a sample portfolio
+            </CTA>
+            <CTA href="/signup">Create free account</CTA>
+          </div>
+        </div>
+
+        {/* FAQ */}
+        <section style={{ marginTop: 44 }}>
+          <h2 style={{ fontSize: 24, fontWeight: 600, letterSpacing: "-0.01em", margin: "0 0 16px", color: C.paper }}>
+            Frequently asked
           </h2>
-          <ul className="space-y-1">
-            {topic.related.map((slug) => {
-              const r = LEARN_BY_SLUG[slug];
-              if (!r) return null;
-              return (
-                <li key={slug}>
-                  <Link href={`/learn/${slug}`} className="text-sm text-primary hover:underline">
-                    {r.title} →
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+          <div style={{ borderRadius: 14, border: `1px solid ${C.hair}`, overflow: "hidden" }}>
+            {topic.faqs.map((f, i) => (
+              <div
+                key={i}
+                style={{
+                  padding: "18px 20px",
+                  borderTop: i === 0 ? "none" : `1px solid ${C.hair}`,
+                }}
+              >
+                <p style={{ fontWeight: 600, margin: 0, color: C.paper }}>{f.q}</p>
+                <p style={{ fontSize: 15, lineHeight: 1.6, color: C.slate, margin: "6px 0 0" }}>{f.a}</p>
+              </div>
+            ))}
+          </div>
         </section>
-      )}
 
-      <p className="border-t border-border pt-4 text-xs text-muted-foreground">
-        Educational content only — not investment advice, and not a recommendation to buy or sell
-        any security. MindMarket helps you measure and understand risk you already own.
-      </p>
-    </article>
+        {/* Related */}
+        {topic.related.length > 0 && (
+          <section style={{ marginTop: 40 }}>
+            <p
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: ".14em",
+                color: C.slate,
+                margin: "0 0 12px",
+              }}
+            >
+              Keep learning
+            </p>
+            <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+              {topic.related.map((slug) => {
+                const r = LEARN_BY_SLUG[slug];
+                if (!r) return null;
+                return (
+                  <li key={slug}>
+                    <Link href={`/learn/${slug}`} style={{ ...linkStyle, fontSize: 15 }}>
+                      {r.title} →
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
+        <div style={{ marginTop: 40, borderTop: `1px solid ${C.hair}`, paddingTop: 20 }}>
+          <Disclaimer>
+            Educational content only — not investment advice, and not a recommendation to buy or sell
+            any security. MindMarket helps you measure and understand risk you already own.
+          </Disclaimer>
+        </div>
+      </article>
+    </MarketingShell>
   );
 }

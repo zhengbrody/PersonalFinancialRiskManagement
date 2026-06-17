@@ -1,0 +1,184 @@
+"use client";
+
+/**
+ * Full-bleed chrome for every pre-login marketing/content surface: the premium
+ * dark background + a fixed, scroll-aware, auth-aware top nav + a footer with
+ * site links. Pages render their own sections inside; SiteShell renders these
+ * routes bare (no app header) so this owns the viewport.
+ *
+ * `minimal` (auth pages): logo-only nav + a slim footer — no nav links / CTAs.
+ */
+
+import { useEffect, useState, type ReactNode } from "react";
+import Link from "next/link";
+import { Logo } from "@/components/ui/logo";
+import { useAuth } from "@/lib/auth-context";
+import { isBillingEnabled } from "@/lib/billing-flag";
+import { C } from "./theme";
+import { CTA } from "./primitives";
+
+export function MarketingShell({
+  children,
+  minimal = false,
+}: {
+  children: ReactNode;
+  minimal?: boolean;
+}) {
+  return (
+    <div
+      className="dark"
+      style={{
+        background: C.ink,
+        color: C.paper,
+        fontFamily: "var(--font-geist-sans, system-ui, sans-serif)",
+        overflowX: "hidden",
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      <MarketingNav minimal={minimal} />
+      <div style={{ flex: 1 }}>{children}</div>
+      <MarketingFooter minimal={minimal} />
+    </div>
+  );
+}
+
+function Wordmark({ size = 26 }: { size?: number }) {
+  return (
+    <Link
+      href="/"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        fontWeight: 600,
+        fontSize: 15,
+        color: C.paper,
+        textDecoration: "none",
+        letterSpacing: "-0.02em",
+      }}
+    >
+      <Logo size={size} />
+      MindMarket
+    </Link>
+  );
+}
+
+const NAV_LINKS: [string, string][] = [
+  ["Product", "/product"],
+  ["Learn", "/learn"],
+  ["Markets", "/markets"],
+  ["Demo", "/demo-risk-check"],
+];
+
+function MarketingNav({ minimal }: { minimal: boolean }) {
+  const { user, configured } = useAuth();
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 12);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  const signedIn = configured && !!user;
+
+  return (
+    <nav
+      style={{
+        position: "fixed",
+        insetInline: 0,
+        top: 0,
+        zIndex: 50,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: scrolled ? "12px 32px" : "16px 32px",
+        background: scrolled ? "rgba(7,9,12,0.72)" : "transparent",
+        backdropFilter: scrolled ? "blur(14px)" : "none",
+        borderBottom: `1px solid ${scrolled ? C.hair : "transparent"}`,
+        transition: "all .3s",
+      }}
+    >
+      <Wordmark />
+      {minimal ? (
+        <Link href="/" style={{ color: C.slate, fontSize: 14, textDecoration: "none" }}>
+          ← Back to site
+        </Link>
+      ) : (
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="mm-nav-links" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {NAV_LINKS.map(([l, href]) => (
+              <Link
+                key={href}
+                href={href}
+                style={{
+                  color: C.slate,
+                  fontSize: 14,
+                  padding: "8px 14px",
+                  borderRadius: 8,
+                  textDecoration: "none",
+                }}
+              >
+                {l}
+              </Link>
+            ))}
+          </div>
+          {signedIn ? (
+            <CTA href="/">Open dashboard</CTA>
+          ) : (
+            <>
+              <CTA variant="ghost" href="/login">
+                Sign in
+              </CTA>
+              <CTA href="/signup">Get started</CTA>
+            </>
+          )}
+        </div>
+      )}
+    </nav>
+  );
+}
+
+function MarketingFooter({ minimal }: { minimal: boolean }) {
+  // Explore links only — the nav owns the Sign in / Get started actions.
+  const links: [string, string][] = [
+    ["Product", "/product"],
+    ["Learn", "/learn"],
+    ["Markets", "/markets"],
+    ["Demo", "/demo-risk-check"],
+    // Pricing only when billing is live (hidden during free beta, like the app nav).
+    ...(isBillingEnabled() ? ([["Pricing", "/pricing"]] as [string, string][]) : []),
+  ];
+  return (
+    <footer style={{ padding: "48px 32px 60px", borderTop: `1px solid ${C.hair}` }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 18,
+          }}
+        >
+          <Wordmark size={24} />
+          {!minimal && (
+            <nav className="mm-footer-links" style={{ display: "flex", flexWrap: "wrap", gap: 18, fontSize: 14 }}>
+              {links.map(([l, href]) => (
+                <Link key={href} href={href} style={{ color: C.slate, textDecoration: "none" }}>
+                  {l}
+                </Link>
+              ))}
+            </nav>
+          )}
+        </div>
+        <p style={{ fontSize: 12.5, color: C.slateDim, maxWidth: "60em", lineHeight: 1.5, margin: 0 }}>
+          MindMarket provides educational portfolio analytics and software demonstrations. It does
+          not provide investment, tax, legal, or financial advice. Figures shown before sign-in use
+          fixed sample books, not live prices.
+        </p>
+      </div>
+    </footer>
+  );
+}

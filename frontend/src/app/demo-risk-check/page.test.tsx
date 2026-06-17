@@ -9,6 +9,11 @@ vi.mock("@/components/ui/bar-chart", () => ({
 const trackMock = vi.fn();
 vi.mock("@/lib/analytics", () => ({ track: (...a: unknown[]) => trackMock(...a) }));
 
+// The page now wears <MarketingShell> (auth-aware nav) — stub anon.
+vi.mock("@/lib/auth-context", () => ({
+  useAuth: () => ({ user: null, configured: false, loading: false }),
+}));
+
 import DemoRiskCheckPage from "./page";
 
 beforeEach(() => trackMock.mockClear());

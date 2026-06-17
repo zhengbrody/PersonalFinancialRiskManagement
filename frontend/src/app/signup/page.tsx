@@ -15,16 +15,18 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { track } from "@/lib/analytics";
 import { useAuth } from "@/lib/auth-context";
+import { MarketingShell } from "@/components/marketing/marketing-shell";
+import { C, display } from "@/components/marketing/theme";
+
+const cardStyle = {
+  borderRadius: 18,
+  border: `1px solid ${C.hair}`,
+  background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.012))",
+  padding: 26,
+} as const;
 
 const POST_SIGNUP_REDIRECT = "/portfolios";
 
@@ -85,19 +87,27 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="mx-auto max-w-md py-12">
-      <Card>
-        <CardHeader>
-          <CardTitle>Create your account</CardTitle>
-          <CardDescription>
-            Free during beta. Already have one?{" "}
-            <Link href="/login" className="text-primary hover:underline">
-              Sign in
-            </Link>
-            .
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+    <MarketingShell minimal>
+      <div style={{ maxWidth: 440, margin: "0 auto", padding: "150px 24px 90px" }}>
+        <div style={{ textAlign: "center", marginBottom: 26 }}>
+          <h1
+            style={{
+              ...display,
+              fontWeight: 400,
+              fontSize: "clamp(34px,5vw,46px)",
+              lineHeight: 1.05,
+              letterSpacing: "-0.01em",
+              color: C.paper,
+              margin: "0 0 10px",
+            }}
+          >
+            Create your account
+          </h1>
+          <p style={{ color: C.slate, fontSize: 15, margin: 0 }}>
+            Free during beta — your first Health Score is a minute away.
+          </p>
+        </div>
+        <div style={cardStyle}>
           {!configured ? (
             <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm">
               Supabase is not configured on this build. Set{" "}
@@ -191,9 +201,16 @@ export default function SignupPage() {
             </form>
             </div>
           )}
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+        <p style={{ textAlign: "center", marginTop: 18, fontSize: 14, color: C.slate }}>
+          Already have one?{" "}
+          <Link href="/login" style={{ color: C.teal, textDecoration: "none" }}>
+            Sign in
+          </Link>
+          .
+        </p>
+      </div>
+    </MarketingShell>
   );
 }
 

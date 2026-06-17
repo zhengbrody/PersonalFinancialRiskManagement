@@ -86,3 +86,17 @@
     display: none !important;
   }
 }
+
+/* Linked marketing cards (content pages) — subtle teal hover. The cards carry
+   inline marketing-palette styles; these !important rules layer the hover on
+   top without pulling the whole card into Tailwind classes. */
+.mm-card {
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+.mm-card:hover {
+  border-color: rgba(47, 167, 188, 0.45) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
