@@ -12,6 +12,13 @@ export const metadata: Metadata = {
     description:
       "Score a portfolio with deterministic risk math and plain-English AI explanations.",
     url: "/score",
+    siteName: "MindMarket",
+    images: ["/og.jpg"],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Portfolio Health Score | MindMarket",
+    description: "Score a portfolio with deterministic risk math and plain-English AI explanations.",
   },
 };
 

@@ -1,11 +1,14 @@
 /**
- * /learn — the educational hub. Server component (SSR/SEO). Lists every topic
- * with its blurb + an ItemList JSON-LD so the hub is crawlable.
+ * /learn — the educational hub. Server component (SSR/SEO) on the premium dark
+ * <MarketingShell/>. Lists every topic with its blurb + an ItemList JSON-LD so
+ * the hub is crawlable.
  */
 
 import type { Metadata } from "next";
-import Link from "next/link";
 import { LEARN_TOPICS } from "@/lib/learn-content";
+import { MarketingShell } from "@/components/marketing/marketing-shell";
+import { C } from "@/components/marketing/theme";
+import { Band, CTA, Disclaimer, Em, MarketingCard, MarketingHero, SecTitle } from "@/components/marketing/primitives";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
 
@@ -40,63 +43,74 @@ export default function LearnHubPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8 py-4">
+    <MarketingShell>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListLd) }}
       />
-      <header className="space-y-3">
-        <p className="text-xs font-medium uppercase tracking-widest text-primary">Learn</p>
-        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-          Understand the risk you already own
-        </h1>
-        <p className="text-lg text-muted-foreground">
-          Plain-English, example-led guides to portfolio risk — the same concepts the Health Score
-          and Risk Report are built on. No jargon, no buy/sell calls.
-        </p>
-      </header>
+      <MarketingHero
+        eyebrow="Learn"
+        title={
+          <>
+            Understand the risk you <Em>already own</Em>
+          </>
+        }
+        lede="Plain-English, example-led guides to portfolio risk — the same concepts the Health Score and Risk Report are built on. No jargon, no buy/sell calls."
+      />
 
-      <ul className="grid gap-3 sm:grid-cols-2">
-        {LEARN_TOPICS.map((t) => (
-          <li key={t.slug}>
-            <Link
-              href={`/learn/${t.slug}`}
-              className="block h-full rounded-xl border border-border bg-card p-5 transition hover:border-primary/40 hover:bg-accent"
-            >
-              <p className="text-[10px] font-medium uppercase tracking-widest text-primary">
+      <Band>
+        <div
+          className="mm-hero-grid"
+          style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 16 }}
+        >
+          {LEARN_TOPICS.map((t) => (
+            <MarketingCard key={t.slug} href={`/learn/${t.slug}`}>
+              <p
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: ".12em",
+                  color: C.teal,
+                  margin: 0,
+                }}
+              >
                 {t.eyebrow}
               </p>
-              <p className="mt-1 font-semibold leading-snug">{t.title}</p>
-              <p className="mt-1.5 text-sm text-muted-foreground">{t.description}</p>
-            </Link>
-          </li>
-        ))}
-      </ul>
-
-      <div className="rounded-xl border border-border bg-card p-6 text-center">
-        <p className="font-semibold">Ready to see it on a portfolio?</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Run a deterministic sample cockpit, or score your own holdings free.
-        </p>
-        <div className="mt-3 flex justify-center gap-2">
-          <Link
-            href="/demo-risk-check"
-            className="rounded-md border border-border px-4 py-2 text-sm hover:bg-accent"
-          >
-            Run a sample portfolio
-          </Link>
-          <Link
-            href="/signup"
-            className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90"
-          >
-            Create free account
-          </Link>
+              <h2 style={{ fontSize: 18, margin: "6px 0 8px", lineHeight: 1.25, letterSpacing: "-0.01em" }}>
+                {t.title}
+              </h2>
+              <p style={{ fontSize: 14, lineHeight: 1.6, color: C.slate, margin: 0 }}>{t.description}</p>
+            </MarketingCard>
+          ))}
         </div>
-      </div>
+      </Band>
 
-      <p className="text-xs text-muted-foreground">
-        Educational content only — not investment advice.
-      </p>
-    </div>
+      <Band>
+        <div
+          style={{
+            borderRadius: 20,
+            border: `1px solid ${C.hair}`,
+            background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.012))",
+            padding: "40px 28px",
+            textAlign: "center",
+          }}
+        >
+          <SecTitle>Ready to see it on a portfolio?</SecTitle>
+          <p style={{ fontSize: 16, color: C.slate, margin: "12px auto 24px", maxWidth: "34em" }}>
+            Run a deterministic sample cockpit, or score your own holdings free.
+          </p>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+            <CTA href="/demo-risk-check" variant="ghost">
+              Run a sample portfolio
+            </CTA>
+            <CTA href="/signup">Create free account</CTA>
+          </div>
+        </div>
+        <div style={{ marginTop: 24 }}>
+          <Disclaimer>Educational content only — not investment advice.</Disclaimer>
+        </div>
+      </Band>
+    </MarketingShell>
   );
 }

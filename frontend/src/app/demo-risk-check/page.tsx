@@ -1,14 +1,18 @@
 /**
- * /demo — public, no-auth Demo Risk Check. The fastest path to "I get it":
- * a real, deterministic risk cockpit on a sample book, with a one-click toggle
- * to stress a high-growth portfolio. Server component (SSR/SEO) wrapping the
- * client <SampleCockpit/>; a tiny client ping fires `demo_started` on mount.
+ * /demo-risk-check — public, no-auth Demo Risk Check on the premium dark
+ * <MarketingShell/>. The fastest path to "I get it": a real, deterministic risk
+ * cockpit on a sample book with a one-click high-growth stress toggle. Server
+ * component (SSR/SEO) wrapping the client <SampleCockpit/> (which uses theme
+ * tokens → renders dark under the shell's `dark` root); a tiny client ping fires
+ * `demo_started` on mount.
  */
 
 import type { Metadata } from "next";
-import Link from "next/link";
 import { SampleCockpit } from "@/components/sample-cockpit";
 import { DemoStartedPing } from "@/components/demo-started-ping";
+import { MarketingShell } from "@/components/marketing/marketing-shell";
+import { C } from "@/components/marketing/theme";
+import { CTA, Disclaimer, Em, MarketingHero } from "@/components/marketing/primitives";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
 
@@ -31,50 +35,65 @@ export const metadata: Metadata = {
 
 export default function DemoRiskCheckPage() {
   return (
-    <div className="mx-auto max-w-3xl space-y-8 py-4">
+    <MarketingShell>
       <DemoStartedPing />
-      <header className="space-y-3">
-        <p className="text-xs font-medium uppercase tracking-widest text-primary">Demo Risk Check</p>
-        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-          See what can break a portfolio — before you add more risk
-        </h1>
-        <p className="text-lg text-muted-foreground">
-          No sign-in. Start with a balanced book, then one-click{" "}
-          <span className="font-medium text-foreground">stress a high-growth portfolio</span> to
-          see how concentration, volatility, and a tech-and-crypto selloff change the picture.
-        </p>
-      </header>
+      <MarketingHero
+        eyebrow="Demo Risk Check"
+        title={
+          <>
+            See what can break a portfolio — <Em>before</Em> you add more risk
+          </>
+        }
+        lede={
+          <>
+            No sign-in. Start with a balanced book, then one-click{" "}
+            <span style={{ color: C.paper, fontWeight: 500 }}>stress a high-growth portfolio</span> to
+            see how concentration, volatility, and a tech-and-crypto selloff change the picture.
+          </>
+        }
+      />
 
-      <SampleCockpit />
+      <div style={{ maxWidth: 920, margin: "0 auto", padding: "28px 24px 8px" }}>
+        <SampleCockpit />
+      </div>
 
-      <section className="flex flex-col items-start gap-3 rounded-xl border border-border bg-card p-6 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="font-semibold">Want this for your own portfolio?</p>
-          <p className="text-sm text-muted-foreground">
-            Add your holdings (or import a CSV) and get a real Health Score, risk report, and
-            AI copilot — free during beta.
-          </p>
+      <div style={{ maxWidth: 920, margin: "0 auto", padding: "16px 24px 64px" }}>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 18,
+            borderRadius: 18,
+            border: `1px solid ${C.hair}`,
+            background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.012))",
+            padding: "24px 26px",
+          }}
+        >
+          <div>
+            <p style={{ fontWeight: 600, fontSize: 17, margin: 0, color: C.paper }}>
+              Want this for your own portfolio?
+            </p>
+            <p style={{ fontSize: 14, color: C.slate, margin: "4px 0 0", maxWidth: "40em" }}>
+              Add your holdings (or import a CSV) and get a real Health Score, risk report, and AI
+              copilot — free during beta.
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <CTA href="/signup">Analyze my portfolio</CTA>
+            <CTA href="/research" variant="ghost">
+              Research a stock
+            </CTA>
+          </div>
         </div>
-        <div className="flex shrink-0 gap-2">
-          <Link
-            href="/signup"
-            className="rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-          >
-            Analyze my portfolio
-          </Link>
-          <Link
-            href="/research"
-            className="rounded-md border border-border px-5 py-2.5 text-sm hover:bg-accent"
-          >
-            Research a stock
-          </Link>
+        <div style={{ marginTop: 18 }}>
+          <Disclaimer>
+            Sample data for illustration — not live prices and not investment advice. Your own
+            cockpit uses real market data with full source provenance.
+          </Disclaimer>
         </div>
-      </section>
-
-      <p className="text-xs text-muted-foreground">
-        Sample data for illustration — not live prices and not investment advice. Your own
-        cockpit uses real market data with full source provenance.
-      </p>
-    </div>
+      </div>
+    </MarketingShell>
   );
 }
