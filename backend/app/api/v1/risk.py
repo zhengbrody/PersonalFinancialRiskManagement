@@ -60,6 +60,7 @@ from ...schemas.risk import (
     StressAssetLoss,
     VarBacktestOut,
 )
+from ...schemas.risk_alerts import RiskAlertsInput, RiskAlertsOutput
 from ...schemas.risk_explain import RiskExplainInput
 
 router = APIRouter(prefix="/api/v1/risk", tags=["risk"])
@@ -1683,6 +1684,31 @@ def explain_endpoint(
         explain_cache.put(cache_key, out.model_dump())
 
     return ok(out.model_dump(), request=request, started_at=started)
+
+
+@router.post(
+    "/alerts",
+    summary="Deterministic top risk alerts (no LLM, no credit) for proactive cards",
+    response_model=None,
+)
+def risk_alerts_endpoint(
+    body: RiskAlertsInput,
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    """Build the top 1-N deterministic risk alerts from numbers the client
+    already fetched (score and/or report). Pure Python — never invents a figure,
+    never calls the LLM, never costs a credit. The frontend renders 1-2 of these
+    as proactive 'Ask Copilot' cards."""
+    started = time.perf_counter()
+    from ...services.risk_alerts import build_risk_alerts
+
+    alerts = build_risk_alerts(body)
+    return ok(
+        RiskAlertsOutput(alerts=alerts).model_dump(),
+        request=request,
+        started_at=started,
+    )
 
 
 # ── benchmark reference context (public) ───────────────────────────

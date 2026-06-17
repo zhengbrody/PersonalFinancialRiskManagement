@@ -27,6 +27,7 @@ import { BenchmarkContext } from "@/components/benchmark-context";
 import { DataProvenance } from "@/components/data-provenance";
 import { VarBacktest } from "@/components/var-backtest";
 import { LearnHint } from "@/components/learn-hint";
+import { RiskAlertsCard } from "@/components/risk-alerts-card";
 import { MetricTrend } from "@/components/metric-trend";
 import { track } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
@@ -53,6 +54,29 @@ export function ReportSections({ report }: { report: RiskReport }) {
   const explainInput = useMemo(() => explainInputFromReport(report), [report]);
   const explain = useRiskExplain(explainInput);
 
+  // Proactive risk-alert input from the report we already have (report-level
+  // concentration + stress are the richest signals).
+  const alertsInput = useMemo(
+    () => ({
+      annual_volatility: report.annual_volatility,
+      max_drawdown: report.max_drawdown,
+      component_var_pct: report.component_var_pct,
+      concentration: report.concentration
+        ? {
+            top_holding_ticker: report.concentration.top_holding_ticker ?? null,
+            top_holding_weight: report.concentration.top_holding_weight ?? null,
+            top5_weight: report.concentration.top5_weight ?? null,
+            top_sector: report.concentration.top_sector ?? null,
+            top_sector_weight: report.concentration.top_sector_weight ?? null,
+          }
+        : null,
+      stress_loss: report.stress_loss,
+      stress_market_shock: report.stress_market_shock,
+      stress_asset_losses: report.stress_asset_losses,
+    }),
+    [report],
+  );
+
   // Fire the −30%…+30% sweep once so the Scenario Explorer has data without a
   // click. Holdings don't change within a mount, so a re-run of the report
   // doesn't need a re-sweep.
@@ -75,6 +99,7 @@ export function ReportSections({ report }: { report: RiskReport }) {
         source="risk"
         title="Executive summary"
       />
+      <RiskAlertsCard input={alertsInput} source="risk" />
       <PortfolioValueSummary metrics={report} />
       <KpiGrid report={report} />
       <BenchmarkContext mine={report} />
