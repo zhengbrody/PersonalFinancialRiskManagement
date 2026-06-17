@@ -16,13 +16,13 @@ export const metadata: Metadata = {
   title: "Demo Risk Check — see your portfolio's hidden risk in 30 seconds",
   description:
     "Try MindMarket's risk cockpit free, no sign-in: score a balanced book, then one-click stress a high-growth portfolio to see concentration, volatility, and crash exposure. Every number is computed, nothing is invented.",
-  alternates: { canonical: "/demo" },
+  alternates: { canonical: "/demo-risk-check" },
   openGraph: {
     type: "website",
     title: "MindMarket — Demo Risk Check",
     description:
       "Score a sample portfolio and stress a high-growth book in 30 seconds — no sign-in. Deterministic risk math, not AI guesswork.",
-    url: `${SITE_URL}/demo`,
+    url: `${SITE_URL}/demo-risk-check`,
     siteName: "MindMarket",
     images: ["/og.jpg"],
   },

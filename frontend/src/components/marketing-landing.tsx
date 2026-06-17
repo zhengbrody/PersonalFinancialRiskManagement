@@ -99,7 +99,7 @@ export function MarketingLanding() {
           without paying $40k for a Bloomberg Terminal.
         </p>
         <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-center md:justify-start">
-          <Link href="/demo">
+          <Link href="/demo-risk-check">
             <Button size="lg" className="w-full sm:w-auto">
               Try a Demo Risk Check
             </Button>
