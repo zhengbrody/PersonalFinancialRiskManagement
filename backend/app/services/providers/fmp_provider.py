@@ -340,6 +340,74 @@ def get_financial_statements(
     return _cached(f"stmts_{period}", tk, _TTL_FUND, _produce)
 
 
+def get_earnings(ticker: str, *, limit: int = 8) -> ProviderResult[list[dict]]:
+    """Historical earnings — actual vs estimate EPS + revenue per period (newest
+    first). Fail-soft; warns ``no_estimates`` when the tier returns actuals only."""
+    tk = ticker.strip().upper()
+
+    def _produce() -> ProviderResult:
+        rows = _get("/earnings", {"symbol": tk, "limit": limit})
+        if not isinstance(rows, list) or not rows:
+            return ProviderResult(data=None, warnings=["no_earnings"])
+        out: list[dict] = []
+        for r in rows:
+            if not isinstance(r, dict) or _pick(r, "date") is None:
+                continue
+            out.append(
+                {
+                    "date": str(_pick(r, "date")),
+                    "eps_actual": _num(_pick(r, "epsActual", "eps")),
+                    "eps_estimate": _num(_pick(r, "epsEstimated", "epsEstimate", "estimatedEps")),
+                    "revenue_actual": _num(_pick(r, "revenueActual", "revenue")),
+                    "revenue_estimate": _num(
+                        _pick(r, "revenueEstimated", "revenueEstimate", "estimatedRevenue")
+                    ),
+                }
+            )
+        if not out:
+            return ProviderResult(data=None, warnings=["no_earnings"])
+        out.sort(key=lambda x: x["date"], reverse=True)
+        has_est = any(
+            x["eps_estimate"] is not None or x["revenue_estimate"] is not None for x in out
+        )
+        return ProviderResult(
+            data=out,
+            source="fmp",
+            as_of=out[0]["date"],
+            coverage=1.0 if has_est else 0.5,
+            warnings=[] if has_est else ["no_estimates"],
+        )
+
+    return _cached("earnings", tk, _TTL_FUND, _produce)
+
+
+def get_transcript_meta(ticker: str, *, excerpt_chars: int = 6000) -> ProviderResult[dict]:
+    """Latest earnings-call transcript metadata + a capped excerpt (the thesis LLM
+    reads the excerpt). Fail-soft; FMP transcripts need a Starter+ plan."""
+    tk = ticker.strip().upper()
+
+    def _produce() -> ProviderResult:
+        import market_intelligence as mi
+
+        res = mi.fetch_latest_transcript_fmp(tk, _key())
+        if not isinstance(res, dict) or res.get("error") or not res.get("content"):
+            reason = str((res or {}).get("error") or "no_transcript")
+            return ProviderResult(data=None, warnings=[reason])
+        content = str(res.get("content") or "")
+        meta = {
+            "year": res.get("year"),
+            "quarter": res.get("quarter"),
+            "date": res.get("date"),
+            "excerpt": content[:excerpt_chars],
+            "excerpt_length": min(len(content), excerpt_chars),
+        }
+        return ProviderResult(
+            data=meta, source="fmp", as_of=str(res.get("date") or "") or None, coverage=1.0
+        )
+
+    return _cached("transcript", tk, _TTL_FUND, _produce)
+
+
 def get_analyst(ticker: str) -> ProviderResult[AnalystConsensus]:
     tk = ticker.upper()
 
