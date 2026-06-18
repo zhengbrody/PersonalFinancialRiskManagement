@@ -37,7 +37,7 @@ const terms: LegalDoc = {
   title: "Terms of Service",
   metaTitle: "Terms of Service — MindMarket",
   description:
-    "The beta terms that govern use of MindMarket AI: eligibility, acceptable use, billing, liability, and governing law.",
+    "The beta terms that govern use of MindMarket AI: eligibility, acceptable use, liability, and governing law.",
   lastUpdated: "2026-05-09",
   intro:
     "These beta terms govern use of MindMarket AI (mindmarket.app). They may be updated before a broader public launch.",
@@ -79,15 +79,11 @@ const terms: LegalDoc = {
       ],
     },
     {
-      heading: "5. Plans and billing",
+      heading: "5. Beta access",
       blocks: [
         {
           kind: "text",
-          text: "We offer Free, Basic, and Pro plans with monthly caps on AI analysis and chat usage. Paid plans are billed monthly via Stripe (when launched). You may cancel any time; access continues through the end of the billing period.",
-        },
-        {
-          kind: "text",
-          text: "We may change pricing with 30 days’ notice. Existing paying subscribers keep their current price for the remainder of their billing period.",
+          text: "MindMarket AI is currently a free educational beta. There are no charges, and no payment information is collected. If paid plans are introduced later, separate billing terms will be presented for your review before any charge applies.",
         },
       ],
     },
@@ -210,12 +206,12 @@ const privacy: LegalDoc = {
             "Portfolio names you assign",
           ],
         },
-        { kind: "lead", label: "Usage data", text: " (for billing / quota enforcement):" },
+        { kind: "lead", label: "Usage data", text: " (for fair-use limits during the beta):" },
         {
           kind: "list",
           items: [
             "Number of AI analyses + chat messages per month",
-            "Plan tier (free / basic / pro)",
+            "Usage tier",
             "Timestamps of usage events",
           ],
         },
@@ -237,7 +233,7 @@ const privacy: LegalDoc = {
           kind: "list",
           items: [
             "Operate the service: store your portfolios, render your dashboards, run analyses you request.",
-            "Bill / enforce quota: track usage events to apply free/basic/pro caps.",
+            "Apply usage limits: track usage events to apply fair-use limits during the beta.",
             "Improve the product: aggregate, anonymized usage statistics. We do not sell user data.",
           ],
         },
