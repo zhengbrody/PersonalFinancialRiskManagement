@@ -56,11 +56,34 @@ engine). The mobile run guards the retention-critical flow on a phone — clicks
 through Playwright's tap-actionability checks, so an off-screen / overlapped
 control on a small viewport fails the test.
 
+## Real-auth smoke (gated, opt-in)
+
+A separate, **non-mocked** smoke (`e2e/real/auth-real.spec.ts`, run via
+`playwright.real.config.ts`) logs a **real Supabase test user** into the
+**deployed** app and verifies the real `/login` → session → protected-route
+chain — the one thing the mocked suite can't. It is **not** part of PR CI; it
+runs only via the `E2E (real auth, nightly)` workflow (schedule + manual
+dispatch) and **self-skips unless credentials are set**.
+
+```bash
+# Run it locally against production (or set E2E_BASE_URL to a preview):
+E2E_REAL_EMAIL='test@example.com' E2E_REAL_PASSWORD='…' npm run test:e2e:real
+# Without those two env vars it skips cleanly (no-op).
+```
+
+**To enable in CI (one-time, owner):**
+1. Create a **throwaway test user** in the Supabase project the deployed app
+   uses (Authentication → Users → Add user, email confirmed). NOT the owner
+   account; no sensitive data. (A separate Supabase *project* is **not** needed
+   for this smoke — it runs against the live app, which uses the live project.)
+2. Add repo **Secrets** `E2E_REAL_EMAIL` + `E2E_REAL_PASSWORD`.
+3. (Optional) repo **Variable** `E2E_BASE_URL` to target a non-prod URL.
+4. (Optional) seed that user a small portfolio so the score surfaces render.
+
 ## Not covered (yet)
 
-- Real signup/login against Supabase, OAuth, password reset (would need a test
-  Supabase project + seeded users; out of scope for a deterministic suite).
-- Real backend/LLM responses, billing/Stripe checkout, multi-portfolio CRUD.
+- OAuth / password-reset / signup flows; multi-portfolio CRUD; billing/Stripe
+  checkout; real LLM-response assertions (non-deterministic by nature).
 - True iOS/Safari rendering (mobile runs on Chromium; WebKit would need
   `playwright install webkit`) and visual-regression snapshots.
 

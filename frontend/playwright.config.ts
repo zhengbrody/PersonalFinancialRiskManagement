@@ -31,6 +31,9 @@ const E2E_ENV: Record<string, string> = {
 export default defineConfig({
   testDir: "./e2e",
   testMatch: /.*\.spec\.ts/,
+  // The gated real-auth smoke (e2e/real/*) runs via playwright.real.config.ts
+  // against a deployed app — keep it out of this mocked, default suite.
+  testIgnore: /real\//,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
