@@ -17,15 +17,18 @@ import json
 import logging
 import time
 
-from fastapi import APIRouter, Depends, Path, Request
+from fastapi import APIRouter, Depends, Path, Query, Request
 
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import ok, too_many_requests, unprocessable
 from ...schemas.news import TickerNewsResponse
 from ...schemas.research import FactPack, VerdictRequest
+from ...schemas.valuation import DCFRequest
 from ...services import news as news_svc
+from ...services import research_dcf as rdcf
 from ...services import research_factpack as rf
 from ...services import research_financials as rfin
+from ...services import research_peers as rpeers
 
 router = APIRouter(prefix="/api/v1/research", tags=["research"])
 
@@ -80,6 +83,55 @@ def research_fact_pack(
         )
         raise unprocessable(f"Could not build a research FactPack for {ticker!r}.") from exc
     return ok({"fact_pack": pack.model_dump()}, request=request, started_at=started)
+
+
+@router.post(
+    "/{ticker}/dcf",
+    summary="Deterministic DCF valuation (accepts user overrides; no credit)",
+    response_model=None,
+)
+def dcf_valuation(
+    body: DCFRequest,
+    request: Request,
+    ticker: str = Path(min_length=1, max_length=20),
+    user: AuthedUser = Depends(require_user),
+):
+    """Deterministic DCF — assumptions derived from reported financials (each
+    labeled with its source_type) + optional user overrides. Returns the full
+    DCFValuationOutput; an invalid setup (e.g. terminal growth ≥ WACC, or
+    insufficient data) comes back with `valid=false` + warnings rather than a
+    bogus number. No LLM, no credit, fail-soft."""
+    started = time.perf_counter()
+    try:
+        out = rdcf.build_dcf(ticker, body.overrides if body else None)
+    except Exception as exc:  # noqa: BLE001 - builder is fail-soft; backstop
+        _log.warning("research.dcf.failed ticker=%s err=%s", ticker, type(exc).__name__)
+        raise unprocessable(f"Could not build a DCF for {ticker!r}.") from exc
+    return ok({"dcf": out.model_dump()}, request=request, started_at=started)
+
+
+@router.get(
+    "/{ticker}/peers",
+    summary="Deterministic peer comparison with percentiles (no credit)",
+    response_model=None,
+)
+def peer_comparison(
+    request: Request,
+    ticker: str = Path(min_length=1, max_length=20),
+    peers: str | None = Query(default=None, description="Optional comma-separated user peers"),
+    user: AuthedUser = Depends(require_user),
+):
+    """Deterministic peer set (FMP peers → sector/industry → curated → user) with
+    per-metric peer median + the subject's percentile rank, missing-data flags,
+    and provenance. No LLM, no credit, fail-soft."""
+    started = time.perf_counter()
+    user_peers = [p.strip().upper() for p in peers.split(",") if p.strip()] if peers else None
+    try:
+        out = rpeers.build_peer_comparison(ticker, user_peers=user_peers)
+    except Exception as exc:  # noqa: BLE001 - fail-soft backstop
+        _log.warning("research.peers.failed ticker=%s err=%s", ticker, type(exc).__name__)
+        raise unprocessable(f"Could not build a peer comparison for {ticker!r}.") from exc
+    return ok({"peers": out.model_dump()}, request=request, started_at=started)
 
 
 @router.get(

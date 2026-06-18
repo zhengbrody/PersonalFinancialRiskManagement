@@ -263,11 +263,15 @@ describe("ResearchPage", () => {
       screen.getByText(/high gross margins and durable franchise/i),
     ).toBeInTheDocument();
 
-    // ── Valuation tab: band pill + dividend yield + peers.
+    // ── Valuation tab: band pill + dividend yield (the deterministic DCF
+    // section self-fetches and is exercised separately).
     await user.click(screen.getByRole("tab", { name: /valuation/i }));
     expect(await screen.findByText(/^rich$/i)).toBeInTheDocument();
     expect(screen.getByText("2.5%")).toBeInTheDocument(); // dividend yield
-    expect(screen.getByText(/peer comparison/i)).toBeInTheDocument();
+
+    // ── Peers tab: the FactPack peer-comparison card.
+    await user.click(screen.getByRole("tab", { name: /^peers$/i }));
+    expect(await screen.findByText(/peer comparison/i)).toBeInTheDocument();
 
     // ── Fundamentals tab: debt/equity + ownership/insider.
     await user.click(screen.getByRole("tab", { name: /fundamentals/i }));

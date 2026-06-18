@@ -38,6 +38,8 @@ import { TickerNews } from "@/components/ticker-news";
 import { LearnHint } from "@/components/learn-hint";
 import { ReportExportButton } from "@/components/report-export-button";
 import { ResearchFinancials } from "@/components/research-financials";
+import { ValuationDcf } from "@/components/valuation-dcf";
+import { PeersComparison } from "@/components/peers-comparison";
 import { ApiError } from "@/lib/api";
 import { BETA_LIMIT_MESSAGE, isBillingEnabled } from "@/lib/billing-flag";
 import { useAuth } from "@/lib/auth-context";
@@ -171,6 +173,7 @@ function ResearchWorkbench() {
 const RESEARCH_TABS = [
   { value: "overview", label: "Overview" },
   { value: "valuation", label: "Valuation" },
+  { value: "peers", label: "Peers" },
   { value: "fundamentals", label: "Fundamentals" },
   { value: "financials", label: "Financials" },
   { value: "technicals", label: "Technicals" },
@@ -200,6 +203,12 @@ function ResearchTabs({ fp, verdict }: { fp: FactPack; verdict?: ResearchVerdict
       {tab === "valuation" && (
         <div className="space-y-4">
           <ValuationCard fp={fp} />
+          <ValuationDcf ticker={fp.ticker} />
+        </div>
+      )}
+      {tab === "peers" && (
+        <div className="space-y-4">
+          <PeersComparison ticker={fp.ticker} />
           {fp.peers.length > 0 && <PeersCard fp={fp} />}
         </div>
       )}
