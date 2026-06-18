@@ -24,8 +24,19 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { MarketRegime } from "@/components/market-regime";
 import { PortfolioValueSummary } from "@/components/portfolio-value-summary";
+import dynamic from "next/dynamic";
 import { ScoreGauge } from "@/components/score-gauge";
 import { RiskDiagnosis } from "@/components/risk-diagnosis";
+// Lazy-loaded: keeps recharts OUT of the `/` route bundle, which the anonymous
+// SEO landing (also `/`) shares — only the signed-in dashboard pulls the chunk.
+const AllocationDonut = dynamic(
+  () => import("@/components/ui/allocation-donut").then((m) => m.AllocationDonut),
+  { ssr: false },
+);
+const MiniSparkline = dynamic(
+  () => import("@/components/ui/mini-sparkline").then((m) => m.MiniSparkline),
+  { ssr: false },
+);
 import { track } from "@/lib/analytics";
 import { isNoPortfolioError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -34,6 +45,7 @@ import {
   useLastSnapshot,
   useRiskExplain,
   useActiveScore,
+  useSnapshotHistory,
 } from "@/lib/queries";
 import type { LastSnapshot } from "@/lib/queries";
 import { explainInputFromScore } from "@/lib/risk-explain-input";
@@ -52,6 +64,10 @@ export function Dashboard() {
   const score = useActiveScore();
   const billing = useBillingMe();
   const lastSnapshot = useLastSnapshot();
+  const history = useSnapshotHistory();
+  const scoreTrend = (history.data?.snapshots ?? [])
+    .map((s) => s.overall_score)
+    .filter((n): n is number => typeof n === "number");
 
   // Fire the funnel event once per score result (not on every render).
   const trackedScore = useRef<number | null>(null);
@@ -90,7 +106,7 @@ export function Dashboard() {
       {score.data && (
         <>
           <ChangeSinceLastVisit current={score.data} prev={lastSnapshot.data?.snapshot} />
-          <ScoreHero score={score.data} />
+          <ScoreHero score={score.data} scoreTrend={scoreTrend} />
           <PortfolioValueSummary metrics={score.data.metrics} />
           <RiskDiagnosis explain={explain.data} loading={explain.isLoading} source="score" />
         </>
@@ -167,8 +183,9 @@ function fmtDate(iso: string): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function ScoreHero({ score }: { score: ScoreResponse }) {
+function ScoreHero({ score, scoreTrend }: { score: ScoreResponse; scoreTrend?: number[] }) {
   const tone = scoreTone(score.overall_score);
+  const sectors = score.concentration?.sectors ?? [];
   const dims = Object.values(score.dimensions);
   const weakest = dims.length
     ? dims.reduce((a, b) => (b.score < a.score ? b : a))
@@ -189,6 +206,12 @@ function ScoreHero({ score }: { score: ScoreResponse }) {
                 </span>
                 <span className="text-lg text-muted-foreground">/ 1000</span>
               </div>
+              {scoreTrend && scoreTrend.length >= 2 && (
+                <div className="mt-1 flex items-center gap-1.5">
+                  <MiniSparkline data={scoreTrend} width={72} height={22} />
+                  <span className="text-[10px] text-muted-foreground">score trend</span>
+                </div>
+              )}
             </div>
             <div className="flex gap-2">
               <Link href="/risk">
@@ -204,6 +227,18 @@ function ScoreHero({ score }: { score: ScoreResponse }) {
             </div>
           </div>
           <ScoreGauge score={score.overall_score} />
+          {sectors.length > 0 && (
+            <div className="border-t border-border pt-4">
+              <p className="mb-2 text-xs uppercase tracking-widest text-muted-foreground">
+                Sector allocation
+              </p>
+              <AllocationDonut
+                slices={sectors.map((s) => ({ label: s.sector, weight: s.weight }))}
+                centerTop={String(score.concentration?.num_holdings ?? "")}
+                centerSub="holdings"
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
 

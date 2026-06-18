@@ -11,6 +11,7 @@
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Kpi } from "@/components/ui/kpi";
+import { AllocationDonut } from "@/components/ui/allocation-donut";
 import type { Concentration } from "@/lib/schemas";
 
 const pct = (v: number | null | undefined) =>
@@ -36,6 +37,13 @@ export function ScoreConcentration({
         <CardDescription>How much of your book rides on one name or one sector.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        {c.sectors && c.sectors.length > 0 && (
+          <AllocationDonut
+            slices={c.sectors.map((s) => ({ label: s.sector, weight: s.weight }))}
+            centerTop={String(c.num_holdings)}
+            centerSub="holdings"
+          />
+        )}
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
           <Kpi
             label={c.top_holding_ticker ? `Top · ${c.top_holding_ticker}` : "Top holding"}
