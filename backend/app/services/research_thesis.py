@@ -10,14 +10,15 @@ produces a number we treat as truth — numbers come from the engines.
 
 from __future__ import annotations
 
-import json
 import logging
 import re
-from datetime import datetime, timezone
 from typing import Callable, Optional
+
+from libs.analysis.equity_research import _extract_json
 
 from ..schemas.report import ThesisOutput
 from . import ai_eval, research_dcf, research_earnings, research_factpack
+from ._common import iso_now, safe
 from .providers import fmp_provider
 
 _log = logging.getLogger(__name__)
@@ -42,17 +43,6 @@ _SYSTEM = (
 _FIG_RE = re.compile(r"\$\s?\d[\d,]*\.?\d*|\d[\d,]*\.?\d*\s?%|\d[\d.]*\s?[x×]")
 
 
-def _iso_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _safe(fn):
-    try:
-        return fn()
-    except Exception:  # noqa: BLE001 - evidence is best-effort
-        return None
-
-
 def _add(numbers: set[float], lines: list[str], label: str, val, kind: str = "num") -> None:
     if val is None:
         return
@@ -71,11 +61,19 @@ def _add(numbers: set[float], lines: list[str], label: str, val, kind: str = "nu
         lines.append(f"{label}: {f:,.1f}")
 
 
-def _gather(ticker: str):
-    """Deterministic evidence text + the allowlist of numbers it contains."""
-    fp = _safe(lambda: research_factpack.build_fact_pack(ticker))
-    dcf = _safe(lambda: research_dcf.build_dcf(ticker))
-    earn = _safe(lambda: research_earnings.build_earnings_comparison(ticker))
+def _gather(ticker: str, *, fp=None, dcf=None, earn=None):
+    """Deterministic evidence text + the allowlist of numbers it contains. The
+    engines may be passed in already-built (the analyst report assembles them
+    once and reuses them here) — otherwise they're built on demand."""
+    if fp is None:
+        fp = safe("research.thesis.factpack", lambda: research_factpack.build_fact_pack(ticker))
+    if dcf is None:
+        dcf = safe("research.thesis.dcf", lambda: research_dcf.build_dcf(ticker))
+    if earn is None:
+        earn = safe(
+            "research.thesis.earnings",
+            lambda: research_earnings.build_earnings_comparison(ticker),
+        )
 
     lines: list[str] = []
     numbers: set[float] = set()
@@ -111,7 +109,7 @@ def _gather(ticker: str):
         if earn.summary.headline:
             lines.append("Latest quarter — " + earn.summary.headline)
 
-    tr = _safe(lambda: fmp_provider.get_transcript_meta(ticker).data)
+    tr = safe("research.thesis.transcript", lambda: fmp_provider.get_transcript_meta(ticker).data)
     if tr and tr.get("excerpt"):
         lines.append("Management transcript excerpt:\n" + str(tr["excerpt"])[:3500])
 
@@ -123,11 +121,20 @@ def _parse_tokens(text: str) -> list[str]:
 
 
 def _token_value(tok: str) -> Optional[float]:
-    t = tok.strip().lower().replace(",", "").replace("$", "").replace("×", "").replace("x", "")
-    is_pct = "%" in t
-    t = t.replace("%", "").strip()
+    # Percent tokens are kept in display form (26.9% → 26.9) to match the
+    # allowlist, which `_add` also stores in display form (round(f * 100, 1)).
+    t = (
+        tok.strip()
+        .lower()
+        .replace(",", "")
+        .replace("$", "")
+        .replace("×", "")
+        .replace("x", "")
+        .replace("%", "")
+        .strip()
+    )
     try:
-        return float(t) if not is_pct else float(t)  # percent kept in display form
+        return float(t)
     except ValueError:
         return None
 
@@ -169,9 +176,16 @@ def _strlist(v, cap: int = 6) -> list[str]:
     return [str(x).strip() for x in v if str(x).strip()][:cap]
 
 
-def build_thesis(ticker: str, *, llm_callable: Optional[Callable[..., str]] = None) -> ThesisOutput:
+def build_thesis(
+    ticker: str,
+    *,
+    llm_callable: Optional[Callable[..., str]] = None,
+    fp=None,
+    dcf=None,
+    earn=None,
+) -> ThesisOutput:
     tk = ticker.strip().upper()
-    evidence, numbers, fp, dcf, earn = _gather(tk)
+    evidence, numbers, fp, dcf, earn = _gather(tk, fp=fp, dcf=dcf, earn=earn)
 
     if llm_callable is None:
         return _fallback(tk, fp, dcf, earn)
@@ -182,7 +196,7 @@ def build_thesis(ticker: str, *, llm_callable: Optional[Callable[..., str]] = No
     )
     try:
         raw = llm_callable(prompt=prompt, system=_SYSTEM, max_tokens=1200, temperature=0.3)
-        data = _parse_json(raw)
+        data = _extract_json(raw or "")
     except Exception as exc:  # noqa: BLE001
         _log.warning("research.thesis.llm_failed ticker=%s err=%s", tk, type(exc).__name__)
         return _fallback(tk, fp, dcf, earn)
@@ -191,7 +205,7 @@ def build_thesis(ticker: str, *, llm_callable: Optional[Callable[..., str]] = No
 
     out = ThesisOutput(
         ticker=tk,
-        generated_at=_iso_now(),
+        generated_at=iso_now(),
         ai_generated=True,
         bull_case=_strlist(data.get("bull_case")),
         bear_case=_strlist(data.get("bear_case")),
@@ -207,27 +221,11 @@ def build_thesis(ticker: str, *, llm_callable: Optional[Callable[..., str]] = No
     return out
 
 
-def _parse_json(raw: Optional[str]) -> Optional[dict]:
-    if not raw:
-        return None
-    s = raw.strip()
-    if s.startswith("```"):
-        s = s.split("```", 2)[1] if "```" in s[3:] else s.strip("`")
-        s = s[4:] if s.lower().startswith("json") else s
-    start, end = s.find("{"), s.rfind("}")
-    if start == -1 or end == -1:
-        return None
-    try:
-        return json.loads(s[start : end + 1])
-    except json.JSONDecodeError:
-        return None
-
-
 def _fallback(ticker, fp, dcf, earn) -> ThesisOutput:
     """Deterministic thesis from the evidence — used when no/failed LLM. Bull from
     drivers + DCF upside, bear from risk flags + DCF downside, monitor from
     earnings. No numbers are invented; all come from the engines."""
-    out = ThesisOutput(ticker=ticker, generated_at=_iso_now(), ai_generated=False)
+    out = ThesisOutput(ticker=ticker, generated_at=iso_now(), ai_generated=False)
     if fp is not None:
         out.bull_case = list(fp.drivers[:4])
         out.bear_case = list(fp.risk_flags[:4])

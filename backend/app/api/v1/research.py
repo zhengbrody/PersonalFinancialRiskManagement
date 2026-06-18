@@ -229,12 +229,12 @@ def research_thesis(
         raise unprocessable(f"Could not build a thesis for {tk!r}.") from exc
 
     if llm is not None and out.ai_generated:
-        _record_thesis_cost(user.id, out, started)
+        _record_thesis_cost(user.id, out, started, input_hash_value=cache_key)
         verdict_cache.put(cache_key, out.model_dump())
     return ok({"thesis": out.model_dump()}, request=request, started_at=started)
 
 
-def _record_thesis_cost(user_id: str, thesis, started: float) -> None:
+def _record_thesis_cost(user_id: str, thesis, started: float, *, input_hash_value: str) -> None:
     from libs.billing.costs import estimate_tokens
 
     from ...services.ai_telemetry import record_ai_call
@@ -247,6 +247,7 @@ def _record_thesis_cost(user_id: str, thesis, started: float) -> None:
         tokens_in=1500,  # evidence + system prompt (rough)
         tokens_out=estimate_tokens(body),
         latency_ms=(time.perf_counter() - started) * 1000,
+        input_hash=input_hash_value,
     )
 
 
