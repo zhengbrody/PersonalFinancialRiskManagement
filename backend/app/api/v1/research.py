@@ -26,9 +26,12 @@ from ...schemas.research import FactPack, VerdictRequest
 from ...schemas.valuation import DCFRequest
 from ...services import news as news_svc
 from ...services import research_dcf as rdcf
+from ...services import research_earnings as rearn
 from ...services import research_factpack as rf
 from ...services import research_financials as rfin
 from ...services import research_peers as rpeers
+from ...services import research_report as rreport
+from ...services import research_thesis as rthesis
 
 router = APIRouter(prefix="/api/v1/research", tags=["research"])
 
@@ -132,6 +135,119 @@ def peer_comparison(
         _log.warning("research.peers.failed ticker=%s err=%s", ticker, type(exc).__name__)
         raise unprocessable(f"Could not build a peer comparison for {ticker!r}.") from exc
     return ok({"peers": out.model_dump()}, request=request, started_at=started)
+
+
+@router.get(
+    "/{ticker}/earnings",
+    summary="Deterministic earnings comparison + transcript metadata (no credit)",
+    response_model=None,
+)
+def earnings_comparison(
+    request: Request,
+    ticker: str = Path(min_length=1, max_length=20),
+    user: AuthedUser = Depends(require_user),
+):
+    """Recent quarters: revenue/EPS vs prior-quarter / prior-year, beat/miss vs
+    estimate ONLY when estimate data exists, plus transcript metadata. Missing
+    estimates/transcript are explicit. No LLM, no credit, fail-soft."""
+    started = time.perf_counter()
+    try:
+        out = rearn.build_earnings_comparison(ticker)
+    except Exception as exc:  # noqa: BLE001 - fail-soft backstop
+        _log.warning("research.earnings.failed ticker=%s err=%s", ticker, type(exc).__name__)
+        raise unprocessable(f"Could not build an earnings comparison for {ticker!r}.") from exc
+    return ok({"earnings": out.model_dump()}, request=request, started_at=started)
+
+
+@router.get(
+    "/{ticker}/report",
+    summary="Institutional analyst HTML report — all sections, deterministic (no credit)",
+    response_model=None,
+)
+def analyst_report(
+    request: Request,
+    ticker: str = Path(min_length=1, max_length=20),
+    user: AuthedUser = Depends(require_user),
+):
+    """Self-contained, PDF-ready HTML research report assembled server-side from
+    the deterministic engines (snapshot, exec summary, financials, DCF + scenario,
+    peers, earnings, risks, monitoring, provenance appendix, disclaimer). No
+    recomputation in the frontend, no LLM number. Fail-soft per section."""
+    started = time.perf_counter()
+    try:
+        out = rreport.build_analyst_report(ticker)
+    except Exception as exc:  # noqa: BLE001 - fail-soft backstop
+        _log.warning("research.report.failed ticker=%s err=%s", ticker, type(exc).__name__)
+        raise unprocessable(f"Could not build a report for {ticker!r}.") from exc
+    return ok({"report": out.model_dump()}, request=request, started_at=started)
+
+
+@router.post(
+    "/{ticker}/thesis",
+    summary="AI-grounded bull/bear/monitor thesis over deterministic evidence (credit-gated)",
+    response_model=None,
+)
+def research_thesis(
+    request: Request,
+    ticker: str = Path(min_length=1, max_length=20),
+    user: AuthedUser = Depends(require_user),
+):
+    """Bull/bear debate + what-to-monitor + management questions, written by the
+    LLM over the deterministic FactPack/DCF/earnings evidence ONLY (no invented
+    numbers — validated + flagged; no buy/sell/hold). No LLM key / failure →
+    deterministic fallback. Credit-gated; cache hit is free."""
+    started = time.perf_counter()
+    tk = ticker.strip().upper()
+
+    from ...services.ai_cache import verdict_cache
+    from ...services.ai_telemetry import input_hash
+
+    cache_key = input_hash(f"thesis:{tk}")
+    cached = verdict_cache.get(cache_key)
+    if cached is not None:
+        return ok({"thesis": cached}, request=request, started_at=started)
+
+    from ...services.llm_client import get_llm_callable
+
+    llm = get_llm_callable(with_tools=False)
+    if llm is not None:
+        from libs.billing.usage import ESTIMATED_COST_USD, QuotaExceeded, check_credits
+
+        try:
+            check_credits(
+                user.id, email=user.email, estimated_cost_usd=ESTIMATED_COST_USD["analysis"]
+            )
+        except QuotaExceeded as exc:
+            raise too_many_requests(str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001 - fail-open on a metering blip
+            _log.warning("research.thesis.credit_check_failed reason=%s", type(exc).__name__)
+
+    try:
+        out = rthesis.build_thesis(tk, llm_callable=llm)
+    except Exception as exc:  # noqa: BLE001 - builder is fail-soft; backstop
+        _log.warning("research.thesis.failed ticker=%s err=%s", tk, type(exc).__name__)
+        raise unprocessable(f"Could not build a thesis for {tk!r}.") from exc
+
+    if llm is not None and out.ai_generated:
+        _record_thesis_cost(user.id, out, started)
+        verdict_cache.put(cache_key, out.model_dump())
+    return ok({"thesis": out.model_dump()}, request=request, started_at=started)
+
+
+def _record_thesis_cost(user_id: str, thesis, started: float) -> None:
+    from libs.billing.costs import estimate_tokens
+
+    from ...services.ai_telemetry import record_ai_call
+
+    body = json.dumps(thesis.model_dump(), default=str)
+    record_ai_call(
+        user_id,
+        "analysis",
+        model=_VERDICT_MODEL,
+        tokens_in=1500,  # evidence + system prompt (rough)
+        tokens_out=estimate_tokens(body),
+        latency_ms=(time.perf_counter() - started) * 1000,
+    )
 
 
 @router.get(

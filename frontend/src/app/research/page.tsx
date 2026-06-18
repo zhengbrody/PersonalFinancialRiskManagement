@@ -40,6 +40,9 @@ import { ReportExportButton } from "@/components/report-export-button";
 import { ResearchFinancials } from "@/components/research-financials";
 import { ValuationDcf } from "@/components/valuation-dcf";
 import { PeersComparison } from "@/components/peers-comparison";
+import { EarningsComparison } from "@/components/earnings-comparison";
+import { ResearchThesis } from "@/components/research-thesis";
+import { AnalystReportView } from "@/components/analyst-report";
 import { ApiError } from "@/lib/api";
 import { BETA_LIMIT_MESSAGE, isBillingEnabled } from "@/lib/billing-flag";
 import { useAuth } from "@/lib/auth-context";
@@ -176,9 +179,11 @@ const RESEARCH_TABS = [
   { value: "peers", label: "Peers" },
   { value: "fundamentals", label: "Fundamentals" },
   { value: "financials", label: "Financials" },
+  { value: "earnings", label: "Earnings" },
   { value: "technicals", label: "Technicals" },
   { value: "news", label: "News & Events" },
   { value: "risks", label: "Risks" },
+  { value: "report", label: "Report" },
   { value: "sources", label: "Sources" },
 ];
 
@@ -197,6 +202,7 @@ function ResearchTabs({ fp, verdict }: { fp: FactPack; verdict?: ResearchVerdict
       {tab === "overview" && (
         <div className="space-y-4">
           <SignalsCard fp={fp} />
+          <ResearchThesis ticker={fp.ticker} />
           <AnalystCard fp={fp} />
         </div>
       )}
@@ -220,6 +226,8 @@ function ResearchTabs({ fp, verdict }: { fp: FactPack; verdict?: ResearchVerdict
         </div>
       )}
       {tab === "financials" && <ResearchFinancials ticker={fp.ticker} />}
+      {tab === "earnings" && <EarningsComparison ticker={fp.ticker} />}
+      {tab === "report" && <AnalystReportView ticker={fp.ticker} />}
       {tab === "technicals" && <MomentumCard fp={fp} />}
       {tab === "news" && <TickerNews ticker={fp.ticker} />}
       {tab === "risks" &&

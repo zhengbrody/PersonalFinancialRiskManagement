@@ -1593,6 +1593,126 @@ export function usePeers(ticker: string | null, userPeers?: string) {
   });
 }
 
+// ── Earnings comparison (deterministic) ─────────────────────────────
+const earningsPeriodSchema = z.looseObject({
+  period: z.string(),
+  fiscal_date: z.string().nullish(),
+  revenue: z.number().nullish(),
+  revenue_yoy: z.number().nullish(),
+  revenue_qoq: z.number().nullish(),
+  eps: z.number().nullish(),
+  eps_yoy: z.number().nullish(),
+  eps_qoq: z.number().nullish(),
+  revenue_estimate: z.number().nullish(),
+  eps_estimate: z.number().nullish(),
+  revenue_surprise_pct: z.number().nullish(),
+  eps_surprise_pct: z.number().nullish(),
+  revenue_beat: z.boolean().nullish(),
+  eps_beat: z.boolean().nullish(),
+});
+export type EarningsPeriod = z.infer<typeof earningsPeriodSchema>;
+export const earningsOutputSchema = z.looseObject({
+  ticker: z.string(),
+  as_of: z.string().nullish(),
+  periods: z.array(earningsPeriodSchema),
+  transcript: z.looseObject({
+    available: z.boolean(),
+    quarter: z.number().nullish(),
+    fiscal_year: z.number().nullish(),
+    date: z.string().nullish(),
+    source: z.string().nullish(),
+    excerpt_length: z.number(),
+  }),
+  summary: z.looseObject({
+    headline: z.string().nullish(),
+    points: z.array(z.string()),
+    ai_generated: z.boolean(),
+  }),
+  missing_data: z.array(z.looseObject({ dataset: z.string(), reason: z.string() })),
+  disclaimer: z.string(),
+});
+export type EarningsOutput = z.infer<typeof earningsOutputSchema>;
+const earningsResponseSchema = z.looseObject({ earnings: earningsOutputSchema });
+type EarningsResponse = z.infer<typeof earningsResponseSchema>;
+
+/** Deterministic earnings comparison. Authed, no credit; cached. */
+export function useEarnings(ticker: string | null) {
+  const { accessToken } = useAuth();
+  return useQuery<EarningsResponse>({
+    queryKey: ["research", "earnings", ticker],
+    enabled: Boolean(accessToken && ticker),
+    queryFn: () =>
+      apiFetch<EarningsResponse>(`/api/v1/research/${encodeURIComponent(ticker!)}/earnings`, {
+        authToken: accessToken!,
+        schema: earningsResponseSchema,
+      }),
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  });
+}
+
+// ── AI thesis (LLM over deterministic evidence; credit-gated) ───────
+export const thesisOutputSchema = z.looseObject({
+  ticker: z.string(),
+  bull_case: z.array(z.string()),
+  bear_case: z.array(z.string()),
+  key_debate: z.string().nullish(),
+  what_would_change_view: z.array(z.string()),
+  monitor_next_quarter: z.array(z.string()),
+  questions_for_management: z.array(z.string()),
+  red_flags: z.array(z.string()),
+  ai_generated: z.boolean(),
+  flagged_numbers: z.array(z.string()),
+  warnings: z.array(z.string()),
+  disclaimer: z.string(),
+});
+export type ThesisOutput = z.infer<typeof thesisOutputSchema>;
+const thesisResponseSchema = z.looseObject({ thesis: thesisOutputSchema });
+type ThesisResponse = z.infer<typeof thesisResponseSchema>;
+
+/** AI-grounded bull/bear thesis. Authed, credit-gated (mutation, on demand). */
+export function useThesis() {
+  const { accessToken } = useAuth();
+  return useMutation<ThesisResponse, Error, { ticker: string }>({
+    mutationFn: ({ ticker }) =>
+      apiFetch<ThesisResponse>(`/api/v1/research/${encodeURIComponent(ticker)}/thesis`, {
+        method: "POST",
+        authToken: accessToken ?? undefined,
+        schema: thesisResponseSchema,
+      }),
+  });
+}
+
+// ── Analyst HTML report (deterministic, assembled server-side) ──────
+const analystReportSchema = z.looseObject({
+  ticker: z.string(),
+  title: z.string(),
+  generated_at: z.string().nullish(),
+  as_of: z.string().nullish(),
+  html: z.string(),
+  sections: z.array(z.looseObject({ key: z.string(), title: z.string(), included: z.boolean() })),
+  disclaimer: z.string(),
+});
+export type AnalystReport = z.infer<typeof analystReportSchema>;
+const analystReportResponseSchema = z.looseObject({ report: analystReportSchema });
+type AnalystReportResponse = z.infer<typeof analystReportResponseSchema>;
+
+/** Server-assembled analyst HTML report. Authed, no credit; cached. */
+export function useAnalystReport(ticker: string | null) {
+  const { accessToken } = useAuth();
+  return useQuery<AnalystReportResponse>({
+    queryKey: ["research", "report", ticker],
+    enabled: Boolean(accessToken && ticker),
+    queryFn: () =>
+      apiFetch<AnalystReportResponse>(`/api/v1/research/${encodeURIComponent(ticker!)}/report`, {
+        authToken: accessToken!,
+        schema: analystReportResponseSchema,
+      }),
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  });
+}
+
 /** Fetch the deterministic FactPack for a ticker (fast, no credit). */
 export function useFactPack() {
   const { accessToken } = useAuth();
