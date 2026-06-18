@@ -1441,6 +1441,158 @@ export function useResearchFinancials(ticker: string | null) {
   });
 }
 
+// ── DCF valuation (deterministic; user overrides recalc) ────────────
+const dcfAssumptionSchema = z.looseObject({
+  name: z.string(),
+  value: z.number().nullish(),
+  source_type: z.string(),
+  source: z.string().nullish(),
+  note: z.string().nullish(),
+});
+const dcfProjectionSchema = z.looseObject({
+  year: z.number(),
+  revenue: z.number(),
+  revenue_growth: z.number(),
+  operating_margin: z.number(),
+  ebit: z.number(),
+  nopat: z.number(),
+  fcf: z.number(),
+  pv_fcf: z.number(),
+});
+const dcfScenarioSchema = z.looseObject({
+  name: z.string(),
+  implied_value_per_share: z.number().nullish(),
+  upside_pct: z.number().nullish(),
+});
+const dcfSensitivitySchema = z.looseObject({
+  title: z.string(),
+  row_label: z.string(),
+  col_label: z.string(),
+  rows: z.array(z.number()),
+  cols: z.array(z.number()),
+  values: z.array(z.array(z.number().nullable())),
+});
+export const dcfOutputSchema = z.looseObject({
+  ticker: z.string(),
+  currency: z.string().default("USD"),
+  as_of: z.string().nullish(),
+  inputs: z.looseObject({
+    projection_years: z.number(),
+    base_revenue: dcfAssumptionSchema,
+    revenue_growth: z.array(dcfAssumptionSchema),
+    operating_margin: z.array(dcfAssumptionSchema),
+    tax_rate: dcfAssumptionSchema,
+    da_pct_revenue: dcfAssumptionSchema,
+    capex_pct_revenue: dcfAssumptionSchema,
+    nwc_pct_revenue: dcfAssumptionSchema,
+    wacc: dcfAssumptionSchema,
+    terminal_growth: dcfAssumptionSchema,
+    net_debt: dcfAssumptionSchema,
+    diluted_shares: dcfAssumptionSchema,
+    missing_data: z.array(z.looseObject({ dataset: z.string(), reason: z.string() })),
+  }),
+  projections: z.array(dcfProjectionSchema),
+  enterprise_value: z.number().nullish(),
+  equity_value: z.number().nullish(),
+  implied_value_per_share: z.number().nullish(),
+  current_price: z.number().nullish(),
+  upside_pct: z.number().nullish(),
+  scenarios: z.array(dcfScenarioSchema),
+  sensitivity: z.array(dcfSensitivitySchema),
+  valid: z.boolean(),
+  warnings: z.array(z.string()),
+  disclaimer: z.string(),
+});
+export type DcfOutput = z.infer<typeof dcfOutputSchema>;
+const dcfResponseSchema = z.looseObject({ dcf: dcfOutputSchema });
+type DcfResponse = z.infer<typeof dcfResponseSchema>;
+
+export type DcfOverrides = {
+  projection_years?: number;
+  wacc?: number;
+  terminal_growth?: number;
+  tax_rate?: number;
+  revenue_growth?: number[];
+  operating_margin?: number;
+  terminal_operating_margin?: number;
+};
+
+/** Deterministic DCF; pass overrides to recompute. Authed, no credit. */
+export function useDcf() {
+  const { accessToken } = useAuth();
+  return useMutation<DcfResponse, Error, { ticker: string; overrides?: DcfOverrides }>({
+    mutationFn: ({ ticker, overrides }) =>
+      apiFetch<DcfResponse>(`/api/v1/research/${encodeURIComponent(ticker)}/dcf`, {
+        method: "POST",
+        body: { overrides: overrides ?? null },
+        authToken: accessToken ?? undefined,
+        schema: dcfResponseSchema,
+      }),
+  });
+}
+
+// ── Peer comparison (deterministic; median + percentiles) ───────────
+const peerRowSchema = z.looseObject({
+  ticker: z.string(),
+  name: z.string().nullish(),
+  is_subject: z.boolean(),
+  market_cap: z.number().nullish(),
+  revenue_growth: z.number().nullish(),
+  gross_margin: z.number().nullish(),
+  operating_margin: z.number().nullish(),
+  net_margin: z.number().nullish(),
+  fcf_margin: z.number().nullish(),
+  roe: z.number().nullish(),
+  roic: z.number().nullish(),
+  pe: z.number().nullish(),
+  forward_pe: z.number().nullish(),
+  ev_sales: z.number().nullish(),
+  ev_ebitda: z.number().nullish(),
+  ps: z.number().nullish(),
+  debt_to_equity: z.number().nullish(),
+  net_cash: z.number().nullish(),
+  return_1y: z.number().nullish(),
+});
+export type PeerRow = z.infer<typeof peerRowSchema>;
+const peerPercentileSchema = z.looseObject({
+  metric: z.string(),
+  subject_value: z.number().nullish(),
+  peer_median: z.number().nullish(),
+  percentile: z.number().nullish(),
+  n: z.number(),
+});
+export type PeerPercentile = z.infer<typeof peerPercentileSchema>;
+export const peersOutputSchema = z.looseObject({
+  ticker: z.string(),
+  as_of: z.string().nullish(),
+  peer_source: z.string(),
+  rows: z.array(peerRowSchema),
+  percentiles: z.array(peerPercentileSchema),
+  missing_data: z.array(z.looseObject({ dataset: z.string(), reason: z.string() })),
+  disclaimer: z.string(),
+});
+export type PeersOutput = z.infer<typeof peersOutputSchema>;
+const peersResponseSchema = z.looseObject({ peers: peersOutputSchema });
+type PeersResponse = z.infer<typeof peersResponseSchema>;
+
+/** Deterministic peer comparison + percentiles. Authed, no credit; cached. */
+export function usePeers(ticker: string | null, userPeers?: string) {
+  const { accessToken } = useAuth();
+  return useQuery<PeersResponse>({
+    queryKey: ["research", "peers", ticker, userPeers ?? null],
+    enabled: Boolean(accessToken && ticker),
+    queryFn: () => {
+      const qs = userPeers ? `?peers=${encodeURIComponent(userPeers)}` : "";
+      return apiFetch<PeersResponse>(
+        `/api/v1/research/${encodeURIComponent(ticker!)}/peers${qs}`,
+        { authToken: accessToken!, schema: peersResponseSchema },
+      );
+    },
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  });
+}
+
 /** Fetch the deterministic FactPack for a ticker (fast, no credit). */
 export function useFactPack() {
   const { accessToken } = useAuth();

@@ -258,6 +258,14 @@ def _normalize_statement(inc: dict, bal: dict, cf: dict, period: str) -> dict:
         "debt": _num(_pick(bal, "totalDebt", "netDebt")),
         "free_cash_flow": _num(_pick(cf, "freeCashFlow")),
         "capex": _num(_pick(cf, "capitalExpenditure")),
+        # Extra raw fields used by the DCF input builder (Phase 2). Additive —
+        # not part of the FinancialQuarter/Annual schema.
+        "d_and_a": _num(
+            _pick(cf, "depreciationAndAmortization") or _pick(inc, "depreciationAndAmortization")
+        ),
+        "income_tax": _num(_pick(inc, "incomeTaxExpense")),
+        "pretax_income": _num(_pick(inc, "incomeBeforeTax", "pretaxIncome")),
+        "change_in_nwc": _num(_pick(cf, "changeInWorkingCapital")),
     }
 
 
