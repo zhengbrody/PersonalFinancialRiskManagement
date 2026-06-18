@@ -25,6 +25,7 @@ from ...schemas.news import TickerNewsResponse
 from ...schemas.research import FactPack, VerdictRequest
 from ...services import news as news_svc
 from ...services import research_factpack as rf
+from ...services import research_financials as rfin
 
 router = APIRouter(prefix="/api/v1/research", tags=["research"])
 
@@ -52,6 +53,33 @@ def fact_pack(
         raise unprocessable(f"Could not build a FactPack for {ticker!r}.") from exc
 
     return ok({"fact_pack": fp.model_dump()}, request=request, started_at=started)
+
+
+@router.get(
+    "/{ticker}/fact-pack",
+    summary="Institutional research FactPack: financials + deterministic trends (no credit)",
+    response_model=None,
+)
+def research_fact_pack(
+    request: Request,
+    ticker: str = Path(min_length=1, max_length=20),
+    user: AuthedUser = Depends(require_user),
+):
+    """Phase 1 institutional FactPack: company snapshot + up to 8 quarters & 5
+    fiscal years of financials + a deterministic trend summary (margins, YoY/QoQ,
+    TTM, acceleration flags), with explicit provenance, missing-data, and a
+    confidence score. Every number is computed in backend code — no LLM. Builds
+    fail-soft (partial pack on provider failure), so this raises only on an
+    unexpected internal error."""
+    started = time.perf_counter()
+    try:
+        pack = rfin.build_research_fact_pack(ticker)
+    except Exception as exc:  # noqa: BLE001 - builder is fail-soft; this is a backstop
+        _log.warning(
+            "research.research_factpack.failed ticker=%s err=%s", ticker, type(exc).__name__
+        )
+        raise unprocessable(f"Could not build a research FactPack for {ticker!r}.") from exc
+    return ok({"fact_pack": pack.model_dump()}, request=request, started_at=started)
 
 
 @router.get(

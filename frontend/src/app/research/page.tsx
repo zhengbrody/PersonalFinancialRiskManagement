@@ -37,6 +37,7 @@ import { CreditsBadge } from "@/components/credits-badge";
 import { TickerNews } from "@/components/ticker-news";
 import { LearnHint } from "@/components/learn-hint";
 import { ReportExportButton } from "@/components/report-export-button";
+import { ResearchFinancials } from "@/components/research-financials";
 import { ApiError } from "@/lib/api";
 import { BETA_LIMIT_MESSAGE, isBillingEnabled } from "@/lib/billing-flag";
 import { useAuth } from "@/lib/auth-context";
@@ -171,6 +172,7 @@ const RESEARCH_TABS = [
   { value: "overview", label: "Overview" },
   { value: "valuation", label: "Valuation" },
   { value: "fundamentals", label: "Fundamentals" },
+  { value: "financials", label: "Financials" },
   { value: "technicals", label: "Technicals" },
   { value: "news", label: "News & Events" },
   { value: "risks", label: "Risks" },
@@ -208,6 +210,7 @@ function ResearchTabs({ fp, verdict }: { fp: FactPack; verdict?: ResearchVerdict
           <OwnershipInsiderCard fp={fp} />
         </div>
       )}
+      {tab === "financials" && <ResearchFinancials ticker={fp.ticker} />}
       {tab === "technicals" && <MomentumCard fp={fp} />}
       {tab === "news" && <TickerNews ticker={fp.ticker} />}
       {tab === "risks" &&
