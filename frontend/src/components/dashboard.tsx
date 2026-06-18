@@ -201,7 +201,10 @@ function ScoreHero({ score, scoreTrend }: { score: ScoreResponse; scoreTrend?: n
                 Portfolio Health Score
               </p>
               <div className="flex items-baseline gap-2">
-                <span className={`text-5xl font-semibold tabular-nums ${tone.text}`}>
+                <span
+                  data-testid="dashboard-active-score"
+                  className={`text-5xl font-semibold tabular-nums ${tone.text}`}
+                >
                   {Math.round(score.overall_score)}
                 </span>
                 <span className="text-lg text-muted-foreground">/ 1000</span>

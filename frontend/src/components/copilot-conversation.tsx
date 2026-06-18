@@ -297,6 +297,7 @@ export function CopilotConversation({
         }
       >
         <Textarea
+          data-testid="copilot-input"
           aria-label="Ask your Portfolio Copilot"
           placeholder="Ask your Copilot… (Enter to send, Shift+Enter for a new line)"
           value={draft}
@@ -308,6 +309,7 @@ export function CopilotConversation({
         <div className="flex justify-end">
           <Button
             type="button"
+            data-testid="copilot-send"
             size={floating ? "sm" : "default"}
             onClick={() => send(draft)}
             disabled={pending || draft.trim() === ""}
