@@ -12,14 +12,44 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, TypedDict
 
 import httpx
 
 from ..core.config import Settings, get_settings
 
+
+class ProviderBalance(TypedDict, total=False):
+    """One provider's balance-card row. The shape is partial by branch — a
+    fail-soft / unconfigured result omits the figure keys — so every field is
+    optional (``total=False``). Runtime is still a plain dict (same JSON on the
+    wire as before); the annotation only lets MyPy catch a typo'd key here."""
+
+    provider: str
+    configured: bool
+    source: str  # "live" (DeepSeek) | "estimate" (Claude)
+    status: str  # "ok" | "warn" | "critical" | "unknown"
+    low: bool
+    currency: str
+    remaining: float
+    topped_up: float
+    granted: float
+    spent: float
+    pct: float | None
+    since: str
+    set_via: str  # "dashboard" | "env"
+    is_available: bool
+    error: str
+
+
+class Balances(TypedDict):
+    deepseek: ProviderBalance
+    anthropic: ProviderBalance
+
+
 _CACHE_TTL = 60.0
-_cache: dict[str, Any] = {"at": 0.0, "data": None}
+_cached_at = 0.0
+_cached: Balances | None = None
 
 
 def _start_of_month_iso() -> str:
@@ -34,7 +64,7 @@ def _f(v: Any) -> float:
         return 0.0
 
 
-def _deepseek(s: Settings) -> dict[str, Any]:
+def _deepseek(s: Settings) -> ProviderBalance:
     """Live DeepSeek balance. `total_balance` is the available remaining;
     low-balance is an absolute floor in the account currency."""
     if not s.deepseek_api_key:
@@ -74,7 +104,7 @@ def _deepseek(s: Settings) -> dict[str, Any]:
         }
 
 
-def _anthropic(s: Settings) -> dict[str, Any]:
+def _anthropic(s: Settings) -> ProviderBalance:
     """Claude estimate: balance snapshot − tracked Claude spend since it was set.
     Prefers the owner's DASHBOARD-set balance (no env / restart) and counts spend
     from when they set it; falls back to the env (`ANTHROPIC_TOPUP_USD/SINCE`)."""
@@ -131,22 +161,23 @@ def _anthropic(s: Settings) -> dict[str, Any]:
     }
 
 
-def balances() -> dict[str, Any]:
+def balances() -> Balances:
     """Combined provider balances for the owner card. Cached 60s (the card polls;
     balances don't move second-to-second, and this protects DeepSeek's free-tier
     rate limit)."""
+    global _cached_at, _cached
     now = time.time()
-    cached = _cache["data"]
-    if cached is not None and now - _cache["at"] < _CACHE_TTL:
-        return cached
+    if _cached is not None and now - _cached_at < _CACHE_TTL:
+        return _cached
     s = get_settings()
-    data = {"deepseek": _deepseek(s), "anthropic": _anthropic(s)}
-    _cache["at"] = now
-    _cache["data"] = data
+    data: Balances = {"deepseek": _deepseek(s), "anthropic": _anthropic(s)}
+    _cached_at = now
+    _cached = data
     return data
 
 
 def invalidate() -> None:
     """Drop the cache so the next read reflects a just-set Claude balance."""
-    _cache["at"] = 0.0
-    _cache["data"] = None
+    global _cached_at, _cached
+    _cached_at = 0.0
+    _cached = None
