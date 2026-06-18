@@ -68,6 +68,33 @@ MindMarket sits between those worlds:
 
 ---
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/cover.png" width="380" alt="MindMarket — an AI portfolio risk cockpit: a 0-1000 health score, a deterministic quant engine, and an AI copilot that never invents a number." />
+</p>
+
+**Try it live, no signup:**
+[mindmarket.app/demo-risk-check](https://mindmarket.app/demo-risk-check) — a sample
+book with an interactive crash simulator and a full health-score readout.
+
+A short tour of the live product:
+
+| Surface | What it shows | Live |
+| --- | --- | --- |
+| Health Score | 0-1000 gauge, each dimension vs your risk target, concentration, and a deterministic "how to improve" list. | [/score](https://mindmarket.app/score) |
+| Risk Report | VaR/CVaR, factor betas, a scenario explorer, stress losses, liquidity outliers, and options Greeks. | [/risk](https://mindmarket.app/risk) |
+| AI Copilot | Streamed answers with source-badged evidence, grounded in the same metrics the UI shows. | [/copilot](https://mindmarket.app/copilot) |
+
+<!--
+Drop real product captures here once taken (dark theme, retina, browser chrome cropped):
+![Health Score cockpit](docs/screenshots/score.png)
+![Risk Report](docs/screenshots/risk.png)
+![AI Copilot](docs/screenshots/copilot.png)
+-->
+
+---
+
 ## System Architecture
 
 MindMarket is a split-stack application:

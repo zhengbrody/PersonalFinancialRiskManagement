@@ -25,7 +25,7 @@ import time
 
 from fastapi import APIRouter, Depends, Request
 
-from ...core.deps_auth import AuthedUser, require_user
+from ...core.deps_auth import AuthedUser, require_owner, require_user
 from ...core.responses import APIError, ok
 from ...schemas.billing import (
     AnthropicTopupRequest,
@@ -156,15 +156,10 @@ def billing_me(request: Request, user: AuthedUser = Depends(require_user)):
 
 
 @router.get("/admin/usage", summary="Owner-only: aggregate token/cost/credit usage")
-def billing_admin_usage(request: Request, user: AuthedUser = Depends(require_user)):
+def billing_admin_usage(request: Request, user: AuthedUser = Depends(require_owner)):
     """Month-to-date usage aggregates (tokens / $ / credits, per kind + per
     user) for the owner dashboard. 403 for everyone else."""
     started = time.perf_counter()
-
-    from libs.admin.status import is_owner_email
-
-    if not is_owner_email(user.email):
-        raise APIError(status=403, code="forbidden", message="Owner only.")
 
     try:
         from libs.billing.usage import get_admin_usage
@@ -181,7 +176,7 @@ def billing_admin_usage(request: Request, user: AuthedUser = Depends(require_use
 
 
 @router.get("/admin/metrics", summary="Owner-only: live in-process API call metrics")
-def billing_admin_metrics(request: Request, user: AuthedUser = Depends(require_user)):
+def billing_admin_metrics(request: Request, user: AuthedUser = Depends(require_owner)):
     """Real-time, in-process counters for the owner live-activity view: per-route
     HTTP volume/latency/errors + per external-provider (yfinance/FMP/Massive/
     FRED/Treasury) call outcomes. Pure memory read — no DB hit — so it's safe to
@@ -189,11 +184,6 @@ def billing_admin_metrics(request: Request, user: AuthedUser = Depends(require_u
     deploy); the dashboard diffs consecutive snapshots to show live rates. The
     billing ledger ($/credits) stays in /admin/usage. 403 for non-owners."""
     started = time.perf_counter()
-
-    from libs.admin.status import is_owner_email
-
-    if not is_owner_email(user.email):
-        raise APIError(status=403, code="forbidden", message="Owner only.")
 
     from ...services import metrics
 
@@ -204,17 +194,12 @@ def billing_admin_metrics(request: Request, user: AuthedUser = Depends(require_u
 
 
 @router.get("/admin/balances", summary="Owner-only: LLM provider remaining balance / top-up")
-def billing_admin_balances(request: Request, user: AuthedUser = Depends(require_user)):
+def billing_admin_balances(request: Request, user: AuthedUser = Depends(require_owner)):
     """Remaining LLM credit per provider for the owner "API balance" card:
     DeepSeek live balance (its real `/user/balance` API) + a Claude ESTIMATE
     (owner-set top-up − tracked Claude spend, since Anthropic exposes no
     balance API). Server-cached, so safe to poll. 403 for non-owners."""
     started = time.perf_counter()
-
-    from libs.admin.status import is_owner_email
-
-    if not is_owner_email(user.email):
-        raise APIError(status=403, code="forbidden", message="Owner only.")
 
     from ...services import api_balance
 
@@ -228,18 +213,13 @@ def billing_admin_balances(request: Request, user: AuthedUser = Depends(require_
 def billing_admin_set_anthropic_topup(
     body: AnthropicTopupRequest,
     request: Request,
-    user: AuthedUser = Depends(require_user),
+    user: AuthedUser = Depends(require_owner),
 ):
     """Record the owner's current Claude balance from the dashboard — no env edit
     or restart. Anthropic exposes no balance API, so this snapshot is what we
     count Claude spend down from (re-set it after each top-up). Returns the
     refreshed balances. 403 for non-owners."""
     started = time.perf_counter()
-
-    from libs.admin.status import is_owner_email
-
-    if not is_owner_email(user.email):
-        raise APIError(status=403, code="forbidden", message="Owner only.")
 
     from libs.billing.usage import set_anthropic_topup
 
@@ -257,17 +237,12 @@ def billing_admin_set_anthropic_topup(
 def billing_admin_status(
     request: Request,
     live: bool = False,
-    user: AuthedUser = Depends(require_user),
+    user: AuthedUser = Depends(require_owner),
 ):
     """Integration config presence (instant) + optional live key-validation
     checks (``?live=true``). Owner only (403 otherwise). Never returns secret
     values — only present/missing + state."""
     started = time.perf_counter()
-
-    from libs.admin.status import is_owner_email
-
-    if not is_owner_email(user.email):
-        raise APIError(status=403, code="forbidden", message="Owner only.")
 
     from ...services import admin_status
 

@@ -18,9 +18,9 @@ launch.
 - Margin loan dollar amount
 - Portfolio names you assign
 
-**Usage data** (for billing / quota enforcement):
+**Usage data** (for fair-use limits during the beta):
 - Number of AI analyses + chat messages per month
-- Plan tier (free / basic / pro)
+- Usage tier
 - Timestamps of usage events
 
 **Inferred data**:
@@ -32,7 +32,7 @@ brokerage account numbers, or any banking credentials.
 ## What we do with it
 - Operate the service: store your portfolios, render your dashboards, run
   analyses you request.
-- Bill / enforce quota: track usage events to apply free/basic/pro caps.
+- Apply usage limits: track usage events to apply fair-use limits during the beta.
 - Improve the product: aggregate, anonymized usage statistics. We do not sell
   user data.
 

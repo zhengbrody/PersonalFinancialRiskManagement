@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import time
 from types import SimpleNamespace
 
@@ -1046,10 +1047,6 @@ def _df_or_none_to_rows(df, *, value_col: str = None) -> list[dict]:
     """Best-effort conversion of a small pandas Series/DataFrame into a
     list of plain dicts. NaN/Inf are dropped; the envelope layer also
     scrubs them but doing it here keeps the wire payload smaller."""
-    import math
-
-    import pandas as pd
-
     if df is None:
         return []
     if isinstance(df, pd.Series):
@@ -1149,16 +1146,11 @@ def _serialize_report(
     excess-return and vol both scale, cancelling), so it's left as-is;
     annual return is re-mixed toward the risk-free rate by the same
     weight. ``1.0`` (the default) is a no-op."""
-    import math
-
     scale = float(risk_scale) if math.isfinite(risk_scale) and risk_scale > 0 else 1.0
 
-    def _finite(v):
-        try:
-            f = float(v)
-        except Exception:
-            return None
-        return f if math.isfinite(f) else None
+    # Canonical finite-coercion (None for non-finite); the local alias keeps the
+    # call-sites below terse. Was a re-implemented nested copy — see `_finite_float`.
+    _finite = _finite_float
 
     def _scaled(v):
         """Finite value lifted to net-equity level (None stays None)."""

@@ -43,7 +43,7 @@ from typing import Any, Optional
 from fastapi import Depends, Request
 
 from .config import Settings, get_settings
-from .responses import service_unavailable, unauthorized
+from .responses import forbidden, service_unavailable, unauthorized
 
 _logger = logging.getLogger(__name__)
 
@@ -284,3 +284,20 @@ def optional_user(
         # anon; don't leak why.
         return None
     return _claims_to_user(claims, token)
+
+
+def require_owner(user: AuthedUser = Depends(require_user)) -> AuthedUser:
+    """403 unless the authed caller is a configured owner.
+
+    Composes on top of ``require_user`` (so a missing/bad JWT still 401s first),
+    then gates on ``is_owner_email``. Declared ONCE here and applied via
+    ``Depends(require_owner)`` on every ``/admin`` route, so the owner check is
+    no longer copy-pasted into each handler body.
+    """
+    # Local import: keeps the auth core from importing the admin/billing layer at
+    # module load (mirrors the lib-boundary convention used across the routers).
+    from libs.admin.status import is_owner_email
+
+    if not is_owner_email(user.email):
+        raise forbidden("Owner only.")
+    return user

@@ -23,13 +23,11 @@ You are responsible for keeping your password secret and for all activity
 under your account. Notify us immediately at contact@mindmarket.app if you
 suspect unauthorized access.
 
-## 5. Plans and billing
-We offer Free, Basic, and Pro plans with monthly caps on AI analysis and
-chat usage. Paid plans are billed monthly via Stripe (when launched). You
-may cancel any time; access continues through the end of the billing period.
-
-We may change pricing with 30 days' notice. Existing paying subscribers
-keep their current price for the remainder of their billing period.
+## 5. Beta access
+MindMarket AI is currently a free educational beta. There are no charges, and
+no payment information is collected. If paid plans are introduced later,
+separate billing terms will be presented for your review before any charge
+applies.
 
 ## 6. Acceptable use
 You agree NOT to:
