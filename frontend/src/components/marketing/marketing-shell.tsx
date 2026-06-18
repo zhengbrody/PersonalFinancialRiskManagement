@@ -14,6 +14,7 @@ import Link from "next/link";
 import { Logo } from "@/components/ui/logo";
 import { useAuth } from "@/lib/auth-context";
 import { isBillingEnabled } from "@/lib/billing-flag";
+import { LEGAL_DOCS } from "@/lib/legal-content";
 import { C } from "./theme";
 import { CTA } from "./primitives";
 
@@ -180,6 +181,13 @@ function MarketingFooter({ minimal }: { minimal: boolean }) {
           not provide investment, tax, legal, or financial advice. Figures shown before sign-in use
           fixed sample books, not live prices.
         </p>
+        <nav style={{ display: "flex", flexWrap: "wrap", gap: 16, fontSize: 12.5 }}>
+          {LEGAL_DOCS.map((d) => (
+            <Link key={d.slug} href={`/legal/${d.slug}`} style={{ color: C.slate, textDecoration: "none" }}>
+              {d.nav}
+            </Link>
+          ))}
+        </nav>
       </div>
     </footer>
   );

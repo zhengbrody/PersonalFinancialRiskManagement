@@ -58,7 +58,14 @@ function accountLinks(isOwner: boolean): NavItem[] {
  * "/" and "/markets" are AUTH-CONDITIONAL — anonymous → full-bleed marketing
  * (the landing / the markets intro), signed-in → the normal app shell.
  */
-const FULL_BLEED_ROUTES = new Set(["/product", "/learn", "/demo-risk-check", "/login", "/signup"]);
+const FULL_BLEED_ROUTES = new Set([
+  "/product",
+  "/learn",
+  "/demo-risk-check",
+  "/login",
+  "/signup",
+  "/legal",
+]);
 const ANON_FULL_BLEED_ROUTES = new Set(["/", "/markets"]);
 
 export function SiteShell({ children }: { children: React.ReactNode }) {
@@ -68,7 +75,8 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
   if (
     isAnonFullBleed ||
     FULL_BLEED_ROUTES.has(pathname) ||
-    pathname.startsWith("/learn/")
+    pathname.startsWith("/learn/") ||
+    pathname.startsWith("/legal/")
   ) {
     return <>{children}</>;
   }

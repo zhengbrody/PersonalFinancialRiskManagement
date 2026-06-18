@@ -1,5 +1,23 @@
 # MindMarket AI — Project Context & Decisions
 
+> ⚠️ **HISTORICAL / ARCHIVAL DOC — DO NOT TREAT AS CURRENT STATE.**
+> This is an early (2026-05-14) planning snapshot from when MindMarket was a
+> **Streamlit-only** app, before the split-stack migration. It is preserved for
+> historical/architectural context only. Much of it is stale: the open
+> "Q8–Q13" questions are long settled, the "CRITICAL" security findings are
+> resolved, and the UI is **no longer Streamlit** (the live product is a Next.js
+> 14 + TypeScript frontend on a FastAPI backend; Streamlit survives only at
+> `/legacy/*`). Where this doc says "Codex" it means the Anthropic Claude API.
+>
+> **For current state, see:**
+> - `README.md` — live project overview
+> - `TECH_STACK.md` — current split-stack technology stack (Next.js + FastAPI primary)
+> - `CLAUDE.md` — authoritative, continuously-updated project context & decision log
+>
+> _Original snapshot below, unedited:_
+
+---
+
 > This file is the single source of truth for project context across Codex sessions.
 > Last updated: 2026-05-14
 
