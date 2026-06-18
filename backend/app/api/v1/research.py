@@ -32,6 +32,7 @@ from ...services import research_financials as rfin
 from ...services import research_peers as rpeers
 from ...services import research_report as rreport
 from ...services import research_thesis as rthesis
+from ...services._common import iso_now, safe
 
 router = APIRouter(prefix="/api/v1/research", tags=["research"])
 
@@ -86,6 +87,61 @@ def research_fact_pack(
         )
         raise unprocessable(f"Could not build a research FactPack for {ticker!r}.") from exc
     return ok({"fact_pack": pack.model_dump()}, request=request, started_at=started)
+
+
+@router.get(
+    "/{ticker}/bundle",
+    summary="Consolidated research bundle — one fetch for the whole page (no credit)",
+    response_model=None,
+)
+def research_bundle(
+    request: Request,
+    ticker: str = Path(min_length=1, max_length=20),
+    user: AuthedUser = Depends(require_user),
+):
+    """Everything the consolidated research page needs, assembled in ONE request
+    so a ticker search fans out to the providers ONCE (the engines share the
+    in-process FMP cache within the call) instead of one fan-out per tab: compact
+    FactPack + institutional financials + DCF + peers + earnings + a deterministic
+    thesis + news. Each block is fail-soft (a failing engine becomes ``null``,
+    never a 500). All numbers are deterministic — no credit, no LLM here; the AI
+    summary is a separate on-demand upgrade (``POST /research/{ticker}/thesis``)."""
+    started = time.perf_counter()
+    tk = ticker.strip().upper()
+
+    fp = safe("research.bundle.factpack", lambda: rf.build_fact_pack(tk))
+    fin = safe("research.bundle.financials", lambda: rfin.build_research_fact_pack(tk))
+    dcf = safe("research.bundle.dcf", lambda: rdcf.build_dcf(tk))
+    peers = safe("research.bundle.peers", lambda: rpeers.build_peer_comparison(tk))
+    earn = safe("research.bundle.earnings", lambda: rearn.build_earnings_comparison(tk))
+    # Reuses the fp/dcf/earn already built above (no duplicate engine pass).
+    thesis = safe(
+        "research.bundle.thesis",
+        lambda: rthesis.build_thesis(tk, llm_callable=None, fp=fp, dcf=dcf, earn=earn),
+    )
+    news = safe(
+        "research.bundle.news",
+        lambda: TickerNewsResponse.model_validate(news_svc.get_ticker_news(tk)).model_dump(),
+    )
+
+    def _dump(x):
+        return x.model_dump() if x is not None else None
+
+    bundle = {
+        "ticker": tk,
+        "generated_at": iso_now(),
+        "as_of": getattr(fin, "as_of", None) or getattr(earn, "as_of", None),
+        "data_confidence": getattr(fin, "data_confidence", None),
+        "confidence_label": getattr(fin, "confidence_label", None),
+        "fact_pack": _dump(fp),
+        "financials": _dump(fin),
+        "dcf": _dump(dcf),
+        "peers": _dump(peers),
+        "earnings": _dump(earn),
+        "thesis": _dump(thesis),
+        "news": news,
+    }
+    return ok({"bundle": bundle}, request=request, started_at=started)
 
 
 @router.post(
