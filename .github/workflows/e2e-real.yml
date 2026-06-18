@@ -1,0 +1,56 @@
+name: E2E (real auth, nightly)
+
+# A GATED, real-environment smoke — distinct from the per-PR mocked `e2e` job in
+# ci.yml. It logs a real Supabase TEST user into the deployed app and checks the
+# real /login → session → protected-route chain. It runs ONLY on a schedule and
+# on manual dispatch (never on PRs), and the spec self-skips unless the secrets
+# below are set, so it's a safe no-op until you opt in.
+#
+# To enable: add repo secrets E2E_REAL_EMAIL + E2E_REAL_PASSWORD (a throwaway
+# test account). Optionally set repo variable E2E_BASE_URL (defaults to
+# https://mindmarket.app).
+
+on:
+  schedule:
+    - cron: "0 8 * * *" # 08:00 UTC daily
+  workflow_dispatch:
+
+jobs:
+  e2e-real:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    env:
+      E2E_REAL_EMAIL: ${{ secrets.E2E_REAL_EMAIL }}
+      E2E_REAL_PASSWORD: ${{ secrets.E2E_REAL_PASSWORD }}
+      E2E_BASE_URL: ${{ vars.E2E_BASE_URL }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Install Playwright browser
+      run: npx playwright install --with-deps chromium
+
+    - name: Run real-auth smoke (skips automatically if secrets are unset)
+      run: npm run test:e2e:real
+
+    - name: Upload Playwright report
+      if: ${{ !cancelled() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: playwright-real-report
+        path: frontend/playwright-report/
+        retention-days: 7
