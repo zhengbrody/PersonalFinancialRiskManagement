@@ -1742,6 +1742,45 @@ export function useResearchVerdict() {
   });
 }
 
+// ── consolidated research bundle (ONE fetch for the whole page) ─────────
+// Reuses every block schema above. A ticker search fans out to the providers
+// once (server-side, shared cache) instead of one fetch per tab.
+export const researchBundleSchema = z.looseObject({
+  ticker: z.string(),
+  generated_at: z.string().nullish(),
+  as_of: z.string().nullish(),
+  data_confidence: z.number().nullish(),
+  confidence_label: z.string().nullish(),
+  fact_pack: factPackSchema.nullish(),
+  financials: researchFactPackSchema.nullish(),
+  dcf: dcfOutputSchema.nullish(),
+  peers: peersOutputSchema.nullish(),
+  earnings: earningsOutputSchema.nullish(),
+  thesis: thesisOutputSchema.nullish(),
+  news: tickerNewsSchema.nullish(),
+});
+export type ResearchBundle = z.infer<typeof researchBundleSchema>;
+const researchBundleResponseSchema = z.looseObject({ bundle: researchBundleSchema });
+type ResearchBundleResponse = z.infer<typeof researchBundleResponseSchema>;
+
+/** Everything the consolidated research page needs in one fetch. Authed, no
+ * credit; cached. Self-fetches by ticker (the page sets the active ticker on
+ * search). The AI verdict + LLM thesis stay separate on-demand calls. */
+export function useResearchBundle(ticker: string | null) {
+  const { accessToken } = useAuth();
+  return useQuery<ResearchBundleResponse>({
+    queryKey: ["research", "bundle", ticker],
+    enabled: Boolean(accessToken && ticker),
+    queryFn: () =>
+      apiFetch<ResearchBundleResponse>(`/api/v1/research/${encodeURIComponent(ticker!)}/bundle`, {
+        authToken: accessToken!,
+        schema: researchBundleResponseSchema,
+      }),
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  });
+}
+
 // ── scenario simulator + efficient frontier ─────────────────────────
 const frontierPointSchema = z.looseObject({ vol: z.number(), ret: z.number() });
 export const efficientFrontierSchema = z.looseObject({

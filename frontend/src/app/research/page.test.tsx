@@ -1,14 +1,17 @@
 /**
- * `/research` Ticker Research 2.0 FactPack cockpit.
+ * `/research` — consolidated single-page cockpit.
+ *
+ * One bundle fetch (`GET /research/{ticker}/bundle`) feeds the whole page; the
+ * AI verdict (`POST /research/verdict`) auto-fires from the bundle's FactPack.
+ * The heavy data sections (financials / DCF / peers / earnings / news / charts)
+ * are reused components with their own tests — stubbed here so the page test
+ * stays focused on composition + the verdict branch.
  *
  * Branches asserted:
  *   1. empty state + search box render.
- *   2. searching a ticker paints the FactPack cockpit (numbers, valuation
- *      band, a source badge, a driver) AND the AI verdict.
- *   3. a quota_exceeded on the verdict shows the upgrade CTA while the fact
- *      pack stays visible.
- *
- * Auth + navigation are mocked the same way as /copilot.
+ *   2. searching a ticker paints the whole cockpit (identity, trust strip,
+ *      driver, valuation band, ownership, momentum) AND the auto-fired verdict.
+ *   3. a quota_exceeded on the verdict shows the upgrade CTA while data stays.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,6 +28,15 @@ const useAuthMock = vi.fn();
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => useAuthMock(),
 }));
+
+// Reused data sections have their own tests — stub them so they don't self-fetch.
+vi.mock("@/components/research-charts", () => ({ ResearchCharts: () => <div>chart</div> }));
+vi.mock("@/components/research-financials", () => ({ ResearchFinancials: () => <div>financials</div> }));
+vi.mock("@/components/valuation-dcf", () => ({ ValuationDcf: () => <div>dcf</div> }));
+vi.mock("@/components/peers-comparison", () => ({ PeersComparison: () => <div>peers-chart</div> }));
+vi.mock("@/components/earnings-comparison", () => ({ EarningsComparison: () => <div>earnings</div> }));
+vi.mock("@/components/ticker-news", () => ({ TickerNews: () => <div>news</div> }));
+vi.mock("@/components/analyst-report", () => ({ AnalystReportView: () => <div>report</div> }));
 
 import ResearchPage from "./page";
 
@@ -47,13 +59,7 @@ function envelope(body: unknown, status = 200): Response {
 }
 
 const billingEnvelope = {
-  data: {
-    user_id: "u-1",
-    email: "owner@mindmarket.test",
-    plan: "free",
-    subscription: null,
-    plans: [],
-  },
+  data: { user_id: "u-1", email: "owner@mindmarket.test", plan: "free", subscription: null, plans: [] },
   error: null,
   meta: { request_id: "r-billing" },
 };
@@ -87,7 +93,7 @@ const FACT_PACK = {
     roa: 0.28,
     roic: 0.55,
     current_ratio: 1.28,
-    debt_to_equity: 0.32, // ratio (×), not 32
+    debt_to_equity: 0.32,
     interest_coverage: 40.0,
   },
   growth: {
@@ -123,24 +129,9 @@ const FACT_PACK = {
   ownership: { institutional_pct: 0.61 },
   insider: { buys_90d: 3, sells_90d: 1, net_shares_90d: 5000, signal: "net buying" },
   peers: [
-    {
-      ticker: "MSFT",
-      name: "Microsoft",
-      market_cap: 3.0e12,
-      pe: 33.0,
-      ps: 12.0,
-      net_margin: 0.36,
-      roe: 0.42,
-    },
+    { ticker: "MSFT", name: "Microsoft", market_cap: 3.0e12, pe: 33.0, ps: 12.0, net_margin: 0.36, roe: 0.42 },
   ],
-  news: [
-    {
-      title: "Apple unveils new chips",
-      site: "Reuters",
-      published: "2026-05-30T12:00:00+00:00",
-      url: "https://example.com/news",
-    },
-  ],
+  news: [],
   drivers: ["High gross margins and durable franchise"],
   risk_flags: ["Trades at a rich multiple vs peers"],
   data_quality: {
@@ -148,10 +139,24 @@ const FACT_PACK = {
     sources: [
       { field: "pe", source: "yfinance", as_of: null, coverage: 1 },
       { field: "quality", source: "yfinance", as_of: null, coverage: 1 },
-      { field: "analyst", source: "yfinance", as_of: null, coverage: 1 },
     ],
     warnings: ["fmp_key_missing"],
   },
+};
+
+const BUNDLE = {
+  ticker: "AAPL",
+  generated_at: "2026-05-31T00:00:00+00:00",
+  as_of: "2026-05-31",
+  data_confidence: 0.82,
+  confidence_label: "high",
+  fact_pack: FACT_PACK,
+  financials: null,
+  dcf: null,
+  peers: null,
+  earnings: null,
+  thesis: null,
+  news: null,
 };
 
 const VERDICT = {
@@ -172,43 +177,16 @@ const VERDICT = {
 };
 
 function routeFetch(verdict: { body: unknown; status?: number }) {
-  return vi
-    .spyOn(globalThis, "fetch")
-    .mockImplementation(async (input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : input.toString();
-      if (url.includes("/research/fact_pack/")) {
-        return envelope({
-          data: { fact_pack: FACT_PACK },
-          error: null,
-          meta: { request_id: "r-fp" },
-        });
-      }
-      if (url.includes("/research/verdict")) {
-        return envelope(verdict.body, verdict.status ?? 200);
-      }
-      if (url.includes("/research/news/")) {
-        return envelope({
-          data: {
-            items: [
-              {
-                title: "Apple unveils new chips",
-                url: "https://example.com/news",
-                type: "news",
-                source: "fmp",
-                source_label: "FMP",
-                site: "Reuters",
-                published: "2026-06-13",
-              },
-            ],
-            sources: [{ field: "news", provider: "fmp", label: "FMP", role: "primary" }],
-            warnings: [],
-          },
-          error: null,
-          meta: { request_id: "r-news" },
-        });
-      }
-      return envelope(billingEnvelope);
-    });
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
+    const url = typeof input === "string" ? input : input.toString();
+    if (url.includes("/research/AAPL/bundle")) {
+      return envelope({ data: { bundle: BUNDLE }, error: null, meta: { request_id: "r-b" } });
+    }
+    if (url.includes("/research/verdict")) {
+      return envelope(verdict.body, verdict.status ?? 200);
+    }
+    return envelope(billingEnvelope);
+  });
 }
 
 beforeEach(() => {
@@ -226,82 +204,41 @@ describe("ResearchPage", () => {
     renderWithQuery(<ResearchPage />);
 
     expect(screen.getByRole("heading", { name: /research/i })).toBeInTheDocument();
-    expect(
-      screen.getByRole("textbox", { name: /ticker symbol/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /ticker symbol/i })).toBeInTheDocument();
     expect(screen.getByText(/search a ticker above/i)).toBeInTheDocument();
   });
 
-  it("paints the fact pack cockpit and the AI verdict after a search", async () => {
+  it("paints the whole cockpit and the auto-fired AI verdict after a search", async () => {
     routeFetch({
-      body: {
-        data: { verdict: VERDICT, fact_pack: FACT_PACK },
-        error: null,
-        meta: { request_id: "r-v" },
-      },
+      body: { data: { verdict: VERDICT, fact_pack: FACT_PACK }, error: null, meta: { request_id: "r-v" } },
     });
 
     const user = userEvent.setup();
     renderWithQuery(<ResearchPage />);
 
-    await user.type(
-      screen.getByRole("textbox", { name: /ticker symbol/i }),
-      "aapl",
-    );
+    await user.type(screen.getByRole("textbox", { name: /ticker symbol/i }), "aapl");
     await user.click(screen.getByRole("button", { name: /research/i }));
 
-    // ── above the tabs (always visible): identity + one-line verdict + dims.
-    expect(
-      (await screen.findAllByText(/apple inc\./i)).length,
-    ).toBeGreaterThanOrEqual(1);
-    expect(
-      await screen.findByText(/durable franchise at a fair multiple/i),
-    ).toBeInTheDocument();
-    expect(screen.getByText("88/100")).toBeInTheDocument(); // quality dimension bar
-    // ── Overview tab (default): the deterministic driver string.
-    expect(
-      screen.getByText(/high gross margins and durable franchise/i),
-    ).toBeInTheDocument();
-
-    // ── Valuation tab: band pill + dividend yield (the deterministic DCF
-    // section self-fetches and is exercised separately).
-    await user.click(screen.getByRole("tab", { name: /valuation/i }));
-    expect(await screen.findByText(/^rich$/i)).toBeInTheDocument();
-    expect(screen.getByText("2.5%")).toBeInTheDocument(); // dividend yield
-
-    // ── Peers tab: the FactPack peer-comparison card.
-    await user.click(screen.getByRole("tab", { name: /^peers$/i }));
-    expect(await screen.findByText(/peer comparison/i)).toBeInTheDocument();
-
-    // ── Fundamentals tab: debt/equity + ownership/insider.
-    await user.click(screen.getByRole("tab", { name: /fundamentals/i }));
-    expect(await screen.findByText("0.32")).toBeInTheDocument(); // debt/equity
-    expect(screen.getByText(/ownership & insiders/i)).toBeInTheDocument();
+    // Identity + trust strip + driver — all on one page, no tabs.
+    expect((await screen.findAllByText(/apple inc\./i)).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Confidence: High \(82%\)/)).toBeInTheDocument();
+    expect(screen.getByText(/high gross margins and durable franchise/i)).toBeInTheDocument();
+    // Valuation band + dividend yield (always visible now).
+    expect(screen.getByText(/^rich$/i)).toBeInTheDocument();
+    expect(screen.getByText("2.5%")).toBeInTheDocument();
+    // Ownership + momentum cards.
     expect(screen.getByText(/^net buying$/i)).toBeInTheDocument();
-
-    // ── Technicals tab: momentum (incl. the new realized-vol stat).
-    await user.click(screen.getByRole("tab", { name: /technicals/i }));
-    expect(await screen.findByText(/price momentum/i)).toBeInTheDocument();
     expect(screen.getByText(/^uptrend$/i)).toBeInTheDocument();
-    expect(screen.getByText(/realized vol 20d/i)).toBeInTheDocument();
-
-    // ── News tab.
-    await user.click(screen.getByRole("tab", { name: /news & events/i }));
-    expect(await screen.findByText(/apple unveils new chips/i)).toBeInTheDocument();
-
-    // ── Sources tab: provenance table.
-    await user.click(screen.getByRole("tab", { name: /sources/i }));
-    expect(await screen.findByText(/data sources & provenance/i)).toBeInTheDocument();
+    // The auto-fired AI verdict.
+    expect(await screen.findByText(/durable franchise at a fair multiple/i)).toBeInTheDocument();
+    expect(screen.getByText("88/100")).toBeInTheDocument(); // quality dimension bar
   });
 
   it("shows the upgrade CTA on a quota_exceeded verdict, keeping the data", async () => {
     routeFetch({
       body: {
         data: null,
-        error: {
-          code: "quota_exceeded",
-          message: "Monthly analysis quota exhausted.",
-        },
+        error: { code: "quota_exceeded", message: "Monthly analysis quota exhausted." },
         meta: { request_id: "r-q" },
       },
       status: 429,
@@ -310,20 +247,13 @@ describe("ResearchPage", () => {
     const user = userEvent.setup();
     renderWithQuery(<ResearchPage />);
 
-    await user.type(
-      screen.getByRole("textbox", { name: /ticker symbol/i }),
-      "aapl",
-    );
+    await user.type(screen.getByRole("textbox", { name: /ticker symbol/i }), "aapl");
     await user.click(screen.getByRole("button", { name: /research/i }));
 
     // Fact pack still painted.
-    expect(
-      (await screen.findAllByText(/apple inc\./i)).length,
-    ).toBeGreaterThanOrEqual(1);
+    expect((await screen.findAllByText(/apple inc\./i)).length).toBeGreaterThanOrEqual(1);
     // Verdict replaced by the upgrade CTA.
-    expect(
-      await screen.findByText(/used your ai analysis quota/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/used your ai analysis quota/i)).toBeInTheDocument();
     const link = screen.getByRole("link", { name: /see plans/i });
     expect(link).toHaveAttribute("href", "/pricing");
   });

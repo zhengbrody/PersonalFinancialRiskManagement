@@ -24,20 +24,28 @@ const sp = (v: number | null | undefined) =>
 const num = (v: number | null | undefined) =>
   v == null || !Number.isFinite(v) ? "—" : v.toFixed(2);
 
-export function EarningsComparison({ ticker }: { ticker: string | null }) {
-  const q = useEarnings(ticker);
-  if (!ticker) return null;
-  if (q.isLoading) return <EarnSkeleton />;
-  if (q.isError || !q.data) {
-    return (
-      <Card>
-        <CardContent className="py-6 text-sm text-muted-foreground">
-          Couldn&apos;t load earnings right now — please try again shortly.
-        </CardContent>
-      </Card>
-    );
+export function EarningsComparison({
+  ticker,
+  data,
+}: {
+  ticker: string | null;
+  data?: EarningsOutput;
+}) {
+  const q = useEarnings(data ? null : ticker);
+  if (!ticker && !data) return null;
+  if (!data) {
+    if (q.isLoading) return <EarnSkeleton />;
+    if (q.isError || !q.data) {
+      return (
+        <Card>
+          <CardContent className="py-6 text-sm text-muted-foreground">
+            Couldn&apos;t load earnings right now — please try again shortly.
+          </CardContent>
+        </Card>
+      );
+    }
   }
-  const e = q.data.earnings;
+  const e = data ?? q.data!.earnings;
   return (
     <div className="space-y-4">
       <Timeline e={e} />

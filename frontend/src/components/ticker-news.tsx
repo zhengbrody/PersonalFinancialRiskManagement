@@ -10,7 +10,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataSourceBadges } from "@/components/data-source-badges";
-import { useTickerNews, type UnifiedNewsItem } from "@/lib/queries";
+import {
+  useTickerNews,
+  type UnifiedNewsItem,
+  type TickerNews as TickerNewsData,
+} from "@/lib/queries";
 
 const TYPE_LABEL: Record<string, string> = {
   news: "News",
@@ -20,28 +24,35 @@ const TYPE_LABEL: Record<string, string> = {
   macro: "Macro",
 };
 
-export function TickerNews({ ticker }: { ticker: string | null }) {
-  const news = useTickerNews(ticker);
-  if (!ticker) return null;
+export function TickerNews({
+  ticker,
+  data,
+}: {
+  ticker: string | null;
+  data?: TickerNewsData;
+}) {
+  const news = useTickerNews(data ? null : ticker);
+  if (!ticker && !data) return null;
+  const value = data ?? news.data;
 
   return (
     <Card>
       <CardHeader className="pb-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-sm">News &amp; filings</CardTitle>
-          {news.data && <DataSourceBadges sources={news.data.sources} />}
+          {value && <DataSourceBadges sources={value.sources} />}
         </div>
       </CardHeader>
       <CardContent className="space-y-2">
-        {news.isPending ? (
+        {!data && news.isPending ? (
           <>
             <Skeleton className="h-8" />
             <Skeleton className="h-8" />
           </>
-        ) : news.isError ? (
+        ) : !data && news.isError ? (
           <p className="text-xs text-muted-foreground">Couldn&apos;t load news right now.</p>
         ) : (
-          (news.data?.items ?? []).map((it, i) => <NewsRow key={i} item={it} />)
+          (value?.items ?? []).map((it, i) => <NewsRow key={i} item={it} />)
         )}
       </CardContent>
     </Card>

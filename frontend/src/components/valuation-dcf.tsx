@@ -50,19 +50,28 @@ type Editor = {
   projection_years: string;
 };
 
-export function ValuationDcf({ ticker }: { ticker: string | null }) {
+export function ValuationDcf({
+  ticker,
+  data,
+}: {
+  ticker: string | null;
+  data?: DcfOutput;
+}) {
   const dcf = useDcf();
   const { mutate } = dcf;
   const [edit, setEdit] = useState<Editor | null>(null);
 
-  // Fetch the base DCF on ticker change.
+  // Fetch the base DCF on ticker change — unless `data` (the consolidated
+  // bundle's base DCF) was supplied, in which case we render it directly and
+  // only call the backend when the user edits + recalculates.
   useEffect(() => {
-    if (ticker) mutate({ ticker });
+    if (ticker && !data) mutate({ ticker });
     setEdit(null);
-  }, [ticker, mutate]);
+  }, [ticker, data, mutate]);
 
-  // Seed the editor once from the derived base assumptions.
-  const out = dcf.data?.dcf;
+  // Seed the editor once from the derived base assumptions. A recalc result
+  // (dcf.data) wins over the bundle's base.
+  const out = dcf.data?.dcf ?? data;
   useEffect(() => {
     if (out && edit === null) {
       const i = out.inputs;
