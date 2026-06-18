@@ -50,12 +50,19 @@ validation). Override the port with `E2E_PORT` if `3100` is taken.
 - `/legal/terms` is reachable and shows the free-beta ("Beta access") copy.
 - `/demo-risk-check` loads.
 
+**Both specs run on two projects** — `chromium` (Desktop Chrome) and
+`mobile-chrome` (Pixel 7: mobile viewport + touch + mobile UA, still the Chromium
+engine). The mobile run guards the retention-critical flow on a phone — clicks go
+through Playwright's tap-actionability checks, so an off-screen / overlapped
+control on a small viewport fails the test.
+
 ## Not covered (yet)
 
 - Real signup/login against Supabase, OAuth, password reset (would need a test
   Supabase project + seeded users; out of scope for a deterministic suite).
 - Real backend/LLM responses, billing/Stripe checkout, multi-portfolio CRUD.
-- Mobile viewports / visual regression.
+- True iOS/Safari rendering (mobile runs on Chromium; WebKit would need
+  `playwright install webkit`) and visual-regression snapshots.
 
 These are intentional: this suite proves the **wiring** of the core journey
 (auth → data → render → interact) without flaky external dependencies.

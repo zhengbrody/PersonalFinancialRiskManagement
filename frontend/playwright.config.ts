@@ -43,7 +43,14 @@ export default defineConfig({
     trace: "on-first-retry",
     video: "retain-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    // Mobile viewport + touch + mobile UA, still on the Chromium engine (no extra
+    // browser download). Guards the retention-critical flow on a phone — the
+    // target audience. (WebKit/iOS fidelity is a later add if iOS-specific bugs
+    // surface; it would need `playwright install webkit`.)
+    { name: "mobile-chrome", use: { ...devices["Pixel 7"] } },
+  ],
   webServer: {
     // Build with the dummy NEXT_PUBLIC_* inlined, then serve. `next start` is
     // production-like + stable for E2E (vs `next dev`'s on-demand compile).
