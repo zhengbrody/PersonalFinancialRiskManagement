@@ -130,11 +130,9 @@ const JSON_LD = JSON.stringify({
       operatingSystem: "Web",
       description:
         "AI portfolio risk analytics for individual investors: portfolio health score (0-1000), VaR/CVaR, stress tests, factor exposure, and an AI copilot grounded in deterministic risk math.",
-      offers: [
-        { "@type": "Offer", name: "Free", price: "0", priceCurrency: "USD" },
-        { "@type": "Offer", name: "Basic", price: "10", priceCurrency: "USD" },
-        { "@type": "Offer", name: "Pro", price: "25", priceCurrency: "USD" },
-      ],
+      // Free educational beta — no paid tiers advertised. (Priced offers
+      // return when monetization launches; gate alongside the billing flag.)
+      offers: [{ "@type": "Offer", price: "0", priceCurrency: "USD" }],
       publisher: { "@id": `${SITE_URL}/#org` },
     },
   ],
