@@ -247,6 +247,47 @@ def test_build_factpack_happy_path_with_mocked_provider(monkeypatch):
     assert "not investment advice" in pack.disclaimer.lower()
 
 
+# ── provider: tier-adaptive limit fallback ──────────────────────────
+
+
+def test_get_financial_statements_falls_back_to_tier_limit(monkeypatch):
+    """Some FMP tiers cap quarterly depth (e.g. 5); asking for 8 → None. The
+    provider must fall back to a smaller limit instead of returning nothing."""
+    fp.reset_cache()
+    monkeypatch.setattr(fp, "_key", lambda: "test-key")
+    tried: list[int] = []
+
+    def fake_get(path, params):
+        n = params["limit"]
+        if path == "/income-statement":
+            tried.append(n)
+            if n > 5:  # tier cap: deeper history is premium → error → None
+                return None
+            return [
+                {
+                    "date": f"2024-{12 - i:02d}-28",
+                    "calendarYear": "2024",
+                    "period": f"Q{4 - (i % 4)}",
+                    "revenue": 100 - i,
+                    "netIncome": 25 - i,
+                    "eps": 2.0 - i * 0.1,
+                    "ebitda": 30 - i,
+                    "freeCashFlow": 22 - i,
+                }
+                for i in range(n)
+            ]
+        return [
+            {"date": f"2024-{12 - i:02d}-28", "totalDebt": 1000, "cashAndCashEquivalents": 500}
+            for i in range(n)
+        ]
+
+    monkeypatch.setattr(fp, "_get", fake_get)
+    res = fp.get_financial_statements("AAPL", period="quarter", limit=8)
+    assert res.data is not None and len(res.data) == 5  # fell back 8 → 5
+    assert tried[0] == 8 and 5 in tried  # tried the requested depth first
+    assert any("history_capped_at_5" in w for w in res.warnings)
+
+
 # ── endpoint ────────────────────────────────────────────────────────
 
 

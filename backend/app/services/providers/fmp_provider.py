@@ -271,10 +271,24 @@ def get_financial_statements(
     tk = ticker.strip().upper()
 
     def _produce() -> ProviderResult:
-        params = {"symbol": tk, "period": period, "limit": limit}
-        inc = _get("/income-statement", params)
-        if not isinstance(inc, list) or not inc:
+        # Some FMP tiers cap statement depth (e.g. quarterly history to ~5);
+        # asking for more returns an error → None. Fall back to progressively
+        # smaller limits so we get as much history as the plan allows instead of
+        # all-or-nothing. A premium key with limit=8 takes the first rung.
+        ladder: list[int] = []
+        for n in (limit, 5, 4):
+            if 0 < n <= limit and n not in ladder:
+                ladder.append(n)
+        inc: Any = None
+        eff = limit
+        for n in ladder:
+            got = _get("/income-statement", {"symbol": tk, "period": period, "limit": n})
+            if isinstance(got, list) and got:
+                inc, eff = got, n
+                break
+        if inc is None:
             return ProviderResult(data=None, warnings=["no_income_statement"])
+        params = {"symbol": tk, "period": period, "limit": eff}
         bal_raw = _get("/balance-sheet-statement", params)
         cf_raw = _get("/cash-flow-statement", params)
         bal_by = (
@@ -297,6 +311,8 @@ def get_financial_statements(
         ]
         rows.sort(key=lambda x: x.get("fiscal_date") or "", reverse=True)  # newest first
         warnings: list[str] = []
+        if eff < limit:
+            warnings.append(f"history_capped_at_{eff}")
         if not bal_by:
             warnings.append("no_balance_sheet")
         if not cf_by:
