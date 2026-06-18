@@ -9,7 +9,10 @@ const nextConfig = {
   // standalone + `.next/static` + `public/` and runs `node server.js`.
   //
   // Safe to keep on for dev too — `next dev` ignores this setting.
-  output: "standalone",
+  // The E2E webServer serves with `next start`, which doesn't pair with
+  // standalone output; `E2E_BUILD=1` (set only by playwright.config.ts) drops
+  // standalone for that build. Production is unaffected (env unset → standalone).
+  output: process.env.E2E_BUILD ? undefined : "standalone",
 
   // Required on Next 14 so `src/instrumentation.ts` (Sentry server init) runs.
   experimental: { instrumentationHook: true },

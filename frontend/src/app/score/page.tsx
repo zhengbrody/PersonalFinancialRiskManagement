@@ -367,7 +367,10 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="flex items-baseline gap-3">
-            <span className="font-mono text-6xl font-semibold tracking-tight text-primary">
+            <span
+              data-testid="score-page-overall"
+              className="font-mono text-6xl font-semibold tracking-tight text-primary"
+            >
               {result.overall_score}
             </span>
             <span className="text-lg text-muted-foreground">/ 1000</span>
