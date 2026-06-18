@@ -1345,6 +1345,102 @@ export function useTickerNews(ticker: string | null) {
   });
 }
 
+// ── Institutional Research FactPack (financials + deterministic trends) ──
+// Every number here is computed by the backend; the LLM is never involved.
+const finFigures = {
+  revenue: z.number().nullish(),
+  gross_profit: z.number().nullish(),
+  operating_income: z.number().nullish(),
+  net_income: z.number().nullish(),
+  eps: z.number().nullish(),
+  eps_diluted: z.number().nullish(),
+  free_cash_flow: z.number().nullish(),
+  capex: z.number().nullish(),
+  cash: z.number().nullish(),
+  debt: z.number().nullish(),
+  shares_outstanding: z.number().nullish(),
+  diluted_shares: z.number().nullish(),
+  ebitda: z.number().nullish(),
+  gross_margin: z.number().nullish(),
+  operating_margin: z.number().nullish(),
+  net_margin: z.number().nullish(),
+  fcf_margin: z.number().nullish(),
+};
+
+export const researchFactPackSchema = z.looseObject({
+  ticker: z.string(),
+  as_of: z.string().nullish(),
+  generated_at: z.string().nullish(),
+  snapshot: z.looseObject({
+    ticker: z.string(),
+    name: z.string().nullish(),
+    sector: z.string().nullish(),
+    industry: z.string().nullish(),
+    exchange: z.string().nullish(),
+    currency: z.string().default("USD"),
+    price: z.number().nullish(),
+    market_cap: z.number().nullish(),
+    beta: z.number().nullish(),
+    shares_outstanding: z.number().nullish(),
+  }),
+  quarters: z.array(z.looseObject({ period: z.string(), fiscal_date: z.string().nullish(), ...finFigures })),
+  annuals: z.array(z.looseObject({ fiscal_year: z.string(), fiscal_date: z.string().nullish(), ...finFigures })),
+  trend: z.looseObject({
+    ttm_revenue: z.number().nullish(),
+    ttm_ebitda: z.number().nullish(),
+    ttm_fcf: z.number().nullish(),
+    ttm_eps: z.number().nullish(),
+    ttm_net_income: z.number().nullish(),
+    revenue_yoy: z.number().nullish(),
+    revenue_qoq: z.number().nullish(),
+    eps_yoy: z.number().nullish(),
+    net_income_yoy: z.number().nullish(),
+    prior_revenue_yoy: z.number().nullish(),
+    gross_margin_delta_yoy: z.number().nullish(),
+    operating_margin_delta_yoy: z.number().nullish(),
+    net_margin_delta_yoy: z.number().nullish(),
+    revenue_trend: z.string().nullish(),
+    flags: z.array(z.string()),
+    quarters_used: z.number(),
+    annuals_used: z.number(),
+  }),
+  provenance: z.array(
+    z.looseObject({
+      dataset: z.string(),
+      source: z.string(),
+      as_of: z.string().nullish(),
+      fetched_at: z.string().nullish(),
+      coverage: z.number(),
+      note: z.string().nullish(),
+    }),
+  ),
+  missing_data: z.array(z.looseObject({ dataset: z.string(), reason: z.string() })),
+  data_confidence: z.number(),
+  confidence_label: z.string(),
+  disclaimer: z.string(),
+});
+export type ResearchFactPack = z.infer<typeof researchFactPackSchema>;
+
+const researchFactPackResponseSchema = z.looseObject({ fact_pack: researchFactPackSchema });
+type ResearchFactPackResponse = z.infer<typeof researchFactPackResponseSchema>;
+
+/** Institutional FactPack (financial statements + deterministic trends).
+ * Authed, no credit; cached. Self-fetches by ticker. */
+export function useResearchFinancials(ticker: string | null) {
+  const { accessToken } = useAuth();
+  return useQuery<ResearchFactPackResponse>({
+    queryKey: ["research", "financials", ticker],
+    enabled: Boolean(accessToken && ticker),
+    queryFn: () =>
+      apiFetch<ResearchFactPackResponse>(
+        `/api/v1/research/${encodeURIComponent(ticker!)}/fact-pack`,
+        { authToken: accessToken!, schema: researchFactPackResponseSchema },
+      ),
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  });
+}
+
 /** Fetch the deterministic FactPack for a ticker (fast, no credit). */
 export function useFactPack() {
   const { accessToken } = useAuth();

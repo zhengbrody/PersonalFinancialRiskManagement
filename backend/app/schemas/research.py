@@ -190,3 +190,135 @@ class VerdictRequest(BaseModel):
             "When supplied the verdict REUSES it (no second network fetch)."
         ),
     )
+
+
+# ════════════════════════════════════════════════════════════════════
+# Institutional Research FactPack (Phase 1) — financial statements +
+# deterministic trend engine. ADDITIVE: this is a separate, richer contract
+# from the compact FactPack above (which the verdict LLM consumes). Every
+# number below is computed in backend code; the LLM never produces any of them.
+# Missing data is explicit (never hidden); provenance is per-dataset.
+# ════════════════════════════════════════════════════════════════════
+
+
+class DataProvenanceItem(BaseModel):
+    """Where one dataset came from and when — provenance is per-dataset, always
+    present so the UI can show source + freshness + coverage."""
+
+    dataset: str  # "profile" | "income_quarterly" | "balance_quarterly" | "cashflow_annual" | ...
+    source: str  # "fmp" | "yfinance" | "derived" | "none"
+    as_of: Optional[str] = None  # latest fiscal date represented in the data
+    fetched_at: Optional[str] = None  # ISO timestamp of the fetch
+    coverage: float = 0.0  # 0..1 fraction of expected fields present
+    note: Optional[str] = None
+
+
+class MissingDataItem(BaseModel):
+    """A dataset/field that is explicitly absent — surfaced, never silently
+    dropped (product principle 3)."""
+
+    dataset: str
+    reason: str  # "provider_error" | "no_key" | "empty" | "insufficient_history" | "unsupported"
+
+
+class CompanySnapshot(BaseModel):
+    ticker: str
+    name: Optional[str] = None
+    sector: Optional[str] = None
+    industry: Optional[str] = None
+    exchange: Optional[str] = None
+    currency: str = "USD"
+    price: Optional[float] = None
+    market_cap: Optional[float] = None
+    beta: Optional[float] = None
+    shares_outstanding: Optional[float] = None
+
+
+class _FinancialFigures(BaseModel):
+    """Shared per-period figures (raw, where available) + deterministically
+    computed margins. Subclassed by FinancialQuarter / FinancialAnnual so the
+    field set + margin semantics are identical across cadences (DRY)."""
+
+    # raw line items (None = the provider didn't supply it)
+    revenue: Optional[float] = None
+    gross_profit: Optional[float] = None
+    operating_income: Optional[float] = None
+    net_income: Optional[float] = None
+    eps: Optional[float] = None
+    eps_diluted: Optional[float] = None
+    free_cash_flow: Optional[float] = None
+    capex: Optional[float] = None
+    cash: Optional[float] = None
+    debt: Optional[float] = None
+    shares_outstanding: Optional[float] = None
+    diluted_shares: Optional[float] = None
+    ebitda: Optional[float] = None
+    # deterministic margins (ratios; None when revenue or the numerator is missing)
+    gross_margin: Optional[float] = None
+    operating_margin: Optional[float] = None
+    net_margin: Optional[float] = None
+    fcf_margin: Optional[float] = None
+
+
+class FinancialQuarter(_FinancialFigures):
+    period: str  # human label, e.g. "2024-Q2"
+    fiscal_date: Optional[str] = None  # statement date, e.g. "2024-06-29"
+
+
+class FinancialAnnual(_FinancialFigures):
+    fiscal_year: str  # e.g. "2024"
+    fiscal_date: Optional[str] = None
+
+
+class FinancialTrendSummary(BaseModel):
+    """Deterministic trend read across the quarterly (and annual) series. All
+    growth is fractional (0.12 = +12%); margin deltas are in ratio points."""
+
+    # Trailing-twelve-month aggregates (sum of the latest 4 quarters; None if <4)
+    ttm_revenue: Optional[float] = None
+    ttm_ebitda: Optional[float] = None
+    ttm_fcf: Optional[float] = None
+    ttm_eps: Optional[float] = None
+    ttm_net_income: Optional[float] = None
+
+    # Latest-quarter growth
+    revenue_yoy: Optional[float] = None  # latest Q vs same Q one year prior
+    revenue_qoq: Optional[float] = None  # latest Q vs the previous quarter
+    eps_yoy: Optional[float] = None
+    net_income_yoy: Optional[float] = None
+    prior_revenue_yoy: Optional[float] = None  # the YoY one quarter earlier (for acceleration)
+
+    # Margin deltas: latest Q margin minus the same-quarter-prior-year margin
+    gross_margin_delta_yoy: Optional[float] = None
+    operating_margin_delta_yoy: Optional[float] = None
+    net_margin_delta_yoy: Optional[float] = None
+
+    # Deterministic flags
+    revenue_trend: Optional[str] = None  # "accelerating" | "decelerating" | "stable"
+    flags: list[str] = Field(default_factory=list)
+    quarters_used: int = 0
+    annuals_used: int = 0
+
+
+class ResearchFactPack(BaseModel):
+    """Institutional research fact pack: company snapshot + up to 8 quarters and
+    5 fiscal years of financials + a deterministic trend summary, with explicit
+    provenance, missing-data, and a confidence score. Quarters/annuals are
+    ordered NEWEST FIRST (index 0 = most recent)."""
+
+    ticker: str
+    as_of: Optional[str] = None  # latest fiscal date across datasets
+    generated_at: Optional[str] = None  # ISO timestamp the pack was built
+    snapshot: CompanySnapshot
+    quarters: list[FinancialQuarter] = Field(default_factory=list)
+    annuals: list[FinancialAnnual] = Field(default_factory=list)
+    trend: FinancialTrendSummary = Field(default_factory=FinancialTrendSummary)
+    provenance: list[DataProvenanceItem] = Field(default_factory=list)
+    missing_data: list[MissingDataItem] = Field(default_factory=list)
+    data_confidence: float = 0.0  # 0..1, deterministic
+    confidence_label: str = "low"  # "high" | "medium" | "low"
+    disclaimer: str = (
+        "Educational and research use only — not investment advice. All figures "
+        "are computed deterministically from provider data; missing data is listed "
+        "explicitly and never inferred by an AI model."
+    )

@@ -220,6 +220,102 @@ def get_growth(ticker: str, *, years: int = 5) -> ProviderResult[list[GrowthRow]
     return _cached("growth", tk, _TTL_FUND, _produce)
 
 
+# ── full financial statements (institutional FactPack, Phase 1) ─────
+
+
+def _period_label(cal: Any, per: Any, period: str, date: Any) -> str:
+    """Human period label: 'YYYY' (annual) or 'YYYY-Qn' (quarter)."""
+    if period == "annual":
+        return str(cal) if cal else (str(date) if date else "")
+    if cal and per:
+        return f"{cal}-{per}"
+    return str(per or date or "")
+
+
+# Normalized keys returned per period (match schemas.research._FinancialFigures).
+_STMT_CRITICAL = ["revenue", "net_income", "eps", "free_cash_flow", "ebitda"]
+
+
+def _normalize_statement(inc: dict, bal: dict, cf: dict, period: str) -> dict:
+    """Merge one period's income + balance + cash-flow FMP rows into a single
+    normalized dict whose keys match the FinancialQuarter/Annual schema (raw
+    numbers only; margins/trends are computed later, in the service)."""
+    cal = _pick(inc, "calendarYear", "fiscalYear")
+    return {
+        "fiscal_date": _pick(inc, "date"),
+        "fiscal_year": str(cal) if cal else None,
+        "period": _period_label(cal, _pick(inc, "period"), period, _pick(inc, "date")),
+        "revenue": _num(_pick(inc, "revenue")),
+        "gross_profit": _num(_pick(inc, "grossProfit")),
+        "operating_income": _num(_pick(inc, "operatingIncome")),
+        "net_income": _num(_pick(inc, "netIncome")),
+        "eps": _num(_pick(inc, "eps", "epsBasic")),
+        "eps_diluted": _num(_pick(inc, "epsdiluted", "epsDiluted")),
+        "ebitda": _num(_pick(inc, "ebitda")),
+        "shares_outstanding": _num(_pick(inc, "weightedAverageShsOut")),
+        "diluted_shares": _num(_pick(inc, "weightedAverageShsOutDil")),
+        "cash": _num(_pick(bal, "cashAndCashEquivalents", "cashAndShortTermInvestments")),
+        "debt": _num(_pick(bal, "totalDebt", "netDebt")),
+        "free_cash_flow": _num(_pick(cf, "freeCashFlow")),
+        "capex": _num(_pick(cf, "capitalExpenditure")),
+    }
+
+
+def get_financial_statements(
+    ticker: str, *, period: str = "quarter", limit: int = 8
+) -> ProviderResult[list[dict]]:
+    """Income + balance-sheet + cash-flow statements merged by fiscal date into
+    normalized per-period dicts (newest first). ``period`` is "quarter" or
+    "annual". Fail-soft: missing key / dead endpoint / no income statement →
+    ``data=None`` + warnings, so the caller records a missing-data entry."""
+    tk = ticker.strip().upper()
+
+    def _produce() -> ProviderResult:
+        params = {"symbol": tk, "period": period, "limit": limit}
+        inc = _get("/income-statement", params)
+        if not isinstance(inc, list) or not inc:
+            return ProviderResult(data=None, warnings=["no_income_statement"])
+        bal_raw = _get("/balance-sheet-statement", params)
+        cf_raw = _get("/cash-flow-statement", params)
+        bal_by = (
+            {r.get("date"): r for r in bal_raw if isinstance(r, dict)}
+            if isinstance(bal_raw, list)
+            else {}
+        )
+        cf_by = (
+            {r.get("date"): r for r in cf_raw if isinstance(r, dict)}
+            if isinstance(cf_raw, list)
+            else {}
+        )
+
+        rows = [
+            _normalize_statement(
+                r, bal_by.get(r.get("date"), {}), cf_by.get(r.get("date"), {}), period
+            )
+            for r in inc
+            if isinstance(r, dict)
+        ]
+        rows.sort(key=lambda x: x.get("fiscal_date") or "", reverse=True)  # newest first
+        warnings: list[str] = []
+        if not bal_by:
+            warnings.append("no_balance_sheet")
+        if not cf_by:
+            warnings.append("no_cash_flow")
+        latest = rows[0] if rows else {}
+        coverage = round(
+            sum(1 for f in _STMT_CRITICAL if latest.get(f) is not None) / len(_STMT_CRITICAL), 3
+        )
+        return ProviderResult(
+            data=rows or None,
+            source="fmp",
+            as_of=latest.get("fiscal_date"),
+            coverage=coverage,
+            warnings=warnings,
+        )
+
+    return _cached(f"stmts_{period}", tk, _TTL_FUND, _produce)
+
+
 def get_analyst(ticker: str) -> ProviderResult[AnalystConsensus]:
     tk = ticker.upper()
 
