@@ -46,13 +46,38 @@ class DCFInput(BaseModel):
     tax_rate: DCFAssumption
     da_pct_revenue: DCFAssumption  # D&A as a % of revenue
     capex_pct_revenue: DCFAssumption  # capex as a % of revenue
-    nwc_pct_revenue: DCFAssumption  # ΔNWC as a % of the revenue change
+    nwc_pct_revenue: DCFAssumption  # ΔNWC as a % of revenue (workbook: avg of last-3 historical)
     wacc: DCFAssumption
+    # Itemized WACC build-up mirroring the workbook's WACC sheet: cost of equity
+    # (rf + β·MRP), cost of debt, capital-structure weights, and the inputs. Each
+    # carries its own source_type. The headline `wacc` above is the composite.
+    wacc_breakdown: list[DCFAssumption] = Field(default_factory=list)
     terminal_growth: DCFAssumption
     net_debt: DCFAssumption
     diluted_shares: DCFAssumption
     provenance: list[DataProvenanceItem] = Field(default_factory=list)
     missing_data: list[MissingDataItem] = Field(default_factory=list)
+
+
+class DCFHistoricalRow(BaseModel):
+    """One reported fiscal year as used to DERIVE the assumptions — the workbook's
+    IS + CFS basis rows (Revenue/growth, EBIT/margin, Taxes/%EBIT, D&A/%sales,
+    CapEx/%sales, ΔNWC/%sales). Every value is reported/derived, never projected."""
+
+    fiscal_year: Optional[str] = None
+    fiscal_date: Optional[str] = None
+    revenue: Optional[float] = None
+    revenue_growth: Optional[float] = None
+    ebit: Optional[float] = None
+    ebit_margin: Optional[float] = None
+    taxes: Optional[float] = None
+    tax_pct_ebit: Optional[float] = None
+    da: Optional[float] = None
+    da_pct_sales: Optional[float] = None
+    capex: Optional[float] = None
+    capex_pct_sales: Optional[float] = None
+    change_nwc: Optional[float] = None
+    nwc_pct_sales: Optional[float] = None
 
 
 class DCFProjectionYear(BaseModel):
@@ -107,6 +132,16 @@ class DCFOverrides(BaseModel):
     terminal_growth: Optional[float] = Field(default=None, ge=-0.05, le=0.1)
     net_debt: Optional[float] = None
     diluted_shares: Optional[float] = Field(default=None, gt=0)
+    # WACC build-up overrides (workbook WACC sheet). When `wacc` above is set it
+    # wins outright; otherwise these feed the capital-structure WACC computation.
+    cost_of_debt: Optional[float] = Field(default=None, ge=0, le=0.3)
+    risk_free_rate: Optional[float] = Field(default=None, ge=0, le=0.2)
+    beta: Optional[float] = Field(default=None, ge=0, le=5)
+    market_risk_premium: Optional[float] = Field(default=None, ge=0, le=0.15)
+    equity_value: Optional[float] = Field(default=None, gt=0)  # market cap of equity
+    total_debt: Optional[float] = Field(default=None, ge=0)
+    short_term_investments: Optional[float] = Field(default=None, ge=0)
+    minority_interest: Optional[float] = Field(default=None, ge=0)
 
 
 class DCFRequest(BaseModel):
@@ -117,14 +152,23 @@ class DCFValuationOutput(BaseModel):
     ticker: str
     currency: str = "USD"
     as_of: Optional[str] = None
+    valuation_date: Optional[str] = None  # the as-of date the valuation is anchored to
     generated_at: Optional[str] = None
 
     inputs: DCFInput
+    historical: list[DCFHistoricalRow] = Field(default_factory=list)  # IS/CFS basis rows
     projections: list[DCFProjectionYear] = Field(default_factory=list)
 
     terminal_value: Optional[float] = None
     pv_terminal_value: Optional[float] = None
     enterprise_value: Optional[float] = None
+    # Itemized equity bridge (workbook DCF rows 59–63): EV + cash + ST investments
+    # − total debt − minority interest = equity value; ÷ diluted shares = price.
+    cash: Optional[float] = None
+    short_term_investments: Optional[float] = None
+    total_debt: Optional[float] = None
+    minority_interest: Optional[float] = None
+    diluted_shares: Optional[float] = None
     equity_value: Optional[float] = None
     implied_value_per_share: Optional[float] = None
     current_price: Optional[float] = None

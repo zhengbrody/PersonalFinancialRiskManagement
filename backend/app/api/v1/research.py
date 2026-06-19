@@ -20,7 +20,7 @@ import time
 from fastapi import APIRouter, Depends, Path, Query, Request
 
 from ...core.deps_auth import AuthedUser, require_user
-from ...core.responses import ok, too_many_requests, unprocessable
+from ...core.responses import forbidden, ok, too_many_requests, unprocessable
 from ...schemas.news import TickerNewsResponse
 from ...schemas.research import FactPack, VerdictRequest
 from ...schemas.valuation import DCFRequest
@@ -52,7 +52,7 @@ def fact_pack(
 ):
     started = time.perf_counter()
     try:
-        fp = rf.build_fact_pack(ticker)
+        fp = rf.build_fact_pack_cached(ticker)
     except ValueError as exc:
         raise unprocessable(str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - fetch/compose failure
@@ -90,6 +90,78 @@ def research_fact_pack(
 
 
 @router.get(
+    "/{ticker}/diagnostics",
+    summary="Research data-coverage diagnostics for a ticker (owner): why is it blank?",
+    response_model=None,
+)
+def research_diagnostics(
+    request: Request,
+    ticker: str = Path(min_length=1, max_length=20),
+    user: AuthedUser = Depends(require_user),
+):
+    """Owner-only. Explains WHY a ticker's research is thin: which provider served
+    the financial statements, how many annual/quarterly rows came back, per-block
+    coverage, the FMP key's PRESENCE (a boolean — never the value), and the
+    missing datasets + provider warnings. For debugging blank research pages.
+    Never prints any secret."""
+    from libs.admin.status import is_owner_email
+
+    if not is_owner_email(user.email):
+        raise forbidden("Owner only.")
+
+    started = time.perf_counter()
+    tk = ticker.strip().upper()
+
+    from ...core.config import get_settings
+    from ...services.providers import fmp_provider as fpp
+
+    fmp_key_present = bool(getattr(get_settings(), "fmp_api_key", ""))
+    ann = fpp.get_financial_statements(tk, period="annual", limit=5)
+    qtr = fpp.get_financial_statements(tk, period="quarter", limit=8)
+    prof = fpp.get_profile(tk)
+    peers = fpp.get_peers(tk)
+    earn = fpp.get_earnings(tk, limit=8)
+
+    missing: list[str] = []
+    if not ann.data:
+        missing.append("income_annual")
+    if not qtr.data:
+        missing.append("income_quarterly")
+    if not getattr(prof, "data", None):
+        missing.append("profile")
+    if not peers.data:
+        missing.append("peers")
+    if not earn.data:
+        missing.append("earnings_estimates")
+
+    warnings = sorted(
+        {
+            *(ann.warnings or []),
+            *(qtr.warnings or []),
+            *(prof.warnings or []),
+            *(peers.warnings or []),
+            *(earn.warnings or []),
+        }
+    )
+
+    payload = {
+        "ticker": tk,
+        "fmp_key_present": fmp_key_present,  # boolean only — never the key value
+        "statements_provider": (ann.source if ann.data else (qtr.source if qtr.data else None)),
+        "annual_rows": len(ann.data or []),
+        "quarterly_rows": len(qtr.data or []),
+        "annual_coverage": round(ann.coverage, 3) if ann.data else 0.0,
+        "profile_coverage": round(prof.coverage, 3) if getattr(prof, "data", None) else 0.0,
+        "peer_count": len(peers.data or []),
+        "earnings_coverage": round(earn.coverage, 3) if earn.data else 0.0,
+        "missing_datasets": missing,
+        "warnings": warnings,
+        "fetched_at": iso_now(),
+    }
+    return ok(payload, request=request, started_at=started)
+
+
+@router.get(
     "/{ticker}/bundle",
     summary="Consolidated research bundle — one fetch for the whole page (no credit)",
     response_model=None,
@@ -109,7 +181,7 @@ def research_bundle(
     started = time.perf_counter()
     tk = ticker.strip().upper()
 
-    fp = safe("research.bundle.factpack", lambda: rf.build_fact_pack(tk))
+    fp = safe("research.bundle.factpack", lambda: rf.build_fact_pack_cached(tk))
     fin = safe("research.bundle.financials", lambda: rfin.build_research_fact_pack(tk))
     dcf = safe("research.bundle.dcf", lambda: rdcf.build_dcf(tk))
     peers = safe("research.bundle.peers", lambda: rpeers.build_peer_comparison(tk))

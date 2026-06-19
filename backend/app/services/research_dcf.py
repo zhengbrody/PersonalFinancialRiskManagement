@@ -19,6 +19,7 @@ from typing import Optional
 from ..schemas.research import DataProvenanceItem, MissingDataItem
 from ..schemas.valuation import (
     DCFAssumption,
+    DCFHistoricalRow,
     DCFInput,
     DCFOverrides,
     DCFProjectionYear,
@@ -35,16 +36,33 @@ _DEF_TAX = 0.21
 _DEF_DA_PCT = 0.04
 _DEF_CAPEX_PCT = 0.04
 _DEF_NWC_PCT = 0.02
+_DEF_OPERATING_MARGIN = 0.15
 _DEF_WACC = 0.09
 _DEF_TERMINAL_GROWTH = 0.025
-# CAPM defaults for the derived WACC.
+# CAPM + capital-structure defaults for the derived WACC (workbook WACC sheet).
 _RISK_FREE = 0.042
-_EQUITY_RISK_PREMIUM = 0.05
+_EQUITY_RISK_PREMIUM = 0.05  # market risk premium (Expected market return − rf)
+_DEF_COST_OF_DEBT = 0.045  # conservative pre-tax cost of debt when not derivable
+_DEF_BETA = 1.0
 _DEFAULT_YEARS = 5
 
 
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _risk_free_rate() -> Optional[float]:
+    """Latest 10Y Treasury (as a decimal) from the existing macro provider, or
+    None. Fail-soft — a network/parse hiccup just falls back to the default."""
+    try:
+        from .macro_data import get_yield_curve
+
+        for p in get_yield_curve().points:
+            if p.tenor == "10Y" and p.yield_pct is not None:
+                return round(p.yield_pct / 100.0, 5)
+    except Exception:  # noqa: BLE001 - optional enrichment, never blocks a DCF
+        return None
+    return None
 
 
 # ── pure projection core ────────────────────────────────────────────
@@ -87,10 +105,13 @@ def project(
         m = margins[t - 1]
         rev = rev_prev * (1.0 + g)
         ebit = rev * m
-        nopat = ebit * (1.0 - tax)
+        nopat = ebit * (1.0 - tax)  # EBIAT = EBIT − taxes (taxes = tax% × EBIT)
         da = rev * da_pct
         capex = rev * capex_pct
-        dnwc = (rev - rev_prev) * nwc_pct
+        # Workbook: ΔNWC = revenue × (ΔNWC % of sales), i.e. a fraction of TOTAL
+        # sales (the % held flat at the average of the last 3 historical years),
+        # NOT a fraction of the year-over-year revenue change.
+        dnwc = rev * nwc_pct
         fcf = nopat + da - capex - dnwc
         df = 1.0 / (1.0 + wacc) ** t
         pv = fcf * df
@@ -161,9 +182,25 @@ def run_dcf(inp: DCFInput, *, current_price: Optional[float]) -> DCFValuationOut
     shares = _v(inp.diluted_shares)
     net_debt = _v(inp.net_debt) or 0.0
 
-    if base_rev is None or not growths or not margins or tax is None or wacc is None or tg is None:
+    missing_inputs = []
+    if base_rev is None:
+        missing_inputs.append("base_revenue")
+    if not growths:
+        missing_inputs.append("revenue_growth")
+    if not margins:
+        missing_inputs.append("operating_margin")
+    if tax is None:
+        missing_inputs.append("tax_rate")
+    if wacc is None:
+        missing_inputs.append("wacc")
+    if tg is None:
+        missing_inputs.append("terminal_growth")
+
+    if missing_inputs:
         out.valid = False
-        out.warnings.append("Insufficient inputs to run the DCF.")
+        out.warnings.append(
+            "Insufficient inputs to run the DCF: " + ", ".join(missing_inputs) + "."
+        )
         return out
 
     core = dict(
@@ -332,12 +369,41 @@ def build_dcf_input(ticker: str, overrides: Optional[DCFOverrides] = None) -> DC
     beta = getattr(prof, "beta", None)
     price = getattr(prof, "price", None)
 
-    # base revenue
+    # TTM fallback from quarterly statements — used only when an annual figure is
+    # missing (e.g. an FMP tier that returns quarters but not annuals). Lazily
+    # fetched + memoized; the quarterly statements are cached by the provider.
+    _ttm_memo: dict[str, Optional[float]] = {}
+
+    def _ttm(field: str) -> Optional[float]:
+        if field not in _ttm_memo:
+            q = fmp_provider.get_financial_statements(tk, period="quarter", limit=8).data or []
+            vals = [r.get(field) for r in q[:4]]
+            _ttm_memo[field] = (
+                float(sum(vals)) if len(vals) == 4 and all(v is not None for v in vals) else None
+            )
+        return _ttm_memo[field]
+
+    # base revenue: latest annual → TTM of the last 4 quarters → unavailable
+    # (an explicit user override wins outright).
     rev0 = latest.get("revenue")
     if ov.base_revenue is not None:
         base_revenue = _asm("base_revenue", ov.base_revenue, "user_override", "user")
     elif rev0 is not None:
-        base_revenue = _asm("base_revenue", rev0, "reported", "fmp", "latest fiscal-year revenue")
+        base_revenue = _asm(
+            "base_revenue",
+            rev0,
+            "reported",
+            ann_res.source or "provider",
+            "latest fiscal-year revenue",
+        )
+    elif _ttm("revenue") is not None:
+        base_revenue = _asm(
+            "base_revenue",
+            _ttm("revenue"),
+            "derived",
+            "derived:ttm_quarters",
+            "annual revenue unavailable — TTM of the last 4 quarters",
+        )
     else:
         base_revenue = _asm("base_revenue", None, "unavailable")
         missing.append(MissingDataItem(dataset="base_revenue", reason="empty"))
@@ -379,6 +445,11 @@ def build_dcf_input(ticker: str, overrides: Optional[DCFOverrides] = None) -> DC
 
     # operating margin (flat at latest, or override / fade to terminal margin)
     op_m = _safe_div(latest.get("operating_income"), latest.get("revenue"))
+    hist_op_margins = [
+        m
+        for m in (_safe_div(r.get("operating_income"), r.get("revenue")) for r in rows)
+        if m is not None and -0.5 <= m <= 0.8
+    ]
     operating_margin: list[DCFAssumption] = []
     if ov.operating_margin is not None:
         for i in range(years):
@@ -392,7 +463,56 @@ def build_dcf_input(ticker: str, overrides: Optional[DCFOverrides] = None) -> DC
             frac = i / max(1, years - 1)
             val = op_m + (term_m - op_m) * frac
             operating_margin.append(
-                _asm(f"operating_margin_y{i + 1}", round(val, 6), term_src, "fmp")
+                _asm(
+                    f"operating_margin_y{i + 1}",
+                    round(val, 6),
+                    term_src,
+                    ann_res.source or "provider",
+                )
+            )
+    elif hist_op_margins:
+        med = sorted(hist_op_margins)[len(hist_op_margins) // 2]
+        term_m = ov.terminal_operating_margin if ov.terminal_operating_margin is not None else med
+        term_src = "user_override" if ov.terminal_operating_margin is not None else "derived"
+        for i in range(years):
+            frac = i / max(1, years - 1)
+            val = med + (term_m - med) * frac
+            operating_margin.append(
+                _asm(
+                    f"operating_margin_y{i + 1}",
+                    round(val, 6),
+                    term_src,
+                    "derived:historical_median_margin",
+                    "latest operating margin unavailable",
+                )
+            )
+    elif _ttm("operating_income") is not None and _ttm("revenue"):
+        ttm_m = _ttm("operating_income") / _ttm("revenue")
+        term_m = ov.terminal_operating_margin if ov.terminal_operating_margin is not None else ttm_m
+        term_src = "user_override" if ov.terminal_operating_margin is not None else "derived"
+        for i in range(years):
+            frac = i / max(1, years - 1)
+            val = ttm_m + (term_m - ttm_m) * frac
+            operating_margin.append(
+                _asm(
+                    f"operating_margin_y{i + 1}",
+                    round(val, 6),
+                    term_src,
+                    "derived:ttm_operating_margin",
+                    "annual operating income unavailable — TTM of last 4 quarters",
+                )
+            )
+    elif rev0 is not None or _ttm("revenue") is not None:
+        missing.append(MissingDataItem(dataset="operating_margin", reason="default_used"))
+        for i in range(years):
+            operating_margin.append(
+                _asm(
+                    f"operating_margin_y{i + 1}",
+                    _DEF_OPERATING_MARGIN,
+                    "default",
+                    "default",
+                    "reported operating income unavailable",
+                )
             )
     else:
         missing.append(MissingDataItem(dataset="operating_margin", reason="empty"))
@@ -414,28 +534,54 @@ def build_dcf_input(ticker: str, overrides: Optional[DCFOverrides] = None) -> DC
         rev0,
         _DEF_CAPEX_PCT,
     )
-    # ΔNWC as a fraction of incremental revenue
-    nwc_pct = _nwc_asm(ov.nwc_pct_revenue, latest, oldest)
+    # ΔNWC as a % of TOTAL sales — workbook: average of the last 3 historical
+    # (ΔNWC / revenue), held flat across the forecast.
+    nwc_pct = _nwc_asm(ov.nwc_pct_revenue, rows)
 
-    # WACC (CAPM-derived from beta, else default)
-    wacc = _wacc_asm(ov.wacc, beta, latest.get("debt"), latest.get("revenue"), tax_rate.value)
+    # WACC — full capital-structure build-up (workbook WACC sheet).
+    mcap = getattr(prof, "market_cap", None)
+    wacc, wacc_breakdown = _build_wacc(
+        ov,
+        beta=beta,
+        equity_value=mcap,
+        total_debt=latest.get("debt"),
+        interest_expense=latest.get("interest_expense"),
+        tax=tax_rate.value,
+    )
+    if mcap is None and ov.equity_value is None:
+        missing.append(MissingDataItem(dataset="equity_market_value", reason="empty"))
 
-    # net debt + diluted shares
+    # Equity bridge as a single net_debt (engine does equity = EV − net_debt, so
+    # net_debt = debt + minority − cash − ST investments reproduces the workbook
+    # bridge EV + cash + ST inv − debt − minority).
+    debt0, cash0 = latest.get("debt"), latest.get("cash")
+    sti0, min0 = latest.get("short_term_investments"), latest.get("minority_interest")
     nd = None
-    if latest.get("debt") is not None or latest.get("cash") is not None:
-        nd = (latest.get("debt") or 0.0) - (latest.get("cash") or 0.0)
+    if any(x is not None for x in (debt0, cash0, sti0, min0)):
+        nd = (debt0 or 0.0) + (min0 or 0.0) - (cash0 or 0.0) - (sti0 or 0.0)
     if ov.net_debt is not None:
         net_debt = _asm("net_debt", ov.net_debt, "user_override", "user")
     elif nd is not None:
-        net_debt = _asm("net_debt", nd, "reported", "fmp", "total debt − cash")
+        net_debt = _asm(
+            "net_debt", nd, "reported", "fmp", "debt + minority − cash − ST investments"
+        )
     else:
         net_debt = _asm("net_debt", 0.0, "default", "default", "assumed zero")
 
     shares = latest.get("diluted_shares") or latest.get("shares_outstanding")
+    derived_shares = _safe_div(mcap, price) if mcap and price else None
     if ov.diluted_shares is not None:
         diluted_shares = _asm("diluted_shares", ov.diluted_shares, "user_override", "user")
     elif shares:
-        diluted_shares = _asm("diluted_shares", shares, "reported", "fmp")
+        diluted_shares = _asm("diluted_shares", shares, "reported", ann_res.source or "provider")
+    elif derived_shares:
+        diluted_shares = _asm(
+            "diluted_shares",
+            round(derived_shares, 3),
+            "derived",
+            "derived:market_cap_over_price",
+            "fallback when reported diluted shares are unavailable",
+        )
     else:
         diluted_shares = _asm("diluted_shares", None, "unavailable")
         missing.append(MissingDataItem(dataset="diluted_shares", reason="empty"))
@@ -451,6 +597,7 @@ def build_dcf_input(ticker: str, overrides: Optional[DCFOverrides] = None) -> DC
         capex_pct_revenue=capex_pct,
         nwc_pct_revenue=nwc_pct,
         wacc=wacc,
+        wacc_breakdown=wacc_breakdown,
         terminal_growth=terminal_growth,
         net_debt=net_debt,
         diluted_shares=diluted_shares,
@@ -468,32 +615,180 @@ def _pct_asm(name, override, numerator, revenue, default) -> DCFAssumption:
     return _asm(name, default, "default", "default")
 
 
-def _nwc_asm(override, latest, oldest) -> DCFAssumption:
+def _nwc_asm(override, rows) -> DCFAssumption:
+    """ΔNWC % of TOTAL sales, held flat — workbook: AVERAGE of the last 3
+    historical (ΔNWC / revenue). The sign is kept (a negative ΔNWC is a cash
+    source), unlike the old % of incremental-revenue derivation."""
     if override is not None:
         return _asm("nwc_pct_revenue", override, "user_override", "user")
-    d_rev = None
-    if latest.get("revenue") is not None and oldest.get("revenue") is not None:
-        d_rev = latest["revenue"] - oldest["revenue"]
-    pct = _safe_div(latest.get("change_in_nwc"), d_rev)
-    if pct is not None and -0.5 <= pct <= 0.5:
-        return _asm("nwc_pct_revenue", round(abs(pct), 4), "derived", "derived:delta_nwc")
-    return _asm("nwc_pct_revenue", _DEF_NWC_PCT, "default", "default", "assumed ~2% of Δrevenue")
-
-
-def _wacc_asm(override, beta, debt, revenue, tax) -> DCFAssumption:
-    if override is not None:
-        return _asm("wacc", override, "user_override", "user")
-    if beta is not None and beta > 0:
-        ke = _RISK_FREE + beta * _EQUITY_RISK_PREMIUM
-        wacc = ke  # equity-only unless we have a debt weight; conservative
+    ratios = []
+    for r in rows[:3]:  # rows are newest-first
+        pct = _safe_div(r.get("change_in_nwc"), r.get("revenue"))
+        if pct is not None and -0.5 <= pct <= 0.5:
+            ratios.append(pct)
+    if ratios:
+        avg = sum(ratios) / len(ratios)
         return _asm(
-            "wacc",
-            round(wacc, 4),
+            "nwc_pct_revenue",
+            round(avg, 5),
             "derived",
-            "derived:capm",
-            f"CAPM: rf {_RISK_FREE:.1%} + β {beta:.2f}×ERP {_EQUITY_RISK_PREMIUM:.1%}",
+            "derived:avg3_nwc_over_sales",
+            "avg of last-3 ΔNWC / sales",
         )
-    return _asm("wacc", _DEF_WACC, "default", "default", "assumed 9%")
+    return _asm("nwc_pct_revenue", _DEF_NWC_PCT, "default", "default", "assumed ~2% of sales")
+
+
+def _build_wacc(
+    ov, *, beta, equity_value, total_debt, interest_expense, tax
+) -> tuple[DCFAssumption, list[DCFAssumption]]:
+    """Capital-structure-weighted WACC (workbook WACC sheet):
+        WACC = %E·Ke + %D·Kd·(1 − tax);  Ke = rf + β·MRP;  %D = D/(D+E).
+    Returns the headline WACC assumption + an itemized, source-typed breakdown.
+    Falls back to an equity-only Ke (labeled) when the capital structure is
+    unavailable, and to a flat default when even the CAPM inputs are missing."""
+    bd: list[DCFAssumption] = []
+
+    rf_ov = ov.risk_free_rate
+    rf = rf_ov if rf_ov is not None else _risk_free_rate()
+    if rf_ov is not None:
+        rf_st, rf_sc = "user_override", "user"
+    elif rf is not None:
+        rf_st, rf_sc = "derived", "derived:treasury_10y"
+    else:
+        rf, rf_st, rf_sc = _RISK_FREE, "default", "default"
+
+    if ov.beta is not None:
+        b, b_st, b_sc = ov.beta, "user_override", "user"
+    elif beta is not None and beta > 0:
+        b, b_st, b_sc = beta, "reported", "fmp"
+    else:
+        b, b_st, b_sc = _DEF_BETA, "default", "default"
+
+    if ov.market_risk_premium is not None:
+        mrp, mrp_st = ov.market_risk_premium, "user_override"
+    else:
+        mrp, mrp_st = _EQUITY_RISK_PREMIUM, "default"
+    cost_equity = rf + b * mrp
+
+    e_val = ov.equity_value if ov.equity_value is not None else equity_value
+    d_val = (
+        ov.total_debt
+        if ov.total_debt is not None
+        else (total_debt if total_debt is not None else 0.0)
+    )
+    e_st = (
+        "user_override"
+        if ov.equity_value is not None
+        else ("reported" if equity_value else "unavailable")
+    )
+    d_st = (
+        "user_override"
+        if ov.total_debt is not None
+        else ("reported" if total_debt is not None else "default")
+    )
+
+    if ov.cost_of_debt is not None:
+        kd, kd_st, kd_sc = ov.cost_of_debt, "user_override", "user"
+    else:
+        # Cost of debt from interest / the debt actually used (override-aware).
+        derived_kd = _safe_div(interest_expense, d_val or None)
+        if derived_kd is not None and 0.0 < derived_kd <= 0.2:
+            kd, kd_st, kd_sc = round(derived_kd, 5), "derived", "derived:interest_over_debt"
+        else:
+            kd, kd_st, kd_sc = _DEF_COST_OF_DEBT, "default", "default"
+
+    bd.append(_asm("risk_free_rate", round(rf, 5), rf_st, rf_sc, "10Y Treasury"))
+    bd.append(_asm("beta", round(b, 3), b_st, b_sc))
+    bd.append(
+        _asm(
+            "market_risk_premium",
+            round(mrp, 4),
+            mrp_st,
+            "default" if mrp_st == "default" else "user",
+        )
+    )
+    bd.append(
+        _asm("cost_of_equity", round(cost_equity, 5), "derived", "derived:capm", "rf + β·MRP")
+    )
+    bd.append(_asm("cost_of_debt", round(kd, 5), kd_st, kd_sc))
+    bd.append(
+        _asm("equity_value", e_val, e_st, "fmp" if e_st == "reported" else "user", "market cap")
+    )
+    bd.append(_asm("total_debt", d_val, d_st, "fmp" if d_st == "reported" else "default"))
+
+    if ov.wacc is not None:
+        w = _asm("wacc", ov.wacc, "user_override", "user")
+        bd.append(w)
+        return w, bd
+
+    if e_val and (e_val + d_val) > 0:
+        pct_e = e_val / (e_val + d_val)
+        pct_d = d_val / (e_val + d_val)
+        wacc_val = pct_e * cost_equity + pct_d * kd * (1.0 - (tax or 0.0))
+        bd.append(_asm("pct_equity", round(pct_e, 4), "derived", "derived:capital_structure"))
+        bd.append(_asm("pct_debt", round(pct_d, 4), "derived", "derived:capital_structure"))
+        bd.append(
+            _asm(
+                "tax_rate",
+                round(tax, 4) if tax is not None else None,
+                "derived",
+                "derived:effective",
+            )
+        )
+        w = _asm("wacc", round(wacc_val, 5), "derived", "derived:wacc", "%E·Ke + %D·Kd·(1−tax)")
+        bd.append(w)
+        return w, bd
+
+    # No capital structure → equity-only cost of equity. If even the CAPM inputs
+    # were defaults (no real beta, no sourced risk-free rate), the WACC is wholly
+    # assumption-driven → label it "default"; otherwise "derived".
+    all_default = b_st == "default" and rf_st == "default"
+    w = _asm(
+        "wacc",
+        round(cost_equity, 5),
+        "default" if all_default else "derived",
+        "default" if all_default else "derived:capm",
+        "capital structure unavailable — equity-only Ke",
+    )
+    bd.append(w)
+    return w, bd
+
+
+def _historical_rows(rows) -> list[DCFHistoricalRow]:
+    """The reported IS/CFS basis rows the assumptions derive from (oldest→newest),
+    with the workbook's per-year % derivations (margin, tax/EBIT, D&A/CapEx/ΔNWC
+    over sales). All reported/derived — never projected."""
+    out: list[DCFHistoricalRow] = []
+    prev_rev = None
+    for r in reversed(rows):  # rows are newest-first; show oldest→newest
+        rev = r.get("revenue")
+        ebit = r.get("operating_income")
+        taxes = r.get("income_tax")
+        da = r.get("d_and_a")
+        capex = abs(r["capex"]) if r.get("capex") is not None else None
+        dnwc = r.get("change_in_nwc")
+        out.append(
+            DCFHistoricalRow(
+                fiscal_year=r.get("fiscal_year"),
+                fiscal_date=r.get("fiscal_date"),
+                revenue=rev,
+                revenue_growth=(
+                    _safe_div(rev - prev_rev, prev_rev) if (rev is not None and prev_rev) else None
+                ),
+                ebit=ebit,
+                ebit_margin=_safe_div(ebit, rev),
+                taxes=taxes,
+                tax_pct_ebit=_safe_div(taxes, ebit),
+                da=da,
+                da_pct_sales=_safe_div(da, rev),
+                capex=capex,
+                capex_pct_sales=_safe_div(capex, rev),
+                change_nwc=dnwc,
+                nwc_pct_sales=_safe_div(dnwc, rev),
+            )
+        )
+        prev_rev = rev
+    return out
 
 
 # ── orchestrator (fail-soft) ────────────────────────────────────────
@@ -508,4 +803,25 @@ def build_dcf(ticker: str, overrides: Optional[DCFOverrides] = None) -> DCFValua
     price = getattr(fmp_provider.get_profile(tk).data, "price", None)
     out = run_dcf(inp, current_price=price)
     out.as_of = inp.provenance[0].as_of if inp.provenance else None
+    out.valuation_date = out.as_of
+
+    # Itemized equity bridge + historical basis (annual statements are cached, so
+    # this re-read is free). The math used inp.net_debt; these expose the parts.
+    rows = fmp_provider.get_financial_statements(tk, period="annual", limit=5).data or []
+    out.historical = _historical_rows(rows)
+    latest = rows[0] if rows else {}
+    ov = overrides or DCFOverrides()
+    out.cash = latest.get("cash")
+    out.short_term_investments = (
+        ov.short_term_investments
+        if ov.short_term_investments is not None
+        else latest.get("short_term_investments")
+    )
+    out.total_debt = ov.total_debt if ov.total_debt is not None else latest.get("debt")
+    out.minority_interest = (
+        ov.minority_interest
+        if ov.minority_interest is not None
+        else latest.get("minority_interest")
+    )
+    out.diluted_shares = inp.diluted_shares.value
     return out

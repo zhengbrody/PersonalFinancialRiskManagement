@@ -234,3 +234,78 @@ def test_empty_result_is_negative_cached_short(monkeypatch, with_key):
     import time as _t
 
     assert expiry - _t.monotonic() <= fp._TTL_EMPTY + 1  # not _TTL_PROFILE (24h)
+
+
+# ── partial FMP (income only) → yfinance backfills balance/cash-flow fields ──
+
+
+def test_partial_fmp_backfills_balance_cashflow_from_yfinance(monkeypatch, with_key):
+    # FMP returns the income statement but NOTHING for balance-sheet / cash-flow.
+    def handler(path, key, params):
+        if "income-statement" in path:
+            return [
+                {
+                    "date": "2024-12-31",
+                    "calendarYear": "2024",
+                    "period": "FY",
+                    "revenue": 1000,
+                    "netIncome": 100,
+                    "eps": 2.0,
+                    "operatingIncome": 200,
+                }
+            ]
+        return None  # balance-sheet + cash-flow empty
+
+    _route(monkeypatch, handler)
+    # yfinance supplies the missing balance/cash-flow fields (keyed by fiscal_year).
+    monkeypatch.setattr(
+        fp,
+        "_yf_statements",
+        lambda tk, period, limit: [
+            {
+                "fiscal_year": "2024",
+                "fiscal_date": "2024-12-31",
+                "cash": 300.0,
+                "short_term_investments": 20.0,
+                "minority_interest": 0.0,
+                "debt": 150.0,
+                "free_cash_flow": 80.0,
+                "capex": -50.0,
+                "d_and_a": 40.0,
+                "change_in_nwc": -5.0,
+            }
+        ],
+    )
+    res = fp.get_financial_statements("AAPL", period="annual", limit=5)
+    assert res.data is not None and res.source == "fmp"
+    row = res.data[0]
+    assert row["revenue"] == 1000 and row["operating_income"] == 200  # FMP income kept
+    assert row["cash"] == 300.0 and row["debt"] == 150.0  # yfinance backfilled the nulls
+    assert row["free_cash_flow"] == 80.0 and row["capex"] == -50.0
+    assert "yfinance_balance_cashflow_backfill" in res.warnings
+    assert "no_balance_sheet" in res.warnings and "no_cash_flow" in res.warnings
+
+
+def test_partial_merge_keeps_fmp_fields_where_present(monkeypatch, with_key):
+    # FMP has income + a balance sheet WITH cash; only cash-flow is missing.
+    def handler(path, key, params):
+        if "income-statement" in path:
+            return [
+                {"date": "2024-12-31", "calendarYear": "2024", "revenue": 1000, "netIncome": 100}
+            ]
+        if "balance-sheet" in path:
+            return [{"date": "2024-12-31", "cashAndCashEquivalents": 999.0, "totalDebt": 111.0}]
+        return None  # cash-flow empty
+
+    _route(monkeypatch, handler)
+    monkeypatch.setattr(
+        fp,
+        "_yf_statements",
+        lambda tk, period, limit: [
+            {"fiscal_year": "2024", "cash": 1.0, "free_cash_flow": 80.0, "capex": -50.0}
+        ],
+    )
+    res = fp.get_financial_statements("AAPL", period="annual", limit=5)
+    row = res.data[0]
+    assert row["cash"] == 999.0  # FMP's value wins over yfinance's
+    assert row["free_cash_flow"] == 80.0  # yfinance fills the missing cash-flow field
