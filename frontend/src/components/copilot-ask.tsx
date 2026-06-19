@@ -26,6 +26,7 @@ import { Markdown } from "@/components/markdown";
 import { ApiError } from "@/lib/api";
 import { BETA_LIMIT_MESSAGE, isBillingEnabled } from "@/lib/billing-flag";
 import { track } from "@/lib/analytics";
+import { useSessionState } from "@/lib/use-session-state";
 import { type CopilotAnswer, type CopilotEvidence, useCopilotAsk } from "@/lib/queries";
 
 const QUICK_PROMPTS = [
@@ -55,6 +56,13 @@ export function CopilotAsk({ initialQuestion }: { initialQuestion?: string } = {
   // navigation alone.
   const [message, setMessage] = useState(initialQuestion ?? "");
   const ask = useCopilotAsk();
+  // Persist the last answer so switching screens/tabs and returning restores it
+  // instead of an empty card (the mutation result itself is lost on unmount).
+  const [savedAnswer, setSavedAnswer] = useSessionState<CopilotAnswer | null>(
+    "mm:copilot:ask:answer",
+    null,
+  );
+  const answer = ask.data ?? savedAnswer;
 
   function run(q: string) {
     const text = q.trim();
@@ -62,7 +70,12 @@ export function CopilotAsk({ initialQuestion }: { initialQuestion?: string } = {
     setMessage(text);
     ask.mutate(
       { message: text },
-      { onSuccess: (a) => track("copilot_ask", { intent: a.intent }) },
+      {
+        onSuccess: (a) => {
+          setSavedAnswer(a);
+          track("copilot_ask", { intent: a.intent });
+        },
+      },
     );
   }
 
@@ -106,7 +119,7 @@ export function CopilotAsk({ initialQuestion }: { initialQuestion?: string } = {
 
         {ask.isPending && <AnswerSkeleton />}
         {ask.isError && !ask.isPending && <AskError error={ask.error} />}
-        {ask.data && !ask.isPending && <AnswerCard answer={ask.data} />}
+        {answer && !ask.isPending && !ask.isError && <AnswerCard answer={answer} />}
       </CardContent>
     </Card>
   );

@@ -25,9 +25,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            // Auth-sensitive data refetches when the tab regains focus
-            // so a freshly-signed-in window doesn't stay stale.
-            refetchOnWindowFocus: true,
+            // Do NOT refetch on window focus. Switching back to the tab was
+            // re-running stale queries (research bundle, billing, snapshots…)
+            // against a sometimes-slow/rate-limited backend, flashing loading
+            // or errors over an already-loaded page. Sign-in already triggers a
+            // fetch (the queryKey gains the accessToken), so focus-refetch buys
+            // nothing here. Data still refetches on mount, interval, and
+            // explicit invalidation.
+            refetchOnWindowFocus: false,
             // Treat data as fresh for 30s — saves hitting the API on
             // every nav between cached pages.
             staleTime: 30_000,

@@ -13,4 +13,12 @@ import { cleanup } from "@testing-library/react";
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  // Clear persisted state (useSessionState) so a ticker/conversation saved by
+  // one test doesn't hydrate into the next and change what renders.
+  try {
+    sessionStorage.clear();
+    localStorage.clear();
+  } catch {
+    /* storage may be stubbed/unavailable in a given test */
+  }
 });

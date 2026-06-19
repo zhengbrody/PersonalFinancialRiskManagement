@@ -42,11 +42,16 @@ logger = logging.getLogger(__name__)
 def _build_http_session() -> requests.Session:
     s = requests.Session()
     retry = Retry(
-        total=3,
-        backoff_factor=1.5,  # 0 → 1.5s → 3s → 6s
-        status_forcelist=[429, 500, 502, 503, 504],
+        total=2,
+        backoff_factor=0.5,  # 0 → 0.5s → 1s (transient 5xx only)
+        # Do NOT retry 429. When FMP's quota is exhausted EVERY call 429s, and
+        # retrying (with backoff + a possible `Retry-After: 60`) stalls each call
+        # for 10s–180s — across ~20 calls per research bundle that's minutes, so
+        # the page "never loads". A 429 now fails fast and the caller drops to the
+        # free-yfinance fallback immediately. Only transient 5xx are retried.
+        status_forcelist=[500, 502, 503, 504],
         allowed_methods=["GET", "HEAD"],
-        respect_retry_after_header=True,
+        respect_retry_after_header=False,
         raise_on_status=False,
     )
     adapter = HTTPAdapter(max_retries=retry, pool_connections=10, pool_maxsize=20)

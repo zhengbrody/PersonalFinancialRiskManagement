@@ -46,6 +46,7 @@ import { AnalystReportView } from "@/components/analyst-report";
 import { ApiError } from "@/lib/api";
 import { BETA_LIMIT_MESSAGE, isBillingEnabled } from "@/lib/billing-flag";
 import { useAuth } from "@/lib/auth-context";
+import { useSessionState } from "@/lib/use-session-state";
 import { track } from "@/lib/analytics";
 import {
   useBillingMe,
@@ -94,8 +95,14 @@ export default function ResearchPage() {
 }
 
 function ResearchWorkbench() {
-  const [symbol, setSymbol] = useState("");
-  const [activeTicker, setActiveTicker] = useState<string | null>(null);
+  // Persisted to sessionStorage so the searched ticker (and its loaded cockpit)
+  // survives switching screens/tabs and coming back, instead of resetting to the
+  // empty search box. The bundle reloads from the React Query cache instantly.
+  const [symbol, setSymbol] = useSessionState("mm:research:symbol", "");
+  const [activeTicker, setActiveTicker] = useSessionState<string | null>(
+    "mm:research:ticker",
+    null,
+  );
   const bundle = useResearchBundle(activeTicker);
   const verdictM = useResearchVerdict();
 

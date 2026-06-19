@@ -97,6 +97,30 @@ export function CopilotConversation({
   // Cancel any in-flight stream when the component unmounts.
   useEffect(() => () => abortRef.current?.abort(), []);
 
+  // Persist the conversation (keyed by variant) so switching screens/tabs and
+  // returning restores the thread instead of an empty chat. Hydrate once on
+  // mount; persist only COMPLETED turns (not every streaming delta — that would
+  // be O(n²) writes over a long answer).
+  const storeKey = `mm:copilot:chat:${variant}`;
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(storeKey);
+      if (raw) setMessages(JSON.parse(raw) as ChatMessage[]);
+    } catch {
+      /* storage unavailable — start with an empty thread */
+    }
+    hydratedRef.current = true;
+  }, [storeKey]);
+  useEffect(() => {
+    if (!hydratedRef.current || pending) return;
+    try {
+      sessionStorage.setItem(storeKey, JSON.stringify(messages));
+    } catch {
+      /* ignore persistence failure */
+    }
+  }, [messages, pending, storeKey]);
+
   /** Append streamed text to the in-flight assistant bubble (create it on
    * the first delta so the "Thinking…" bubble shows until words arrive). */
   function pushDelta(text: string) {
