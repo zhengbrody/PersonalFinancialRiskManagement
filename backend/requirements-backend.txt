@@ -39,3 +39,10 @@ mcp>=1.0,<2
 # 500s (e.g. an uncaught ValidationError) with full context. Only initialised
 # in production (see app/main.py:_maybe_init_sentry); a no-op otherwise.
 sentry-sdk[fastapi]>=2.0,<3
+
+# lxml — required by yfinance 1.4.x's get_earnings_dates() (it parses the Yahoo
+# earnings calendar via pandas.read_html, which needs an HTML backend). Without
+# it that call raises ImportError and the free-yfinance EPS beat/miss fallback
+# in providers/fmp_provider._yf_earnings silently fail-softs to empty. The rest
+# of yfinance (price/.info JSON) does NOT need lxml — only the earnings scrape.
+lxml>=5,<7
