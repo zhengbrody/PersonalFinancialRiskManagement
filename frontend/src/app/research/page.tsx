@@ -95,10 +95,11 @@ export default function ResearchPage() {
 }
 
 function ResearchWorkbench() {
-  // Persisted to sessionStorage so the searched ticker (and its loaded cockpit)
-  // survives switching screens/tabs and coming back, instead of resetting to the
-  // empty search box. The bundle reloads from the React Query cache instantly.
-  const [symbol, setSymbol] = useSessionState("mm:research:symbol", "");
+  // The search box stays plain useState (no need to persist every keystroke);
+  // only the ACTIVE ticker is persisted to sessionStorage, so switching
+  // screens/tabs and coming back restores the loaded cockpit (the bundle reloads
+  // from the React Query cache instantly) instead of an empty search box.
+  const [symbol, setSymbol] = useState("");
   const [activeTicker, setActiveTicker] = useSessionState<string | null>(
     "mm:research:ticker",
     null,
