@@ -9,7 +9,7 @@ the LLM narrative lives in the thesis, which reads the transcript excerpt.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional
 
 from ..schemas.earnings import (
@@ -20,20 +20,12 @@ from ..schemas.earnings import (
 )
 from ..schemas.research import DataProvenanceItem, MissingDataItem
 from . import research_financials as rfin
+from ._common import iso_now
 from .providers import fmp_provider
 
 _log = logging.getLogger(__name__)
 _MATCH_DAYS = 130  # an earnings report dates ~1 month after quarter-end
-
-
-def _iso_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _growth(curr: Optional[float], base: Optional[float]) -> Optional[float]:
-    if curr is None or base is None or base <= 0:
-        return None
-    return curr / base - 1.0
+_growth = rfin._growth  # same fractional-growth-with-non-positive-base guard
 
 
 def _date(s: Optional[str]) -> Optional[datetime]:
@@ -99,7 +91,7 @@ def _summary(periods: list[EarningsPeriod]) -> EarningsThemeSummary:
 def build_earnings_comparison(ticker: str) -> EarningsComparisonOutput:
     """Deterministic earnings comparison. Never raises on provider failure."""
     tk = ticker.strip().upper()
-    fetched = _iso_now()
+    fetched = iso_now()
     prov: list[DataProvenanceItem] = []
     missing: list[MissingDataItem] = []
 

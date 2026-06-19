@@ -16,23 +16,35 @@ renders for free-tier/no-key deploys.
 from __future__ import annotations
 
 import logging
-import time
 from typing import Callable, Optional
 
 from ..schemas import research as R
+from .cache import get_cache
+from .cache_keys import make_key
 from .providers import fmp_provider as fmp
 
 _log = logging.getLogger(__name__)
 
-# Free yfinance enrichment is now ALWAYS run to fill fields FMP doesn't carry
-# (forward P/E, YoY growth) — cached briefly so repeat searches stay snappy and
-# don't re-hit yfinance on every page load.
+# Free yfinance enrichment is ALWAYS run to fill fields FMP doesn't carry
+# (forward P/E, YoY growth) — cached via the shared cache service so repeat
+# searches stay snappy AND a yfinance hiccup serves the last good enrichment
+# (stale) instead of dropping those fields. Bump the version to invalidate.
 _ENRICH_TTL = 60 * 60
-_enrich_cache: dict[str, tuple[float, dict]] = {}
+_ENRICH_VERSION = "v1"
+
+# Cache the whole composed FactPack by ticker + version. A repeat search within
+# the TTL skips every provider round-trip; a rebuild failure serves the last
+# good pack marked stale (see build_fact_pack_cached). Bump on shape changes.
+FACTPACK_VERSION = "v1"
+_FACTPACK_TTL = 30 * 60
 
 
 def reset_enrich_cache() -> None:
-    _enrich_cache.clear()
+    """Test hook — drop the shared cache (enrichment + FactPack both live there
+    now). Kept under the old name so existing fixtures keep working."""
+    from . import cache as _cache
+
+    _cache.reset_cache()
 
 
 def _pref(*vals):
@@ -277,15 +289,40 @@ def _default_enricher(tk: str) -> dict:
 
 
 def _cached_enrich(tk: str) -> dict:
-    """yfinance enrichment with a short in-proc TTL so always-on enrichment
-    doesn't re-hit the network on every research page load."""
-    now = time.time()
-    hit = _enrich_cache.get(tk)
-    if hit is not None and now - hit[0] < _ENRICH_TTL:
-        return hit[1]
-    data = _default_enricher(tk)
-    _enrich_cache[tk] = (now, data)
-    return data
+    """yfinance enrichment via the shared cache service. A fresh hit skips the
+    network; if yfinance is down on a refresh, the last good enrichment is
+    served (stale) rather than dropping the fields it fills."""
+    key = make_key("research:enrich", _ENRICH_VERSION, tk)
+    return get_cache().fetch(key, lambda: _default_enricher(tk), ttl=_ENRICH_TTL).value or {}
+
+
+def build_fact_pack_cached(
+    ticker: str,
+    *,
+    yf_enricher: Optional[Callable[[str], dict]] = None,
+) -> R.FactPack:
+    """``build_fact_pack`` cached by ticker + ``FACTPACK_VERSION`` in the shared
+    cache, with stale-on-failure. A repeat search within the TTL returns the
+    cached pack (zero provider round-trips); if the rebuild raises and a stale
+    pack exists, that's served marked stale. Cache state is attached to
+    ``fp.cache`` so the UI can show "cached · as of … · stale"."""
+    tk = (ticker or "").strip().upper()
+    if not tk:
+        raise ValueError("ticker is required")
+    key = make_key("research:factpack", FACTPACK_VERSION, tk)
+    res = get_cache().fetch(
+        key,
+        lambda: build_fact_pack(tk, yf_enricher=yf_enricher).model_dump(),
+        ttl=_FACTPACK_TTL,
+    )
+    fp = R.FactPack.model_validate(res.value)
+    fp.cache = R.CacheProvenance(
+        cache_hit=res.cache_hit,
+        fetched_at=res.fetched_at,
+        expires_at=res.expires_at,
+        stale=res.stale,
+    )
+    return fp
 
 
 # ── verdict (deterministic skeleton → LLM phrasing) ─────────────────

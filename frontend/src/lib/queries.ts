@@ -1472,6 +1472,23 @@ const dcfSensitivitySchema = z.looseObject({
   cols: z.array(z.number()),
   values: z.array(z.array(z.number().nullable())),
 });
+const dcfHistoricalRowSchema = z.looseObject({
+  fiscal_year: z.string().nullish(),
+  fiscal_date: z.string().nullish(),
+  revenue: z.number().nullish(),
+  revenue_growth: z.number().nullish(),
+  ebit: z.number().nullish(),
+  ebit_margin: z.number().nullish(),
+  taxes: z.number().nullish(),
+  tax_pct_ebit: z.number().nullish(),
+  da: z.number().nullish(),
+  da_pct_sales: z.number().nullish(),
+  capex: z.number().nullish(),
+  capex_pct_sales: z.number().nullish(),
+  change_nwc: z.number().nullish(),
+  nwc_pct_sales: z.number().nullish(),
+});
+
 export const dcfOutputSchema = z.looseObject({
   ticker: z.string(),
   currency: z.string().default("USD"),
@@ -1486,13 +1503,24 @@ export const dcfOutputSchema = z.looseObject({
     capex_pct_revenue: dcfAssumptionSchema,
     nwc_pct_revenue: dcfAssumptionSchema,
     wacc: dcfAssumptionSchema,
+    wacc_breakdown: z.array(dcfAssumptionSchema).default([]),
     terminal_growth: dcfAssumptionSchema,
     net_debt: dcfAssumptionSchema,
     diluted_shares: dcfAssumptionSchema,
     missing_data: z.array(z.looseObject({ dataset: z.string(), reason: z.string() })),
   }),
+  valuation_date: z.string().nullish(),
+  historical: z.array(dcfHistoricalRowSchema).default([]),
   projections: z.array(dcfProjectionSchema),
+  terminal_value: z.number().nullish(),
+  pv_terminal_value: z.number().nullish(),
   enterprise_value: z.number().nullish(),
+  // Itemized equity bridge (workbook DCF rows 59–63).
+  cash: z.number().nullish(),
+  short_term_investments: z.number().nullish(),
+  total_debt: z.number().nullish(),
+  minority_interest: z.number().nullish(),
+  diluted_shares: z.number().nullish(),
   equity_value: z.number().nullish(),
   implied_value_per_share: z.number().nullish(),
   current_price: z.number().nullish(),
@@ -1509,12 +1537,27 @@ type DcfResponse = z.infer<typeof dcfResponseSchema>;
 
 export type DcfOverrides = {
   projection_years?: number;
+  base_revenue?: number;
   wacc?: number;
   terminal_growth?: number;
   tax_rate?: number;
   revenue_growth?: number[];
   operating_margin?: number;
   terminal_operating_margin?: number;
+  da_pct_revenue?: number;
+  capex_pct_revenue?: number;
+  nwc_pct_revenue?: number;
+  net_debt?: number;
+  diluted_shares?: number;
+  // WACC build-up overrides (workbook WACC sheet).
+  cost_of_debt?: number;
+  risk_free_rate?: number;
+  beta?: number;
+  market_risk_premium?: number;
+  equity_value?: number;
+  total_debt?: number;
+  short_term_investments?: number;
+  minority_interest?: number;
 };
 
 /** Deterministic DCF; pass overrides to recompute. Authed, no credit. */
@@ -1739,6 +1782,45 @@ export function useResearchVerdict() {
         authToken: accessToken ?? undefined,
         schema: researchVerdictResponseSchema,
       }),
+  });
+}
+
+// ── consolidated research bundle (ONE fetch for the whole page) ─────────
+// Reuses every block schema above. A ticker search fans out to the providers
+// once (server-side, shared cache) instead of one fetch per tab.
+export const researchBundleSchema = z.looseObject({
+  ticker: z.string(),
+  generated_at: z.string().nullish(),
+  as_of: z.string().nullish(),
+  data_confidence: z.number().nullish(),
+  confidence_label: z.string().nullish(),
+  fact_pack: factPackSchema.nullish(),
+  financials: researchFactPackSchema.nullish(),
+  dcf: dcfOutputSchema.nullish(),
+  peers: peersOutputSchema.nullish(),
+  earnings: earningsOutputSchema.nullish(),
+  thesis: thesisOutputSchema.nullish(),
+  news: tickerNewsSchema.nullish(),
+});
+export type ResearchBundle = z.infer<typeof researchBundleSchema>;
+const researchBundleResponseSchema = z.looseObject({ bundle: researchBundleSchema });
+type ResearchBundleResponse = z.infer<typeof researchBundleResponseSchema>;
+
+/** Everything the consolidated research page needs in one fetch. Authed, no
+ * credit; cached. Self-fetches by ticker (the page sets the active ticker on
+ * search). The AI verdict + LLM thesis stay separate on-demand calls. */
+export function useResearchBundle(ticker: string | null) {
+  const { accessToken } = useAuth();
+  return useQuery<ResearchBundleResponse>({
+    queryKey: ["research", "bundle", ticker],
+    enabled: Boolean(accessToken && ticker),
+    queryFn: () =>
+      apiFetch<ResearchBundleResponse>(`/api/v1/research/${encodeURIComponent(ticker!)}/bundle`, {
+        authToken: accessToken!,
+        schema: researchBundleResponseSchema,
+      }),
+    staleTime: 10 * 60 * 1000,
+    retry: false,
   });
 }
 

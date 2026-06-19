@@ -18,7 +18,7 @@
  * /login when signed out).
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -32,12 +32,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable, type Column } from "@/components/ui/data-table";
-import { Tabs } from "@/components/ui/tabs";
 import { CreditsBadge } from "@/components/credits-badge";
 import { TickerNews } from "@/components/ticker-news";
 import { LearnHint } from "@/components/learn-hint";
 import { ReportExportButton } from "@/components/report-export-button";
 import { ResearchFinancials } from "@/components/research-financials";
+import { ResearchCharts } from "@/components/research-charts";
 import { ValuationDcf } from "@/components/valuation-dcf";
 import { PeersComparison } from "@/components/peers-comparison";
 import { EarningsComparison } from "@/components/earnings-comparison";
@@ -49,10 +49,11 @@ import { useAuth } from "@/lib/auth-context";
 import { track } from "@/lib/analytics";
 import {
   useBillingMe,
-  useFactPack,
+  useResearchBundle,
   useResearchVerdict,
   type FactPack,
   type ResearchVerdict,
+  type ResearchBundle,
 } from "@/lib/queries";
 
 export default function ResearchPage() {
@@ -94,25 +95,34 @@ export default function ResearchPage() {
 
 function ResearchWorkbench() {
   const [symbol, setSymbol] = useState("");
-  const factM = useFactPack();
+  const [activeTicker, setActiveTicker] = useState<string | null>(null);
+  const bundle = useResearchBundle(activeTicker);
   const verdictM = useResearchVerdict();
 
-  async function run(raw: string) {
-    const ticker = raw.trim().toUpperCase();
-    if (!ticker || factM.isPending) return;
-    verdictM.reset();
-    // Privacy: never send the ticker itself to analytics — searching a
-    // symbol can reveal what the user holds.
-    track("research_started");
-    try {
-      const { fact_pack } = await factM.mutateAsync({ ticker });
-      verdictM.mutate({ fact_pack });
-    } catch {
-      // factM.error renders below.
-    }
-  }
+  const b = bundle.data?.bundle;
+  const fp = b?.fact_pack ?? undefined;
 
-  const fp = factM.data?.fact_pack;
+  // Auto-fire the AI verdict once per ticker, as soon as the bundle's FactPack
+  // lands — the prominent AI summary fills in a moment after the data.
+  const firedFor = useRef<string | null>(null);
+  const { mutate: fireVerdict } = verdictM;
+  useEffect(() => {
+    if (fp && firedFor.current !== fp.ticker) {
+      firedFor.current = fp.ticker;
+      fireVerdict({ fact_pack: fp });
+    }
+  }, [fp, fireVerdict]);
+
+  function run(raw: string) {
+    const ticker = raw.trim().toUpperCase();
+    if (!ticker) return;
+    verdictM.reset();
+    firedFor.current = null;
+    // Privacy: never send the ticker itself to analytics — searching a symbol
+    // can reveal what the user holds.
+    track("research_started");
+    setActiveTicker(ticker);
+  }
 
   return (
     <div className="space-y-6">
@@ -131,117 +141,146 @@ function ResearchWorkbench() {
           autoCapitalize="characters"
           className="uppercase"
         />
-        <Button type="submit" disabled={factM.isPending || symbol.trim() === ""}>
-          {factM.isPending ? "Loading…" : "Research"}
+        <Button type="submit" disabled={bundle.isFetching || symbol.trim() === ""}>
+          {bundle.isFetching ? "Loading…" : "Research"}
         </Button>
       </form>
       <CreditsBadge />
 
-      {factM.isPending && <FactPackSkeleton />}
+      {bundle.isLoading && <FactPackSkeleton />}
+      {bundle.isError && !bundle.isLoading && <ErrorCard error={bundle.error} />}
 
-      {factM.error && !factM.isPending && <ErrorCard error={factM.error} />}
-
-      {fp && !factM.isPending && (
-        <>
-          {/* Identity + the one-line verdict + dimensions stay above the tabs;
-              the detail (valuation/fundamentals/technicals/news/risks/sources)
-              is organized into tabs below. */}
-          <FactPackHeader fp={fp} />
-          <div className="flex justify-end">
-            <ReportExportButton
-              kind="ticker"
-              payload={{ fact_pack: fp, verdict: verdictM.data?.verdict ?? null }}
-              label="Export research report"
-            />
-          </div>
-          <VerdictSection
-            pending={verdictM.isPending}
-            error={verdictM.error}
-            verdict={verdictM.data?.verdict}
-          />
-          <ResearchTabs fp={fp} verdict={verdictM.data?.verdict} />
-          <CopilotHandoff fp={fp} />
-        </>
+      {b && fp && <ResearchReport b={b} fp={fp} verdictM={verdictM} />}
+      {b && !fp && (
+        <Card>
+          <CardContent className="py-6 text-sm text-muted-foreground">
+            We couldn&apos;t find data for that ticker. Check the symbol and try again.
+          </CardContent>
+        </Card>
       )}
 
-      {!fp && !factM.isPending && !factM.error && <EmptyState />}
+      {!activeTicker && <EmptyState />}
     </div>
   );
 }
 
-// ── Copilot handoff ─────────────────────────────────────────────────
-
-// ── tabbed cockpit (groups the existing cards; no card appears twice) ───────
-
-const RESEARCH_TABS = [
-  { value: "overview", label: "Overview" },
-  { value: "valuation", label: "Valuation" },
-  { value: "peers", label: "Peers" },
-  { value: "fundamentals", label: "Fundamentals" },
-  { value: "financials", label: "Financials" },
-  { value: "earnings", label: "Earnings" },
-  { value: "technicals", label: "Technicals" },
-  { value: "news", label: "News & Events" },
-  { value: "risks", label: "Risks" },
-  { value: "report", label: "Report" },
-  { value: "sources", label: "Sources" },
-];
-
-function ResearchTabs({ fp, verdict }: { fp: FactPack; verdict?: ResearchVerdict }) {
-  const [tab, setTab] = useState("overview");
+/**
+ * The consolidated single-page report. One bundle fetch feeds every section —
+ * the pure FactPack cards, the trust strip, the AI summary (auto-fired verdict),
+ * the deterministic investment debate, the charts, and the reused financials /
+ * DCF / peers / earnings / news components (passed their bundle slice so they
+ * don't re-fetch). No tabs; nothing here fans out to the providers a second time.
+ */
+function ResearchReport({
+  b,
+  fp,
+  verdictM,
+}: {
+  b: ResearchBundle;
+  fp: FactPack;
+  verdictM: ReturnType<typeof useResearchVerdict>;
+}) {
   return (
-    <div className="space-y-4">
-      <Tabs
-        items={RESEARCH_TABS}
-        value={tab}
-        onValueChange={(v) => {
-          setTab(v);
-          track("research_tab_changed", { tab: v }); // safe: tab label only
-        }}
+    <div className="space-y-6">
+      <FactPackHeader fp={fp} />
+      <TrustStrip b={b} />
+      <div className="flex justify-end">
+        <ReportExportButton
+          kind="ticker"
+          payload={{ fact_pack: fp, verdict: verdictM.data?.verdict ?? null }}
+          label="Export research report"
+        />
+      </div>
+
+      {/* AI summary (loads a beat after the data) + the deterministic debate */}
+      <VerdictSection
+        pending={verdictM.isPending}
+        error={verdictM.error}
+        verdict={verdictM.data?.verdict}
       />
-      {tab === "overview" && (
-        <div className="space-y-4">
-          <SignalsCard fp={fp} />
-          <ResearchThesis ticker={fp.ticker} />
-          <AnalystCard fp={fp} />
-        </div>
+      {verdictM.data?.verdict && <VerdictCasework verdict={verdictM.data.verdict} />}
+      <ResearchThesis ticker={fp.ticker} initial={b.thesis ?? undefined} />
+
+      {/* Charts: the trend chart is unique here; the earnings timeline, peer
+          scatter and DCF scenarios render inside their reused sections below. */}
+      <ResearchCharts financials={b.financials ?? undefined} />
+
+      <SignalsCard fp={fp} />
+
+      {/* Valuation */}
+      <ValuationCard fp={fp} />
+      <ValuationDcf ticker={fp.ticker} data={b.dcf ?? undefined} />
+
+      {/* Quality + growth */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <QualityCard fp={fp} />
+        <GrowthCard fp={fp} />
+      </div>
+
+      {/* Financials */}
+      <ResearchFinancials ticker={fp.ticker} data={b.financials ?? undefined} />
+
+      {/* Peers */}
+      {fp.peers.length > 0 && <PeersCard fp={fp} />}
+      <PeersComparison ticker={fp.ticker} data={b.peers ?? undefined} />
+
+      {/* Earnings */}
+      <EarningsComparison ticker={fp.ticker} data={b.earnings ?? undefined} />
+
+      {/* Analyst + technicals + ownership */}
+      <AnalystCard fp={fp} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <MomentumCard fp={fp} />
+        <OwnershipInsiderCard fp={fp} />
+      </div>
+
+      {/* News + provenance */}
+      <TickerNews ticker={fp.ticker} data={b.news ?? undefined} />
+      <SourcesCard fp={fp} />
+
+      {/* Full HTML report (on demand) + Copilot handoff */}
+      <AnalystReportView ticker={fp.ticker} />
+      <CopilotHandoff fp={fp} />
+    </div>
+  );
+}
+
+/**
+ * Dense one-line trust strip: data-confidence (toned), the distinct data
+ * sources, the as-of date, and the count of explicitly-missing fields. Every
+ * value comes from the bundle; nothing is inferred.
+ */
+function TrustStrip({ b }: { b: ResearchBundle }) {
+  const conf = b.data_confidence ?? null;
+  const label = b.confidence_label;
+  const sources = Array.from(
+    new Set((b.financials?.provenance ?? []).map((p) => p.source).filter(Boolean)),
+  ).map((s) => (s === "yfinance" ? "Yahoo (free)" : s === "fmp" ? "FMP" : s));
+  const missing = b.financials?.missing_data?.length ?? 0;
+  const tone =
+    conf == null
+      ? "text-muted-foreground"
+      : conf >= 0.66
+        ? "text-emerald-600 dark:text-emerald-400"
+        : conf >= 0.4
+          ? "text-amber-600 dark:text-amber-400"
+          : "text-red-600 dark:text-red-400";
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs">
+      {label && conf != null && (
+        <span className={`font-medium ${tone}`}>
+          Confidence: {label.charAt(0).toUpperCase() + label.slice(1)} ({Math.round(conf * 100)}%)
+        </span>
       )}
-      {tab === "valuation" && (
-        <div className="space-y-4">
-          <ValuationCard fp={fp} />
-          <ValuationDcf ticker={fp.ticker} />
-        </div>
+      {sources.length > 0 && (
+        <span className="text-muted-foreground">· Sources: {sources.join(", ")}</span>
       )}
-      {tab === "peers" && (
-        <div className="space-y-4">
-          <PeersComparison ticker={fp.ticker} />
-          {fp.peers.length > 0 && <PeersCard fp={fp} />}
-        </div>
+      {b.as_of && <span className="text-muted-foreground">· as of {formatAsOf(b.as_of)}</span>}
+      {missing > 0 && (
+        <span className="text-amber-600 dark:text-amber-400">
+          · {missing} field{missing === 1 ? "" : "s"} missing
+        </span>
       )}
-      {tab === "fundamentals" && (
-        <div className="space-y-4">
-          <QualityCard fp={fp} />
-          <GrowthCard fp={fp} />
-          <OwnershipInsiderCard fp={fp} />
-        </div>
-      )}
-      {tab === "financials" && <ResearchFinancials ticker={fp.ticker} />}
-      {tab === "earnings" && <EarningsComparison ticker={fp.ticker} />}
-      {tab === "report" && <AnalystReportView ticker={fp.ticker} />}
-      {tab === "technicals" && <MomentumCard fp={fp} />}
-      {tab === "news" && <TickerNews ticker={fp.ticker} />}
-      {tab === "risks" &&
-        (verdict ? (
-          <VerdictCasework verdict={verdict} />
-        ) : (
-          <Card>
-            <CardContent className="py-6 text-sm text-muted-foreground">
-              The bull/bear case loads with the AI verdict. The deterministic risk
-              flags are in the Overview tab.
-            </CardContent>
-          </Card>
-        ))}
-      {tab === "sources" && <SourcesCard fp={fp} />}
     </div>
   );
 }

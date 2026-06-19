@@ -124,6 +124,16 @@ class DataQuality(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class CacheProvenance(BaseModel):
+    """Whether a payload was served from cache and its freshness window. Lets the
+    UI show a "cached · as of … · stale" badge and trust the recency."""
+
+    cache_hit: bool = False
+    fetched_at: Optional[str] = None  # ISO8601 — when the underlying data was fetched
+    expires_at: Optional[str] = None  # ISO8601 — when the cached copy goes stale
+    stale: bool = False  # served past expiry because a refresh failed
+
+
 class FactPack(BaseModel):
     """The compact, source-attributed fact sheet for one ticker."""
 
@@ -153,6 +163,8 @@ class FactPack(BaseModel):
     risk_flags: list[str] = Field(default_factory=list)
 
     data_quality: DataQuality = Field(default_factory=DataQuality)
+    # Set when the FactPack was served via the shared cache (build_fact_pack_cached).
+    cache: Optional[CacheProvenance] = None
 
 
 # ── Verdict (LLM over the FactPack) ─────────────────────────────────

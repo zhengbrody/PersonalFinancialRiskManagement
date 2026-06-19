@@ -20,7 +20,7 @@ import time
 from fastapi import APIRouter, Depends, Path, Query, Request
 
 from ...core.deps_auth import AuthedUser, require_user
-from ...core.responses import ok, too_many_requests, unprocessable
+from ...core.responses import forbidden, ok, too_many_requests, unprocessable
 from ...schemas.news import TickerNewsResponse
 from ...schemas.research import FactPack, VerdictRequest
 from ...schemas.valuation import DCFRequest
@@ -32,6 +32,7 @@ from ...services import research_financials as rfin
 from ...services import research_peers as rpeers
 from ...services import research_report as rreport
 from ...services import research_thesis as rthesis
+from ...services._common import iso_now, safe
 
 router = APIRouter(prefix="/api/v1/research", tags=["research"])
 
@@ -51,7 +52,7 @@ def fact_pack(
 ):
     started = time.perf_counter()
     try:
-        fp = rf.build_fact_pack(ticker)
+        fp = rf.build_fact_pack_cached(ticker)
     except ValueError as exc:
         raise unprocessable(str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - fetch/compose failure
@@ -86,6 +87,133 @@ def research_fact_pack(
         )
         raise unprocessable(f"Could not build a research FactPack for {ticker!r}.") from exc
     return ok({"fact_pack": pack.model_dump()}, request=request, started_at=started)
+
+
+@router.get(
+    "/{ticker}/diagnostics",
+    summary="Research data-coverage diagnostics for a ticker (owner): why is it blank?",
+    response_model=None,
+)
+def research_diagnostics(
+    request: Request,
+    ticker: str = Path(min_length=1, max_length=20),
+    user: AuthedUser = Depends(require_user),
+):
+    """Owner-only. Explains WHY a ticker's research is thin: which provider served
+    the financial statements, how many annual/quarterly rows came back, per-block
+    coverage, the FMP key's PRESENCE (a boolean — never the value), and the
+    missing datasets + provider warnings. For debugging blank research pages.
+    Never prints any secret."""
+    from libs.admin.status import is_owner_email
+
+    if not is_owner_email(user.email):
+        raise forbidden("Owner only.")
+
+    started = time.perf_counter()
+    tk = ticker.strip().upper()
+
+    from ...core.config import get_settings
+    from ...services.providers import fmp_provider as fpp
+
+    fmp_key_present = bool(getattr(get_settings(), "fmp_api_key", ""))
+    ann = fpp.get_financial_statements(tk, period="annual", limit=5)
+    qtr = fpp.get_financial_statements(tk, period="quarter", limit=8)
+    prof = fpp.get_profile(tk)
+    peers = fpp.get_peers(tk)
+    earn = fpp.get_earnings(tk, limit=8)
+
+    missing: list[str] = []
+    if not ann.data:
+        missing.append("income_annual")
+    if not qtr.data:
+        missing.append("income_quarterly")
+    if not getattr(prof, "data", None):
+        missing.append("profile")
+    if not peers.data:
+        missing.append("peers")
+    if not earn.data:
+        missing.append("earnings_estimates")
+
+    warnings = sorted(
+        {
+            *(ann.warnings or []),
+            *(qtr.warnings or []),
+            *(prof.warnings or []),
+            *(peers.warnings or []),
+            *(earn.warnings or []),
+        }
+    )
+
+    payload = {
+        "ticker": tk,
+        "fmp_key_present": fmp_key_present,  # boolean only — never the key value
+        "statements_provider": (ann.source if ann.data else (qtr.source if qtr.data else None)),
+        "annual_rows": len(ann.data or []),
+        "quarterly_rows": len(qtr.data or []),
+        "annual_coverage": round(ann.coverage, 3) if ann.data else 0.0,
+        "profile_coverage": round(prof.coverage, 3) if getattr(prof, "data", None) else 0.0,
+        "peer_count": len(peers.data or []),
+        "earnings_coverage": round(earn.coverage, 3) if earn.data else 0.0,
+        "missing_datasets": missing,
+        "warnings": warnings,
+        "fetched_at": iso_now(),
+    }
+    return ok(payload, request=request, started_at=started)
+
+
+@router.get(
+    "/{ticker}/bundle",
+    summary="Consolidated research bundle — one fetch for the whole page (no credit)",
+    response_model=None,
+)
+def research_bundle(
+    request: Request,
+    ticker: str = Path(min_length=1, max_length=20),
+    user: AuthedUser = Depends(require_user),
+):
+    """Everything the consolidated research page needs, assembled in ONE request
+    so a ticker search fans out to the providers ONCE (the engines share the
+    in-process FMP cache within the call) instead of one fan-out per tab: compact
+    FactPack + institutional financials + DCF + peers + earnings + a deterministic
+    thesis + news. Each block is fail-soft (a failing engine becomes ``null``,
+    never a 500). All numbers are deterministic — no credit, no LLM here; the AI
+    summary is a separate on-demand upgrade (``POST /research/{ticker}/thesis``)."""
+    started = time.perf_counter()
+    tk = ticker.strip().upper()
+
+    fp = safe("research.bundle.factpack", lambda: rf.build_fact_pack_cached(tk))
+    fin = safe("research.bundle.financials", lambda: rfin.build_research_fact_pack(tk))
+    dcf = safe("research.bundle.dcf", lambda: rdcf.build_dcf(tk))
+    peers = safe("research.bundle.peers", lambda: rpeers.build_peer_comparison(tk))
+    earn = safe("research.bundle.earnings", lambda: rearn.build_earnings_comparison(tk))
+    # Reuses the fp/dcf/earn already built above (no duplicate engine pass).
+    thesis = safe(
+        "research.bundle.thesis",
+        lambda: rthesis.build_thesis(tk, llm_callable=None, fp=fp, dcf=dcf, earn=earn),
+    )
+    news = safe(
+        "research.bundle.news",
+        lambda: TickerNewsResponse.model_validate(news_svc.get_ticker_news(tk)).model_dump(),
+    )
+
+    def _dump(x):
+        return x.model_dump() if x is not None else None
+
+    bundle = {
+        "ticker": tk,
+        "generated_at": iso_now(),
+        "as_of": getattr(fin, "as_of", None) or getattr(earn, "as_of", None),
+        "data_confidence": getattr(fin, "data_confidence", None),
+        "confidence_label": getattr(fin, "confidence_label", None),
+        "fact_pack": _dump(fp),
+        "financials": _dump(fin),
+        "dcf": _dump(dcf),
+        "peers": _dump(peers),
+        "earnings": _dump(earn),
+        "thesis": _dump(thesis),
+        "news": news,
+    }
+    return ok({"bundle": bundle}, request=request, started_at=started)
 
 
 @router.post(
@@ -229,12 +357,12 @@ def research_thesis(
         raise unprocessable(f"Could not build a thesis for {tk!r}.") from exc
 
     if llm is not None and out.ai_generated:
-        _record_thesis_cost(user.id, out, started)
+        _record_thesis_cost(user.id, out, started, input_hash_value=cache_key)
         verdict_cache.put(cache_key, out.model_dump())
     return ok({"thesis": out.model_dump()}, request=request, started_at=started)
 
 
-def _record_thesis_cost(user_id: str, thesis, started: float) -> None:
+def _record_thesis_cost(user_id: str, thesis, started: float, *, input_hash_value: str) -> None:
     from libs.billing.costs import estimate_tokens
 
     from ...services.ai_telemetry import record_ai_call
@@ -247,6 +375,7 @@ def _record_thesis_cost(user_id: str, thesis, started: float) -> None:
         tokens_in=1500,  # evidence + system prompt (rough)
         tokens_out=estimate_tokens(body),
         latency_ms=(time.perf_counter() - started) * 1000,
+        input_hash=input_hash_value,
     )
 
 

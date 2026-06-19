@@ -10,9 +10,15 @@ or unavailable portfolio rather than a 422.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 _log = logging.getLogger(__name__)
+
+
+def iso_now() -> str:
+    """Current UTC instant as an ISO-8601 string (shared ``generated_at`` stamp)."""
+    return datetime.now(timezone.utc).isoformat()
 
 
 def safe(label: str, fn: Callable[[], Any], default: Any = None) -> Any:

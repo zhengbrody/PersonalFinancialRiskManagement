@@ -160,3 +160,152 @@ def test_cache_hit_avoids_second_call(monkeypatch, with_key):
     first = calls["n"]
     fp.get_profile("AAPL")  # cached → no new upstream call
     assert calls["n"] == first
+
+
+# ── free-yfinance statement fallback + negative caching (research depth) ──
+
+
+def _yf_mod(inc, bal, cf):
+    import types
+
+    tk = types.SimpleNamespace(
+        quarterly_income_stmt=inc,
+        quarterly_balance_sheet=bal,
+        quarterly_cashflow=cf,
+        income_stmt=inc,
+        balance_sheet=bal,
+        cashflow=cf,
+    )
+    return types.SimpleNamespace(Ticker=lambda _t: tk)
+
+
+def _fake_statements():
+    import pandas as pd
+
+    c = [pd.Timestamp("2024-12-31"), pd.Timestamp("2024-09-30")]
+    inc = pd.DataFrame(
+        {c[0]: [120e9, 40e9, 2.0], c[1]: [115e9, 38e9, 1.9]},
+        index=["Total Revenue", "Net Income", "Diluted EPS"],
+    )
+    bal = pd.DataFrame(
+        {c[0]: [30e9, 50e9], c[1]: [28e9, 48e9]},
+        index=["Cash And Cash Equivalents", "Total Debt"],
+    )
+    cf = pd.DataFrame(
+        {c[0]: [35e9, -10e9], c[1]: [33e9, -9e9]},
+        index=["Free Cash Flow", "Capital Expenditure"],
+    )
+    return inc, bal, cf
+
+
+def test_yf_statements_normalizes_to_statement_shape(monkeypatch):
+    import sys
+
+    monkeypatch.setitem(sys.modules, "yfinance", _yf_mod(*_fake_statements()))
+    rows = fp._yf_statements("AAPL", "quarter", 8)
+    assert len(rows) == 2
+    assert rows[0]["period"] == "2024-Q4"  # Dec → Q4
+    assert rows[0]["revenue"] == 120e9
+    assert rows[0]["eps"] == 2.0  # no Basic EPS → falls back to Diluted EPS
+    assert rows[0]["free_cash_flow"] == 35e9
+    assert rows[0]["debt"] == 50e9
+
+
+def test_statements_fall_back_to_yfinance_when_fmp_empty(monkeypatch):
+    # No FMP key → _cached short-circuits FMP before the producer; the wrapper
+    # must STILL reach yfinance so the institutional financials populate.
+    import sys
+
+    monkeypatch.setattr(fp, "_key", lambda: "")
+    monkeypatch.setitem(sys.modules, "yfinance", _yf_mod(*_fake_statements()))
+    res = fp.get_financial_statements("AAPL", period="quarter", limit=8)
+    assert res.data is not None and res.source == "yfinance"
+    assert res.data[0]["revenue"] == 120e9
+    assert "fmp_empty_yfinance_fallback" in res.warnings
+
+
+def test_empty_result_is_negative_cached_short(monkeypatch, with_key):
+    # An empty FMP result is cached only for _TTL_EMPTY, not the 24h profile TTL,
+    # so a transient rate-limit doesn't freeze a ticker as "—".
+    _route(monkeypatch, lambda path, key, params: None)
+    res = fp.get_profile("ZZZ")
+    assert res.data is None
+    expiry, _ = fp._cache["profile:ZZZ"]
+    import time as _t
+
+    assert expiry - _t.monotonic() <= fp._TTL_EMPTY + 1  # not _TTL_PROFILE (24h)
+
+
+# ── partial FMP (income only) → yfinance backfills balance/cash-flow fields ──
+
+
+def test_partial_fmp_backfills_balance_cashflow_from_yfinance(monkeypatch, with_key):
+    # FMP returns the income statement but NOTHING for balance-sheet / cash-flow.
+    def handler(path, key, params):
+        if "income-statement" in path:
+            return [
+                {
+                    "date": "2024-12-31",
+                    "calendarYear": "2024",
+                    "period": "FY",
+                    "revenue": 1000,
+                    "netIncome": 100,
+                    "eps": 2.0,
+                    "operatingIncome": 200,
+                }
+            ]
+        return None  # balance-sheet + cash-flow empty
+
+    _route(monkeypatch, handler)
+    # yfinance supplies the missing balance/cash-flow fields (keyed by fiscal_year).
+    monkeypatch.setattr(
+        fp,
+        "_yf_statements",
+        lambda tk, period, limit: [
+            {
+                "fiscal_year": "2024",
+                "fiscal_date": "2024-12-31",
+                "cash": 300.0,
+                "short_term_investments": 20.0,
+                "minority_interest": 0.0,
+                "debt": 150.0,
+                "free_cash_flow": 80.0,
+                "capex": -50.0,
+                "d_and_a": 40.0,
+                "change_in_nwc": -5.0,
+            }
+        ],
+    )
+    res = fp.get_financial_statements("AAPL", period="annual", limit=5)
+    assert res.data is not None and res.source == "fmp"
+    row = res.data[0]
+    assert row["revenue"] == 1000 and row["operating_income"] == 200  # FMP income kept
+    assert row["cash"] == 300.0 and row["debt"] == 150.0  # yfinance backfilled the nulls
+    assert row["free_cash_flow"] == 80.0 and row["capex"] == -50.0
+    assert "yfinance_balance_cashflow_backfill" in res.warnings
+    assert "no_balance_sheet" in res.warnings and "no_cash_flow" in res.warnings
+
+
+def test_partial_merge_keeps_fmp_fields_where_present(monkeypatch, with_key):
+    # FMP has income + a balance sheet WITH cash; only cash-flow is missing.
+    def handler(path, key, params):
+        if "income-statement" in path:
+            return [
+                {"date": "2024-12-31", "calendarYear": "2024", "revenue": 1000, "netIncome": 100}
+            ]
+        if "balance-sheet" in path:
+            return [{"date": "2024-12-31", "cashAndCashEquivalents": 999.0, "totalDebt": 111.0}]
+        return None  # cash-flow empty
+
+    _route(monkeypatch, handler)
+    monkeypatch.setattr(
+        fp,
+        "_yf_statements",
+        lambda tk, period, limit: [
+            {"fiscal_year": "2024", "cash": 1.0, "free_cash_flow": 80.0, "capex": -50.0}
+        ],
+    )
+    res = fp.get_financial_statements("AAPL", period="annual", limit=5)
+    row = res.data[0]
+    assert row["cash"] == 999.0  # FMP's value wins over yfinance's
+    assert row["free_cash_flow"] == 80.0  # yfinance fills the missing cash-flow field

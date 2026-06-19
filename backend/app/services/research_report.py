@@ -12,7 +12,6 @@ explicit note + a provenance/missing-data appendix entry.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 
 from ..schemas.report import (
     AnalystReportOutput,
@@ -29,31 +28,28 @@ from . import (
     research_peers,
     research_thesis,
 )
+from ._common import iso_now, safe
 
 _log = logging.getLogger(__name__)
 
 
-def _safe(fn):
-    try:
-        return fn()
-    except Exception:  # noqa: BLE001 - each section is best-effort
-        return None
-
-
-def _iso_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
 def build_analyst_report(ticker: str) -> AnalystReportOutput:
     tk = ticker.strip().upper()
-    gen = _iso_now()
+    gen = iso_now()
 
-    fin = _safe(lambda: research_financials.build_research_fact_pack(tk))
-    fp = _safe(lambda: research_factpack.build_fact_pack(tk))
-    dcf = _safe(lambda: research_dcf.build_dcf(tk))
-    peers = _safe(lambda: research_peers.build_peer_comparison(tk))
-    earn = _safe(lambda: research_earnings.build_earnings_comparison(tk))
-    thesis = _safe(lambda: research_thesis.build_thesis(tk, llm_callable=None))
+    fin = safe(
+        "research.report.financials", lambda: research_financials.build_research_fact_pack(tk)
+    )
+    fp = safe("research.report.factpack", lambda: research_factpack.build_fact_pack(tk))
+    dcf = safe("research.report.dcf", lambda: research_dcf.build_dcf(tk))
+    peers = safe("research.report.peers", lambda: research_peers.build_peer_comparison(tk))
+    earn = safe("research.report.earnings", lambda: research_earnings.build_earnings_comparison(tk))
+    # The thesis reuses the FactPack/DCF/earnings already built above instead of
+    # rebuilding them (engine recompute over the same cached provider data).
+    thesis = safe(
+        "research.report.thesis",
+        lambda: research_thesis.build_thesis(tk, llm_callable=None, fp=fp, dcf=dcf, earn=earn),
+    )
 
     name = (getattr(fin, "snapshot", None) and fin.snapshot.name) or tk
     as_of = (getattr(fin, "as_of", None)) or (getattr(earn, "as_of", None)) or ""

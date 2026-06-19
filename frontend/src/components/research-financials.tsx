@@ -33,33 +33,43 @@ const confidenceTone: Record<string, string> = {
   low: "bg-red-500/15 text-red-700 dark:text-red-300",
 };
 
-export function ResearchFinancials({ ticker }: { ticker: string | null }) {
-  const q = useResearchFinancials(ticker);
+export function ResearchFinancials({
+  ticker,
+  data,
+}: {
+  ticker: string | null;
+  data?: ResearchFactPack;
+}) {
+  // When `data` is supplied (from the consolidated bundle), render it directly
+  // and skip the per-section fetch; otherwise self-fetch by ticker.
+  const q = useResearchFinancials(data ? null : ticker);
 
-  if (!ticker) return null;
-  if (q.isLoading) {
-    return (
-      <Card>
-        <CardContent className="space-y-3 py-6">
-          <Skeleton className="h-5 w-48" />
-          <Skeleton className="h-24 w-full" />
-          <Skeleton className="h-40 w-full" />
-        </CardContent>
-      </Card>
-    );
-  }
-  if (q.isError || !q.data) {
-    return (
-      <Card>
-        <CardContent className="py-6 text-sm text-muted-foreground">
-          Couldn&apos;t load the financial fact pack right now. The deterministic figures load
-          from the backend — please try again in a moment.
-        </CardContent>
-      </Card>
-    );
+  if (!ticker && !data) return null;
+  if (!data) {
+    if (q.isLoading) {
+      return (
+        <Card>
+          <CardContent className="space-y-3 py-6">
+            <Skeleton className="h-5 w-48" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-40 w-full" />
+          </CardContent>
+        </Card>
+      );
+    }
+    if (q.isError || !q.data) {
+      return (
+        <Card>
+          <CardContent className="py-6 text-sm text-muted-foreground">
+            Couldn&apos;t load the financial fact pack right now. The deterministic figures load
+            from the backend — please try again in a moment.
+          </CardContent>
+        </Card>
+      );
+    }
   }
 
-  const fp = q.data.fact_pack;
+  const fp = data ?? q.data!.fact_pack;
   return (
     <div className="space-y-4">
       <Snapshot fp={fp} />

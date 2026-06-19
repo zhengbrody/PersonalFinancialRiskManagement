@@ -181,10 +181,11 @@ def fake_portfolios(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _reset_ai_caches():
-    """AI response caches are module-global (in-proc TTL); a fresh app per
-    test does NOT reset them, so clear before every test to keep tests
-    order-independent."""
-    from backend.app.services import ai_cache
+    """AI response caches AND the shared JSON cache are module-global (in-proc);
+    a fresh app per test does NOT reset them, so clear before every test to keep
+    tests order-independent."""
+    from backend.app.services import ai_cache, cache
 
     ai_cache.reset_all()
+    cache.reset_cache()
     yield

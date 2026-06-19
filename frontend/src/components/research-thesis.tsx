@@ -14,10 +14,18 @@ import { isBillingEnabled, BETA_LIMIT_MESSAGE } from "@/lib/billing-flag";
 import { ApiError } from "@/lib/api";
 import { useThesis, type ThesisOutput } from "@/lib/queries";
 
-export function ResearchThesis({ ticker }: { ticker: string | null }) {
+export function ResearchThesis({
+  ticker,
+  initial,
+}: {
+  ticker: string | null;
+  initial?: ThesisOutput;
+}) {
   const m = useThesis();
   if (!ticker) return null;
-  const thesis = m.data?.thesis;
+  // The LLM upgrade (m.data) wins; otherwise the deterministic thesis the
+  // bundle already computed (initial) renders immediately.
+  const thesis = m.data?.thesis ?? initial;
 
   if (!thesis) {
     return (
@@ -39,7 +47,26 @@ export function ResearchThesis({ ticker }: { ticker: string | null }) {
     );
   }
 
-  return <ThesisCard thesis={thesis} />;
+  // When the shown thesis is still the deterministic one, offer the AI upgrade.
+  const canUpgrade = !m.data && !thesis.ai_generated;
+  return (
+    <div className="space-y-2">
+      <ThesisCard thesis={thesis} />
+      {canUpgrade && (
+        <div className="flex items-center gap-3">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => m.mutate({ ticker })}
+            disabled={m.isPending}
+          >
+            {m.isPending ? "Thinking…" : "Upgrade to the AI-written debate"}
+          </Button>
+          {m.isError && <ErrorNote error={m.error} />}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function ThesisCard({ thesis }: { thesis: ThesisOutput }) {

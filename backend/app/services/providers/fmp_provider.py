@@ -33,6 +33,8 @@ from ...schemas.providers import (
     ProviderResult,
     Ratios,
 )
+from ..cache import CacheResult, get_cache
+from ..cache_keys import make_key
 
 _log = logging.getLogger(__name__)
 
@@ -43,6 +45,10 @@ _TTL_PROFILE = 24 * 60 * 60
 _TTL_ANALYST = 6 * 60 * 60
 _TTL_NEWS = 30 * 60
 _TTL_PEERS = 6 * 60 * 60
+# A miss/empty result (rate-limit blip, transient 5xx, missing key) is cached
+# only briefly so it self-heals — without this a single 429 froze a ticker's
+# data as "—" for the full domain TTL (up to 6h) even after the limit recovered.
+_TTL_EMPTY = 90
 
 _cache: dict[str, tuple[float, ProviderResult]] = {}
 
@@ -91,6 +97,39 @@ def _get(path: str, params: dict) -> Any:
     return mi._fmp_get(path, _key(), params)
 
 
+class _ProviderEmpty(Exception):
+    """Internal: a GET returned no data — treated as a refresh failure so the
+    cache serves the last good response instead of overwriting it."""
+
+
+def cached_get(
+    path: str, params: dict, *, ttl: float = _TTL_FUND, stale_ttl: float | None = None
+) -> CacheResult:
+    """Cached FMP GET via the shared cache service, with **stale-on-failure**.
+
+    A fresh hit skips the HTTP call entirely; a transient empty/error serves the
+    last good response (marked ``stale``) rather than overwriting it with nothing.
+    The key hashes (path, params) — never the API key — so no secret leaks. The
+    API key is read by ``_get`` itself. Returns a ``CacheResult`` carrying the
+    JSON value + cache_hit / fetched_at / expires_at / stale provenance.
+    """
+
+    key = make_key("fmp:get", path, params)
+
+    def producer() -> Any:
+        data = _get(path, params)
+        if data is None:
+            raise _ProviderEmpty()
+        return data
+
+    try:
+        return get_cache().fetch(key, producer, ttl=ttl, stale_ttl=stale_ttl)
+    except _ProviderEmpty:
+        return CacheResult(
+            value=None, cache_hit=False, fetched_at=None, expires_at=None, stale=False
+        )
+
+
 def _cached(
     domain: str, ticker: str, ttl: int, producer: Callable[[], ProviderResult]
 ) -> ProviderResult:
@@ -112,7 +151,10 @@ def _cached(
             _log.warning("fmp.%s.failed ticker=%s err=%s", domain, ticker, type(exc).__name__)
             metrics.record_provider("fmp", "error")
             res = ProviderResult(data=None, warnings=[f"fmp_error:{type(exc).__name__}"])
-    _cache[key] = (time.monotonic() + ttl, res)
+    # Real data is cached for the full domain TTL; an empty/failed result is
+    # negative-cached briefly so a transient rate-limit doesn't stick for hours.
+    store_ttl = ttl if res.data is not None else min(ttl, _TTL_EMPTY)
+    _cache[key] = (time.monotonic() + store_ttl, res)
     return res
 
 
@@ -255,6 +297,8 @@ def _normalize_statement(inc: dict, bal: dict, cf: dict, period: str) -> dict:
         "shares_outstanding": _num(_pick(inc, "weightedAverageShsOut")),
         "diluted_shares": _num(_pick(inc, "weightedAverageShsOutDil")),
         "cash": _num(_pick(bal, "cashAndCashEquivalents", "cashAndShortTermInvestments")),
+        "short_term_investments": _num(_pick(bal, "shortTermInvestments")),
+        "minority_interest": _num(_pick(bal, "minorityInterest")),
         "debt": _num(_pick(bal, "totalDebt", "netDebt")),
         "free_cash_flow": _num(_pick(cf, "freeCashFlow")),
         "capex": _num(_pick(cf, "capitalExpenditure")),
@@ -265,8 +309,145 @@ def _normalize_statement(inc: dict, bal: dict, cf: dict, period: str) -> dict:
         ),
         "income_tax": _num(_pick(inc, "incomeTaxExpense")),
         "pretax_income": _num(_pick(inc, "incomeBeforeTax", "pretaxIncome")),
+        "interest_expense": _num(_pick(inc, "interestExpense")),
         "change_in_nwc": _num(_pick(cf, "changeInWorkingCapital")),
     }
+
+
+def _yf_series(df: Any, *names: str) -> Any:
+    """First matching row (Series) of a yfinance statement DataFrame by label."""
+    try:
+        idx = df.index
+    except AttributeError:
+        return None
+    for n in names:
+        if n in idx:
+            return df.loc[n]
+    return None
+
+
+def _yf_statements(tk: str, period: str, limit: int) -> list[dict]:
+    """Free-yfinance fallback for the financial statements, normalized to the
+    SAME key shape as ``_normalize_statement`` so the DCF / earnings / trend
+    consumers don't care whether FMP or yfinance produced the row. Fail-soft to
+    ``[]`` — covers tickers FMP rate-limits or whose tier caps statement depth."""
+    try:
+        import yfinance as yf
+
+        t = yf.Ticker(tk)
+        if period == "annual":
+            inc, bal, cf = t.income_stmt, t.balance_sheet, t.cashflow
+        else:
+            inc, bal, cf = t.quarterly_income_stmt, t.quarterly_balance_sheet, t.quarterly_cashflow
+        if inc is None or getattr(inc, "empty", True):
+            return []
+    except Exception:  # noqa: BLE001 - yfinance shapes/network vary
+        return []
+
+    rev = _yf_series(inc, "Total Revenue", "TotalRevenue")
+    gross = _yf_series(inc, "Gross Profit", "GrossProfit")
+    op_inc = _yf_series(inc, "Operating Income", "OperatingIncome")
+    net = _yf_series(inc, "Net Income", "NetIncome", "Net Income Common Stockholders")
+    eps_b = _yf_series(inc, "Basic EPS", "BasicEPS")
+    eps_d = _yf_series(inc, "Diluted EPS", "DilutedEPS")
+    ebitda = _yf_series(inc, "EBITDA", "Normalized EBITDA")
+    shares_b = _yf_series(inc, "Basic Average Shares", "Basic Average Shares Outstanding")
+    shares_d = _yf_series(inc, "Diluted Average Shares")
+    tax = _yf_series(inc, "Tax Provision", "Income Tax Expense")
+    pretax = _yf_series(inc, "Pretax Income", "Income Before Tax")
+    interest = _yf_series(inc, "Interest Expense", "Interest Expense Non Operating")
+    cash = _yf_series(
+        bal, "Cash And Cash Equivalents", "Cash Cash Equivalents And Short Term Investments"
+    )
+    sti = _yf_series(bal, "Other Short Term Investments", "Short Term Investments")
+    minority = _yf_series(bal, "Minority Interest")
+    debt = _yf_series(bal, "Total Debt", "Net Debt")
+    fcf = _yf_series(cf, "Free Cash Flow", "FreeCashFlow")
+    capex = _yf_series(cf, "Capital Expenditure", "Capital Expenditures")
+    dep = _yf_series(cf, "Depreciation And Amortization", "Depreciation Amortization Depletion")
+    if dep is None:
+        dep = _yf_series(inc, "Reconciled Depreciation")
+    nwc = _yf_series(cf, "Change In Working Capital", "Change In Working Capital")
+
+    def _at(s: Any, col: Any) -> Optional[float]:
+        try:
+            return _num(s[col]) if s is not None else None
+        except Exception:  # noqa: BLE001
+            return None
+
+    rows: list[dict] = []
+    for col in list(inc.columns)[:limit]:
+        try:
+            d = col.date()
+            iso, year, qn = d.isoformat(), d.year, (d.month - 1) // 3 + 1
+        except Exception:  # noqa: BLE001
+            iso, year, qn = str(col)[:10], None, None
+        label = str(year) if period == "annual" else (f"{year}-Q{qn}" if year else iso)
+        rows.append(
+            {
+                "fiscal_date": iso,
+                "fiscal_year": str(year) if year else None,
+                "period": label,
+                "revenue": _at(rev, col),
+                "gross_profit": _at(gross, col),
+                "operating_income": _at(op_inc, col),
+                "net_income": _at(net, col),
+                "eps": _at(eps_b, col) if eps_b is not None else _at(eps_d, col),
+                "eps_diluted": _at(eps_d, col),
+                "ebitda": _at(ebitda, col),
+                "shares_outstanding": _at(shares_b, col),
+                "diluted_shares": _at(shares_d, col),
+                "cash": _at(cash, col),
+                "short_term_investments": _at(sti, col),
+                "minority_interest": _at(minority, col),
+                "debt": _at(debt, col),
+                "free_cash_flow": _at(fcf, col),
+                "capex": _at(capex, col),
+                "d_and_a": _at(dep, col),
+                "income_tax": _at(tax, col),
+                "pretax_income": _at(pretax, col),
+                "interest_expense": _at(interest, col),
+                "change_in_nwc": _at(nwc, col),
+            }
+        )
+    rows.sort(key=lambda x: x.get("fiscal_date") or "", reverse=True)
+    return rows
+
+
+# Balance-sheet + cash-flow fields that yfinance can backfill into partial FMP
+# rows (everything NOT sourced from the income statement).
+_BS_CF_FIELDS = (
+    "cash",
+    "short_term_investments",
+    "minority_interest",
+    "debt",
+    "free_cash_flow",
+    "capex",
+    "d_and_a",
+    "change_in_nwc",
+)
+
+
+def _merge_yf_balance_cashflow(tk: str, period: str, limit: int, rows: list[dict]) -> bool:
+    """Fill the balance-sheet / cash-flow fields of partial FMP rows from free
+    yfinance (matched by fiscal year for annual, period label for quarterly).
+    FMP values are kept; only ``None`` fields are filled. Returns True if any
+    field was backfilled. Fail-soft — a yfinance hiccup just leaves the nulls."""
+    yf_rows = _yf_statements(tk, period, limit)
+    if not yf_rows:
+        return False
+    key = "fiscal_year" if period == "annual" else "period"
+    yf_by = {r.get(key): r for r in yf_rows if r.get(key)}
+    backfilled = False
+    for row in rows:
+        yfr = yf_by.get(row.get(key))
+        if not yfr:
+            continue
+        for f in _BS_CF_FIELDS:
+            if row.get(f) is None and yfr.get(f) is not None:
+                row[f] = yfr[f]
+                backfilled = True
+    return backfilled
 
 
 def get_financial_statements(
@@ -274,8 +455,9 @@ def get_financial_statements(
 ) -> ProviderResult[list[dict]]:
     """Income + balance-sheet + cash-flow statements merged by fiscal date into
     normalized per-period dicts (newest first). ``period`` is "quarter" or
-    "annual". Fail-soft: missing key / dead endpoint / no income statement →
-    ``data=None`` + warnings, so the caller records a missing-data entry."""
+    "annual". FMP is primary; free yfinance backfills when FMP is empty (rate
+    limit / tier cap) so the statement-driven engines don't go blank. Fail-soft:
+    both empty → ``data=None`` + warnings, so the caller records missing data."""
     tk = ticker.strip().upper()
 
     def _produce() -> ProviderResult:
@@ -325,6 +507,13 @@ def get_financial_statements(
             warnings.append("no_balance_sheet")
         if not cf_by:
             warnings.append("no_cash_flow")
+        # PARTIAL FMP — income present but balance-sheet and/or cash-flow missing
+        # (a common tier reality). Backfill ONLY the missing balance/cash-flow
+        # FIELDS from free yfinance (matched by fiscal year/period) instead of
+        # returning half-empty rows. FMP fields win; yfinance fills the nulls.
+        if rows and (not bal_by or not cf_by):
+            if _merge_yf_balance_cashflow(tk, period, limit, rows):
+                warnings.append("yfinance_balance_cashflow_backfill")
         latest = rows[0] if rows else {}
         coverage = round(
             sum(1 for f in _STMT_CRITICAL if latest.get(f) is not None) / len(_STMT_CRITICAL), 3
@@ -337,7 +526,45 @@ def get_financial_statements(
             warnings=warnings,
         )
 
-    return _cached(f"stmts_{period}", tk, _TTL_FUND, _produce)
+    res = _cached(f"stmts_{period}", tk, _TTL_FUND, _produce)
+    if res.data is not None:
+        return res
+    # FMP gave nothing — no key, rate-limited, dead endpoint, or tier cap. Fall
+    # back to FREE yfinance. This runs OUTSIDE _cached's key gate (which would
+    # short-circuit before _produce when no FMP key is set), so the institutional
+    # financials populate for every user, not just FMP-key holders. Cached under a
+    # distinct key with the same negative-TTL discipline.
+    return _yf_statements_cached(tk, period, limit, res.warnings)
+
+
+def _yf_statements_cached(
+    tk: str, period: str, limit: int, fmp_warnings: list[str]
+) -> ProviderResult[list[dict]]:
+    from .. import metrics
+
+    key = f"stmts_yf_{period}:{tk}"
+    hit = _cache.get(key)
+    if hit is not None and hit[0] > time.monotonic():
+        return hit[1]
+    rows = _yf_statements(tk, period, limit)
+    if rows:
+        latest = rows[0]
+        coverage = round(
+            sum(1 for f in _STMT_CRITICAL if latest.get(f) is not None) / len(_STMT_CRITICAL), 3
+        )
+        res = ProviderResult(
+            data=rows,
+            source="yfinance",
+            as_of=latest.get("fiscal_date"),
+            coverage=coverage,
+            warnings=["fmp_empty_yfinance_fallback"],
+        )
+    else:
+        res = ProviderResult(data=None, warnings=fmp_warnings or ["no_statements"])
+    metrics.record_provider("yfinance", "ok" if res.data is not None else "empty")
+    store_ttl = _TTL_FUND if res.data is not None else _TTL_EMPTY
+    _cache[key] = (time.monotonic() + store_ttl, res)
+    return res
 
 
 def get_earnings(ticker: str, *, limit: int = 8) -> ProviderResult[list[dict]]:

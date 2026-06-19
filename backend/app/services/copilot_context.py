@@ -62,66 +62,82 @@ def load_positions_and_score(
 
     tickers = sorted(holdings.keys())
 
-    # Pull real price history from the same cached source the risk
-    # endpoints use. A fetch failure is a 500 (our/upstream problem),
-    # never a 422 (which signals a user-fixable data gap).
-    from . import market_data
+    def _compute():
+        # Pull real price history from the same cached source the risk
+        # endpoints use. A fetch failure is a 500 (our/upstream problem),
+        # never a 422 (which signals a user-fixable data gap).
+        from . import market_data
 
-    try:
-        prices = market_data.get_price_history(tickers, days=history_days)
-    except Exception as exc:
-        raise server_error("Market data fetch failed.", reason=type(exc).__name__) from exc
+        try:
+            prices = market_data.get_price_history(tickers, days=history_days)
+        except Exception as exc:
+            raise server_error("Market data fetch failed.", reason=type(exc).__name__) from exc
 
-    if prices.empty:
-        raise APIError(
-            status=422,
-            code="no_market_data",
-            message="Could not fetch prices for any holding.",
-            details={"tickers": tickers},
+        if prices.empty:
+            raise APIError(
+                status=422,
+                code="no_market_data",
+                message="Could not fetch prices for any holding.",
+                details={"tickers": tickers},
+            )
+
+        # Build typed positions (handles unknown cost_basis=None internally).
+        from libs.mindmarket_core.session_loader import build_user_positions
+
+        positions = build_user_positions(holdings, prices)
+        if not positions:
+            raise APIError(
+                status=422,
+                code="no_priced_holdings",
+                message="Could not price any holding (shares=0 or no quote).",
+            )
+
+        # ── Cash + margin leverage (parity with /risk/score_from_active) ──
+        # Fold idle cash in as a native `cash` position and lift the book by
+        # `leverage = gross / net_equity`. Fail-soft to the unlevered, cash-free
+        # book on any capital-fetch hiccup — never fail the chat.
+        from libs.mindmarket_core.portfolio_scoring import AssetPosition, score_portfolio
+
+        equity_value = float(sum(p.market_value for p in positions))
+        cash_balance, margin_loan = _resolve_cash_and_margin(user)
+        if cash_balance > 0:
+            positions = [
+                *positions,
+                AssetPosition(
+                    ticker="CASH",
+                    name="Cash",
+                    asset_type="cash",
+                    market_value=cash_balance,
+                    cost_basis=cash_balance,  # no capital gain → 0 P&L
+                ),
+            ]
+        leverage = _leverage_factor(
+            gross_assets=equity_value + cash_balance, margin_loan=margin_loan
         )
 
-    # Build typed positions (handles unknown cost_basis=None internally).
-    from libs.mindmarket_core.session_loader import build_user_positions
+        # Daily returns matrix from the same history. pct_change drops the
+        # leading NaN row; dropna(how="all") removes fully-empty rows.
+        returns = prices.pct_change().dropna(how="all")
 
-    positions = build_user_positions(holdings, prices)
-    if not positions:
-        raise APIError(
-            status=422,
-            code="no_priced_holdings",
-            message="Could not price any holding (shares=0 or no quote).",
+        score = score_portfolio(
+            positions,
+            returns,
+            risk_preference=risk_preference,
+            risk_free_rate=risk_free_rate,
+            leverage=leverage,
         )
+        return positions, score
 
-    # ── Cash + margin leverage (parity with /risk/score_from_active) ──
-    # Fold idle cash in as a native `cash` position and lift the book by
-    # `leverage = gross / net_equity`. Fail-soft to the unlevered, cash-free
-    # book on any capital-fetch hiccup — never fail the chat.
-    from libs.mindmarket_core.portfolio_scoring import AssetPosition, score_portfolio
+    # Cache the DETERMINISTIC (positions, score) by user_id + portfolio_hash +
+    # context_version. A holdings change busts the key → recompute; an identical
+    # repeat skips the price fetch + engine. (All callers use the default score
+    # params, so they're encoded by the context_version.) On a transient compute
+    # failure with a prior good context, the stale context is served rather than
+    # failing the chat. user_id is always in the key — this is user-private data.
+    from . import context_cache as cc
 
-    equity_value = float(sum(p.market_value for p in positions))
-    cash_balance, margin_loan = _resolve_cash_and_margin(user)
-    if cash_balance > 0:
-        positions = [
-            *positions,
-            AssetPosition(
-                ticker="CASH",
-                name="Cash",
-                asset_type="cash",
-                market_value=cash_balance,
-                cost_basis=cash_balance,  # no capital gain → 0 P&L
-            ),
-        ]
-    leverage = _leverage_factor(gross_assets=equity_value + cash_balance, margin_loan=margin_loan)
-
-    # Daily returns matrix from the same history. pct_change drops the
-    # leading NaN row; dropna(how="all") removes fully-empty rows.
-    returns = prices.pct_change().dropna(how="all")
-
-    score = score_portfolio(
-        positions,
-        returns,
-        risk_preference=risk_preference,
-        risk_free_rate=risk_free_rate,
-        leverage=leverage,
+    positions, score, _res = cc.cached_copilot_context(
+        user_id=user.id, holdings=holdings, producer=_compute
     )
     return positions, score
 

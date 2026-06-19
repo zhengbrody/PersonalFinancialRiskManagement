@@ -61,20 +61,28 @@ const BADGE_METRICS = [
   { metric: "pe", label: "P/E", fmt: (v: number | null) => x(v) },
 ];
 
-export function PeersComparison({ ticker }: { ticker: string | null }) {
-  const q = usePeers(ticker);
-  if (!ticker) return null;
-  if (q.isLoading) return <PeersSkeleton />;
-  if (q.isError || !q.data) {
-    return (
-      <Card>
-        <CardContent className="py-6 text-sm text-muted-foreground">
-          Couldn&apos;t load peers right now — please try again shortly.
-        </CardContent>
-      </Card>
-    );
+export function PeersComparison({
+  ticker,
+  data,
+}: {
+  ticker: string | null;
+  data?: PeersOutput;
+}) {
+  const q = usePeers(data ? null : ticker);
+  if (!ticker && !data) return null;
+  if (!data) {
+    if (q.isLoading) return <PeersSkeleton />;
+    if (q.isError || !q.data) {
+      return (
+        <Card>
+          <CardContent className="py-6 text-sm text-muted-foreground">
+            Couldn&apos;t load peers right now — please try again shortly.
+          </CardContent>
+        </Card>
+      );
+    }
   }
-  const out = q.data.peers;
+  const out = data ?? q.data!.peers;
   return (
     <div className="space-y-4">
       <PercentileBadges out={out} />
