@@ -195,7 +195,68 @@ def get_profile(ticker: str) -> ProviderResult[CompanyProfile]:
             coverage=_coverage(prof, ["name", "sector", "market_cap", "price", "beta"]),
         )
 
-    return _cached("profile", tk, _TTL_PROFILE, _produce)
+    res = _cached("profile", tk, _TTL_PROFILE, _produce)
+    # The DCF current-price + CAPM WACC need price/market_cap/beta. FMP can leave
+    # them null (429 rate-limit, free tier, or no key) — backfill those (and any
+    # missing identity) from FREE yfinance so valuation populates for everyone,
+    # not just FMP-key holders. FMP values win; yfinance fills only the nulls.
+    d = res.data
+    if d is None or d.price is None or d.market_cap is None or d.beta is None:
+        return _profile_with_yf_fallback(tk, res)
+    return res
+
+
+def _profile_with_yf_fallback(
+    tk: str, fmp_res: ProviderResult[CompanyProfile]
+) -> ProviderResult[CompanyProfile]:
+    """Merge free-yfinance profile fields into an FMP profile that left the
+    DCF/WACC-critical price/market_cap/beta null. Runs OUTSIDE ``_cached``'s key
+    gate (which short-circuits before the producer when no FMP key is set), and
+    is cached under a distinct key with the same negative-TTL discipline as the
+    statement fallback (a transient miss re-tries soon; a real hit stays 24h)."""
+    from .. import metrics
+
+    key = f"profile_yf:{tk}"
+    hit = _cache.get(key)
+    if hit is not None and hit[0] > time.monotonic():
+        return hit[1]
+
+    yfp = _yf_profile(tk)
+    if not any(yfp.get(f) is not None for f in ("price", "market_cap", "beta", "name")):
+        # yfinance added nothing — keep whatever FMP gave (partial profile or None),
+        # negative-cached briefly so we re-try rather than sticking for hours.
+        metrics.record_provider("yfinance", "empty")
+        _cache[key] = (time.monotonic() + _TTL_EMPTY, fmp_res)
+        return fmp_res
+
+    base = fmp_res.data
+
+    def _fill(attr: str, yf_key: str) -> Any:
+        cur = getattr(base, attr, None) if base else None
+        return cur if cur is not None else yfp.get(yf_key)
+
+    merged = CompanyProfile(
+        ticker=tk,
+        name=_fill("name", "name"),
+        sector=_fill("sector", "sector"),
+        industry=_fill("industry", "industry"),
+        exchange=getattr(base, "exchange", None) if base else None,
+        currency=_fill("currency", "currency"),
+        market_cap=_fill("market_cap", "market_cap"),
+        price=_fill("price", "price"),
+        beta=_fill("beta", "beta"),
+        description=getattr(base, "description", None) if base else None,
+    )
+    res: ProviderResult = ProviderResult(
+        data=merged,
+        source="fmp+yfinance" if base is not None else "yfinance",
+        as_of=fmp_res.as_of,
+        coverage=_coverage(merged, ["name", "sector", "market_cap", "price", "beta"]),
+        warnings=[*fmp_res.warnings, "yfinance_profile_fallback"],
+    )
+    metrics.record_provider("yfinance", "ok")
+    _cache[key] = (time.monotonic() + _TTL_PROFILE, res)
+    return res
 
 
 def get_fundamentals(ticker: str) -> ProviderResult[Ratios]:
@@ -324,6 +385,31 @@ def _yf_series(df: Any, *names: str) -> Any:
         if n in idx:
             return df.loc[n]
     return None
+
+
+def _yf_profile(tk: str) -> dict:
+    """Free-yfinance fallback for the profile fields the DCF/WACC need
+    (price/market_cap/beta) + identity. Fail-soft to ``{}`` — covers tickers FMP
+    rate-limits, a free tier nulls, or when no FMP key is set. ``Ticker.info`` is
+    heavier than ``fast_info`` but is the only source of beta; the caller caches
+    the result 24h, so the cost is paid once per ticker per day."""
+    try:
+        import yfinance as yf
+
+        info = getattr(yf.Ticker(tk), "info", None)
+    except Exception:  # noqa: BLE001 - yfinance shapes/network vary
+        return {}
+    if not isinstance(info, dict):
+        return {}
+    return {
+        "price": _num(info.get("currentPrice") or info.get("regularMarketPrice")),
+        "market_cap": _num(info.get("marketCap")),
+        "beta": _num(info.get("beta")),
+        "name": info.get("longName") or info.get("shortName"),
+        "sector": info.get("sector"),
+        "industry": info.get("industry"),
+        "currency": info.get("currency"),
+    }
 
 
 def _yf_statements(tk: str, period: str, limit: int) -> list[dict]:

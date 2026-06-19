@@ -18,6 +18,13 @@ def _reset():
     fp.reset_cache()
 
 
+@pytest.fixture(autouse=True)
+def _offline_yf(monkeypatch):
+    """Keep the suite offline + deterministic: the profile fallback must never
+    reach real yfinance unless a test explicitly supplies data (overriding this)."""
+    monkeypatch.setattr(fp, "_yf_profile", lambda tk: {})
+
+
 @pytest.fixture
 def with_key(monkeypatch):
     monkeypatch.setattr(fp, "_key", lambda: "testkey")
@@ -34,7 +41,7 @@ def _route(monkeypatch, handler):
 
 
 def test_no_key_returns_unavailable(monkeypatch):
-    monkeypatch.setattr(fp, "_key", lambda: "")
+    monkeypatch.setattr(fp, "_key", lambda: "")  # _offline_yf autouse keeps yfinance empty
     res = fp.get_profile("AAPL")
     assert res.ok is False and res.data is None
     assert "fmp_key_missing" in res.warnings
@@ -65,6 +72,65 @@ def test_profile_normalized_with_provenance(monkeypatch, with_key):
     assert res.data.ticker == "AAPL" and res.data.name == "Apple Inc."
     assert res.data.market_cap == pytest.approx(3.2e12)
     assert res.coverage == pytest.approx(1.0)  # all 5 expected fields present
+
+
+# ── yfinance profile fallback (DCF/WACC need price/market_cap/beta) ──
+
+
+def test_complete_fmp_profile_skips_yfinance(monkeypatch, with_key):
+    """FMP supplies price+market_cap+beta → the yfinance fallback never runs."""
+
+    def handler(path, key, params=None, **k):
+        if path == "/profile":
+            return [{"companyName": "Apple", "mktCap": 3e12, "price": 200.0, "beta": 1.1}]
+        return None
+
+    _route(monkeypatch, handler)
+
+    def _boom(tk):  # pragma: no cover - must NOT be called on the complete path
+        raise AssertionError("yfinance fallback should not run when FMP is complete")
+
+    monkeypatch.setattr(fp, "_yf_profile", _boom)
+    res = fp.get_profile("AAPL")
+    assert res.ok and res.source == "fmp" and res.data.price == pytest.approx(200.0)
+
+
+def test_partial_fmp_profile_backfills_price_beta_from_yfinance(monkeypatch, with_key):
+    """FMP gives identity but NULL price/market_cap/beta (a free-tier reality) —
+    yfinance fills only the nulls; FMP's identity fields win."""
+
+    def handler(path, key, params=None, **k):
+        if path == "/profile":
+            return [{"companyName": "Apple Inc.", "sector": "Technology"}]  # no price/beta/mktCap
+        return None
+
+    _route(monkeypatch, handler)
+    monkeypatch.setattr(
+        fp,
+        "_yf_profile",
+        lambda tk: {"price": 211.0, "market_cap": 3.1e12, "beta": 1.25, "name": "Apple (yf)"},
+    )
+    res = fp.get_profile("AAPL")
+    assert res.source == "fmp+yfinance"
+    assert res.data.name == "Apple Inc."  # FMP identity wins
+    assert res.data.price == pytest.approx(211.0)  # yfinance filled the null
+    assert res.data.market_cap == pytest.approx(3.1e12)
+    assert res.data.beta == pytest.approx(1.25)
+    assert "yfinance_profile_fallback" in res.warnings
+
+
+def test_profile_built_from_yfinance_when_fmp_empty(monkeypatch):
+    """No FMP key at all → the profile still populates from free yfinance so DCF
+    valuation works for non-key holders (mirrors the statement fallback)."""
+    monkeypatch.setattr(fp, "_key", lambda: "")
+    monkeypatch.setattr(
+        fp,
+        "_yf_profile",
+        lambda tk: {"price": 150.0, "market_cap": 1e12, "beta": 0.9, "name": "Acme"},
+    )
+    res = fp.get_profile("ACME")
+    assert res.ok and res.source == "yfinance"
+    assert res.data.price == pytest.approx(150.0) and res.data.beta == pytest.approx(0.9)
 
 
 def test_fundamentals_pick_handles_field_renames(monkeypatch, with_key):

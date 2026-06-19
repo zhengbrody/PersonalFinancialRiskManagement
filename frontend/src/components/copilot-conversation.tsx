@@ -36,6 +36,7 @@ import { ApiError } from "@/lib/api";
 import { BETA_LIMIT_MESSAGE, isBillingEnabled } from "@/lib/billing-flag";
 import { env } from "@/lib/env";
 import { useAuth } from "@/lib/auth-context";
+import { readSession, writeSession } from "@/lib/use-session-state";
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -104,21 +105,15 @@ export function CopilotConversation({
   const storeKey = `mm:copilot:chat:${variant}`;
   const hydratedRef = useRef(false);
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem(storeKey);
-      if (raw) setMessages(JSON.parse(raw) as ChatMessage[]);
-    } catch {
-      /* storage unavailable — start with an empty thread */
-    }
+    const stored = readSession<ChatMessage[]>(storeKey);
+    if (stored) setMessages(stored);
     hydratedRef.current = true;
   }, [storeKey]);
   useEffect(() => {
+    // Persist only COMPLETED turns (not every streaming delta — that would be
+    // O(n²) writes over a long answer).
     if (!hydratedRef.current || pending) return;
-    try {
-      sessionStorage.setItem(storeKey, JSON.stringify(messages));
-    } catch {
-      /* ignore persistence failure */
-    }
+    writeSession(storeKey, messages);
   }, [messages, pending, storeKey]);
 
   /** Append streamed text to the in-flight assistant bubble (create it on
