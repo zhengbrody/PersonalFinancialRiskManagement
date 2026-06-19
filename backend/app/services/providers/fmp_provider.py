@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import date
 from typing import Any, Callable, Optional
 
 from ...core.config import get_settings
@@ -412,6 +413,41 @@ def _yf_profile(tk: str) -> dict:
     }
 
 
+def _yf_earnings(tk: str, limit: int) -> list[dict]:
+    """Free-yfinance fallback for earnings beat/miss — EPS estimate + reported
+    EPS per PAST report date (revenue estimate is NOT available here, EPS only).
+    Fail-soft to ``[]``. Covers the common FMP tier that returns earnings actuals
+    but no estimates (so EPS beat/miss would otherwise never show)."""
+    try:
+        import yfinance as yf
+
+        df = yf.Ticker(tk).get_earnings_dates(limit=max(limit * 3, 16))
+    except Exception:  # noqa: BLE001 - yfinance shapes/network vary
+        return []
+    if df is None or getattr(df, "empty", True):
+        return []
+    rows: list[dict] = []
+    for idx, r in df.iterrows():
+        act = _num(r.get("Reported EPS"))
+        if act is None:  # keep only past quarters that actually reported
+            continue
+        try:
+            d = idx.date().isoformat()
+        except Exception:  # noqa: BLE001
+            d = str(idx)[:10]
+        rows.append(
+            {
+                "date": d,
+                "eps_actual": act,
+                "eps_estimate": _num(r.get("EPS Estimate")),
+                "revenue_actual": None,
+                "revenue_estimate": None,
+            }
+        )
+    rows.sort(key=lambda x: x["date"], reverse=True)
+    return rows[:limit]
+
+
 def _yf_statements(tk: str, period: str, limit: int) -> list[dict]:
     """Free-yfinance fallback for the financial statements, normalized to the
     SAME key shape as ``_normalize_statement`` so the DCF / earnings / trend
@@ -691,7 +727,94 @@ def get_earnings(ticker: str, *, limit: int = 8) -> ProviderResult[list[dict]]:
             warnings=[] if has_est else ["no_estimates"],
         )
 
-    return _cached("earnings", tk, _TTL_FUND, _produce)
+    res = _cached("earnings", tk, _TTL_FUND, _produce)
+    rows = res.data or []
+    # The common FMP tier returns earnings actuals but NO estimates (or nothing) —
+    # so EPS beat/miss never shows. Backfill EPS estimate + reported EPS from FREE
+    # yfinance (revenue estimate stays absent — EPS only there). FMP wins; yfinance
+    # fills the nulls. Runs outside _cached's key gate (works with no FMP key too).
+    if not any(r.get("eps_estimate") is not None for r in rows):
+        return _earnings_with_yf_fallback(tk, limit, res)
+    return res
+
+
+def _date_iso(s: Any) -> Optional[date]:
+    try:
+        return date.fromisoformat(str(s)[:10])
+    except (ValueError, TypeError):
+        return None
+
+
+def _merge_earnings_estimates(fmp_rows: list[dict], yf_rows: list[dict]) -> list[dict]:
+    """Fill null eps_estimate/eps_actual on FMP earnings rows from the nearest
+    yfinance row (≤20 days — report dates are ~90 days apart, so a match can't
+    cross quarters), then append any yfinance quarters FMP didn't cover. Newest
+    first. FMP values are never overwritten — yfinance only fills nulls."""
+    out = [dict(r) for r in fmp_rows]
+    used: set[int] = set()
+    for row in out:
+        fd = _date_iso(row.get("date"))
+        if fd is None:
+            continue
+        best_i, best_gap = None, None
+        for i, y in enumerate(yf_rows):
+            yd = _date_iso(y.get("date"))
+            if yd is None:
+                continue
+            gap = abs((yd - fd).days)
+            if gap <= 20 and (best_gap is None or gap < best_gap):
+                best_i, best_gap = i, gap
+        if best_i is not None:
+            used.add(best_i)
+            y = yf_rows[best_i]
+            if row.get("eps_estimate") is None:
+                row["eps_estimate"] = y.get("eps_estimate")
+            if row.get("eps_actual") is None:
+                row["eps_actual"] = y.get("eps_actual")
+    out.extend(dict(y) for i, y in enumerate(yf_rows) if i not in used)
+    out.sort(key=lambda x: x.get("date") or "", reverse=True)
+    return out
+
+
+def _earnings_with_yf_fallback(
+    tk: str, limit: int, fmp_res: ProviderResult[list[dict]]
+) -> ProviderResult[list[dict]]:
+    """Merge free-yfinance EPS estimates into an FMP earnings result that lacked
+    them (or build from yfinance when FMP gave nothing). Cached + negative-cached
+    like the statement/profile fallbacks; runs outside ``_cached``'s key gate."""
+    from .. import metrics
+
+    key = f"earnings_yf:{tk}"
+    hit = _cache.get(key)
+    if hit is not None and hit[0] > time.monotonic():
+        return hit[1]
+
+    yf_rows = _yf_earnings(tk, limit)
+    if not yf_rows:
+        metrics.record_provider("yfinance", "empty")
+        _cache[key] = (time.monotonic() + _TTL_EMPTY, fmp_res)
+        return fmp_res
+
+    fmp_rows = fmp_res.data or []
+    if fmp_rows:
+        merged = _merge_earnings_estimates(fmp_rows, yf_rows)
+        source = "fmp+yfinance"
+        warnings = [w for w in fmp_res.warnings if w != "no_estimates"]
+        warnings.append("yfinance_earnings_fallback")
+    else:
+        merged = yf_rows
+        source = "yfinance"
+        warnings = ["yfinance_earnings_fallback"]
+    res: ProviderResult = ProviderResult(
+        data=merged,
+        source=source,
+        as_of=merged[0]["date"] if merged else None,
+        coverage=1.0,
+        warnings=warnings,
+    )
+    metrics.record_provider("yfinance", "ok")
+    _cache[key] = (time.monotonic() + _TTL_FUND, res)
+    return res
 
 
 def get_transcript_meta(ticker: str, *, excerpt_chars: int = 6000) -> ProviderResult[dict]:

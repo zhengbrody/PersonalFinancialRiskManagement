@@ -20,9 +20,10 @@ def _reset():
 
 @pytest.fixture(autouse=True)
 def _offline_yf(monkeypatch):
-    """Keep the suite offline + deterministic: the profile fallback must never
-    reach real yfinance unless a test explicitly supplies data (overriding this)."""
+    """Keep the suite offline + deterministic: the yfinance fallbacks must never
+    reach the network unless a test explicitly supplies data (overriding this)."""
     monkeypatch.setattr(fp, "_yf_profile", lambda tk: {})
+    monkeypatch.setattr(fp, "_yf_earnings", lambda tk, limit: [])
 
 
 @pytest.fixture
@@ -131,6 +132,78 @@ def test_profile_built_from_yfinance_when_fmp_empty(monkeypatch):
     res = fp.get_profile("ACME")
     assert res.ok and res.source == "yfinance"
     assert res.data.price == pytest.approx(150.0) and res.data.beta == pytest.approx(0.9)
+
+
+# ── yfinance earnings fallback (EPS beat/miss when the FMP tier omits estimates) ──
+
+
+def test_complete_fmp_earnings_skips_yfinance(monkeypatch, with_key):
+    def handler(path, key, params=None, **k):
+        if path == "/earnings":
+            return [{"date": "2025-03-31", "epsActual": 1.5, "epsEstimated": 1.4}]
+        return None
+
+    _route(monkeypatch, handler)
+
+    def _boom(tk, limit):  # pragma: no cover - must not run when FMP has estimates
+        raise AssertionError("yfinance earnings fallback should not run")
+
+    monkeypatch.setattr(fp, "_yf_earnings", _boom)
+    res = fp.get_earnings("AAPL")
+    assert res.ok and res.source == "fmp"
+    assert res.data[0]["eps_estimate"] == pytest.approx(1.4)
+
+
+def test_earnings_no_estimates_backfills_eps_from_yfinance(monkeypatch, with_key):
+    """FMP returns actuals but no estimate (a common tier reality) → yfinance
+    fills the EPS estimate on the matched quarter so beat/miss can show."""
+
+    def handler(path, key, params=None, **k):
+        if path == "/earnings":
+            return [{"date": "2025-03-31", "epsActual": 1.5}]  # actual only
+        return None
+
+    _route(monkeypatch, handler)
+    monkeypatch.setattr(
+        fp,
+        "_yf_earnings",
+        lambda tk, limit: [
+            {
+                "date": "2025-04-01",  # 1 day off the FMP row → matches (≤20d)
+                "eps_actual": 1.5,
+                "eps_estimate": 1.3,
+                "revenue_actual": None,
+                "revenue_estimate": None,
+            }
+        ],
+    )
+    res = fp.get_earnings("AAPL")
+    assert res.source == "fmp+yfinance"
+    row = next(r for r in res.data if r["date"] == "2025-03-31")
+    assert row["eps_estimate"] == pytest.approx(1.3)  # yfinance filled the null
+    assert "yfinance_earnings_fallback" in res.warnings
+    assert "no_estimates" not in res.warnings
+
+
+def test_earnings_built_from_yfinance_when_fmp_empty(monkeypatch):
+    monkeypatch.setattr(fp, "_key", lambda: "")
+    monkeypatch.setattr(
+        fp,
+        "_yf_earnings",
+        lambda tk, limit: [
+            {
+                "date": "2025-03-31",
+                "eps_actual": 1.5,
+                "eps_estimate": 1.3,
+                "revenue_actual": None,
+                "revenue_estimate": None,
+            }
+        ],
+    )
+    res = fp.get_earnings("ACME")
+    assert res.ok and res.source == "yfinance"
+    assert res.data[0]["eps_estimate"] == pytest.approx(1.3)
+    assert "yfinance_earnings_fallback" in res.warnings
 
 
 def test_fundamentals_pick_handles_field_renames(monkeypatch, with_key):
