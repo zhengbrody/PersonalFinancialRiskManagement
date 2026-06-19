@@ -27,7 +27,9 @@ def test_bundle_requires_auth():
 
 def test_bundle_assembles_blocks_and_reuses_engines(monkeypatch, mint_token):
     captured: dict = {}
-    monkeypatch.setattr(rmod.rf, "build_fact_pack_cached", lambda tk: _Stub(ticker=tk, drivers=["d"]))
+    monkeypatch.setattr(
+        rmod.rf, "build_fact_pack_cached", lambda tk: _Stub(ticker=tk, drivers=["d"])
+    )
     monkeypatch.setattr(
         rmod.rfin,
         "build_research_fact_pack",
