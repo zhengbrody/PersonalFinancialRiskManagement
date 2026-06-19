@@ -154,6 +154,12 @@ class Settings:
     # See libs/analysis/equity_research.build_company_dossier.
     fmp_api_key: str = field(default_factory=lambda: _env_str("FMP_API_KEY"))
 
+    # Optional Redis URL for the shared JSON cache (services/cache.py). When
+    # blank — or when the `redis` package isn't installed / the server is
+    # unreachable — the cache transparently falls back to an in-process TTL+LRU
+    # store. So this is purely an upgrade: set it to share cache across workers.
+    redis_url: str = field(default_factory=lambda: _env_str("REDIS_URL"))
+
     # Sentry DSN for backend error tracking. The DSN is a write-only ingest
     # endpoint (not a secret), so we bake the project default and allow an env
     # override. Init is gated to production in app/main.py.

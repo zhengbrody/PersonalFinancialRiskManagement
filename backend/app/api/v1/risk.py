@@ -594,8 +594,32 @@ def score_from_active_endpoint(
 
     from engine.quant import score_portfolio_from_input
 
+    from ...services import context_cache as cc
+
+    # Cache the DETERMINISTIC score by user_id + portfolio_hash + market_data_hash
+    # + engine_version (+ the score params). A repeat with the same book on the
+    # same market snapshot skips the Monte-Carlo engine run; ANY holdings change
+    # busts the key (portfolio_hash) → recompute. The score is user-private, so
+    # user_id is always in the key.
     try:
-        score = score_portfolio_from_input(portfolio_input, returns_frame, leverage=leverage)
+        score, _score_cache = cc.cached_risk_score(
+            user_id=user.id,
+            holdings=holdings,
+            market_data=price_frame,
+            params={
+                "rp": body.risk_preference,
+                "rfr": body.risk_free_rate,
+                "lev": round(leverage, 4),
+                # Cash + margin also shape the score (cash is folded in as a
+                # position → cash drag; margin → leverage). Both MUST be in the
+                # key, else two books differing only in cash/margin would collide.
+                "cash": round(cash_balance, 2),
+                "margin": round(margin_loan, 2),
+            },
+            producer=lambda: score_portfolio_from_input(
+                portfolio_input, returns_frame, leverage=leverage
+            ),
+        )
     except Exception as exc:
         raise unprocessable(f"Score computation failed: {exc}") from exc
 
@@ -1564,59 +1588,85 @@ def scenarios_endpoint(
     user: AuthedUser = Depends(require_user),
 ):
     started = time.perf_counter()
-    engine, returns, w, equity_value, risk_scale = _build_active_engine(user, body)
 
-    if returns is None or returns.empty:
-        raise unprocessable("No return history to simulate scenarios on.")
+    from ...services import context_cache as cc
 
-    # The investor holds NET equity (= equity + cash − margin = equity/scale).
-    # `pnl_pct` is the return ON that net equity (leverage amplifies it); the
-    # $ value must therefore move the NET-equity base, not gross equity — else
-    # a levered/cash book over/understates the dollar swing.
-    risk_scale = float(risk_scale) if risk_scale and np.isfinite(risk_scale) else 1.0
-    net_equity = equity_value / risk_scale if risk_scale > 0 else equity_value
+    # Resolve holdings just for the cache key (portfolio_hash). Fail-soft: if we
+    # can't, skip caching and compute directly (the producer raises the proper
+    # 422 on an empty/dataless book).
+    try:
+        from libs.auth.active_portfolio import get_active_holdings
 
-    points: list[ScenarioPoint] = []
-    for shock in _SCENARIO_SHOCKS:
-        try:
-            # _stress_test → signed equity-book P&L (Σ wᵢ·βᵢ·shock) + the
-            # per-asset signed return (βᵢ·shock). Scale the PORTFOLIO pnl to
-            # the net-equity (leverage-aware) return; per-asset moves are the
-            # asset's own price change and are NOT leverage-scaled.
-            port_pnl, asset_losses = engine._stress_test(returns, w, market_shock=shock)
-            pnl = float(port_pnl) * risk_scale
-        except Exception:  # noqa: BLE001 - a single bad shock shouldn't sink the sweep
-            continue
-        if not np.isfinite(pnl):
-            continue
-        # Most-impacted (most negative) first, top 8 kept for the explorer.
-        ranked = sorted(
-            (
-                StressAssetLoss(ticker=str(t), loss_pct=float(loss))
-                for t, loss in (asset_losses or {}).items()
-                if np.isfinite(loss)
-            ),
-            key=lambda r: r.loss_pct,
-        )[:8]
-        points.append(
-            ScenarioPoint(
-                shock_pct=float(shock),
-                pnl_pct=pnl,
-                portfolio_value=float(net_equity * (1.0 + pnl)),
-                asset_losses=ranked,
+        _holdings = get_active_holdings(access_token=user.access_token) or {}
+    except Exception:  # noqa: BLE001
+        _holdings = {}
+
+    def _compute() -> dict:
+        engine, returns, w, equity_value, risk_scale = _build_active_engine(user, body)
+
+        if returns is None or returns.empty:
+            raise unprocessable("No return history to simulate scenarios on.")
+
+        # The investor holds NET equity (= equity + cash − margin = equity/scale).
+        # `pnl_pct` is the return ON that net equity (leverage amplifies it); the
+        # $ value must therefore move the NET-equity base, not gross equity — else
+        # a levered/cash book over/understates the dollar swing.
+        risk_scale_f = float(risk_scale) if risk_scale and np.isfinite(risk_scale) else 1.0
+        net_equity = equity_value / risk_scale_f if risk_scale_f > 0 else equity_value
+
+        points: list[ScenarioPoint] = []
+        for shock in _SCENARIO_SHOCKS:
+            try:
+                # _stress_test → signed equity-book P&L (Σ wᵢ·βᵢ·shock) + the
+                # per-asset signed return (βᵢ·shock). Scale the PORTFOLIO pnl to
+                # the net-equity (leverage-aware) return; per-asset moves are the
+                # asset's own price change and are NOT leverage-scaled.
+                port_pnl, asset_losses = engine._stress_test(returns, w, market_shock=shock)
+                pnl = float(port_pnl) * risk_scale_f
+            except Exception:  # noqa: BLE001 - a single bad shock shouldn't sink the sweep
+                continue
+            if not np.isfinite(pnl):
+                continue
+            # Most-impacted (most negative) first, top 8 kept for the explorer.
+            ranked = sorted(
+                (
+                    StressAssetLoss(ticker=str(t), loss_pct=float(loss))
+                    for t, loss in (asset_losses or {}).items()
+                    if np.isfinite(loss)
+                ),
+                key=lambda r: r.loss_pct,
+            )[:8]
+            points.append(
+                ScenarioPoint(
+                    shock_pct=float(shock),
+                    pnl_pct=pnl,
+                    portfolio_value=float(net_equity * (1.0 + pnl)),
+                    asset_losses=ranked,
+                )
             )
-        )
 
-    if not points:
-        raise server_error("Scenario simulation produced no usable points.")
+        if not points:
+            raise server_error("Scenario simulation produced no usable points.")
 
-    out = ScenariosOut(
-        total_value=float(net_equity),
-        scenarios=points,
-        as_of=_frame_as_of(returns),
-        observations=len(returns),
-    )
-    return ok(out.model_dump(), request=request, started_at=started)
+        return ScenariosOut(
+            total_value=float(net_equity),
+            scenarios=points,
+            as_of=_frame_as_of(returns),
+            observations=len(returns),
+        ).model_dump()
+
+    # Cache the scenario output by portfolio_hash + scenario params (NO user_id:
+    # it's fully determined by the portfolio (hashed) + params, identical books
+    # legitimately share it, and the hash never reveals holdings). A holdings
+    # change busts the key → recompute.
+    scenario_params = {**body.model_dump(), "shocks": list(_SCENARIO_SHOCKS)}
+    if _holdings:
+        out = cc.cached_scenarios(
+            holdings=_holdings, scenario_params=scenario_params, producer=_compute
+        ).value
+    else:
+        out = _compute()
+    return ok(out, request=request, started_at=started)
 
 
 # ── AI risk diagnosis (structured, deterministic-first) ────────────────
