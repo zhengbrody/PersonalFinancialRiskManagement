@@ -55,6 +55,32 @@ REGIME_BULL = "BULL"
 REGIME_BEAR = "BEAR"
 REGIME_TRANSITION = "TRANSITION"
 
+# ── Composite regime v2 — signal-strength weighting (desk model) ──────────────
+# Each detector emits a CONTINUOUS score in [-1, +1] (+ risk-on/bullish,
+# - risk-off/bearish); the composite is their weight-normalized sum, so
+# confidence becomes a real dial instead of {0, .33, .67, 1}. Weights encode
+# signal quality + horizon: the price TREND (slow, reliable) and the VIX TERM
+# STRUCTURE (fast, high-signal) carry the book; the hand-rolled GMM is the
+# noisiest and is de-weighted; realized-vol is a ONE-SIDED risk-off axis only
+# (low realized vol is NOT bullish — it's complacency, the volatility paradox).
+_W_TREND = 0.35
+_W_VIX = 0.30
+_W_HMM = 0.20
+_W_VOL = 0.15
+
+# Banded labels on the continuous composite (symmetric). Vocabulary unchanged so
+# the frontend + history ribbon + _find_regime_start_date stay compatible.
+_BAND_STRONG = 0.50  # |score| >= -> "Bullish" / "Bearish"
+_BAND_LEAN = 0.15  # |score| >= -> "Leaning Bullish/Bearish"; else "Mixed / Transitional"
+
+# Score-shape constants (how far into a regime = full +/-1).
+_TREND_FULL = 0.10  # price 10% above/below SMA200 -> full +/-1
+_VOL_RATIO_HOT = 0.5  # short/long vol ratio 1.5 -> full -1 (risk-off)
+_VIX_TERM_FULL = 0.10  # 10% contango/backwardation -> full +/-1
+_VIX_CENTER = 20.0  # VIX level pivot (classic "elevated" line)
+_VIX_HALF = 10.0  # VIX 10 -> +1 (calm), 30 -> -1 (stressed)
+_CONFIRM_DAYS = 2  # headline regime must hold this many days to flip (anti-whipsaw)
+
 
 # ══════════════════════════════════════════════════════════════
 #  File-based Cache
@@ -542,91 +568,88 @@ def detect_regime_trend(
 def get_composite_regime(
     returns: pd.Series,
     prices: pd.Series,
+    vix_term: Optional[pd.DataFrame] = None,
 ) -> Dict:
     """
-    Combine all three regime detection methods into a unified signal.
+    Combine the detectors into a unified signal (v2 — signal-strength weighted).
 
-    Aggregation logic: if 2+ methods agree on direction (bullish or bearish),
-    use that consensus. Otherwise, label as "Mixed / Transitional".
+    Each detector emits a CONTINUOUS score in [-1, +1]; the composite is their
+    weight-normalized sum (``_W_*``), so confidence is a real dial rather than
+    {0, .33, .67, 1}. The price trend + VIX term structure carry the most weight;
+    realized-vol is a one-sided risk-off axis (low vol is NOT bullish); the GMM is
+    de-weighted. The headline regime uses a ``_CONFIRM_DAYS`` hysteresis to avoid
+    1-day whipsaw. Backward-compatible: same dict keys + label vocabulary, with
+    additive ``composite_score`` / ``signal_breakdown`` fields.
 
     Parameters
     ----------
-    returns : pd.Series
-        Log returns indexed by date.
-    prices : pd.Series
-        Price series indexed by date.
+    returns, prices : pd.Series
+        Log returns / price series indexed by date.
+    vix_term : pd.DataFrame, optional
+        Per-date ``ts_ratio`` (VIX/VIX3M) + ``vix_level``. When omitted the
+        composite renormalizes over the price-based detectors (graceful degrade).
 
     Returns
     -------
-    dict
-        {
-            current_regime: str,
-            confidence: float (0.0-1.0),
-            vol_regime: str,
-            trend_regime: str,
-            hmm_regime: str,
-            history: pd.DataFrame
-        }
+    dict with current_regime, confidence (0-1), composite_score (-1..1),
+    vol_regime, trend_regime, hmm_regime, signal_breakdown, history.
     """
     logger.info("regime.composite.start", n_returns=len(returns), n_prices=len(prices))
 
-    # Run individual detectors
+    # Run individual detectors (unchanged).
     hmm_regimes = detect_regime_hmm(returns)
     vol_df = detect_regime_vol(returns)
     trend_df = detect_regime_trend(prices)
 
-    # Get current regime from each method
     hmm_current = hmm_regimes.iloc[-1] if len(hmm_regimes) > 0 else REGIME_NORMAL
     vol_current = vol_df["regime"].iloc[-1] if len(vol_df) > 0 else REGIME_NORMAL_VOL
     trend_current = trend_df["regime"].iloc[-1] if len(trend_df) > 0 else REGIME_TRANSITION
 
-    # ── Map each detector to a directional signal ──
-    # +1 = bullish, -1 = bearish, 0 = neutral
-    hmm_signal = _hmm_to_signal(hmm_current)
-    vol_signal = _vol_to_signal(vol_current)
-    trend_signal = _trend_to_signal(trend_current)
+    # ── Build aligned history with the continuous composite score per day ──
+    history = _build_regime_history(hmm_regimes, vol_df, trend_df, vix_term)
 
-    signals = [hmm_signal, vol_signal, trend_signal]
-    signal_sum = sum(signals)
-    n_agree_bullish = sum(1 for s in signals if s > 0)
-    n_agree_bearish = sum(1 for s in signals if s < 0)
-
-    # Determine composite regime
-    if n_agree_bullish >= 2:
-        composite = "Bullish"
-        confidence = n_agree_bullish / 3.0
-    elif n_agree_bearish >= 2:
-        composite = "Bearish"
-        confidence = n_agree_bearish / 3.0
-    elif signal_sum > 0:
-        composite = "Leaning Bullish"
-        confidence = 0.33
-    elif signal_sum < 0:
-        composite = "Leaning Bearish"
-        confidence = 0.33
+    # Headline = latest score (continuous confidence) + the debounced band label.
+    if len(history) > 0 and "composite_score" in history.columns:
+        scores = history["composite_score"].tolist()
+        latest_score = _clip1(scores[-1])
+        confirmed = _debounce_labels([_band_label(_clip1(s)) for s in scores])
+        composite = confirmed[-1]
     else:
+        latest_score = 0.0
         composite = "Mixed / Transitional"
-        confidence = 0.0
 
-    # ── Build aligned history DataFrame ──
-    history = _build_regime_history(hmm_regimes, vol_df, trend_df)
+    confidence = round(abs(latest_score), 2)
+
+    # Per-detector breakdown of the LATEST day (desk transparency; additive).
+    last = history.iloc[-1] if len(history) > 0 else {}
+    _, breakdown = _score_row(
+        last.get("price") if len(history) else None,
+        last.get("sma200") if len(history) else None,
+        last.get("vol_ratio") if len(history) else None,
+        hmm_current,
+        last.get("ts_ratio") if (len(history) and "ts_ratio" in history.columns) else None,
+        last.get("vix_level") if (len(history) and "vix_level" in history.columns) else None,
+    )
 
     result = {
         "current_regime": composite,
-        "confidence": round(confidence, 2),
+        "confidence": confidence,
+        "composite_score": round(latest_score, 3),
         "vol_regime": vol_current,
         "trend_regime": trend_current,
         "hmm_regime": hmm_current,
+        "signal_breakdown": {
+            k: (round(v, 3) if v is not None else None) for k, v in breakdown.items()
+        },
         "history": history,
     }
 
     logger.info(
         "regime.composite.complete",
         current_regime=composite,
-        confidence=round(confidence, 2),
-        hmm=hmm_current,
-        vol=vol_current,
-        trend=trend_current,
+        confidence=confidence,
+        composite_score=round(latest_score, 3),
+        breakdown=result["signal_breakdown"],
     )
 
     return result
@@ -659,18 +682,178 @@ def _trend_to_signal(regime: str) -> int:
     return 0
 
 
+# ── Composite v2: continuous per-detector scorers (pure, network-free) ────────
+
+
+def _clip1(x: float) -> float:
+    """Clamp to [-1, +1]; non-finite -> 0."""
+    try:
+        f = float(x)
+    except (TypeError, ValueError):
+        return 0.0
+    if not np.isfinite(f):
+        return 0.0
+    return max(-1.0, min(1.0, f))
+
+
+def _trend_score(price: float, sma200: float) -> float:
+    """+1 when price is _TREND_FULL above its 200d mean, -1 when as far below."""
+    if not price or not sma200 or sma200 <= 0:
+        return 0.0
+    return _clip1((price / sma200 - 1.0) / _TREND_FULL)
+
+
+def _vol_score(vol_ratio: float) -> float:
+    """ONE-SIDED risk-off: high short/long realized-vol ratio -> negative; a calm
+    tape (ratio <= 1) is NEUTRAL (0), never bullish. Fixes the LOW_VOL=+1 bug."""
+    try:
+        r = float(vol_ratio)
+    except (TypeError, ValueError):
+        return 0.0
+    if not np.isfinite(r) or r <= 1.0:
+        return 0.0
+    return -_clip1((r - 1.0) / _VOL_RATIO_HOT)
+
+
+def _hmm_score(label: str) -> float:
+    """GMM cluster -> directional sign (de-weighted; sign-only, magnitude noisy)."""
+    return float(_hmm_to_signal(label))
+
+
+def _vix_level_score(vix_level: Optional[float]) -> float:
+    """VIX level pivoted at _VIX_CENTER: calm -> +, stressed -> -."""
+    if vix_level is None or not np.isfinite(vix_level):
+        return 0.0
+    return _clip1((_VIX_CENTER - float(vix_level)) / _VIX_HALF)
+
+
+def _vix_score(ts_ratio: Optional[float], vix_level: Optional[float]) -> float:
+    """VIX term structure (primary) + level (secondary). ts_ratio = VIX/VIX3M:
+    >1 backwardation = risk-off (-), <1 contango = risk-on (+). Falls back to the
+    level alone when the term ratio is unavailable."""
+    if ts_ratio is not None and np.isfinite(ts_ratio):
+        term = _clip1((1.0 - float(ts_ratio)) / _VIX_TERM_FULL)
+        if vix_level is not None and np.isfinite(vix_level):
+            return 0.7 * term + 0.3 * _vix_level_score(vix_level)
+        return term
+    return _vix_level_score(vix_level)
+
+
+def _score_row(
+    price: float,
+    sma200: float,
+    vol_ratio: float,
+    hmm_label: str,
+    ts_ratio: Optional[float] = None,
+    vix_level: Optional[float] = None,
+) -> Tuple[float, dict]:
+    """Weight-normalized composite of the available detectors -> (score, parts).
+
+    VIX is folded in only when its data is present (per row); otherwise the
+    weights renormalize over trend/vol/hmm — so the model degrades gracefully to
+    the price-only composite, never NaN."""
+    trend_s = _trend_score(price, sma200)
+    vol_s = _vol_score(vol_ratio)
+    hmm_s = _hmm_score(hmm_label)
+    pairs = [(_W_TREND, trend_s), (_W_VOL, vol_s), (_W_HMM, hmm_s)]
+    vix_s: Optional[float] = None
+    if (ts_ratio is not None and np.isfinite(ts_ratio)) or (
+        vix_level is not None and np.isfinite(vix_level)
+    ):
+        vix_s = _vix_score(ts_ratio, vix_level)
+        pairs.append((_W_VIX, vix_s))
+    wsum = sum(w for w, _ in pairs)
+    score = sum(w * s for w, s in pairs) / wsum if wsum else 0.0
+    return _clip1(score), {"trend": trend_s, "vol": vol_s, "hmm": hmm_s, "vix": vix_s}
+
+
+def _band_label(score: float) -> str:
+    """Continuous composite -> 5-level headline label."""
+    if score >= _BAND_STRONG:
+        return "Bullish"
+    if score >= _BAND_LEAN:
+        return "Leaning Bullish"
+    if score <= -_BAND_STRONG:
+        return "Bearish"
+    if score <= -_BAND_LEAN:
+        return "Leaning Bearish"
+    return "Mixed / Transitional"
+
+
+def _ribbon_label(score: float) -> str:
+    """Continuous composite -> simple 3-vocab for the history ribbon +
+    _find_regime_start_date (backward-compatible with the old composite_signal)."""
+    if score >= _BAND_LEAN:
+        return "Bullish"
+    if score <= -_BAND_LEAN:
+        return "Bearish"
+    return "Mixed"
+
+
+def _debounce_labels(labels: list, confirm_days: int = _CONFIRM_DAYS) -> list:
+    """Require a new label to persist `confirm_days` consecutive days before the
+    confirmed (headline) label flips — kills 1-day whipsaw."""
+    out: list = []
+    confirmed = None
+    run_label = None
+    run = 0
+    for lab in labels:
+        if lab == run_label:
+            run += 1
+        else:
+            run_label, run = lab, 1
+        if confirmed is None or run >= confirm_days:
+            confirmed = lab
+        out.append(confirmed)
+    return out
+
+
+def _fetch_vix_term_history(period_years: int = 2) -> Optional[pd.DataFrame]:
+    """Free-yfinance VIX + VIX3M closes -> per-date term-structure ratio + level.
+    Fail-soft to None (the composite then runs price-only). ts_ratio = VIX/VIX3M:
+    >1 backwardation (risk-off), <1 contango (risk-on)."""
+    try:
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=365 * period_years + 30)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            raw = yf.download(
+                ["^VIX", "^VIX3M"],
+                start=start_date.strftime("%Y-%m-%d"),
+                end=end_date.strftime("%Y-%m-%d"),
+                auto_adjust=True,
+                progress=False,
+            )
+        if raw is None or raw.empty:
+            return None
+        close = raw["Close"] if "Close" in raw.columns.get_level_values(0) else raw
+        vix = close["^VIX"].dropna()
+        vix3m = close["^VIX3M"].dropna()
+        df = pd.DataFrame({"vix_level": vix, "vix3m": vix3m}).dropna()
+        if df.empty:
+            return None
+        df["ts_ratio"] = df["vix_level"] / df["vix3m"].replace(0, np.nan)
+        return df[["ts_ratio", "vix_level"]].dropna()
+    except Exception as exc:  # pragma: no cover - upstream variability
+        logger.warning("regime.vix_term_fetch.failed", error=str(exc))
+        return None
+
+
 def _build_regime_history(
     hmm_regimes: pd.Series,
     vol_df: pd.DataFrame,
     trend_df: pd.DataFrame,
+    vix_term: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
     """
-    Build an aligned history DataFrame combining all three regime series.
+    Build an aligned history DataFrame combining all three regime series plus the
+    continuous composite score (v2). Backward-compatible columns are preserved.
 
     Returns
     -------
     pd.DataFrame
         Columns: date, hmm_regime, vol_regime, trend_regime, composite_signal
+        (+ additive: composite_score)
     """
     # Create individual date-indexed series
     hmm_series = hmm_regimes.copy()
@@ -696,28 +879,56 @@ def _build_regime_history(
         else pd.Series(dtype=str, name="trend_regime")
     )
 
-    # Combine on shared dates
-    history = pd.DataFrame(
-        {
-            "hmm_regime": hmm_series,
-            "vol_regime": vol_series,
-            "trend_regime": trend_series,
-        }
-    )
+    # Numeric series for the continuous scorer (price/sma200 from trend_df,
+    # vol_ratio from vol_df), aligned by date.
+    def _num_series(df, col, name):
+        if df is None or len(df) == 0 or col not in df.columns:
+            return pd.Series(dtype=float, name=name)
+        return pd.Series(df[col].values, index=pd.DatetimeIndex(df["date"]), name=name)
 
-    # Forward-fill gaps from different series having different start dates
+    price_series = _num_series(trend_df, "price", "price")
+    sma200_series = _num_series(trend_df, "sma_long", "sma200")
+    volratio_series = _num_series(vol_df, "vol_ratio", "vol_ratio")
+
+    cols = {
+        "hmm_regime": hmm_series,
+        "vol_regime": vol_series,
+        "trend_regime": trend_series,
+        "price": price_series,
+        "sma200": sma200_series,
+        "vol_ratio": volratio_series,
+    }
+    if vix_term is not None and not vix_term.empty:
+        cols["ts_ratio"] = pd.Series(
+            vix_term["ts_ratio"].values, index=pd.DatetimeIndex(vix_term.index), name="ts_ratio"
+        )
+        cols["vix_level"] = pd.Series(
+            vix_term["vix_level"].values, index=pd.DatetimeIndex(vix_term.index), name="vix_level"
+        )
+
+    history = pd.DataFrame(cols)
+    # Forward-fill gaps from different series having different start dates.
     history = history.ffill()
     history = history.dropna(how="all")
 
-    # Compute composite signal for each day
-    history["composite_signal"] = history.apply(
-        lambda row: _composite_signal_for_row(
+    # Continuous composite score per day -> ribbon label (3-vocab) + score column.
+    def _row_score(row):
+        s, _ = _score_row(
+            row.get("price"),
+            row.get("sma200"),
+            row.get("vol_ratio"),
             row.get("hmm_regime", REGIME_NORMAL),
-            row.get("vol_regime", REGIME_NORMAL_VOL),
-            row.get("trend_regime", REGIME_TRANSITION),
-        ),
-        axis=1,
-    )
+            row.get("ts_ratio") if "ts_ratio" in history.columns else None,
+            row.get("vix_level") if "vix_level" in history.columns else None,
+        )
+        return s
+
+    if len(history) > 0:
+        history["composite_score"] = history.apply(_row_score, axis=1)
+        history["composite_signal"] = history["composite_score"].apply(_ribbon_label)
+    else:
+        history["composite_score"] = pd.Series(dtype=float)
+        history["composite_signal"] = pd.Series(dtype=str)
 
     history = history.reset_index()
     history = history.rename(columns={"index": "date"})
@@ -794,10 +1005,14 @@ def get_regime_summary() -> Dict:
             "historical_regimes": pd.DataFrame(),
         }
 
-    # Run composite regime detection
-    composite = get_composite_regime(returns, prices)
+    # Fetch the VIX term structure (VIX/VIX3M) so the composite can fold in the
+    # single highest-signal free risk indicator. Fail-soft: None -> price-only.
+    vix_term = _fetch_vix_term_history(period_years=2)
 
-    # Fetch VIX for a VIX-based regime label
+    # Run composite regime detection (v2 — signal-strength weighted, VIX-aware).
+    composite = get_composite_regime(returns, prices, vix_term=vix_term)
+
+    # Fetch VIX for the display label (backward-compatible field).
     vix_regime = _get_vix_regime()
 
     # Determine when the current regime started
@@ -807,6 +1022,8 @@ def get_regime_summary() -> Dict:
     result = {
         "current_regime": composite["current_regime"],
         "confidence": composite["confidence"],
+        "composite_score": composite.get("composite_score"),
+        "signal_breakdown": composite.get("signal_breakdown"),
         "vix_regime": vix_regime,
         "trend_regime": composite["trend_regime"],
         "vol_regime": composite["vol_regime"],
