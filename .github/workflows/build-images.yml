@@ -31,19 +31,19 @@ name: Build & push images (GHCR)
 on:
   push:
     branches: [main]
-    paths:
-      - 'frontend/**'
-      - 'backend/**'
-      - 'Dockerfile'
-      - 'backend/Dockerfile'
-      - 'engine/**'
-      - 'domain/**'
-      - 'libs/**'
-      - 'agents/**'
-      - 'market_intelligence.py'
-      - 'risk_engine.py'
-      - 'data_provider.py'
-      - '.github/workflows/build-images.yml'
+    # The backend image bundles the WHOLE repo (`COPY . /app` in the backend
+    # Dockerfile) — so any root-level legacy module the backend imports
+    # (regime_detector.py, portfolio_config.py, volatility_scanner.py, …)
+    # affects the image. An allowlist silently MISSED those (a change to
+    # regime_detector.py triggered no build → a silent no-deploy, 2026-06-20).
+    # Invert to a denylist: build on every push to main EXCEPT pure docs and the
+    # Caddy-served static assets (those deploy via `git pull` on the box, not the
+    # image). A redundant build on a docs-adjacent code change is cheap + safe; a
+    # silent no-deploy is not.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'assets/**'
   workflow_dispatch: {}
 
 permissions:
