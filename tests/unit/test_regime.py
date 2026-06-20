@@ -9,15 +9,18 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import regime_detector as rd
 from regime_detector import (
     REGIME_BEAR,
     REGIME_BULL,
     REGIME_HIGH_VOL,
     REGIME_LOW_VOL,
     REGIME_NORMAL_VOL,
+    REGIME_RISK_ON,
     REGIME_TRANSITION,
     detect_regime_trend,
     detect_regime_vol,
+    get_composite_regime,
     get_regime_transitions,
 )
 
@@ -217,3 +220,150 @@ class TestGetRegimeTransitions:
         result = get_regime_transitions(short)
         assert result["current_duration_days"] == 0
         assert len(result["transition_matrix"]) == 0
+
+
+# ══════════════════════════════════════════════════════════════
+#  Composite regime v2 — signal-strength weighting (desk model)
+# ══════════════════════════════════════════════════════════════
+
+
+class TestVolScoreOneSided:
+    """The headline fix: low realized vol is NEUTRAL, never bullish."""
+
+    def test_low_vol_ratio_is_neutral_not_bullish(self):
+        # ratio < 1 (calm) must score exactly 0 — NOT a positive/bullish signal.
+        assert rd._vol_score(0.5) == 0.0
+        assert rd._vol_score(0.95) == 0.0
+        assert rd._vol_score(1.0) == 0.0
+
+    def test_high_vol_ratio_is_risk_off(self):
+        assert rd._vol_score(1.5) < 0
+        assert rd._vol_score(1.5) == pytest.approx(-1.0, abs=1e-9)
+        # monotonic: hotter vol -> more negative (saturating at -1)
+        assert rd._vol_score(1.2) > rd._vol_score(1.4)
+
+    def test_nan_safe(self):
+        assert rd._vol_score(float("nan")) == 0.0
+        assert rd._vol_score(None) == 0.0
+
+
+class TestTrendScore:
+    def test_above_below_sma(self):
+        assert rd._trend_score(110, 100) == pytest.approx(1.0)  # 10% above -> full +1
+        assert rd._trend_score(90, 100) == pytest.approx(-1.0)
+        assert rd._trend_score(105, 100) == pytest.approx(0.5, abs=1e-6)
+        assert rd._trend_score(100, 100) == pytest.approx(0.0, abs=1e-9)
+
+    def test_clip_and_guards(self):
+        assert rd._trend_score(200, 100) == 1.0  # clipped
+        assert rd._trend_score(100, 0) == 0.0  # bad denom
+        assert rd._trend_score(None, 100) == 0.0
+
+
+class TestVixScore:
+    def test_term_structure_sign(self):
+        # contango (VIX < VIX3M, ratio < 1) = risk-on (+); backwardation = risk-off (-)
+        assert rd._vix_score(0.9, 16) > 0
+        assert rd._vix_score(1.1, 28) < 0
+
+    def test_level_fallback_when_no_term(self):
+        # no term ratio -> pure level: calm VIX positive, stressed negative
+        assert rd._vix_score(None, 12) > 0
+        assert rd._vix_score(None, 30) < 0
+        assert rd._vix_score(None, 20) == pytest.approx(0.0, abs=1e-9)
+
+
+class TestScoreRowAggregation:
+    def test_vix_renormalizes_when_absent(self):
+        # Same price/vol/hmm inputs; absent VIX must renormalize over 3 detectors,
+        # never NaN, and stay in [-1, 1].
+        s_no_vix, parts = rd._score_row(110, 100, 0.8, REGIME_RISK_ON)
+        assert parts["vix"] is None
+        assert -1.0 <= s_no_vix <= 1.0
+        s_with_vix, parts2 = rd._score_row(110, 100, 0.8, REGIME_RISK_ON, 0.85, 15)
+        assert parts2["vix"] is not None
+        # risk-on VIX term pulls the composite further bullish than without it
+        assert s_with_vix > s_no_vix
+
+    def test_calm_uptrend_not_overbullish_from_low_vol(self):
+        # A calm (low-vol) uptrend: vol contributes 0, NOT a bonus. The score comes
+        # from trend (+) only, so it can't exceed the trend's own weighted ceiling.
+        s, parts = rd._score_row(110, 100, 0.6, rd.REGIME_NORMAL)
+        assert parts["vol"] == 0.0
+        assert s > 0  # bullish from trend
+        # equals trend weight share since vol/hmm are 0 (no vix): 0.35*1 / (0.35+0.15+0.20)
+        assert s == pytest.approx(0.35 / 0.70, abs=1e-6)
+
+
+class TestBandsAndDebounce:
+    def test_band_label_thresholds(self):
+        assert rd._band_label(0.6) == "Bullish"
+        assert rd._band_label(0.3) == "Leaning Bullish"
+        assert rd._band_label(0.0) == "Mixed / Transitional"
+        assert rd._band_label(-0.3) == "Leaning Bearish"
+        assert rd._band_label(-0.6) == "Bearish"
+
+    def test_ribbon_vocab_backward_compatible(self):
+        # ribbon stays {Bullish, Bearish, Mixed} so _find_regime_start_date matches
+        assert rd._ribbon_label(0.5) == "Bullish"
+        assert rd._ribbon_label(-0.5) == "Bearish"
+        assert rd._ribbon_label(0.05) == "Mixed"
+
+    def test_debounce_suppresses_one_day_blip(self):
+        labels = ["Bullish", "Bullish", "Bearish", "Bullish", "Bullish"]
+        out = rd._debounce_labels(labels, confirm_days=2)
+        assert out[2] == "Bullish"  # single contrary day did NOT flip the headline
+        assert out[-1] == "Bullish"
+
+    def test_debounce_flips_after_confirmation(self):
+        labels = ["Bullish", "Bearish", "Bearish", "Bearish"]
+        out = rd._debounce_labels(labels, confirm_days=2)
+        assert out[1] == "Bullish"  # not yet confirmed
+        assert out[2] == "Bearish"  # confirmed after 2 consecutive
+
+
+class TestCompositeV2EndToEnd:
+    """get_composite_regime on synthetic data — no network."""
+
+    def _synthetic(self, drift, n=420, seed=7):
+        dates = pd.date_range("2022-01-03", periods=n, freq="B")
+        rng = np.random.RandomState(seed)
+        log_prices = np.cumsum(drift + rng.randn(n) * 0.004)
+        prices = pd.Series(100.0 * np.exp(log_prices), index=dates)
+        returns = np.log(prices / prices.shift(1)).dropna()
+        return prices, returns
+
+    def test_uptrend_is_bullish_with_continuous_confidence(self):
+        prices, returns = self._synthetic(drift=0.0025)
+        out = get_composite_regime(returns, prices)  # no vix_term -> price-only
+        # backward-compatible keys all present
+        for k in (
+            "current_regime",
+            "confidence",
+            "vol_regime",
+            "trend_regime",
+            "hmm_regime",
+            "history",
+        ):
+            assert k in out
+        # new additive fields
+        assert "composite_score" in out and "signal_breakdown" in out
+        assert -1.0 <= out["composite_score"] <= 1.0
+        assert "Bullish" in out["current_regime"]
+        # confidence is now CONTINUOUS — not pinned to the old {0,.33,.67,1} set
+        assert 0.0 <= out["confidence"] <= 1.0
+        # history carries the additive score col + backward-compatible ribbon vocab
+        h = out["history"]
+        assert "composite_score" in h.columns and "composite_signal" in h.columns
+        assert set(h["composite_signal"].unique()) <= {"Bullish", "Bearish", "Mixed"}
+
+    def test_vix_term_folds_into_score(self):
+        prices, returns = self._synthetic(drift=0.0015)
+        # risk-on term structure (deep contango) over the whole window
+        vix_term = pd.DataFrame({"ts_ratio": 0.85, "vix_level": 14.0}, index=prices.index)
+        base = get_composite_regime(returns, prices)
+        with_vix = get_composite_regime(returns, prices, vix_term=vix_term)
+        assert with_vix["signal_breakdown"]["vix"] is not None
+        assert base["signal_breakdown"]["vix"] is None
+        # a risk-on VIX term structure should not reduce the bullish score
+        assert with_vix["composite_score"] >= base["composite_score"] - 1e-9
