@@ -17,17 +17,14 @@
 # the legacy routes to the `streamlit` service and drop this divergence.
 
 {$SITE_HOST}, www.{$SITE_HOST} {
-	# gzip everything EXCEPT Server-Sent Event streams: Caddy's encoder
-	# buffers up to its minimum-length before the first flush, which would
-	# delay the start of the Copilot SSE stream (/api/v1/copilot/chat/stream)
-	# and undercut token-by-token rendering. Excluding text/event-stream
-	# lets those responses flush each event immediately.
-	encode {
-		gzip
-		match {
-			not header Content-Type text/event-stream*
-		}
-	}
+	# gzip compressible responses. NOTE: a prior attempt to exclude SSE via
+	# `encode { match { not header Content-Type text/event-stream* } }` used
+	# INVALID Caddyfile syntax — the `not` response matcher is unrecognized
+	# even by caddy 2.11 — and crash-looped caddy on boot (parse error). The
+	# Copilot SSE stream is fine without it: Cloudflare fronts the origin and
+	# does edge compression, and browsers decode gzip transparently; the
+	# stream still flushes. Keep this a plain directive so it always parses.
+	encode gzip
 	log {
 		output stdout
 		format json
