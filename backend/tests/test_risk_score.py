@@ -64,6 +64,41 @@ def test_score_with_inline_returns_drops_synthetic_warning(test_client):
     assert not any("synthesised" in n for n in notes)
 
 
+def test_score_surfaces_data_quality_confidence_and_drivers(test_client):
+    """The response must carry the deterministic explainability fields: a
+    data-quality/confidence read, the pre-dampening base score, ranked drivers,
+    and structured reason codes. Full data → high confidence, undamped."""
+    import random
+
+    rng = random.Random(3)
+    returns = {
+        "SPY": [rng.gauss(0.0004, 0.01) for _ in range(252)],
+        "BND": [rng.gauss(0.0001, 0.003) for _ in range(252)],
+    }
+    bench = [rng.gauss(0.0004, 0.01) for _ in range(252)]
+    body = {**_basic_body(), "returns": returns, "benchmark_returns": bench}
+    data = test_client.post("/api/v1/risk/score", json=body).json()["data"]
+
+    # data-quality / confidence on metrics
+    assert data["metrics"]["confidence"] == "high"
+    assert 0.0 <= data["metrics"]["data_quality"] <= 1.0
+    assert data["metrics"]["dropped_tickers"] == []
+
+    # full data → no dampening: shown score equals the pre-dampening base
+    assert data["base_overall"] == data["overall_score"]
+
+    # drivers: one per dimension, ranked by points_below_max (biggest drag first)
+    drivers = data["drivers"]
+    assert len(drivers) == 3
+    pts = [d["points_below_max"] for d in drivers]
+    assert pts == sorted(pts, reverse=True)
+    assert all({"key", "name", "score", "weight", "points_below_max"} <= set(d) for d in drivers)
+
+    # reason codes are structured (may be empty for a healthy full-data book)
+    for rc in data["reason_codes"]:
+        assert "code" in rc and "severity" in rc
+
+
 def test_score_rejects_empty_holdings(test_client):
     resp = test_client.post("/api/v1/risk/score", json={"holdings": [], "risk_preference": 3})
     assert resp.status_code == 422

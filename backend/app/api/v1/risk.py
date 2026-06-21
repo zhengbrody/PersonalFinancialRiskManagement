@@ -50,10 +50,12 @@ from ...schemas.risk import (
     LiquidityRow,
     PortfolioMetricsOut,
     PriceProvenanceOut,
+    ReasonCodeOut,
     ReportFromActiveRequest,
     RiskReportOut,
     ScenarioPoint,
     ScenariosOut,
+    ScoreDriverOut,
     ScoreFromActiveRequest,
     ScoreRequest,
     ScoreResponse,
@@ -152,9 +154,14 @@ def _serialize_score(score) -> ScoreResponse:
         leverage=metrics_dict.get("leverage"),
         gross_annual_return=metrics_dict.get("gross_annual_return"),
         margin_cost_annual=metrics_dict.get("margin_cost_annual"),
+        data_quality=metrics_dict.get("data_quality"),
+        confidence=metrics_dict.get("confidence"),
+        dropped_tickers=list(metrics_dict.get("dropped_tickers") or []),
     )
+    base_overall = int(getattr(score, "base_overall", 0) or score.overall_score)
     return ScoreResponse(
         overall_score=int(score.overall_score),
+        base_overall=base_overall,
         risk_preference=int(score.risk_preference),
         risk_target=dict(score.risk_target or {}),
         metrics=metrics,
@@ -167,6 +174,8 @@ def _serialize_score(score) -> ScoreResponse:
             )
             for k, d in score.dimensions.items()
         },
+        drivers=[ScoreDriverOut(**dr) for dr in (getattr(score, "drivers", ()) or ())],
+        reason_codes=[ReasonCodeOut(**rc) for rc in (getattr(score, "reason_codes", ()) or ())],
     )
 
 

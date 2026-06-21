@@ -16,8 +16,17 @@ from .constants import DEFAULT_RISK_LIMITS, TRADING_DAYS
 
 
 def sharpe_ratio(annual_ret: float, annual_vol: float, risk_free: float) -> float:
-    """Annualized Sharpe. Returns 0 when vol is non-positive (defensive)."""
-    return (annual_ret - risk_free) / annual_vol if annual_vol > 0 else 0.0
+    """Annualized Sharpe. Returns 0 for a (near-)flat portfolio.
+
+    The guard is an epsilon, not ``> 0``: a constant/near-constant return series
+    has a floating-point residual std (~1e-16), and dividing by it yields an
+    absurd Sharpe (e.g. 2e15) that then displays literally and pins the score.
+    No real portfolio has an annualized vol in ``(0, 1e-9)``, so flooring there
+    is safe and turns the degenerate case into an honest 0.0.
+    """
+    if not np.isfinite(annual_vol) or annual_vol <= 1e-9:
+        return 0.0
+    return (annual_ret - risk_free) / annual_vol
 
 
 def margin_call_distance(

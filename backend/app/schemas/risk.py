@@ -328,6 +328,13 @@ class PortfolioMetricsOut(BaseModel):
     leverage: Optional[float] = None
     gross_annual_return: Optional[float] = None  # unlevered asset-mix return
     margin_cost_annual: Optional[float] = None  # annualized borrow drag
+    # Deterministic input-health. `data_quality` ∈ [0,1] is the worst-link of
+    # coverage / observations / dropped holdings; `confidence` is its label
+    # (high|medium|low). When confidence is not high the score is stabilized
+    # toward neutral instead of collapsing — see ScoreResponse.base_overall.
+    data_quality: Optional[float] = None
+    confidence: Optional[str] = None
+    dropped_tickers: list[str] = Field(default_factory=list)
 
 
 class OptionScorePenaltyRow(BaseModel):
@@ -355,6 +362,29 @@ class OptionScoreImpactOut(BaseModel):
     penalty_breakdown: list[OptionScorePenaltyRow] = Field(default_factory=list)
 
 
+class ScoreDriverOut(BaseModel):
+    """One dimension's deterministic contribution to the overall score —
+    the points it COSTS vs a perfect 10 (biggest drag first)."""
+
+    key: str
+    name: str
+    score: float
+    weight: float
+    points_below_max: int
+    detail: str = ""
+
+
+class ReasonCodeOut(BaseModel):
+    """A structured, machine-readable penalty behind the score (the LLM may
+    phrase these, never invent). Extra keys (dimension / tickers /
+    stabilized_from) ride along per code."""
+
+    model_config = ConfigDict(extra="allow")
+    code: str
+    severity: str
+    detail: str = ""
+
+
 class ScoreResponse(BaseModel):
     overall_score: int
     risk_preference: int
@@ -369,6 +399,13 @@ class ScoreResponse(BaseModel):
     # show "what's dragging it" without the full risk report. None for an
     # empty/uncomputable book.
     concentration: Optional[ConcentrationOut] = None
+    # Deterministic explainability + stabilization (additive). `base_overall` is
+    # the score BEFORE confidence dampening (== overall_score at full data);
+    # `drivers` ranks the dimensions by points-cost; `reason_codes` are the
+    # structured penalties incl. low-data-confidence + missing prices.
+    base_overall: Optional[int] = None
+    drivers: list[ScoreDriverOut] = Field(default_factory=list)
+    reason_codes: list[ReasonCodeOut] = Field(default_factory=list)
 
 
 # ── /api/v1/risk/benchmarks (public reference context) ──────────────
