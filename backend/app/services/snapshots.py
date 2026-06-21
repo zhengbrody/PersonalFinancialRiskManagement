@@ -51,9 +51,17 @@ def record_snapshot(
     contributed_capital: float = 0.0,
     extra_metrics: Optional[dict[str, Any]] = None,
     top_positions: Optional[list[dict]] = None,
+    concentration: Optional[Any] = None,
+    overall_override: Optional[int] = None,
+    option_penalty: Optional[int] = None,
     source: str = "score",
 ) -> None:
-    """Insert a daily snapshot of the active portfolio (deduped). Never raises."""
+    """Insert a daily snapshot of the active portfolio (deduped). Never raises.
+
+    Stores the per-dimension scores, the deterministic data-quality read, and a
+    compact concentration summary alongside the headline metrics — so the
+    "what changed?" engine can attribute a score move to its components against
+    the user's OWN prior snapshot (not a generic benchmark)."""
     if not access_token:
         return
     try:
@@ -84,14 +92,25 @@ def record_snapshot(
             net_equity = gross - loan
         leverage = (gross / net_equity) if net_equity > 0 else None
 
+        final_overall = (
+            int(overall_override) if overall_override is not None else int(score.overall_score)
+        )
         risk_metrics = {
-            "overall_score": int(score.overall_score),
+            # The FINAL displayed score (post option-penalty) so day-over-day
+            # deltas match what the user saw.
+            "overall_score": final_overall,
+            "base_overall": int(getattr(score, "base_overall", 0) or score.overall_score),
             "annual_return": _finite(m.annual_return),
             "annual_volatility": _finite(m.annual_volatility),
             "sharpe_ratio": _finite(m.sharpe_ratio),
             "max_drawdown": _finite(m.max_drawdown),
             "var_95_daily": _finite(m.var_95_daily),
             "beta_to_benchmark": _finite(m.beta_to_benchmark),
+            # Per-dimension scores (0..10) — the basis for component-delta attribution.
+            "dimensions": {
+                k: _finite(getattr(d, "score", None))
+                for k, d in (getattr(score, "dimensions", {}) or {}).items()
+            },
         }
         for key in (
             "daily_pnl",
@@ -108,6 +127,32 @@ def record_snapshot(
             if val is not None:
                 risk_metrics[key] = val
 
+        # Deterministic input-health snapshot (the data_quality JSONB column was
+        # reserved in migration 0004 and is now populated).
+        data_quality = {
+            "confidence": getattr(m, "confidence", None),
+            "data_quality": _finite(getattr(m, "data_quality", None)),
+            "observations": int(getattr(m, "observations", 0) or 0),
+            "data_coverage": _finite(getattr(m, "data_coverage", None)),
+            "dropped_tickers": list(getattr(m, "dropped_tickers", ()) or []),
+        }
+        # Compact concentration summary (top name / top sector / HHI) for the
+        # concentration-change driver. `concentration` is the API ConcentrationOut.
+        conc: dict[str, Any] = {}
+        if concentration is not None:
+            conc = {
+                "top_holding_ticker": getattr(concentration, "top_holding_ticker", None),
+                "top_holding_weight": _finite(getattr(concentration, "top_holding_weight", None)),
+                "top5_weight": _finite(getattr(concentration, "top5_weight", None)),
+                "hhi": _finite(getattr(concentration, "hhi", None)),
+                "top_sector": getattr(concentration, "top_sector", None),
+                "top_sector_weight": _finite(getattr(concentration, "top_sector_weight", None)),
+            }
+        if conc:
+            risk_metrics["concentration"] = conc
+        if option_penalty:
+            risk_metrics["option_penalty"] = int(option_penalty)
+
         sb.table("portfolio_snapshots").insert(
             {
                 "source": source,
@@ -118,6 +163,7 @@ def record_snapshot(
                 "contributed_capital": round(float(contributed_capital or 0.0), 2),
                 "leverage": round(leverage, 4) if leverage is not None else None,
                 "risk_metrics": risk_metrics,
+                "data_quality": data_quality,
                 "top_positions": (top_positions or [])[:10],
             }
         ).execute()
@@ -148,6 +194,41 @@ def get_previous_snapshot(access_token: Optional[str]) -> Optional[dict]:
         return None
 
 
+_WINDOW_HOURS = {
+    "previous": _SNAPSHOT_MIN_GAP_HOURS,  # the prior-day baseline
+    "7d": 7 * 24,
+    "30d": 30 * 24,
+}
+
+
+def get_snapshot_at_window(access_token: Optional[str], window: str = "previous") -> Optional[dict]:
+    """The most recent snapshot OLDER than the window's lower bound — i.e. the
+    user's own prior state ~1 day / ~7 days / ~30 days ago. Returns the full row
+    (risk_metrics + data_quality + top_positions) for change attribution, or None
+    if there is no snapshot that old. Never raises."""
+    if not access_token:
+        return None
+    hours = _WINDOW_HOURS.get(window, _SNAPSHOT_MIN_GAP_HOURS)
+    try:
+        sb = _client(access_token)
+        resp = (
+            sb.table("portfolio_snapshots")
+            .select(
+                "created_at,risk_metrics,data_quality,top_positions,"
+                "net_equity,leverage,contributed_capital"
+            )
+            .lt("created_at", _iso_hours_ago(hours))
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = resp.data or []
+        return rows[0] if rows else None
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("snapshot.window_read_failed window=%s reason=%s", window, type(exc).__name__)
+        return None
+
+
 def get_snapshot_history(access_token: Optional[str], *, limit: int = 90) -> list[dict]:
     """Recent snapshots oldest→newest, flattened to a chartable shape:
     ``[{as_of, overall_score, annual_volatility, var_95_daily, sharpe_ratio,
@@ -167,6 +248,8 @@ def get_snapshot_history(access_token: Optional[str], *, limit: int = 90) -> lis
         out: list[dict] = []
         for r in rows:
             m = r.get("risk_metrics") or {}
+            dims = m.get("dimensions") or {}
+            dq = r.get("data_quality") or {}
             out.append(
                 {
                     "as_of": r.get("created_at"),
@@ -181,6 +264,11 @@ def get_snapshot_history(access_token: Optional[str], *, limit: int = 90) -> lis
                     "total_pnl": _finite(m.get("total_pnl")),
                     "total_return": _finite(m.get("total_return")),
                     "contributed_capital": _finite(r.get("contributed_capital")),
+                    # Per-dimension trend + confidence (additive).
+                    "risk_match": _finite(dims.get("risk_match")),
+                    "risk_adjusted_return": _finite(dims.get("risk_adjusted_return")),
+                    "downside_protection": _finite(dims.get("downside_protection")),
+                    "confidence": dq.get("confidence") or m.get("confidence"),
                 }
             )
         return out

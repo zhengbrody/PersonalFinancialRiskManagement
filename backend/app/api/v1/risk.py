@@ -65,6 +65,7 @@ from ...schemas.risk import (
 )
 from ...schemas.risk_alerts import RiskAlertsInput, RiskAlertsOutput
 from ...schemas.risk_explain import RiskExplainInput
+from ...schemas.score_changes import ScoreChangeRequest
 
 router = APIRouter(prefix="/api/v1/risk", tags=["risk"])
 
@@ -641,8 +642,47 @@ def score_from_active_endpoint(
         current_prices=_current_price_map(tickers, market_data),
     )
 
-    # Record a daily snapshot (deduped, fail-soft) so the dashboard can show a
-    # "what changed since your last visit" delta. Never blocks the score.
+    # Concentration over the invested equity book (cash excluded; options aren't
+    # in positions_input — they're priced separately). Cheap weights+sector math,
+    # so the score page can show "what's dragging it" without the full report.
+    equity_mv = {p.ticker: float(p.market_value) for p in positions_input if p.asset_type != "cash"}
+    concentration = _concentration_from_values(equity_mv, holdings)
+
+    response = _serialize_score(score)
+    response = response.model_copy(
+        update={
+            "metrics": response.metrics.model_copy(
+                update={k: v for k, v in account_metrics.items() if v is not None}
+            ),
+            "price_provenance": _price_provenance(price_prov, price_frame),
+            "concentration": concentration,
+        }
+    )
+
+    # Options affect the score deterministically: a capped penalty derived from
+    # the option exposure flags is subtracted, and the impact block is surfaced
+    # so the deduction is transparent (base_score − penalty + the breakdown).
+    equity_shares = {
+        str(tk).upper(): float((h or {}).get("shares") or 0.0)
+        for tk, h in (holdings or {}).items()
+        if not _is_option_holding(h)
+    }
+    net_equity_val = float(account_metrics.get("net_equity") or equity_value)
+    impact = _option_score_impact(
+        holdings,
+        equity_shares=equity_shares,
+        net_equity=net_equity_val,
+        base_score=int(response.overall_score),
+    )
+    option_penalty = None
+    if impact is not None:
+        option_penalty = int(impact["penalty"])
+        adjusted = max(0, int(response.overall_score) - option_penalty)
+        response = response.model_copy(update={"overall_score": adjusted, "options": impact})
+
+    # Record a daily snapshot (deduped, fail-soft) AFTER the final score is known,
+    # so day-over-day deltas + the "what changed" engine compare against the score
+    # the user actually saw. Never blocks the response.
     from ...services import snapshots
 
     top = sorted(positions_input, key=lambda p: p.market_value, reverse=True)[:10]
@@ -662,42 +702,10 @@ def score_from_active_endpoint(
         contributed_capital=contributed_capital,
         extra_metrics=account_metrics,
         top_positions=top_positions,
+        concentration=concentration,
+        overall_override=int(response.overall_score),
+        option_penalty=option_penalty,
     )
-
-    # Concentration over the invested equity book (cash excluded; options aren't
-    # in positions_input — they're priced separately). Cheap weights+sector math,
-    # so the score page can show "what's dragging it" without the full report.
-    equity_mv = {p.ticker: float(p.market_value) for p in positions_input if p.asset_type != "cash"}
-
-    response = _serialize_score(score)
-    response = response.model_copy(
-        update={
-            "metrics": response.metrics.model_copy(
-                update={k: v for k, v in account_metrics.items() if v is not None}
-            ),
-            "price_provenance": _price_provenance(price_prov, price_frame),
-            "concentration": _concentration_from_values(equity_mv, holdings),
-        }
-    )
-
-    # Options affect the score deterministically: a capped penalty derived from
-    # the option exposure flags is subtracted, and the impact block is surfaced
-    # so the deduction is transparent (base_score − penalty + the breakdown).
-    equity_shares = {
-        str(tk).upper(): float((h or {}).get("shares") or 0.0)
-        for tk, h in (holdings or {}).items()
-        if not _is_option_holding(h)
-    }
-    net_equity_val = float(account_metrics.get("net_equity") or equity_value)
-    impact = _option_score_impact(
-        holdings,
-        equity_shares=equity_shares,
-        net_equity=net_equity_val,
-        base_score=int(response.overall_score),
-    )
-    if impact is not None:
-        adjusted = max(0, int(response.overall_score) - int(impact["penalty"]))
-        response = response.model_copy(update={"overall_score": adjusted, "options": impact})
 
     return ok(response.model_dump(), request=request, started_at=started)
 
@@ -745,6 +753,29 @@ def snapshot_history_endpoint(request: Request, user: AuthedUser = Depends(requi
 
     history = snapshots.get_snapshot_history(user.access_token)
     return ok({"snapshots": history}, request=request, started_at=started)
+
+
+@router.post(
+    "/score_changes",
+    summary="Deterministic 'what changed?' — current score vs the user's own prior snapshot",
+)
+def score_changes_endpoint(
+    body: ScoreChangeRequest,
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    """Decompose how the Health Score moved vs the user's OWN prior state
+    (previous-day / 7d / 30d): per-dimension component deltas (an exact
+    decomposition of the score move), input-metric changes, ranked drivers, data-
+    quality changes, and a holdings diff. The client passes the CURRENT score it
+    already holds — zero recompute; the backend fetches the prior snapshot. All
+    deterministic (no LLM). Fail-soft: an unavailable snapshot → available=false."""
+    started = time.perf_counter()
+    from ...services import score_changes, snapshots
+
+    prev = snapshots.get_snapshot_at_window(user.access_token, body.window)
+    report = score_changes.build_change_report(body, prev)
+    return ok(report.model_dump(), request=request, started_at=started)
 
 
 # ── /score_from_active continues above. Below: /report_from_active. ──
