@@ -2002,6 +2002,84 @@ export function useRiskExplain(input: RiskExplainInput | null) {
   });
 }
 
+// ── deterministic "what changed?" vs the user's own prior snapshot ──
+export const scoreChangeReportSchema = z.looseObject({
+  window: z.string(),
+  available: z.boolean(),
+  as_of_previous: z.string().nullish(),
+  current_score: z.number(),
+  previous_score: z.number().nullish(),
+  score_delta: z.number().nullish(),
+  base_score_delta: z.number().nullish(),
+  component_deltas: z.array(
+    z.looseObject({
+      key: z.string(),
+      name: z.string(),
+      previous: z.number().nullish(),
+      current: z.number().nullish(),
+      delta: z.number().nullish(),
+      points_contribution: z.number().nullish(),
+    }),
+  ),
+  input_changes: z.array(
+    z.looseObject({
+      key: z.string(),
+      label: z.string(),
+      previous: z.number().nullish(),
+      current: z.number().nullish(),
+      delta: z.number().nullish(),
+      unit: z.string(),
+      direction: z.string(),
+    }),
+  ),
+  top_drivers: z.array(
+    z.looseObject({
+      key: z.string(),
+      label: z.string(),
+      points: z.number(),
+      detail: z.string().nullish(),
+    }),
+  ),
+  data_quality_changes: z.array(
+    z.looseObject({
+      key: z.string(),
+      label: z.string(),
+      previous: z.string().nullish(),
+      current: z.string().nullish(),
+      note: z.string().nullish(),
+    }),
+  ),
+  holdings_changes: z.looseObject({
+    added: z.array(z.string()),
+    removed: z.array(z.string()),
+    reweighted: z.array(z.looseObject({})),
+  }),
+  summary: z.string(),
+});
+export type ScoreChangeReport = z.infer<typeof scoreChangeReportSchema>;
+
+/**
+ * Deterministic "what changed?" — posts the CURRENT score the page already holds
+ * (zero recompute) for a window (previous|7d|30d); the backend diffs it against
+ * the user's own prior snapshot. The LLM is never involved.
+ */
+export function useScoreChanges(body: Record<string, unknown> | null) {
+  const { accessToken, user } = useAuth();
+  return useQuery<ScoreChangeReport>({
+    queryKey: ["risk", "score_changes", user?.id ?? null, body ? JSON.stringify(body) : null],
+    enabled: Boolean(accessToken && body),
+    queryFn: () =>
+      apiFetch<ScoreChangeReport>("/api/v1/risk/score_changes", {
+        method: "POST",
+        body: body!,
+        authToken: accessToken!,
+        schema: scoreChangeReportSchema,
+      }),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+}
+
 // ── exportable HTML reports (server-rendered, deterministic) ────────
 export const reportResponseSchema = z.looseObject({
   html: z.string(),

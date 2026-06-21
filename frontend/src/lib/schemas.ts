@@ -95,6 +95,12 @@ export const portfolioMetricsSchema = z.looseObject({
   leverage: z.number().nullish(),
   gross_annual_return: z.number().nullish(),
   margin_cost_annual: z.number().nullish(),
+  // Deterministic input-health: data_quality ∈ [0,1] (worst-link of coverage /
+  // observations / dropped holdings); confidence is its label. When not "high"
+  // the score is stabilized toward neutral instead of collapsing.
+  data_quality: z.number().nullish(),
+  confidence: z.string().nullish(),
+  dropped_tickers: z.array(z.string()).nullish(),
 });
 export type PortfolioMetrics = z.infer<typeof portfolioMetricsSchema>;
 
@@ -137,6 +143,23 @@ export const concentrationSchema = z.looseObject({
 });
 export type Concentration = z.infer<typeof concentrationSchema>;
 
+export const scoreDriverSchema = z.looseObject({
+  key: z.string(),
+  name: z.string(),
+  score: z.number(),
+  weight: z.number(),
+  points_below_max: z.number(),
+  detail: z.string().nullish(),
+});
+export type ScoreDriver = z.infer<typeof scoreDriverSchema>;
+
+export const reasonCodeSchema = z.looseObject({
+  code: z.string(),
+  severity: z.string(),
+  detail: z.string().nullish(),
+});
+export type ReasonCode = z.infer<typeof reasonCodeSchema>;
+
 export const scoreResponseSchema = z.looseObject({
   overall_score: z.number(),
   risk_preference: z.number(),
@@ -148,5 +171,11 @@ export const scoreResponseSchema = z.looseObject({
   // Top-name / top-5 / HHI / sector roll-up over the equity book (cheap; lets
   // the score page show "what's dragging it" without the full report).
   concentration: concentrationSchema.nullish(),
+  // Deterministic explainability + stabilization. base_overall is the score
+  // BEFORE confidence dampening (== overall_score at full data); drivers rank
+  // dimensions by points-cost; reason_codes are the structured penalties.
+  base_overall: z.number().nullish(),
+  drivers: z.array(scoreDriverSchema).nullish(),
+  reason_codes: z.array(reasonCodeSchema).nullish(),
 });
 export type ScoreResponse = z.infer<typeof scoreResponseSchema>;
