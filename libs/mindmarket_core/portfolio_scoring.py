@@ -283,6 +283,10 @@ class PortfolioMetrics:
     data_quality: float = 1.0  # 0..1, worst-link of coverage/observations/dropped
     confidence: str = "high"  # high | medium | low (derived from data_quality)
     dropped_tickers: tuple[str, ...] = ()  # holdings excluded for missing/short history
+    # Drawdown from the running peak at the LATEST point (0 = at a fresh high).
+    # Additive, NON-scoring — only max_drawdown feeds the score; this just lets the
+    # UI flag whether the worst drawdown is stale (recovered) or currently active.
+    current_drawdown: float = 0.0
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -648,6 +652,11 @@ def compute_portfolio_metrics(
     cumulative = (1.0 + port_returns).cumprod()
     drawdown = cumulative / cumulative.cummax() - 1.0
     max_drawdown = float(abs(drawdown.min())) if not drawdown.empty else 0.0
+    # How far below the peak the book is RIGHT NOW (0 = at a fresh high). Lets the
+    # UI distinguish a STALE worst-drawdown that has since recovered from one the
+    # book is currently sitting in. Additive, NON-scoring — max_drawdown (the
+    # scored downside input) is unchanged.
+    current_drawdown = float(abs(drawdown.iloc[-1])) if not drawdown.empty else 0.0
 
     q05 = float(port_returns.quantile(0.05))
     var_95 = max(0.0, -q05)
@@ -706,6 +715,7 @@ def compute_portfolio_metrics(
         data_quality=float(data_quality),
         confidence=confidence,
         dropped_tickers=rs.dropped,
+        current_drawdown=current_drawdown,
     )
 
 

@@ -366,6 +366,25 @@ def test_degraded_inputs_do_not_collapse_but_full_data_collapse_shows_through():
     assert any(r["code"] == "low_data_confidence" for r in degraded.reason_codes)
 
 
+def test_current_drawdown_distinguishes_recovered_from_active():
+    """current_drawdown is the drawdown from peak RIGHT NOW (non-scoring):
+    near 0 when a past crash has recovered, large when the book is still down.
+    max_drawdown (the scored input) is unchanged in both cases."""
+    idx = pd.bdate_range("2024-01-01", periods=40)
+    # Recovered: a mid-window dip, then new highs by the end.
+    recovered = pd.Series([0.02] * 10 + [-0.08] * 2 + [0.02] * 28, index=idx)
+    pos, frame = _single_asset(recovered)
+    m_rec = compute_portfolio_metrics(pos, frame, risk_free_rate=0.045)
+    assert m_rec.max_drawdown > 0.10  # the dip is in the (scored) max DD
+    assert m_rec.current_drawdown < 0.01  # but we're at a fresh high now
+
+    # Active: a late crash the book is still sitting in.
+    active = pd.Series([0.001] * 30 + [-0.20] + [0.001] * 9, index=idx)
+    pos2, frame2 = _single_asset(active)
+    m_act = compute_portfolio_metrics(pos2, frame2, risk_free_rate=0.045)
+    assert m_act.current_drawdown > 0.10  # still well below the peak
+
+
 def test_data_quality_is_worst_link():
     """data_quality must reflect the WORST input dimension: long history but poor
     coverage (a big holding dropped) is still low-confidence."""

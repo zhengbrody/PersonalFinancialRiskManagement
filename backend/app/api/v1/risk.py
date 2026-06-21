@@ -158,6 +158,7 @@ def _serialize_score(score) -> ScoreResponse:
         data_quality=metrics_dict.get("data_quality"),
         confidence=metrics_dict.get("confidence"),
         dropped_tickers=list(metrics_dict.get("dropped_tickers") or []),
+        current_drawdown=metrics_dict.get("current_drawdown"),
     )
     base_overall = int(getattr(score, "base_overall", 0) or score.overall_score)
     return ScoreResponse(

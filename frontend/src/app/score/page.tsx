@@ -489,6 +489,13 @@ function MetricsCard({ result }: { result: ScoreResponse }) {
             value={fmtNum(result.metrics.sharpe_ratio, 2)}
           />
           <MetricRow label="Max DD" value={fmtPct(result.metrics.max_drawdown)} />
+          <MetricRow
+            label="Drawdown now"
+            value={drawdownNowLabel(
+              result.metrics.current_drawdown,
+              result.metrics.max_drawdown,
+            )}
+          />
           <MetricRow label="VaR 95 (daily)" value={fmtPct(result.metrics.var_95_daily)} />
           <MetricRow label="CVaR 95 (daily)" value={fmtPct(result.metrics.cvar_95_daily)} />
           <MetricRow label="Beta" value={fmtNum(result.metrics.beta_to_benchmark, 2)} />
@@ -572,6 +579,17 @@ function MetricRow({ label, value }: { label: string; value: string }) {
 function fmtPct(v: number | null | undefined): string {
   if (v === null || v === undefined || Number.isNaN(v)) return "—";
   return `${(v * 100).toFixed(2)}%`;
+}
+
+/** "Drawdown now" — distinguishes a stale (recovered) worst drawdown from one
+ * the book is currently sitting in. At/near a fresh high we say "recovered". */
+function drawdownNowLabel(
+  current: number | null | undefined,
+  max: number | null | undefined,
+): string {
+  if (current === null || current === undefined || Number.isNaN(current)) return "—";
+  if (current < 0.01 && (max ?? 0) > 0.05) return "≈ at high";
+  return fmtPct(current);
 }
 
 function fmtNum(v: number | null | undefined, dp = 2): string {
