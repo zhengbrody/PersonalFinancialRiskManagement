@@ -25,11 +25,15 @@ import { PortfolioValueSummary } from "@/components/portfolio-value-summary";
 import { BenchmarkContext } from "@/components/benchmark-context";
 import { DataProvenance } from "@/components/data-provenance";
 import { MetricTrend } from "@/components/metric-trend";
+import {
+  ScoreChangeReport,
+  ConfidenceBadge,
+  ReasonCodes,
+} from "@/components/score-change-report";
 import { track } from "@/lib/analytics";
 import { ApiError, apiFetch, isNoPortfolioError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useActiveScore, useLastSnapshot, useRiskExplain } from "@/lib/queries";
-import type { LastSnapshot } from "@/lib/queries";
 import { explainInputFromScore } from "@/lib/risk-explain-input";
 import { scoreResponseSchema } from "@/lib/schemas";
 import type { Holding, ScoreRequest, ScoreResponse } from "@/lib/schemas";
@@ -380,6 +384,11 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
           </div>
           <ScoreGauge score={result.overall_score} />
           <HeroMeta metrics={result.metrics} />
+          <ConfidenceBadge
+            metrics={result.metrics}
+            baseOverall={result.base_overall}
+            overall={result.overall_score}
+          />
         </CardContent>
       </Card>
 
@@ -395,6 +404,7 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
       {tab === "overview" && (
         <div className="space-y-4">
           <RiskDiagnosis explain={explain.data} loading={explain.isLoading} source="score" />
+          <ReasonCodes score={result} />
           <RiskAlertsCard input={alertsInput} source="score" />
           <ScoreConcentration concentration={result.concentration} />
           <ImproveScore score={result} />
@@ -425,7 +435,7 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
             description="Each visit you score, we save a snapshot — here's your trend."
             kind="score"
           />
-          <WhatChanged current={result} prev={snapshot} />
+          <ScoreChangeReport score={result} />
         </div>
       )}
       {tab === "actions" && <ActionCards explain={explain.data} loading={explain.isLoading} />}
@@ -517,111 +527,6 @@ function MetricsCard({ result }: { result: ScoreResponse }) {
           coverage={result.metrics.data_coverage}
           priceProvenance={result.price_provenance}
         />
-      </CardContent>
-    </Card>
-  );
-}
-
-function WhatChanged({
-  current,
-  prev,
-}: {
-  current: ScoreResponse;
-  prev: LastSnapshot["snapshot"] | null;
-}) {
-  if (!prev || prev.overall_score == null) {
-    return (
-      <Card>
-        <CardContent className="py-6 text-sm text-muted-foreground">
-          No earlier snapshot yet — we save one each time you score, so your
-          first change will show up on your next visit.
-        </CardContent>
-      </Card>
-    );
-  }
-
-  const now = Math.round(current.overall_score);
-  const was = Math.round(prev.overall_score);
-  const dScore = now - was;
-  const tone =
-    dScore > 0
-      ? "text-emerald-600 dark:text-emerald-400"
-      : dScore < 0
-        ? "text-amber-600 dark:text-amber-400"
-        : "text-muted-foreground";
-  const sign = dScore > 0 ? "+" : "";
-
-  const rows: { label: string; was: string; now: string }[] = [
-    {
-      label: "Net equity",
-      was: fmtUSD(prev.net_equity),
-      now: fmtUSD(current.metrics.net_equity ?? current.metrics.total_value),
-    },
-    {
-      label: "Today P&L",
-      was: fmtSignedUSD(prev.daily_pnl),
-      now: fmtSignedUSD(current.metrics.daily_pnl),
-    },
-    {
-      label: "Total return",
-      was: fmtSignedPct(prev.total_return),
-      now: fmtSignedPct(current.metrics.total_return),
-    },
-    {
-      label: "Health score",
-      was: String(was),
-      now: String(now),
-    },
-    {
-      label: "Annual volatility",
-      was: fmtPct(prev.annual_volatility),
-      now: fmtPct(current.metrics.annual_volatility),
-    },
-    {
-      label: "Sharpe ratio",
-      was: fmtNum(prev.sharpe_ratio, 2),
-      now: fmtNum(current.metrics.sharpe_ratio, 2),
-    },
-    {
-      label: "Max drawdown",
-      was: fmtPct(prev.max_drawdown),
-      now: fmtPct(current.metrics.max_drawdown),
-    },
-  ];
-
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">
-          Since {prev.as_of ? new Date(prev.as_of).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "last snapshot"}
-        </CardTitle>
-        <CardDescription>
-          Health score{" "}
-          <span className={`font-medium ${tone}`}>
-            {sign}
-            {dScore}
-          </span>
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <th className="py-1 font-medium">Metric</th>
-              <th className="py-1 text-right font-medium">Then</th>
-              <th className="py-1 text-right font-medium">Now</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.label} className="border-t border-border/40">
-                <td className="py-1.5 text-muted-foreground">{r.label}</td>
-                <td className="py-1.5 text-right font-mono">{r.was}</td>
-                <td className="py-1.5 text-right font-mono">{r.now}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </CardContent>
     </Card>
   );
