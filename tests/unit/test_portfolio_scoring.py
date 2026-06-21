@@ -226,3 +226,157 @@ def test_unestimable_benchmark_beta_adds_note():
 
     assert np.isnan(metrics.beta_to_benchmark)
     assert any("beta could not be estimated" in n.lower() for n in metrics.data_quality_notes)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Slice 1 — exact math + data-quality confidence + score stabilization
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def _single_asset(returns_series: pd.Series) -> tuple[list, pd.DataFrame]:
+    """A 100%-AAA book + a returns frame whose only column is AAA, so the
+    portfolio return series equals `returns_series` exactly (no blending)."""
+    pos = [AssetPosition("AAA", "Asset A", "public_security", 100_000.0, 90_000.0)]
+    frame = pd.DataFrame({"AAA": returns_series})
+    return pos, frame
+
+
+def test_sharpe_matches_textbook_formula_on_known_series():
+    """Sharpe = (mean(daily)·252 − rf) / (std(daily, ddof=1)·√252), computed on
+    the PRE-leverage series. Assert the wiring (frequency, annualization, ddof,
+    rf-as-annual) against an independently-computed expected value."""
+    idx = pd.bdate_range("2024-01-01", periods=252)
+    rng = np.random.default_rng(11)
+    daily = pd.Series(rng.normal(0.0006, 0.009, 252), index=idx)
+    pos, frame = _single_asset(daily)
+    rf = 0.045
+
+    m = compute_portfolio_metrics(pos, frame, risk_free_rate=rf)
+
+    exp_ret = float(daily.mean() * 252)
+    exp_vol = float(daily.std(ddof=1) * np.sqrt(252))
+    exp_sharpe = (exp_ret - rf) / exp_vol
+    assert m.annual_return == pytest.approx(exp_ret, rel=1e-9)
+    assert m.annual_volatility == pytest.approx(exp_vol, rel=1e-9)
+    assert m.sharpe_ratio == pytest.approx(exp_sharpe, rel=1e-9)
+
+
+def test_zero_volatility_returns_zero_sharpe_not_nan():
+    """A perfectly flat return series has zero vol — Sharpe must be 0.0 (defensive),
+    never NaN/inf that would poison the score."""
+    idx = pd.bdate_range("2024-01-01", periods=252)
+    pos, frame = _single_asset(pd.Series(0.0004, index=idx))  # constant daily return
+    m = compute_portfolio_metrics(pos, frame, risk_free_rate=0.045)
+    assert m.annual_volatility == pytest.approx(0.0, abs=1e-12)
+    assert m.sharpe_ratio == 0.0
+    assert np.isfinite(m.sharpe_ratio)
+
+
+def test_max_drawdown_on_known_equity_curve():
+    """A single −20% day after a rising run is exactly a 20% peak-to-trough
+    drawdown (dd = cum/cummax − 1 = 0.80 − 1), independent of the peak level —
+    and it stays the worst as the curve recovers. (40 obs to clear the
+    minimum-history inclusion gate.)"""
+    idx = pd.bdate_range("2024-01-01", periods=40)
+    daily = pd.Series([0.001] * 30 + [-0.20] + [0.001] * 9, index=idx)
+    pos, frame = _single_asset(daily)
+    m = compute_portfolio_metrics(pos, frame, risk_free_rate=0.045)
+    assert m.max_drawdown == pytest.approx(0.20, rel=1e-9)
+
+
+def test_annualized_volatility_known_series():
+    idx = pd.bdate_range("2024-01-01", periods=120)
+    rng = np.random.default_rng(3)
+    daily = pd.Series(rng.normal(0.0, 0.012, 120), index=idx)
+    pos, frame = _single_asset(daily)
+    m = compute_portfolio_metrics(pos, frame, risk_free_rate=0.0)
+    assert m.annual_volatility == pytest.approx(float(daily.std(ddof=1) * np.sqrt(252)), rel=1e-9)
+
+
+def test_full_data_book_is_undamped_and_backward_compatible():
+    """A full-coverage, long-history book must score byte-identically to the
+    legacy path: data_quality high, no dampening (base_overall == overall_score)."""
+    positions = demo_asset_positions(100_000)
+    returns = _sample_returns()
+    score = score_portfolio(positions, returns, benchmark_returns=returns["SPY"], risk_preference=3)
+    assert score.metrics.confidence == "high"
+    assert score.metrics.data_quality >= 0.8
+    assert score.base_overall == score.overall_score  # undamped
+    assert score.metrics.dropped_tickers == ()
+    # Deterministic explainability is always attached.
+    assert len(score.drivers) == 3
+    assert score.drivers[0]["points_below_max"] >= score.drivers[-1]["points_below_max"]
+
+
+def test_missing_price_flags_and_does_not_silently_collapse():
+    """A missing price for a held name must (a) be reported as dropped, (b) drop
+    data confidence, and (c) NOT let the score collapse — it is stabilized toward
+    neutral with a reason code, instead of silently producing a catastrophic number."""
+    positions = [
+        AssetPosition("AAA", "A", "public_security", 40_000.0, 35_000.0),
+        AssetPosition("BBB", "B", "public_security", 35_000.0, 33_000.0),
+        AssetPosition("CCC", "C", "public_security", 25_000.0, 24_000.0),
+    ]
+    rng = np.random.default_rng(5)
+    idx = pd.bdate_range("2024-01-01", periods=252)
+    frame = pd.DataFrame(
+        {  # CCC deliberately absent (price fetch failed)
+            "AAA": rng.normal(0.0004, 0.01, 252),
+            "BBB": rng.normal(0.0003, 0.011, 252),
+        },
+        index=idx,
+    )
+    score = score_portfolio(positions, frame, risk_preference=3)
+    assert "CCC" in score.metrics.dropped_tickers
+    assert score.metrics.confidence != "high"
+    codes = {r["code"] for r in score.reason_codes}
+    assert "missing_price_data" in codes and "low_data_confidence" in codes
+
+
+def test_degraded_inputs_do_not_collapse_but_full_data_collapse_shows_through():
+    """The 500→70 case. A book whose RAW dimensions crater:
+    * with DEGRADED inputs (short history + a dropped name) is floored toward
+      neutral + flagged low-confidence (no silent collapse);
+    * with FULL data is a legitimate move and is shown as-is (base == overall),
+      to be explained by the what-changed engine — not hidden."""
+    positions = [
+        AssetPosition("AAA", "A", "public_security", 40_000.0, 50_000.0),
+        AssetPosition("BBB", "B", "public_security", 35_000.0, 50_000.0),
+        AssetPosition("CCC", "C", "public_security", 25_000.0, 50_000.0),
+    ]
+    rng = np.random.default_rng(9)
+    idx = pd.bdate_range("2024-01-01", periods=252)
+    crash = {  # negative drift + high vol → raw score craters
+        "AAA": rng.normal(-0.002, 0.05, 252),
+        "BBB": rng.normal(-0.0025, 0.055, 252),
+        "CCC": rng.normal(-0.003, 0.06, 252),
+    }
+    full = score_portfolio(positions, pd.DataFrame(crash, index=idx), risk_preference=3)
+    # Full data → legitimate collapse shown as-is (no dampening).
+    assert full.metrics.confidence == "high"
+    assert full.base_overall == full.overall_score
+    assert full.overall_score < 200  # a genuinely bad book scores low — and is honest
+
+    # Degraded: only 45 days and only AAA priced (BBB/CCC dropped).
+    degraded_frame = pd.DataFrame({"AAA": crash["AAA"][:45]}, index=idx[:45])
+    degraded = score_portfolio(positions, degraded_frame, risk_preference=3)
+    assert degraded.metrics.confidence == "low"
+    # The raw score would crater, but the SHOWN score is floored well above it.
+    assert degraded.overall_score > degraded.base_overall + 100
+    assert any(r["code"] == "low_data_confidence" for r in degraded.reason_codes)
+
+
+def test_data_quality_is_worst_link():
+    """data_quality must reflect the WORST input dimension: long history but poor
+    coverage (a big holding dropped) is still low-confidence."""
+    positions = [
+        AssetPosition("AAA", "A", "public_security", 60_000.0, 55_000.0),  # 60% dropped
+        AssetPosition("BBB", "B", "public_security", 40_000.0, 38_000.0),
+    ]
+    rng = np.random.default_rng(2)
+    idx = pd.bdate_range("2024-01-01", periods=252)
+    frame = pd.DataFrame({"BBB": rng.normal(0.0003, 0.01, 252)}, index=idx)  # AAA missing
+    m = compute_portfolio_metrics(positions, frame)
+    assert m.data_coverage < 0.5
+    assert m.data_quality < 0.5  # capped by coverage despite the full history
+    assert m.confidence == "low"

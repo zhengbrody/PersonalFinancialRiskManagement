@@ -23,6 +23,179 @@ RISK_TARGETS: dict[int, dict[str, float | str]] = {
     5: {"label": "Aggressive growth", "annual_volatility": 0.25, "beta": 1.30},
 }
 
+# ── Data-quality confidence + score stabilization ─────────────────────────────
+# A Health Score must never silently COLLAPSE on degraded INPUTS (a missing price,
+# a capital-fetch blip, or too little history). We compute a deterministic
+# data-quality score in [0,1]; when it is below full confidence the three
+# dimension scores are shrunk toward a neutral anchor, so a low-confidence book
+# reads "uncertain, ~mid, + data-quality warning" instead of a confident
+# catastrophic number. Design invariants:
+#   * A FULL-data book (data_quality >= _DQ_FULL) is scored byte-identically to
+#     before — the common case is unchanged, only degraded inputs are dampened.
+#   * A LEGITIMATE market crash on full history keeps data_quality ≈ 1.0 and is
+#     NOT dampened — the deterministic "what changed" engine explains that move.
+# This is the fix for "missing/bad data cannot silently destroy the score".
+_NEUTRAL_DIM = 5.5  # anchor the dampening pulls toward (midpoint of the 1..10 band)
+_DQ_FULL = 0.80  # data-quality at/above which scoring is fully undamped
+_MIN_FIDELITY = 0.45  # the most a terrible-data score may still deviate from neutral
+_CONF_HIGH, _CONF_MED = 0.80, 0.50  # data_quality cutoffs for the high/medium/low label
+_MIN_SCORING_OBS = 40  # below this many overlapping days, annualized stats are fragile
+_FULL_HISTORY_OBS = 180  # at/above this, the observation-quality factor is full (1.0)
+
+
+def _data_quality_score(
+    *,
+    coverage: float,
+    observations: int,
+    n_priceable: int,
+    n_dropped: int,
+    beta_estimable: bool,
+) -> float:
+    """Deterministic data-quality in [0,1] — the WORST-LINK of the input-health
+    factors (any one degraded dimension caps confidence, which is the honest
+    read: a 70%-covered book is low-confidence even if its history is long).
+
+    * coverage  — fraction of portfolio value with usable price history
+    * observations — overlapping trading days behind the annualized stats
+    * dropped   — holdings excluded for missing/insufficient history
+    * beta      — a mild cap when the benchmark beta could not be estimated
+    """
+    cov_q = _clamp((float(coverage) - 0.5) / 0.49, 0.0, 1.0)  # 0 at <=50%, 1 at >=99%
+    obs_q = _clamp(
+        (int(observations) - _MIN_SCORING_OBS) / float(_FULL_HISTORY_OBS - _MIN_SCORING_OBS),
+        0.0,
+        1.0,
+    )
+    drop_q = _clamp(1.0 - (int(n_dropped) / float(max(1, int(n_priceable)))), 0.0, 1.0)
+    base = min(cov_q, obs_q, drop_q)
+    return _clamp(base * (1.0 if beta_estimable else 0.95), 0.0, 1.0)
+
+
+def _confidence_label(data_quality: float) -> str:
+    if data_quality >= _CONF_HIGH:
+        return "high"
+    if data_quality >= _CONF_MED:
+        return "medium"
+    return "low"
+
+
+def _score_fidelity(data_quality: float) -> float:
+    """Dampening fidelity in [_MIN_FIDELITY, 1.0]: 1.0 (undamped) once data_quality
+    reaches _DQ_FULL, ramping down to _MIN_FIDELITY as quality → 0."""
+    return _MIN_FIDELITY + (1.0 - _MIN_FIDELITY) * _clamp(data_quality / _DQ_FULL, 0.0, 1.0)
+
+
+def _dampen_dimension(raw: float, fidelity: float) -> float:
+    """Shrink a raw 1..10 dimension score toward the neutral anchor by `fidelity`.
+    fidelity == 1.0 → unchanged; lower → pulled toward _NEUTRAL_DIM."""
+    return _NEUTRAL_DIM + (float(raw) - _NEUTRAL_DIM) * float(fidelity)
+
+
+# Dimension weights (single source of truth for the 0..10 → 0..1000 roll-up).
+_DIM_WEIGHTS: dict[str, float] = {
+    "risk_match": 0.35,
+    "risk_adjusted_return": 0.35,
+    "downside_protection": 0.30,
+}
+
+
+def _overall_from_dims(scores: Mapping[str, float]) -> int:
+    """Weighted 1..10 dimension scores → clamped 0..1000 overall."""
+    weighted_10 = sum(_DIM_WEIGHTS[k] * float(scores[k]) for k in _DIM_WEIGHTS)
+    return int(_clamp(round(((weighted_10 - 1.0) / 9.0) * 1000.0), 0, 1000))
+
+
+def _build_drivers(dimensions: Mapping[str, "DimensionScore"]) -> tuple[dict, ...]:
+    """Rank dimensions by the points each COSTS the overall vs a perfect 10
+    (biggest drag first) — the deterministic 'why this number' contributions."""
+    rows = [
+        {
+            "key": k,
+            "name": dimensions[k].name,
+            "score": float(dimensions[k].score),
+            "weight": _DIM_WEIGHTS[k],
+            "points_below_max": int(
+                round(_DIM_WEIGHTS[k] * (10.0 - float(dimensions[k].score)) / 9.0 * 1000.0)
+            ),
+            "detail": dimensions[k].detail,
+        }
+        for k in _DIM_WEIGHTS
+    ]
+    rows.sort(key=lambda r: r["points_below_max"], reverse=True)
+    return tuple(rows)
+
+
+def _build_reason_codes(
+    dimensions: Mapping[str, "DimensionScore"],
+    metrics: "PortfolioMetrics",
+    *,
+    base_overall: int,
+    overall: int,
+) -> tuple[dict, ...]:
+    """Structured, machine-readable penalties behind the score. The LLM may
+    PHRASE these; it must never invent a reason that isn't here."""
+    reasons: list[dict] = []
+    if metrics.confidence != "high":
+        reasons.append(
+            {
+                "code": "low_data_confidence",
+                "severity": "high" if metrics.confidence == "low" else "watch",
+                "detail": (
+                    f"Data confidence {metrics.confidence} (quality "
+                    f"{metrics.data_quality:.0%}); score stabilized toward neutral "
+                    f"(raw {base_overall} → shown {overall}) until inputs improve."
+                ),
+                "stabilized_from": int(base_overall),
+            }
+        )
+    if metrics.dropped_tickers:
+        reasons.append(
+            {
+                "code": "missing_price_data",
+                "severity": "high" if len(metrics.dropped_tickers) >= 2 else "watch",
+                "detail": (
+                    "Excluded from risk metrics (no usable price history): "
+                    + ", ".join(metrics.dropped_tickers)
+                ),
+                "tickers": list(metrics.dropped_tickers),
+            }
+        )
+    for k in _DIM_WEIGHTS:
+        s = float(dimensions[k].score)
+        if s < 4.0:
+            reasons.append(
+                {
+                    "code": f"weak_{k}",
+                    "severity": "high" if s < 2.5 else "watch",
+                    "dimension": k,
+                    "score": s,
+                    "detail": dimensions[k].detail,
+                }
+            )
+    if metrics.leverage > 1.0:
+        reasons.append(
+            {
+                "code": "margin_leverage",
+                "severity": "watch",
+                "detail": (
+                    f"{metrics.leverage:.2f}× leverage amplifies vol/VaR; "
+                    f"~{metrics.margin_cost_annual:.1%}/yr borrow drag."
+                ),
+            }
+        )
+    if 0 < metrics.observations < 60:
+        reasons.append(
+            {
+                "code": "short_history",
+                "severity": "watch",
+                "detail": (
+                    f"Only {metrics.observations} overlapping trading days; "
+                    "annualized estimates are low-confidence."
+                ),
+            }
+        )
+    return tuple(reasons)
+
 
 @dataclass(frozen=True)
 class AssetPosition:
@@ -104,6 +277,12 @@ class PortfolioMetrics:
     leverage: float = 1.0
     gross_annual_return: float = float("nan")  # unlevered asset-mix return
     margin_cost_annual: float = 0.0  # annualized borrow drag = (L−1)·risk_free
+    # Deterministic input-health (additive; equity-only full-data books keep
+    # data_quality=1.0 / confidence="high"). Drives the score-stabilization
+    # dampening so degraded inputs can't silently collapse the score.
+    data_quality: float = 1.0  # 0..1, worst-link of coverage/observations/dropped
+    confidence: str = "high"  # high | medium | low (derived from data_quality)
+    dropped_tickers: tuple[str, ...] = ()  # holdings excluded for missing/short history
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -127,14 +306,27 @@ class PortfolioScore:
     risk_target: dict[str, float | str]
     metrics: PortfolioMetrics
     dimensions: dict[str, DimensionScore]
+    # Deterministic explainability (additive). `drivers` ranks each dimension by
+    # the points it COSTS the overall vs a perfect 10 (biggest drag first).
+    # `reason_codes` are the structured, machine-readable penalties (one per major
+    # detractor incl. low data confidence) — the LLM may phrase these, never invent.
+    drivers: tuple[dict, ...] = ()
+    reason_codes: tuple[dict, ...] = ()
+    # `base_overall` is the score BEFORE confidence dampening; `overall_score` is
+    # after. Equal when data is full-confidence. Lets the UI show "low-confidence,
+    # softened from N" instead of a bare collapse.
+    base_overall: int = 0
 
     def as_dict(self) -> dict:
         return {
             "overall_score": self.overall_score,
+            "base_overall": self.base_overall,
             "risk_preference": self.risk_preference,
             "risk_target": self.risk_target,
             "metrics": self.metrics.as_dict(),
             "dimensions": {k: v.as_dict() for k, v in self.dimensions.items()},
+            "drivers": list(self.drivers),
+            "reason_codes": list(self.reason_codes),
         }
 
 
@@ -303,11 +495,24 @@ def _clean_returns_frame(returns: pd.DataFrame) -> pd.DataFrame:
     return cleaned.dropna(how="all")
 
 
+@dataclass(frozen=True)
+class _ReturnSeries:
+    """Internal: the weighted portfolio return series + the input-health signals
+    needed for the deterministic data-quality score."""
+
+    series: pd.Series
+    cash_weight: float
+    coverage: float
+    notes: tuple[str, ...]
+    n_priceable: int  # active non-cash positions that SHOULD have price history
+    dropped: tuple[str, ...]  # priceable tickers excluded for missing/short history
+
+
 def _portfolio_return_series(
     positions: list[AssetPosition],
     asset_returns: pd.DataFrame,
     risk_free_rate: float,
-) -> tuple[pd.Series, float, float, tuple[str, ...]]:
+) -> _ReturnSeries:
     returns = _clean_returns_frame(asset_returns)
     notes: list[str] = []
     if returns.empty:
@@ -322,20 +527,26 @@ def _portfolio_return_series(
     included: dict[str, pd.Series] = {}
     included_values: dict[str, float] = {}
     daily_cash_return = float(risk_free_rate) / TRADING_DAYS
+    n_priceable = 0
+    dropped: list[str] = []
 
     for p in active:
         ticker = p.ticker.upper()
         if p.asset_type == "cash":
             included[ticker] = pd.Series(daily_cash_return, index=returns.index, dtype=float)
             included_values[ticker] = float(p.market_value)
-        elif ticker in returns.columns:
+            continue
+        n_priceable += 1
+        if ticker in returns.columns:
             series = returns[ticker].astype(float)
             if series.notna().sum() >= max(30, int(len(returns) * 0.4)):
                 included[ticker] = series
                 included_values[ticker] = float(p.market_value)
             else:
+                dropped.append(ticker)
                 notes.append(f"{ticker}: insufficient return history; excluded from risk metrics.")
         else:
+            dropped.append(ticker)
             notes.append(f"{ticker}: missing return history; excluded from risk metrics.")
 
     covered_value = float(sum(included_values.values()))
@@ -353,7 +564,14 @@ def _portfolio_return_series(
         {ticker: value / covered_value for ticker, value in included_values.items()}
     )
     portfolio_returns = aligned.dot(weights.reindex(aligned.columns).fillna(0.0))
-    return portfolio_returns.astype(float), cash_value / total_value, coverage, tuple(notes)
+    return _ReturnSeries(
+        series=portfolio_returns.astype(float),
+        cash_weight=cash_value / total_value if total_value > 0 else 0.0,
+        coverage=coverage,
+        notes=tuple(notes),
+        n_priceable=n_priceable,
+        dropped=tuple(dropped),
+    )
 
 
 def compute_portfolio_metrics(
@@ -381,12 +599,11 @@ def compute_portfolio_metrics(
 
     active = active_positions(positions)
     total_value = float(sum(p.market_value for p in active))
-    port_returns, cash_weight, coverage, notes = _portfolio_return_series(
-        active,
-        asset_returns,
-        risk_free_rate,
-    )
-    notes = list(notes)
+    rs = _portfolio_return_series(active, asset_returns, risk_free_rate)
+    port_returns = rs.series
+    cash_weight = rs.cash_weight
+    coverage = rs.coverage
+    notes = list(rs.notes)
 
     # ── Asset-mix Sharpe (leverage- & cash-invariant) ──────────────────────
     # Sharpe must measure the QUALITY of the asset mix, not be corrupted by
@@ -453,6 +670,23 @@ def compute_portfolio_metrics(
                 "(insufficient overlapping history with the benchmark)."
             )
 
+    # ── Deterministic data-quality / confidence ────────────────────────────────
+    # Combines coverage, overlapping observations, dropped holdings and beta-
+    # estimability into a single 0..1 confidence used to stabilize the score.
+    data_quality = _data_quality_score(
+        coverage=coverage,
+        observations=observations,
+        n_priceable=rs.n_priceable,
+        n_dropped=len(rs.dropped),
+        beta_estimable=bool(np.isfinite(beta)),
+    )
+    confidence = _confidence_label(data_quality)
+    if confidence != "high":
+        detail = f"Data confidence is {confidence} (quality {data_quality:.0%})"
+        if rs.dropped:
+            detail += f"; {len(rs.dropped)} holding(s) lack usable price history"
+        notes.append(detail + " — the score is stabilized toward neutral until inputs improve.")
+
     return PortfolioMetrics(
         annual_return=annual_return,
         annual_volatility=annual_volatility,
@@ -469,6 +703,9 @@ def compute_portfolio_metrics(
         leverage=float(lev),
         gross_annual_return=asset_return,
         margin_cost_annual=float(margin_cost_annual),
+        data_quality=float(data_quality),
+        confidence=confidence,
+        dropped_tickers=rs.dropped,
     )
 
 
@@ -551,14 +788,17 @@ def score_portfolio(
     else:
         risk_alignment = 1.0 - min(1.0, vol_gap)
         risk_detail = f"Vol {metrics.annual_volatility:.1%} vs target {target_vol:.1%}."
-    risk_match = _clamp(1.0 + 9.0 * risk_alignment, 1.0, 10.0)
+    risk_match_raw = _clamp(1.0 + 9.0 * risk_alignment, 1.0, 10.0)
 
-    sharpe_score = _interp_ascending(
-        metrics.sharpe_ratio,
-        thresholds=[-0.50, 0.00, 0.50, 1.00, 1.50],
-        scores=[1.0, 3.0, 6.0, 8.0, 10.0],
+    sharpe_score_raw = _clamp(
+        _interp_ascending(
+            metrics.sharpe_ratio,
+            thresholds=[-0.50, 0.00, 0.50, 1.00, 1.50],
+            scores=[1.0, 3.0, 6.0, 8.0, 10.0],
+        ),
+        1.0,
+        10.0,
     )
-    sharpe_score = _clamp(sharpe_score, 1.0, 10.0)
 
     drawdown_score = _interp_descending(
         metrics.max_drawdown,
@@ -570,41 +810,55 @@ def score_portfolio(
         thresholds=[0.0075, 0.0125, 0.0200, 0.0300, 0.0500, 0.0800],
         scores=[10.0, 8.0, 6.0, 4.0, 2.0, 1.0],
     )
-    downside_score = _clamp(0.70 * drawdown_score + 0.30 * var_score, 1.0, 10.0)
+    downside_score_raw = _clamp(0.70 * drawdown_score + 0.30 * var_score, 1.0, 10.0)
+
+    # Confidence-aware stabilization: shrink the raw dimension scores toward the
+    # neutral anchor when inputs are degraded (fidelity < 1). A full-data book
+    # keeps fidelity == 1.0, so its scores are byte-identical to the legacy path.
+    raw_scores = {
+        "risk_match": risk_match_raw,
+        "risk_adjusted_return": sharpe_score_raw,
+        "downside_protection": downside_score_raw,
+    }
+    fidelity = _score_fidelity(metrics.data_quality)
+    adj = {k: _clamp(_dampen_dimension(v, fidelity), 1.0, 10.0) for k, v in raw_scores.items()}
 
     dimensions = {
         "risk_match": DimensionScore(
             name="Risk Match",
-            score=round(risk_match, 1),
-            status=score_status(risk_match),
+            score=round(adj["risk_match"], 1),
+            status=score_status(adj["risk_match"]),
             detail=risk_detail,
         ),
         "risk_adjusted_return": DimensionScore(
             name="Risk-adjusted Return",
-            score=round(sharpe_score, 1),
-            status=score_status(sharpe_score),
+            score=round(adj["risk_adjusted_return"], 1),
+            status=score_status(adj["risk_adjusted_return"]),
             detail=_risk_adjusted_detail(metrics),
         ),
         "downside_protection": DimensionScore(
             name="Downside Protection",
-            score=round(downside_score, 1),
-            status=score_status(downside_score),
+            score=round(adj["downside_protection"], 1),
+            status=score_status(adj["downside_protection"]),
             detail=(
                 f"Max drawdown {metrics.max_drawdown:.1%}; "
                 f"daily VaR(95%) {metrics.var_95_daily:.2%}."
             ),
         ),
     }
-    weighted_score_10 = (
-        0.35 * dimensions["risk_match"].score
-        + 0.35 * dimensions["risk_adjusted_return"].score
-        + 0.30 * dimensions["downside_protection"].score
-    )
-    overall = int(round(((weighted_score_10 - 1.0) / 9.0) * 1000))
+    # `base_overall` is the pre-dampening score (from the raw dimensions);
+    # `overall` is what we show (from the dampened dimensions). Equal at full data.
+    base_overall = _overall_from_dims({k: round(v, 1) for k, v in raw_scores.items()})
+    overall = _overall_from_dims({k: d.score for k, d in dimensions.items()})
     return PortfolioScore(
-        overall_score=int(_clamp(overall, 0, 1000)),
+        overall_score=int(overall),
         risk_preference=pref,
         risk_target=dict(target),
         metrics=metrics,
         dimensions=dimensions,
+        drivers=_build_drivers(dimensions),
+        reason_codes=_build_reason_codes(
+            dimensions, metrics, base_overall=base_overall, overall=overall
+        ),
+        base_overall=int(base_overall),
     )

@@ -100,7 +100,10 @@ def score_to_dict(score) -> dict:
 def score_from_dict(d: dict):
     _AP, DimensionScore, PortfolioMetrics, PortfolioScore = _lazy_types()
     m = _filtered(PortfolioMetrics, d.get("metrics") or {})
-    m["data_quality_notes"] = tuple(m.get("data_quality_notes") or ())  # list → tuple after JSON
+    # JSON turns tuples into lists — restore tuple-typed fields for a faithful
+    # round-trip (frozen-dataclass equality is tuple-sensitive).
+    m["data_quality_notes"] = tuple(m.get("data_quality_notes") or ())
+    m["dropped_tickers"] = tuple(m.get("dropped_tickers") or ())
     metrics = PortfolioMetrics(**m)
     dims = {
         k: DimensionScore(**_filtered(DimensionScore, v))
@@ -112,6 +115,9 @@ def score_from_dict(d: dict):
         risk_target=d.get("risk_target") or {},
         metrics=metrics,
         dimensions=dims,
+        drivers=tuple(d.get("drivers") or ()),
+        reason_codes=tuple(d.get("reason_codes") or ()),
+        base_overall=int(d.get("base_overall", d.get("overall_score", 0))),
     )
 
 
