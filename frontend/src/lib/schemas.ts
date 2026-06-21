@@ -101,6 +101,8 @@ export const portfolioMetricsSchema = z.looseObject({
   data_quality: z.number().nullish(),
   confidence: z.string().nullish(),
   dropped_tickers: z.array(z.string()).nullish(),
+  // Drawdown from peak right now (0 = fresh high). Non-scoring context.
+  current_drawdown: z.number().nullish(),
 });
 export type PortfolioMetrics = z.infer<typeof portfolioMetricsSchema>;
 

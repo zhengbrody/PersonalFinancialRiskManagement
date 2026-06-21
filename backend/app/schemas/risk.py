@@ -335,6 +335,9 @@ class PortfolioMetricsOut(BaseModel):
     data_quality: Optional[float] = None
     confidence: Optional[str] = None
     dropped_tickers: list[str] = Field(default_factory=list)
+    # Drawdown from peak RIGHT NOW (0 = at a fresh high) — non-scoring context so
+    # the UI can flag whether the worst drawdown is stale (recovered) or active.
+    current_drawdown: Optional[float] = None
 
 
 class OptionScorePenaltyRow(BaseModel):
