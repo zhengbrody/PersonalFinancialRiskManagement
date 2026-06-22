@@ -252,6 +252,49 @@ export function useRegimeDetail() {
   });
 }
 
+// ── ML regime classifier (trained risk-state model; CONTEXT only) ─────
+
+export const mlRegimeSchema = z.looseObject({
+  // 4-class risk STATE: risk_on | neutral | volatile | stress.
+  regime: z.string().nullable(),
+  confidence: z.number().nullable(),
+  class_probabilities: z.record(z.string(), z.number()),
+  top_drivers: z.array(
+    z.looseObject({
+      feature: z.string(),
+      label: z.string(),
+      value: z.number(),
+      vs_normal: z.string(),
+      importance: z.number().nullish(),
+    }),
+  ),
+  model_version: z.string().nullish(),
+  trained_at: z.string().nullish(),
+  training_window: z.looseObject({}).nullish(),
+  source: z.string(), // model | heuristic_fallback | unavailable
+  last_updated: z.string().nullish(),
+  data_coverage: z.looseObject({}),
+  current_realized_vol: z.number().nullish(),
+  note: z.string().nullish(),
+});
+export type MlRegime = z.infer<typeof mlRegimeSchema>;
+
+/**
+ * The TRAINED market risk-state model (backend/app/ml). Public, server-cached
+ * ~10 min, fail-soft. Market CONTEXT only — never advice, never part of the
+ * deterministic Health Score.
+ */
+export function useMlRegime() {
+  return useQuery<MlRegime>({
+    queryKey: ["ml", "regime"],
+    queryFn: () =>
+      apiFetch<MlRegime>("/api/v1/ml/regime", {
+        schema: mlRegimeSchema,
+      }),
+    staleTime: 10 * 60 * 1000,
+  });
+}
+
 /** Invalidate the portfolios list so the next render refetches. */
 function invalidatePortfoliosKey(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ["portfolios"] });

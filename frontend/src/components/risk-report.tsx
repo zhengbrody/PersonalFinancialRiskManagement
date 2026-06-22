@@ -20,6 +20,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { HorizontalBarChart, type BarDatum } from "@/components/ui/bar-chart";
 import { DataTable, type Column } from "@/components/ui/data-table";
+import { RegimeContextLine } from "@/components/regime-context";
 import { TickerBadge } from "@/components/ui/ticker-badge";
 import { Kpi } from "@/components/ui/kpi";
 import { RiskDiagnosis } from "@/components/risk-diagnosis";
@@ -109,6 +110,7 @@ export function ReportSections({ report }: { report: RiskReport }) {
         source="risk"
         title="Executive summary"
       />
+      <RegimeContextLine />
       <RiskAlertsCard input={alertsInput} source="risk" />
       <PortfolioValueSummary metrics={report} />
       <KpiGrid report={report} />

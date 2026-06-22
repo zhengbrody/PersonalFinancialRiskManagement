@@ -7,6 +7,10 @@ vi.mock("@/lib/auth-context", () => ({ useAuth: () => authMock() }));
 
 // Heavy live market components fetch on mount — stub to pure markers.
 vi.mock("@/components/market-regime", () => ({ MarketRegime: () => <div data-testid="regime" /> }));
+vi.mock("@/components/regime-context", () => ({
+  RegimeContext: () => <div data-testid="ml-regime" />,
+  RegimeContextLine: () => <div data-testid="ml-regime-line" />,
+}));
 vi.mock("@/components/market-season", () => ({ MarketSeason: () => <div data-testid="season" /> }));
 vi.mock("@/components/market-movers", () => ({ MarketMovers: () => <div data-testid="movers" /> }));
 vi.mock("@/components/market-news", () => ({ MarketNews: () => <div data-testid="news" /> }));
