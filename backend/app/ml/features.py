@@ -40,6 +40,12 @@ FEATURE_NAMES: list[str] = [
 
 CORE_KEYS = ("spy", "vix")  # required; everything else is optional/NaN-tolerant
 
+# The core SPY-derived features whose ~200-day warmup must be present before a
+# row is usable. Single source so training (build_dataset) and serving
+# (latest_feature_row) drop the same warmup rows — adding a core feature here
+# updates both. A row may still have NaN in OPTIONAL columns (the model handles it).
+WARMUP_REQUIRED = ["trend_sma200", "vol_ratio", "drawdown"]
+
 
 def _series(raw: dict, key: str) -> pd.Series | None:
     s = raw.get(key)
@@ -113,9 +119,9 @@ def build_feature_frame(raw: dict[str, pd.Series]) -> pd.DataFrame:
 def latest_feature_row(raw: dict[str, pd.Series]) -> pd.DataFrame:
     """The most recent fully-warmed feature row (1xN), for live inference."""
     frame = build_feature_frame(raw)
-    # The first ~200 rows are NaN (SMA200 warmup) on the CORE trend features;
-    # require those present so we never predict on a half-warmed row.
-    warm = frame.dropna(subset=["trend_sma200", "vol_ratio", "drawdown"])
+    # Require the core warmup features present so we never predict on a
+    # half-warmed row (the first ~200 rows are NaN from the SMA200 warmup).
+    warm = frame.dropna(subset=WARMUP_REQUIRED)
     if warm.empty:
         raise ValueError("no warmed-up feature row (insufficient history)")
     return warm.iloc[[-1]]

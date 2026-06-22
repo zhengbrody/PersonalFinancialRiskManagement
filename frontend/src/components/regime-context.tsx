@@ -52,13 +52,29 @@ function provenance(r: MlRegime): string {
   return `model ${r.model_version ?? "regime"}${r.last_updated ? ` · as of ${r.last_updated}` : ""}`;
 }
 
-export function RegimeContext() {
-  const q = useMlRegime();
-  if (q.isLoading) return <Skeleton className="h-40 w-full rounded-lg" />;
-  const r = q.data;
-  if (!r || !r.regime || r.source === "unavailable") return null; // fail-soft: hide
+// One source of truth for the compliance caveat — it lived in three surfaces
+// with drifting wording. Centralized so the "not advice / not your score"
+// invariant can't be weakened in just one of them.
+const REGIME_CAVEAT =
+  "Risk-state only — not a price forecast, not investment advice, and it does not change your Health Score.";
 
-  const s = STATE[r.regime] ?? STATE.neutral;
+type RegimeView = { r: MlRegime; s: (typeof STATE)[string] };
+
+/** Shared data + fail-soft guard for both surfaces (one hook, one rule). */
+function useRegimeState(): { loading: boolean; view: RegimeView | null } {
+  const q = useMlRegime();
+  const r = q.data;
+  if (!r || !r.regime || r.source === "unavailable") {
+    return { loading: q.isLoading, view: null }; // loading or genuinely hidden
+  }
+  return { loading: false, view: { r, s: STATE[r.regime] ?? STATE.neutral } };
+}
+
+export function RegimeContext() {
+  const { loading, view } = useRegimeState();
+  if (loading) return <Skeleton className="h-40 w-full rounded-lg" />;
+  if (!view) return null; // fail-soft: hide
+  const { r, s } = view;
   const conf = r.confidence != null ? `${Math.round(r.confidence * 100)}%` : null;
 
   return (
@@ -85,7 +101,7 @@ export function RegimeContext() {
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               What the model is weighing
             </p>
-            {r.top_drivers.slice(0, 4).map((d) => (
+            {r.top_drivers.map((d) => (
               <div key={d.feature} className="flex items-center justify-between gap-3 text-sm">
                 <span>{d.label}</span>
                 <span className="text-muted-foreground">{d.vs_normal}</span>
@@ -95,8 +111,7 @@ export function RegimeContext() {
         )}
 
         <p className="border-t border-border/40 pt-2 text-xs text-muted-foreground">
-          Risk-state only — not a price forecast, not investment advice, and it does not change your
-          Health Score. <span className="opacity-70">Source: {provenance(r)}.</span>
+          {REGIME_CAVEAT} <span className="opacity-70">Source: {provenance(r)}.</span>
         </p>
       </CardContent>
     </Card>
@@ -105,17 +120,16 @@ export function RegimeContext() {
 
 /** Compact one-liner for /score + /risk — the same model, as a context chip. */
 export function RegimeContextLine() {
-  const q = useMlRegime();
-  const r = q.data;
-  if (!r || !r.regime || r.source === "unavailable") return null;
-  const s = STATE[r.regime] ?? STATE.neutral;
+  const { view } = useRegimeState();
+  if (!view) return null;
+  const { r, s } = view;
   const conf = r.confidence != null ? ` (${Math.round(r.confidence * 100)}%)` : "";
   return (
-    <p className="flex items-center gap-2 text-sm text-muted-foreground">
-      <span className={`inline-block h-2 w-2 rounded-full ${s.dot}`} />
+    <p className="flex items-start gap-2 text-sm text-muted-foreground">
+      <span className={`mt-1 inline-block h-2 w-2 shrink-0 rounded-full ${s.dot}`} />
       <span>
         Market risk-state: <span className="font-medium text-foreground">{s.label}</span>
-        {conf} — model context, not advice; does not change your score.
+        {conf}. {REGIME_CAVEAT}
       </span>
     </p>
   );

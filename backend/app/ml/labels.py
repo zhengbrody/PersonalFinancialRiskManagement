@@ -42,20 +42,16 @@ def build_labels(prices: pd.Series, *, horizon: int = HORIZON) -> pd.Series:
     # Forward realized vol over (t, t+h]: trailing-h std evaluated at t+h.
     fwd_vol = (daily.rolling(horizon).std() * np.sqrt(TRADING_DAYS)).shift(-horizon)
 
-    out = pd.Series(index=prices.index, dtype="object")
-    for t in prices.index:
-        v = fwd_vol.get(t)
-        if v is None or not np.isfinite(v):
-            out[t] = np.nan
-        elif v < RISK_ON_VOL:
-            out[t] = "risk_on"
-        elif v < NEUTRAL_VOL:
-            out[t] = "neutral"
-        elif v < VOLATILE_VOL:
-            out[t] = "volatile"
-        else:
-            out[t] = "stress"
-    return out
+    # Left-closed bins ([a, b)) so the cutoffs match the `<` thresholds exactly;
+    # CLASSES is calm -> stressed in the same order as the bins.
+    out = pd.cut(
+        fwd_vol,
+        bins=[-np.inf, RISK_ON_VOL, NEUTRAL_VOL, VOLATILE_VOL, np.inf],
+        labels=CLASSES,
+        right=False,
+    ).astype("object")
+    # No-future / non-finite rows -> NaN (dropped before training).
+    return out.where(np.isfinite(fwd_vol))
 
 
 def label_thresholds() -> dict:

@@ -29,7 +29,7 @@ from sklearn.model_selection import TimeSeriesSplit
 
 from . import data as ml_data
 from . import labels as ml_labels
-from .features import FEATURE_NAMES, build_feature_frame
+from .features import FEATURE_NAMES, WARMUP_REQUIRED, build_feature_frame
 
 _log = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ def build_dataset(raw: dict[str, pd.Series]) -> tuple[pd.DataFrame, pd.Series]:
     X = build_feature_frame(raw)
     y = ml_labels.build_labels(raw["spy"])
     df = X.join(y.rename("label"))
-    df = df.dropna(subset=["label", "trend_sma200", "vol_ratio", "drawdown"])
+    df = df.dropna(subset=["label", *WARMUP_REQUIRED])
     return df[FEATURE_NAMES], df["label"].astype(str)
 
 
