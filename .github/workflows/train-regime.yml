@@ -1,0 +1,50 @@
+# Offline retraining of the market-regime classifier.
+#
+# Training NEVER runs on the EC2 box (RAM) or in the request path — it runs here
+# on a GH runner, fetches free market history (yfinance), trains the sklearn
+# model, and commits the refreshed artifact (backend/app/ml/artifacts/). That
+# commit to `main` then triggers build-images, so the next pull-only deploy
+# ships the retrained model automatically.
+#
+# Manual (`workflow_dispatch`) or weekly. NOT on push — so it can't loop on its
+# own artifact commit. A flaky yfinance fetch just fails the run; re-dispatch.
+
+name: Train regime model
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write # to commit the refreshed artifact
+
+concurrency:
+  group: train-regime
+  cancel-in-progress: false
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: |
+          pip install -r requirements.txt
+          pip install -r backend/requirements-backend.txt
+      - name: Train + write artifact
+        run: python -m backend.app.ml.train
+      - name: Commit artifact if changed
+        run: |
+          git config user.name "regime-train-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add backend/app/ml/artifacts/regime_model.joblib backend/app/ml/artifacts/regime_meta.json
+          if git diff --cached --quiet; then
+            echo "No artifact change — skipping commit."
+          else
+            git commit -m "chore(ml): retrain regime model [skip ci]"
+            git push origin HEAD:main
+          fi

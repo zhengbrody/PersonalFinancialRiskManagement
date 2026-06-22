@@ -1,0 +1,165 @@
+{
+  "model_version": "regime-v1",
+  "trained_at": "2026-06-22T19:27:01.142531+00:00",
+  "sklearn_version": "1.8.0",
+  "estimator": "HistGradientBoostingClassifier",
+  "feature_names": [
+    "trend_sma200",
+    "trend_sma50",
+    "golden_cross",
+    "mom_20d",
+    "mom_60d",
+    "vol_21d",
+    "vol_63d",
+    "vol_ratio",
+    "drawdown",
+    "vix_level",
+    "vix_change_5d",
+    "vix_term",
+    "qqq_trend",
+    "qqq_spy_spread",
+    "yield_slope"
+  ],
+  "classes": [
+    "risk_on",
+    "neutral",
+    "volatile",
+    "stress"
+  ],
+  "label_thresholds": {
+    "horizon": 10,
+    "basis": "absolute_forward_realized_vol_annualized",
+    "risk_on_vol": 0.12,
+    "neutral_vol": 0.18,
+    "volatile_vol": 0.28,
+    "classes": [
+      "risk_on",
+      "neutral",
+      "volatile",
+      "stress"
+    ]
+  },
+  "training_window": {
+    "start": "2012-05-29",
+    "end": "2026-06-05",
+    "rows": 3526
+  },
+  "class_distribution": {
+    "risk_on": 1860,
+    "neutral": 927,
+    "volatile": 558,
+    "stress": 181
+  },
+  "metrics": {
+    "cv_macro_f1_mean": 0.3109,
+    "cv_accuracy_mean": 0.4835,
+    "holdout_accuracy": 0.5482,
+    "holdout_macro_f1": 0.4006,
+    "elevated_risk_auc": 0.7835,
+    "baseline_majority_class": "risk_on",
+    "baseline_accuracy": 0.5057,
+    "per_class": {
+      "risk_on": {
+        "precision": 0.602,
+        "recall": 0.849,
+        "f1-score": 0.705
+      },
+      "neutral": {
+        "precision": 0.505,
+        "recall": 0.201,
+        "f1-score": 0.287
+      },
+      "volatile": {
+        "precision": 0.333,
+        "recall": 0.373,
+        "f1-score": 0.352
+      },
+      "stress": {
+        "precision": 0.25,
+        "recall": 0.267,
+        "f1-score": 0.258
+      }
+    },
+    "confusion_matrix": [
+      [
+        303,
+        35,
+        17,
+        2
+      ],
+      [
+        173,
+        52,
+        32,
+        2
+      ],
+      [
+        27,
+        12,
+        28,
+        8
+      ],
+      [
+        0,
+        4,
+        7,
+        4
+      ]
+    ],
+    "confusion_labels": [
+      "risk_on",
+      "neutral",
+      "volatile",
+      "stress"
+    ],
+    "holdout_size": 706
+  },
+  "feature_importances": {
+    "vol_63d": 0.17927,
+    "vix_level": 0.16955,
+    "golden_cross": 0.09726,
+    "yield_slope": 0.08338,
+    "vol_ratio": 0.07663,
+    "mom_60d": 0.06555,
+    "vol_21d": 0.06411,
+    "drawdown": 0.05079,
+    "qqq_trend": 0.04843,
+    "trend_sma50": 0.03506,
+    "qqq_spy_spread": 0.03239,
+    "vix_term": 0.03103,
+    "vix_change_5d": 0.026,
+    "mom_20d": 0.02482,
+    "trend_sma200": 0.02328
+  },
+  "feature_medians": {
+    "trend_sma200": 0.065962,
+    "trend_sma50": 0.019627,
+    "golden_cross": 0.046881,
+    "mom_20d": 0.016795,
+    "mom_60d": 0.040727,
+    "vol_21d": 0.119055,
+    "vol_63d": 0.124918,
+    "vol_ratio": 0.81312,
+    "drawdown": -0.014231,
+    "vix_level": 16.07,
+    "vix_change_5d": -0.18,
+    "vix_term": 0.881816,
+    "qqq_trend": 0.084821,
+    "qqq_spy_spread": 0.00409,
+    "yield_slope": 1.158
+  },
+  "data_coverage": {
+    "sources_present": [
+      "irx",
+      "qqq",
+      "spy",
+      "tnx",
+      "vix",
+      "vix3m"
+    ],
+    "sources_missing": [],
+    "spy_start": "2011-05-27",
+    "spy_end": "2026-06-22",
+    "observations": 3788
+  }
+}

@@ -28,6 +28,7 @@ from .api.v1 import (
     institutions,
     macro,
     market,
+    ml,
     options,
     portfolios,
     quant,
@@ -175,6 +176,7 @@ def create_app() -> FastAPI:
     app.include_router(institutions.router)
     app.include_router(feedback.router)
     app.include_router(data.router)
+    app.include_router(ml.router)
 
     # Envelope-aware exception handlers. Order matters: register the
     # narrower types first so FastAPI's resolver picks them over the

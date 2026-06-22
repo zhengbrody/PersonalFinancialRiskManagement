@@ -46,3 +46,13 @@ sentry-sdk[fastapi]>=2.0,<3
 # in providers/fmp_provider._yf_earnings silently fail-softs to empty. The rest
 # of yfinance (price/.info JSON) does NOT need lxml — only the earnings scrape.
 lxml>=5,<7
+
+# ML regime classifier (backend/app/ml/). scikit-learn ONLY — NOT xgboost/
+# lightgbm (their ~90MB import would crowd the 916MB box; sklearn is ~25MB and
+# inference is sub-ms). Training is OFFLINE (CI / local), never in the request
+# path. The version is PINNED to the minor the model artifact is trained on: a
+# joblib/pickle sklearn model is not guaranteed to load across minor versions,
+# so the image MUST match the trainer (the artifact's regime_meta.json records
+# the exact sklearn_version, and the loader warns on mismatch).
+scikit-learn>=1.8,<1.9
+joblib>=1.4,<2
