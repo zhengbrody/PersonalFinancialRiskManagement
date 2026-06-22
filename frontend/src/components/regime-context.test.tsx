@@ -57,7 +57,7 @@ describe("RegimeContextLine", () => {
     mockUse.mockReturnValue({ isLoading: false, data: regime({ regime: "stress", confidence: 0.6 }) });
     render(<RegimeContextLine />);
     expect(screen.getByText("Stressed")).toBeInTheDocument();
-    expect(screen.getByText(/does not change your score/i)).toBeInTheDocument();
+    expect(screen.getByText(/does not change your Health Score/i)).toBeInTheDocument();
   });
 
   it("hides when unavailable", () => {

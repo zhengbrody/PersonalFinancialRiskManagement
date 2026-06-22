@@ -81,10 +81,6 @@ def reset() -> None:
     _model, _meta, _load_failed = None, None, False
 
 
-def meta() -> Optional[dict]:
-    return _meta if _load() else None
-
-
 def is_available() -> bool:
     return _load()
 

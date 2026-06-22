@@ -48,20 +48,32 @@ def _bucket_vol(vol: float) -> str:
     return "stress"
 
 
+def _base() -> dict:
+    """The shared envelope keys for every tier — keeps the three producers (model
+    path, heuristic, unavailable) key-aligned with MLRegimeOut so a future field
+    can't drift out of one of them."""
+    return {
+        "regime": None,
+        "confidence": None,
+        "class_probabilities": {},
+        "top_drivers": [],
+        "model_version": None,
+        "trained_at": None,
+        "training_window": None,
+        "last_updated": None,
+        "data_coverage": {},
+    }
+
+
 def _heuristic_fallback(raw: dict, coverage: dict) -> dict:
     spy = raw["spy"]
     daily = spy.pct_change()
     cur_vol = float(daily.tail(21).std() * math.sqrt(252)) if len(daily) > 21 else float("nan")
-    regime = _bucket_vol(cur_vol) if np.isfinite(cur_vol) else None
+    finite = np.isfinite(cur_vol)
     return {
-        "regime": regime,
-        "confidence": None,
-        "class_probabilities": {},
-        "top_drivers": [],
-        "current_realized_vol": round(cur_vol, 4) if np.isfinite(cur_vol) else None,
-        "model_version": None,
-        "trained_at": None,
-        "training_window": None,
+        **_base(),
+        "regime": _bucket_vol(cur_vol) if finite else None,
+        "current_realized_vol": round(cur_vol, 4) if finite else None,
         "source": "heuristic_fallback",
         "last_updated": coverage.get("spy_end"),
         "data_coverage": coverage,
@@ -71,16 +83,8 @@ def _heuristic_fallback(raw: dict, coverage: dict) -> dict:
 
 def _unavailable() -> dict:
     return {
-        "regime": None,
-        "confidence": None,
-        "class_probabilities": {},
-        "top_drivers": [],
-        "model_version": None,
-        "trained_at": None,
-        "training_window": None,
+        **_base(),
         "source": "unavailable",
-        "last_updated": None,
-        "data_coverage": {},
         "note": "Market data temporarily unavailable.",
     }
 
@@ -99,7 +103,11 @@ def get_regime(
             return hit[1]
 
     try:
-        raw = ml_data.fetch_history(years=2.5, fetcher=fetcher)
+        # ~1.75y is enough to warm the longest feature window (SMA200 + the 252d
+        # vol/drawdown rollups) with margin; we only predict on the latest row, so
+        # fetching more is wasted bytes on the cold-cache request. (Training uses
+        # the full 15y.)
+        raw = ml_data.fetch_history(years=1.75, fetcher=fetcher)
         coverage = ml_data.data_coverage(raw)
     except Exception as exc:  # noqa: BLE001 - data down
         _log.warning("ml_regime.data_unavailable err=%s", type(exc).__name__)
