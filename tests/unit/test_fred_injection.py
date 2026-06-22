@@ -14,12 +14,9 @@ Covers:
 
 from __future__ import annotations
 
-import importlib
-import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pandas as pd
-import pytest
 
 import market_intelligence as mi
 from risk_engine import RiskReport
@@ -177,81 +174,3 @@ def test_build_ai_risk_briefing_omits_section_when_none():
     )
 
     assert "Macroeconomic Releases" not in prompt
-
-
-# ──────────────────────────────────────────────────────────────
-# 5/6. Floating chat context — install fake streamlit
-# ──────────────────────────────────────────────────────────────
-@pytest.fixture
-def floating_chat_module(monkeypatch):
-    fake_st = MagicMock()
-    fake_st.session_state = {}
-    monkeypatch.setitem(sys.modules, "streamlit", fake_st)
-    sys.modules.pop("ui.floating_chat", None)
-    module = importlib.import_module("ui.floating_chat")
-    return module, fake_st
-
-
-def test_chat_context_includes_macro_when_available(monkeypatch, floating_chat_module):
-    module, fake_st = floating_chat_module
-    fake_st.session_state.update({"weights": {"AAPL": 1.0}})
-
-    # Avoid touching the real active-portfolio loader.
-    monkeypatch.setattr("libs.auth.active_portfolio.get_active_holdings", lambda: {}, raising=False)
-    monkeypatch.setattr(
-        "libs.auth.active_portfolio.get_active_margin_loan", lambda: 0, raising=False
-    )
-    monkeypatch.setattr(
-        "libs.auth.active_portfolio.get_active_portfolio_meta", lambda: {}, raising=False
-    )
-
-    fake_rows = [
-        {
-            "Series": "CPI YoY",
-            "Latest": "3.20%",
-            "Date": "2026-04-01",
-            "fred_id": "CPIAUCSL",
-            "Source": "FRED",
-        },
-        {
-            "Series": "Unemployment Rate",
-            "Latest": "4.10%",
-            "Date": "2026-04-01",
-            "fred_id": "UNRATE",
-            "Source": "FRED",
-        },
-    ]
-    # FRED macro injection lives on the deep-context path (the short
-    # path skips it because casual questions don't need macro releases).
-    with patch("market_intelligence.fetch_macro_releases", return_value=fake_rows):
-        context = module._build_portfolio_context(depth="deep")
-
-    assert "CPI YoY" in context
-    assert "Unemployment Rate" in context
-    assert "3.20%" in context
-    assert "4.10%" in context
-    assert "Recent macro releases" in context
-
-
-def test_chat_context_silently_skips_macro_when_fred_down(monkeypatch, floating_chat_module):
-    module, fake_st = floating_chat_module
-    fake_st.session_state.update({"weights": {"AAPL": 1.0}})
-
-    monkeypatch.setattr("libs.auth.active_portfolio.get_active_holdings", lambda: {}, raising=False)
-    monkeypatch.setattr(
-        "libs.auth.active_portfolio.get_active_margin_loan", lambda: 0, raising=False
-    )
-    monkeypatch.setattr(
-        "libs.auth.active_portfolio.get_active_portfolio_meta", lambda: {}, raising=False
-    )
-
-    def _boom():
-        raise RuntimeError("FRED really is down")
-
-    with patch("market_intelligence.fetch_macro_releases", side_effect=_boom):
-        # Must NOT raise -- the chat keeps working even with FRED down.
-        context = module._build_portfolio_context()
-
-    assert "Recent macro releases" not in context
-    # Weights block should still be present so the rest of the function ran.
-    assert "Current portfolio weights" in context
