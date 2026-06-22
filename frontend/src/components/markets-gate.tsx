@@ -11,6 +11,7 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { MarketRegime } from "@/components/market-regime";
+import { RegimeContext } from "@/components/regime-context";
 import { MarketSeason } from "@/components/market-season";
 import { MarketMovers } from "@/components/market-movers";
 import { MarketNews } from "@/components/market-news";
@@ -48,6 +49,7 @@ function MarketsView() {
       </header>
 
       <MarketRegime />
+      <RegimeContext />
       <MarketSeason />
       <MarketMovers />
       <PortfolioSentiment />

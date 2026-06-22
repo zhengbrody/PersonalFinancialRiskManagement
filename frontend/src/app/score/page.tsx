@@ -30,6 +30,7 @@ import {
   ConfidenceBadge,
   ReasonCodes,
 } from "@/components/score-change-report";
+import { RegimeContextLine } from "@/components/regime-context";
 import { track } from "@/lib/analytics";
 import { ApiError, apiFetch, isNoPortfolioError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -389,6 +390,7 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
             baseOverall={result.base_overall}
             overall={result.overall_score}
           />
+          <RegimeContextLine />
         </CardContent>
       </Card>
 
