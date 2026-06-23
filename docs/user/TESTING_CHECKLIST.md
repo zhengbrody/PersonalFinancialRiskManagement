@@ -1,5 +1,10 @@
 # 🧪 MindMarket AI - 功能测试清单
 
+> **HISTORICAL (2026-06-23).** Manual-test checklist for the original Streamlit
+> app, retired on 2026-06-23. The split stack is verified by the automated gates
+> (`pytest backend/tests` + root `pytest` + `npm test` + Playwright E2E). Kept
+> for reference only.
+
 完成sidebar修复后，使用此清单验证所有功能是否正常工作。
 
 ---

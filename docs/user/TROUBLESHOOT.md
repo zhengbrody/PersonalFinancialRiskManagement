@@ -1,5 +1,9 @@
 # Sidebar不显示 - 故障排查指南
 
+> **HISTORICAL (2026-06-23).** Troubleshooting for the original Streamlit app
+> (sidebar / session-state / `st.*` issues), retired on 2026-06-23. None of it
+> applies to the Next.js + FastAPI split stack. Kept for reference only.
+
 ## 当前情况
 - ✅ 代码检查通过（sidebar代码存在且正确）
 - ✅ initial_sidebar_state="expanded" 已设置

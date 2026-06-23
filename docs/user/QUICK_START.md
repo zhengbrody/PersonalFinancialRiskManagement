@@ -1,5 +1,10 @@
 # MindMarket AI - Quick Start After Updates
 
+> **HISTORICAL (2026-06-23).** This guide targets the original Streamlit app
+> (`streamlit run app.py`), which was fully retired on 2026-06-23. The live
+> product is the Next.js + FastAPI split stack at https://mindmarket.app; for
+> local dev see `frontend/` and `backend/` READMEs. Kept for reference only.
+
 ## 🎯 What Changed?
 
 ### ✅ Fixed Critical Bug
