@@ -48,6 +48,11 @@ services:
       - SUPABASE_URL=${SUPABASE_URL:-}
       - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-}
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
+      # SUPABASE_SERVICE_KEY is the service-role key: server-only, used by
+      # trusted owner/admin paths for platform-wide usage/cost visibility, and
+      # must never be rendered in the UI. (It used to live on the retired
+      # Streamlit `app`; the backend is its sole consumer now — guarded by
+      # tests/unit/test_deploy_config.py.)
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
       - FMP_API_KEY=${FMP_API_KEY:-}
       # Massive Stocks (Basic) — OPTIONAL fallback market price/history source.
