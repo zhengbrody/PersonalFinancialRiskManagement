@@ -20,7 +20,17 @@ Env vars read (or st.secrets fallback):
 """
 
 from .client import AuthError, get_supabase
-from .guards import require_auth_page
+
+try:
+    # guards.py is Streamlit-only (the @require_auth_page page decorator). The
+    # Streamlit app was removed, so this package-level re-export now has no
+    # importers — but a legacy unit test still imports guards directly. Guard the
+    # re-export so `import libs.auth.<submodule>` (the backend's path into auth)
+    # no longer drags Streamlit into the backend/prod image, while a
+    # Streamlit-present env (dev/test extras) keeps the real symbol.
+    from .guards import require_auth_page
+except ModuleNotFoundError:  # streamlit not installed (backend/prod)
+    require_auth_page = None  # type: ignore[assignment]
 from .session import (
     complete_oauth_with_code,
     current_user,

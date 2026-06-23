@@ -12,3 +12,10 @@ pre-commit>=3.6.0
 # 类型桩
 types-requests
 pandas-stubs
+
+# Legacy Streamlit libs/ — kept OUT of the prod requirements.txt (the backend
+# image no longer ships Streamlit) but still needed to run the legacy tests/
+# suite, which exercises the Streamlit-coupled libs/auth + libs/analysis modules.
+streamlit>=1.55,<2
+extra-streamlit-components>=0.1.71
+fpdf2>=2.7
