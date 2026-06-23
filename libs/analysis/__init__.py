@@ -1,15 +1,17 @@
 """Single-name equity analysis pipeline — Wall Street-grade dossier
-plus LLM analyst + multi-page PDF report.
+plus LLM analyst.
 
 Modules
 -------
 - :mod:`equity_research` — dossier assembly + LLM analyst + Pydantic
   ``DeepAnalysis`` output. Pure logic, no Streamlit.
-- :mod:`equity_pdf` — institutional report builder backed by fpdf2;
-  returns PDF bytes for the Streamlit download button.
+- :mod:`portfolio_research` — portfolio-level deep-analysis skeleton.
 
-Both are used from ``pages/10_Ticker_Research.py`` but live here so
-they're easy to unit-test against synthetic data.
+Consumed by the FastAPI backend (``backend/app/services/research_*``); they
+live here so they're easy to unit-test against synthetic data. (The old
+fpdf2-backed ``equity_pdf`` PDF builder was removed 2026-06-23 with the
+Streamlit retirement — the split stack renders reports via
+``backend/app/services/report_html.py`` instead.)
 """
 
 from .equity_research import (

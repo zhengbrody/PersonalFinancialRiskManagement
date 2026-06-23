@@ -125,7 +125,6 @@ flowchart TD
 | --- | --- |
 | `/` | Next.js frontend |
 | `/api/v1/*` | FastAPI backend |
-| `/legacy/*` | Legacy Streamlit app, retained as a rollback surface |
 | `/mcp` / stdio | MCP tools for AI clients |
 
 The production deployment uses Docker Compose, Caddy, GitHub Actions, and GHCR
@@ -162,9 +161,9 @@ small EC2 instance never runs a memory-heavy `next build`.
 ├── supabase/              # Database migrations and edge functions
 ├── docs/                  # ADRs, AWS runbooks, SEO notes, legal docs
 ├── infra/                 # Historical AWS CDK experiments and runbooks
-├── pages/, app.py, ui/    # Legacy Streamlit surface retained under /legacy
-├── compose.split.yml      # Production split-stack compose file
-├── Caddyfile.split        # Production routing
+├── compose.split.yml      # Backend + frontend (GHCR images)
+├── compose.aws.yml        # Caddy reverse proxy / TLS terminator
+├── Caddyfile              # Production routing (mounted into Caddy)
 └── .github/workflows/     # CI and GHCR image builds
 ```
 
@@ -333,14 +332,10 @@ npx tsc --noEmit
 npm run build
 ```
 
-### Legacy Streamlit
-
-```bash
-streamlit run app.py
-```
-
-Legacy Streamlit is kept for rollback and historical workflows. New product
-development should target `frontend/` and `backend/`.
+> The original Streamlit app was fully retired on 2026-06-23 — its UI code,
+> the backend's dependency on Streamlit, and the running `/legacy` container
+> are all gone. Product work happens in `frontend/` and `backend/`. The old
+> Streamlit surface is recoverable from git history if ever needed.
 
 ---
 
@@ -366,7 +361,7 @@ Production deploys are pull-only on EC2:
 2. GitHub Actions builds frontend/backend images on hosted runners.
 3. Images are pushed to GHCR.
 4. EC2 pulls images and recreates the relevant containers.
-5. Caddy routes `/`, `/api/v1/*`, and `/legacy/*`.
+5. Caddy routes `/` to the frontend and `/api/v1/*` to the backend.
 
 Key files:
 

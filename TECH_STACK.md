@@ -13,31 +13,30 @@ AI portfolio Copilot — all behind a strict "the LLM never invents a number"
 deterministic-engine boundary.
 
 The platform runs on a **split stack**: a Next.js + TypeScript frontend (the primary
-UI) talking to a FastAPI + Pydantic backend, with the original Streamlit app preserved
-as a legacy/advanced workbench.
+UI) talking to a FastAPI + Pydantic backend. It began as a Streamlit app, which was
+**fully retired in 2026-06** once every surface had been ported to the split stack.
 
-**Scale**: ~430 backend tests + ~230 frontend tests + ~990 legacy-engine tests | 10+
-external API integrations | 16 FastAPI endpoints (envelope-shaped) | English-only UI
+**Scale**: ~570 backend tests + ~265 frontend tests + ~850 legacy-engine tests | 10+
+external API integrations | envelope-shaped `{data, error, meta}` API | English-only UI
 
 ---
 
 ## 0. Architecture — Split Stack (Next.js + FastAPI)
 
 The product was migrated from a Streamlit-only app to a split stack in 2026-05;
-production traffic is served by the Next.js frontend. Streamlit is preserved at
-`/legacy/*` as the advanced workbench and rollback target.
+production traffic is served by the Next.js frontend. The legacy Streamlit app was
+**fully retired on 2026-06-23** — its UI code, the backend's dependency on Streamlit,
+and the running `/legacy` container were all removed (recoverable from git history).
 
 ```
 internet → Cloudflare → Caddy :80/443 ─┬─► /          → Next.js   :3000   (primary UI)
-                                        ├─► /api/v1/*  → FastAPI   :8000   (API)
-                                        └─► /legacy/*  → Streamlit :8501   (legacy/workbench)
+                                        └─► /api/v1/*  → FastAPI   :8000   (API)
 ```
 
 | Tier | Technology | Role |
 |------|-----------|------|
 | **Frontend (primary)** | Next.js 14 (App Router) + TypeScript + Tailwind + shadcn-style primitives + Recharts | The live UI at mindmarket.app — standalone output, SSR/SEO, market-synced theme |
-| **Backend (API)** | FastAPI (Python 3.12) + Pydantic v2 | 16 endpoints, all envelope-shaped `{data, error, meta}`; reuses the quant engine verbatim |
-| **Legacy** | Streamlit 1.55 (Python) | Preserved at `/legacy/*` only — advanced workbench + rollback target, **not** the main UI |
+| **Backend (API)** | FastAPI (Python 3.12) + Pydantic v2 | Envelope-shaped `{data, error, meta}` endpoints; reuses the quant engine verbatim |
 | **MCP server** | Anthropic MCP (stdio) | 10 tools exposing scoring / market / research / portfolio-risk to Claude |
 
 **Trust-boundary layering** (the LLM-never-invents-a-number rule):
@@ -141,7 +140,7 @@ internet → Cloudflare → Caddy :80/443 ─┬─► /          → Next.js   
 | **Data Sources** | Yahoo Finance (yfinance — bulk workhorse), Financial Modeling Prep (FMP — fundamentals/analyst/peers), Massive (Polygon-style EOD/history fallback), FRED + US Treasury (macro), SEC EDGAR (13F / Form-4), CNN Fear & Greed, RSS feeds |
 | **Provider strategy** | Smart hybrid: yfinance for bulk prices; FMP primary for fundamentals; Massive fallback fills gaps; each domain uses its strongest source, with provenance shown everywhere |
 | **Data Pipeline** | Per-ticker error isolation, multi-point data-quality validation; everything fail-soft (a provider blip degrades to a fallback, never a 5xx) |
-| **Caching** | In-process TTL caches per domain (price / history / fundamentals / macro); legacy pickle cache for the Streamlit path |
+| **Caching** | In-process TTL caches per domain (price / history / fundamentals / macro) |
 | **Data Validation** | Min data points, missing-rate, negative-price, extreme-return and suspension detection; finite-guards on all serialized numbers |
 | **Data Cleaning** | Forward-fill, interpolation for small gaps, winsorization (1st-99th percentile) |
 
@@ -149,11 +148,10 @@ internet → Cloudflare → Caddy :80/443 ─┬─► /          → Next.js   
 
 ## 6. Data Visualization
 
-- **Frontend (Recharts)**: equity-curve / drawdown time-series, risk-driver & factor
+- **Recharts**: equity-curve / drawdown time-series, risk-driver & factor
   bar charts, allocation donut, KPI sparklines, options payoff curves, scenario sweeps,
   efficient-frontier scatter, VaR histogram — all theme-aware (CSS variables, light+dark).
-- **Legacy (Plotly)**: Monte Carlo VaR histograms, correlation heatmaps, component-VaR
-  bars, scenario waterfalls in the Streamlit workbench.
+  (Plotly charts lived in the old Streamlit workbench, retired 2026-06-23.)
 
 ---
 
@@ -162,7 +160,6 @@ internet → Cloudflare → Caddy :80/443 ─┬─► /          → Next.js   
 | Tool | Usage |
 |------|-------|
 | **Self-contained HTML reports** | Backend renders portfolio / ticker / options reports as one printable HTML doc (inline CSS + `@media print`, server-generated inline SVG payoff, every field HTML-escaped) → browser Save-as-PDF |
-| **FPDF2 / openpyxl / Kaleido** (legacy) | Multi-page PDF risk report + multi-sheet Excel export in the Streamlit workbench |
 
 ---
 
@@ -187,7 +184,7 @@ internet → Cloudflare → Caddy :80/443 ─┬─► /          → Next.js   
 | Component | Detail |
 |-----------|--------|
 | **Docker** | Separate `frontend/Dockerfile` (Next.js standalone) + `backend/Dockerfile` (Python 3.12) |
-| **docker-compose** | `compose.split.yml` orchestrates Streamlit + FastAPI + Next.js + Caddy (the live production stack) |
+| **docker-compose** | `compose.split.yml` (backend + frontend, GHCR images) + `compose.aws.yml` (Caddy / TLS) orchestrate the live production stack |
 | **GitHub Actions CI/CD** | Builds frontend + backend images on GH runners → pushes to **GHCR** (`ghcr.io/zhengbrody/mindmarket-{frontend,backend}`); runs pytest / vitest / black / ruff / tsc / eslint |
 | **Pull-only deploys** | EC2 pulls prebuilt images from GHCR (never builds on-box — the t3.micro is RAM-bound); zero-build, fast rollback |
 | **Cloudflare** | DNS + CDN + edge WAF/rate-limiting in front of EC2; origin IP hidden, AWS SG locked to Cloudflare IP ranges |
@@ -276,7 +273,7 @@ internet → Cloudflare → Caddy :80/443 ─┬─► /          → Next.js   
 
 ## Key Technical Highlights
 
-1. **Split-stack migration**: Streamlit-only → Next.js (TS) + FastAPI (Python 3.12), live in production.
+1. **Split-stack migration**: Streamlit-only → Next.js (TS) + FastAPI (Python 3.12), live in production (Streamlit fully retired 2026-06 after every surface was ported).
 2. **Quantitative Finance**: VaR, Monte Carlo, EWMA, Markowitz optimization, multi-factor models, options Greeks, regime detection.
 3. **AI with a hard truth boundary**: the LLM never invents a number — it rephrases deterministic engine output, with grounded attribution and per-call telemetry.
 4. **Data engineering**: multi-source smart-hybrid ETL with provenance, fail-soft adapters, per-domain caching.

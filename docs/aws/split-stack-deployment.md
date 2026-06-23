@@ -1,4 +1,11 @@
-# Split-Stack Deployment (Caddy + Next.js + FastAPI + Streamlit)
+# Split-Stack Deployment (Caddy + Next.js + FastAPI)
+
+> **HISTORICAL — kept for reference.** This is the original 2026-05 split-stack
+> migration design. Production was cut over to the Next.js + FastAPI split stack
+> in 2026-05, and the legacy **Streamlit tier was fully retired on 2026-06-23**
+> (UI code, the backend's dependency on Streamlit, and the running `/legacy`
+> container were all removed). The design-time "Not cut over" status below is no
+> longer accurate — see CLAUDE.md §0 / §1B for the current topology.
 
 > **Status:** Design + artifacts ready. **Not cut over to production.**
 > Production cutover requires explicit operator approval ("approve
