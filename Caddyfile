@@ -1,20 +1,19 @@
 # Caddyfile — CANONICAL live split-stack routing.
 #
 #   /api/v1/*   → backend  :8000   (FastAPI)
-#   /_stcore/*  → app      :8501   (legacy Streamlit session keep-alive)
-#   /legacy/*   → app      :8501   (legacy Streamlit workbench)
 #   /           → frontend :3000   (Next.js)
 #
 # WHY this IS the canonical Caddyfile (not Caddyfile.split):
 # `mindmarket.service` runs `git reset --hard origin/main` on every boot,
 # wiping any local edit to this mounted file. So the split routing MUST
-# live in git's `Caddyfile` — else a reboot reverts the whole site to the
-# old Streamlit-only routing (2026-05-31 incident). The legacy container
-# is service-named `app` (compose.aws.yml, which systemd brings up), hence
-# `app:8501` not `streamlit:8501`. Pre-split rollback content lives in git
-# history + EC2 Caddyfile.live.bak.
-# TODO(B): once systemd moves to compose.split.yml + GHCR pulls, retarget
-# the legacy routes to the `streamlit` service and drop this divergence.
+# live in git's `Caddyfile` — else a reboot reverts the routing (the
+# 2026-05-31 incident). Pre-split rollback content lives in git history.
+#
+# The legacy Streamlit workbench (/legacy/*, /_stcore/*) was RETIRED 2026-06-23:
+# the `app` Streamlit container is gone, the backend no longer depends on
+# Streamlit (requirements split), and those routes were removed. Any /legacy/*
+# request now falls through to the Next.js catch-all (404). To bring Streamlit
+# back, restore the routes + the `app` service from git history.
 
 {$SITE_HOST}, www.{$SITE_HOST} {
 	# gzip compressible responses. NOTE: a prior attempt to exclude SSE via
@@ -130,48 +129,6 @@
 	# (a few minutes) are more than enough.
 	handle /api/v1/* {
 		reverse_proxy backend:8000
-	}
-
-	# ── /legacy/* → Streamlit ──────────────────────────────────────
-	# Strip the `/legacy` prefix on the way to Streamlit so internal
-	# routing inside Streamlit stays unchanged. WebSocket + SSE
-	# timeout matches the original Caddyfile.
-	handle_path /legacy/* {
-		reverse_proxy app:8501 {
-			transport http {
-				read_timeout 300s
-				write_timeout 300s
-			}
-		}
-	}
-
-	# Bare `/legacy` (no trailing slash) → keep it sticky to Streamlit
-	# so old bookmarks keep working without a redirect dance.
-	handle /legacy {
-		redir /legacy/ permanent
-	}
-
-	# ── /_stcore/* → Streamlit session keep-alive ─────────────────
-	# Streamlit's WebSocket + session endpoints live at the ROOT path
-	# (`/_stcore/stream`, `/_stcore/health`, `/_stcore/host-config`,
-	# …), NOT under `/legacy/`. Before cutover `/` → Streamlit caught
-	# these for free; now `/` → Next.js, so without this route an
-	# active legacy session's WebSocket falls through to the frontend
-	# catch-all and the page silently goes stale. Long timeouts mirror
-	# the /legacy/* route.
-	#
-	# NOTE: on EC2 the live legacy container is service-named `app`
-	# (it still runs from compose.aws.yml), so the deployed copy of
-	# this file targets `app:8501`. In git we target `app:8501`
-	# — the service name compose.split.yml actually defines. Keep both
-	# in sync if the legacy container is ever renamed.
-	handle /_stcore/* {
-		reverse_proxy app:8501 {
-			transport http {
-				read_timeout 300s
-				write_timeout 300s
-			}
-		}
 	}
 
 	# ── / → Next.js frontend (default route) ──────────────────────

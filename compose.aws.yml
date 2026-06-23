@@ -1,61 +1,19 @@
 # compose.aws.yml
 #
-# Production-ish docker compose used on the EC2 instance (NOT for local dev —
-# local dev keeps the original docker-compose.yml).
+# Caddy-only reverse proxy for the EC2 split stack. The legacy Streamlit `app`
+# service was RETIRED 2026-06-23 (see CLAUDE.md §1B): the backend no longer
+# depends on Streamlit, the /legacy routes were dropped from ./Caddyfile, and
+# the `app` container was removed. This file used to define `app` + `caddy`;
+# now it is just the TLS terminator / reverse proxy that fronts the GHCR-pulled
+# backend + frontend defined in compose.split.yml.
 #
-# Differences from local:
-#   - Caddy sidecar terminates TLS via Let's Encrypt (HTTP-01 challenge)
-#     and reverse-proxies app:8501 → public 443. SITE_HOST is set per-deploy
-#     to <eip>.nip.io so we get a real cert without owning a domain.
-#   - awslogs log driver ships container stdout to CloudWatch Log groups
-#     /mindmarket/app and /mindmarket/caddy. Lets us debug the app from the
-#     CW console without SSHing in.
-#   - app no longer publishes :8501 to the host; only Caddy reaches it via
-#     the docker network. Defense in depth.
-#   - Healthchecks so docker compose ps shows real status.
+#   - Caddy terminates TLS via Let's Encrypt (HTTP-01) and reverse-proxies
+#     /api/v1/* → backend:8000 and / → frontend:3000 (see ./Caddyfile).
+#   - awslogs ships caddy stdout to the /mindmarket/caddy CloudWatch group.
+#   - systemd (mindmarket.service) brings this up with `--no-build` on boot,
+#     after the split backend+frontend. NEVER build on the box (916MB → OOM).
 
 services:
-  app:
-    build: .
-    expose:
-      - "8501"
-    environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-}
-      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
-      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-}
-      - FMP_API_KEY=${FMP_API_KEY:-}
-      - MINDMARKET_OWNER_EMAIL=${MINDMARKET_OWNER_EMAIL:-}
-      - MINDMARKET_OWNER_EMAILS=${MINDMARKET_OWNER_EMAILS:-}
-      - MINDMARKET_APP_URL=${MINDMARKET_APP_URL:-}
-      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
-      - STRIPE_BASIC_PRICE_ID=${STRIPE_BASIC_PRICE_ID:-}
-      - STRIPE_PRO_PRICE_ID=${STRIPE_PRO_PRICE_ID:-}
-      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
-      # Supabase Auth + per-user portfolios. The anon key is safe to expose
-      # because RLS enforces tenant isolation. The service-role key is still
-      # server-only; it is used by trusted owner/admin paths for platform-wide
-      # usage/cost visibility and must never be rendered in the UI.
-      - SUPABASE_URL=${SUPABASE_URL:-}
-      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
-      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
-    # python:3.10-slim doesn't include curl; use urllib (always present).
-    healthcheck:
-      test: ["CMD", "python", "-c",
-             "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health').read()"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    logging:
-      driver: awslogs
-      options:
-        awslogs-region: us-east-1
-        awslogs-group: /mindmarket/app
-        awslogs-stream: streamlit
-        awslogs-create-group: "true"
-    restart: unless-stopped
-
   caddy:
     image: caddy:2-alpine
     ports:
@@ -69,9 +27,6 @@ services:
       - ./assets/seo:/srv/seo:ro
       - caddy_data:/data
       - caddy_config:/config
-    depends_on:
-      app:
-        condition: service_healthy
     logging:
       driver: awslogs
       options:

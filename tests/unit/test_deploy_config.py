@@ -3,8 +3,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_aws_compose_passes_supabase_service_key_to_server_only_app_env():
-    compose = (ROOT / "compose.aws.yml").read_text(encoding="utf-8")
+def test_split_compose_passes_supabase_service_key_to_server_only_backend_env():
+    # The service-role key moved from the retired Streamlit `app` (compose.aws.yml)
+    # to the backend (compose.split.yml) when Streamlit was retired — see CLAUDE.md
+    # §1B. It must still be forwarded server-side and documented as never-in-UI.
+    compose = (ROOT / "compose.split.yml").read_text(encoding="utf-8")
 
     assert "SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}" in compose
     assert "server-only" in compose

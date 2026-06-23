@@ -20,38 +20,10 @@
 # MCP server is NOT a service here. It is stdio-only; operators run it
 # manually when wiring up Claude Desktop / Code. See backend/README.md.
 
+# NOTE: the legacy `streamlit` service was REMOVED 2026-06-23 (CLAUDE.md §1B).
+# It was an on-box `build:` trap (a `next build`/streamlit build on the 916MB
+# box OOMs). The split stack is now backend + frontend (GHCR pull-only) + caddy.
 services:
-  streamlit:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    expose:
-      - "8501"
-    environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-}
-      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
-      - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-}
-      - FMP_API_KEY=${FMP_API_KEY:-}
-      - MINDMARKET_OWNER_EMAIL=${MINDMARKET_OWNER_EMAIL:-}
-      - MINDMARKET_OWNER_EMAILS=${MINDMARKET_OWNER_EMAILS:-}
-      - MINDMARKET_APP_URL=${MINDMARKET_APP_URL:-}
-      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
-      - STRIPE_BASIC_PRICE_ID=${STRIPE_BASIC_PRICE_ID:-}
-      - STRIPE_PRO_PRICE_ID=${STRIPE_PRO_PRICE_ID:-}
-      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
-      - SUPABASE_URL=${SUPABASE_URL:-}
-      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
-      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
-    # python:3.10-slim doesn't include curl; use urllib (always present).
-    healthcheck:
-      test: ["CMD", "python", "-c",
-             "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health').read()"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    restart: unless-stopped
 
   backend:
     # Pull the CI-built image on EC2 (`docker compose pull`); `build:` stays
@@ -76,6 +48,11 @@ services:
       - SUPABASE_URL=${SUPABASE_URL:-}
       - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-}
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
+      # SUPABASE_SERVICE_KEY is the service-role key: server-only, used by
+      # trusted owner/admin paths for platform-wide usage/cost visibility, and
+      # must never be rendered in the UI. (It used to live on the retired
+      # Streamlit `app`; the backend is its sole consumer now — guarded by
+      # tests/unit/test_deploy_config.py.)
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
       - FMP_API_KEY=${FMP_API_KEY:-}
       # Massive Stocks (Basic) — OPTIONAL fallback market price/history source.
@@ -157,8 +134,6 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      streamlit:
-        condition: service_healthy
       backend:
         condition: service_healthy
       frontend:
