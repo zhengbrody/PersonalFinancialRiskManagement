@@ -13,9 +13,8 @@ pre-commit>=3.6.0
 types-requests
 pandas-stubs
 
-# Legacy Streamlit libs/ — kept OUT of the prod requirements.txt (the backend
-# image no longer ships Streamlit) but still needed to run the legacy tests/
-# suite, which exercises the Streamlit-coupled libs/auth + libs/analysis modules.
-streamlit>=1.55,<2
-extra-streamlit-components>=0.1.71
-fpdf2>=2.7
+# NOTE: streamlit / extra-streamlit-components / fpdf2 were fully removed
+# 2026-06-23 (Streamlit retirement, CLAUDE.md §1B). The legacy tests/ that touch
+# Streamlit-coupled libs/ MOCK streamlit via monkeypatch (sys.modules), so the
+# real package is no longer needed even for the test suite; the only module that
+# genuinely needed fpdf2 (libs/analysis/equity_pdf) was deleted with its test.

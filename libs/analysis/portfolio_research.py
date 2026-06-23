@@ -32,14 +32,10 @@ Public API
   behaviour as the equity counterpart: when no LLM, returns a
   data-only placeholder so the dashboard still renders.
 
-Not in scope this round
------------------------
-- Streamlit page integration (lands in a follow-up; the page just
-  needs to wire weights / prices / meta into the dossier builder).
-- PDF report (will reuse ``libs/analysis/equity_pdf`` patterns).
-
 The skeleton + tests are enough to validate the schema + missing-data
-professional behaviour before we commit to a UI surface.
+professional behaviour before we commit to a UI surface. (The original
+Streamlit-page + fpdf2 PDF-export plans were dropped with the 2026-06-23
+Streamlit retirement; reports now render via ``backend/app/services/report_html``.)
 """
 
 from __future__ import annotations

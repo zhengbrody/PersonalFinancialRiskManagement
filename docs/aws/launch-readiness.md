@@ -1,5 +1,10 @@
 # Launch-readiness playbook
 
+> **Note (2026-06-23):** point-in-time checklist from 2026-06-04. Since then the
+> legacy Streamlit tier was fully retired — the live stack is Next.js + FastAPI +
+> Caddy only (no `/legacy`). Streamlit references below are historical. See
+> CLAUDE.md §1B.
+
 > Status (2026-06-04): the product is feature- and credibility-complete for a
 > paid beta. The remaining work is **owner-gated** (systemd, DNS, Stripe keys) —
 > none of it needs more code. This is the one-shot checklist to flip each
