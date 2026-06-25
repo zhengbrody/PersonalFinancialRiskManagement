@@ -62,6 +62,7 @@ const FULL_BLEED_ROUTES = new Set([
   "/product",
   "/learn",
   "/demo-risk-check",
+  "/risk-today",
   "/login",
   "/signup",
   "/legal",
