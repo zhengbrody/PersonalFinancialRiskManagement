@@ -32,6 +32,7 @@ from .api.v1 import (
     options,
     portfolios,
     quant,
+    regime_summary,
     reports,
     research,
     risk,
@@ -167,6 +168,7 @@ def create_app() -> FastAPI:
     app.include_router(portfolios.router)
     app.include_router(market.router)
     app.include_router(macro.router)
+    app.include_router(regime_summary.router)
     app.include_router(billing.router)
     app.include_router(copilot.router)
     app.include_router(quant.router)

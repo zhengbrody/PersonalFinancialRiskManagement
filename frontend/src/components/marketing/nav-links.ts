@@ -8,5 +8,6 @@ export const NAV_LINKS: [string, string][] = [
   ["Product", "/product"],
   ["Learn", "/learn"],
   ["Markets", "/markets"],
+  ["Risk Today", "/risk-today"],
   ["Demo", "/demo-risk-check"],
 ];
