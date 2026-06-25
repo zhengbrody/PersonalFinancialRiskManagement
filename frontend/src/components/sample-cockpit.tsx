@@ -22,6 +22,7 @@ import { ScoreGauge, scoreBand } from "@/components/score-gauge";
 import { HorizontalBarChart, type BarDatum } from "@/components/ui/bar-chart";
 import { Kpi } from "@/components/ui/kpi";
 import { track } from "@/lib/analytics";
+import { buildShareUrl } from "@/lib/share-card";
 
 const NOTIONAL = 100_000; // sample book size, $
 
@@ -55,7 +56,10 @@ type DemoBook = {
 };
 
 // ── Balanced book (default — the "normal" baseline) ─────────────────────────
-const BALANCED: DemoBook = {
+// Exported so share-card.test.ts can assert lib/share-card.ts's SHARE_BOOKS
+// stays in sync (score/takeaway) — the shareable card must never drift from the
+// cockpit it's screenshotting.
+export const BALANCED: DemoBook = {
   id: "balanced",
   holdings: [
     { ticker: "SPY", name: "S&P 500 ETF", weight: 0.45, beta: 1.0, varContribPct: 88 },
@@ -88,7 +92,7 @@ const BALANCED: DemoBook = {
 };
 
 // ── High-growth book ("Stress a high-growth portfolio") ─────────────────────
-const GROWTH: DemoBook = {
+export const GROWTH: DemoBook = {
   id: "growth",
   holdings: [
     { ticker: "QQQ", name: "Nasdaq-100 ETF", weight: 0.25, beta: 1.15, varContribPct: 14 },
@@ -177,12 +181,26 @@ export function SampleCockpit() {
             is computed, nothing is invented.
           </p>
         </div>
-        <Link
-          href="/signup"
-          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          Score your own →
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            href={buildShareUrl(variant)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() =>
+              // Safe: only which fixed demo book, never any real holdings/$.
+              track("share_card_created", { variant, source: "demo" })
+            }
+            className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-accent"
+          >
+            Share this result ↗
+          </a>
+          <Link
+            href="/signup"
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            Score your own →
+          </Link>
+        </div>
       </div>
 
       {/* portfolio toggle — the headline interaction */}

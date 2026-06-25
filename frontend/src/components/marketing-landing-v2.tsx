@@ -21,6 +21,7 @@ import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { C, display, mono, eyebrow, secTitle } from "@/components/marketing/theme";
 import { Reveal, useReveal, useCountUp } from "@/components/marketing/motion";
 import { CTA, Band } from "@/components/marketing/primitives";
+import { StickyMobileCTA } from "@/components/marketing/sticky-mobile-cta";
 
 /* SEO — the authoritative Organization + SoftwareApplication JSON-LD ships on
    every page from layout.tsx; the homepage adds only this FAQ rich result (no
@@ -96,6 +97,7 @@ export function MarketingLandingV2() {
       <Steps />
       <ClosingCTA />
       <LearnRow />
+      <StickyMobileCTA />
     </MarketingShell>
   );
 }
@@ -131,15 +133,15 @@ function Hero() {
           </Reveal>
           <Reveal delay={0.16}>
             <p style={{ maxWidth: "30em", fontSize: "clamp(16px,1.5vw,19px)", lineHeight: 1.6, color: C.slate, margin: "0 0 32px" }}>
-              Connect your holdings and get an institutional-grade risk read in seconds — a 0–1000 Health Score, real VaR and stress tests, explained in plain English. The math hedge funds pay $40k a year for, made simple.
+              Paste your holdings — or import from your broker — and get a hedge-fund-grade risk X-ray in seconds: a 0–1000 Health Score, real VaR, stress tests, and concentration, explained in plain English. Free, no signup to try.
             </p>
           </Reveal>
           <Reveal delay={0.24}>
             <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-              <CTA href="/signup" lg>Score my portfolio — free</CTA>
-              <CTA href="#demo" variant="ghost" lg>See a live demo</CTA>
+              <CTA href="/demo-risk-check" lg>Try a free risk check</CTA>
+              <CTA href="/signup" variant="ghost" lg>Score my portfolio</CTA>
             </div>
-            <p style={{ marginTop: 18, fontSize: 13, color: C.slateDim }}>No credit card · numbers are computed, never invented.</p>
+            <p style={{ marginTop: 18, fontSize: 13, color: C.slateDim }}>No signup to try · no credit card · numbers are computed, never invented.</p>
           </Reveal>
         </div>
 
