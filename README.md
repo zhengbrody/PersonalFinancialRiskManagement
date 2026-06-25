@@ -85,6 +85,10 @@ A short tour of the live product:
 | Health Score | 0-1000 gauge, each dimension vs your risk target, concentration, and a deterministic "how to improve" list. | [/score](https://mindmarket.app/score) |
 | Risk Report | VaR/CVaR, factor betas, a scenario explorer, stress losses, liquidity outliers, and options Greeks. | [/risk](https://mindmarket.app/risk) |
 | AI Copilot | Streamed answers with source-badged evidence, grounded in the same metrics the UI shows. | [/copilot](https://mindmarket.app/copilot) |
+| Risk Today | A trained ML model's read of the current market risk-state (calm→stressed) with live VIX, Fear & Greed, and the yield curve — context, not advice. | [/risk-today](https://mindmarket.app/risk-today) |
+| Learn & Resources | 10 plain-English risk guides + a hub linking every guide and tool. | [/learn](https://mindmarket.app/learn) |
+
+The no-signup demo also generates a **shareable risk-score card** (`/share/risk-card`) — an OG image that unfurls on X/LinkedIn.
 
 <!--
 Drop real product captures here once taken (dark theme, retina, browser chrome cropped):
