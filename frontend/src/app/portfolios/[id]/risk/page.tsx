@@ -52,6 +52,17 @@ export default function PortfolioRiskPage() {
     [portfoliosQuery.data, portfolioId],
   );
 
+  // report_from_active scores the user's ACTIVE book: the default-flagged
+  // portfolio, or — when none is flagged — the most-recent one (the list is
+  // sorted is_default DESC, created_at DESC, so portfolios[0]). Only warn when
+  // running the report here would actually score a DIFFERENT portfolio; a user
+  // with a single (or most-recent) book gets scored as expected, no scary notice.
+  const isActivePortfolio = useMemo(() => {
+    const list = portfoliosQuery.data?.portfolios ?? [];
+    const activeId = list.find((p) => p.is_default)?.id ?? list[0]?.id;
+    return !!portfolio && portfolio.id === activeId;
+  }, [portfoliosQuery.data, portfolio]);
+
   // The report is for the DEFAULT portfolio (report_from_active); feed the
   // options cockpit from the same book so they're consistent.
   const optionContracts = useMemo(
@@ -103,14 +114,14 @@ export default function PortfolioRiskPage() {
         </Button>
       </header>
 
-      {!portfolio.is_default && (
+      {!isActivePortfolio && (
         <Card className="border-warning/40">
           <CardHeader>
-            <CardTitle className="text-base">Not the active portfolio</CardTitle>
+            <CardTitle className="text-base">Heads up — this isn’t your default portfolio</CardTitle>
             <CardDescription>
-              The risk report uses the portfolio flagged{" "}
-              <code className="font-mono">is_default=true</code>. Mark this one as
-              default from the edit page if you want to score it here.
+              Running a report here scores your <strong>default</strong> portfolio,
+              not this one. To analyze this portfolio, set it as default from its
+              Edit page.
             </CardDescription>
           </CardHeader>
         </Card>

@@ -196,6 +196,20 @@ def create_portfolio(
     the caller's identity. Streamlit callers omit it (session-bound)."""
     sb = _authed_client(access_token_override=access_token)
 
+    # A user's FIRST portfolio is auto-promoted to default so the active-portfolio
+    # resolver — and the Risk/Score pages that key off is_default — always have a
+    # target. Without this, a new user's first book lands is_default=false and the
+    # per-portfolio Risk page shows a confusing "Not the active portfolio" notice
+    # on an otherwise-empty account. RLS scopes the probe to the caller; fail open
+    # so a transient read never blocks creation.
+    if not is_default:
+        try:
+            existing = sb.table("portfolios").select("id").limit(1).execute()
+            if not (existing.data or []):
+                is_default = True
+        except Exception:
+            pass
+
     if is_default:
         # Demote any existing default first — Postgres trigger could do this
         # transactionally, but a 2-step write is simpler and the race window
