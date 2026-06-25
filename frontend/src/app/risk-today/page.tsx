@@ -20,9 +20,13 @@ import { MarketRegime } from "@/components/market-regime";
 import { MacroSnapshot } from "@/components/macro-snapshot";
 import { C, display } from "@/components/marketing/theme";
 
-// Regenerate the SSR HTML at most every ~30 min; the backend services are
-// already cached (ml 10 min / macro 5 min), so origin load stays trivial.
-export const revalidate = 1800;
+// Render on each request, NOT via ISR. The regime data isn't reachable at build
+// time (the backend isn't up during CI), so an ISR prerender would bake the
+// fail-soft "unavailable" fallback and serve it until the first revalidation —
+// i.e. the page would read "unavailable" for ~30 min after every deploy. The
+// backend services are already cached (ml 10 min / macro 5 min), so per-request
+// SSR is cheap and the page always shows live data.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Today’s Market Risk Regime",
@@ -46,7 +50,7 @@ async function fetchSummary(): Promise<RegimeSummary | null> {
   // pre-render, where `backend` is unreachable, just degrades to the fallback).
   const base = process.env.INTERNAL_API_BASE_URL || "http://backend:8000";
   try {
-    const res = await fetch(`${base}/api/v1/regime/summary`, { next: { revalidate } });
+    const res = await fetch(`${base}/api/v1/regime/summary`, { cache: "no-store" });
     if (!res.ok) return null;
     const body = (await res.json()) as { data?: RegimeSummary };
     return body?.data ?? null;
