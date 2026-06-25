@@ -137,6 +137,15 @@
   .mm-float-chip {
     display: none !important;
   }
+  /* Resource hub: 3 cols → 2 on tablet. */
+  .mm-resource-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+@media (max-width: 640px) {
+  .mm-resource-grid {
+    grid-template-columns: 1fr !important;
+  }
 }
 /* Mobile hamburger (marketing nav) + sticky bottom CTA: hidden on desktop,
    shown below 640px exactly where the inline desktop nav links collapse. */

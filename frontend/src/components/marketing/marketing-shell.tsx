@@ -145,7 +145,9 @@ function MarketingFooter({ minimal }: { minimal: boolean }) {
   const links: [string, string][] = [
     ["Product", "/product"],
     ["Learn", "/learn"],
+    ["Resources", "/resources"],
     ["Markets", "/markets"],
+    ["Risk Today", "/risk-today"],
     ["Demo", "/demo-risk-check"],
     // Pricing only when billing is live (hidden during free beta, like the app nav).
     ...(isBillingEnabled() ? ([["Pricing", "/pricing"]] as [string, string][]) : []),

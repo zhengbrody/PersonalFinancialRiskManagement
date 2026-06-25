@@ -4,6 +4,7 @@
 // any non-Caddy deployment will serve.
 import type { MetadataRoute } from "next";
 import { LEARN_SLUGS } from "@/lib/learn-content";
+import { LEGAL_DOCS } from "@/lib/legal-content";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
 
@@ -39,6 +40,7 @@ const PUBLIC_ROUTES: Array<{
   { path: "/about", changeFrequency: "monthly", priority: 0.8 },
   { path: "/demo", changeFrequency: "monthly", priority: 0.8 },
   { path: "/sample-risk-report", changeFrequency: "monthly", priority: 0.8 },
+  { path: "/resources", changeFrequency: "monthly", priority: 0.7 },
 ];
 
 export default function sitemap(): MetadataRoute.Sitemap {
@@ -49,6 +51,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
     changeFrequency: "monthly" as const,
     priority: 0.8,
   }));
+  const legal: MetadataRoute.Sitemap = LEGAL_DOCS.map((d) => ({
+    url: `${SITE_URL}/legal/${d.slug}`,
+    lastModified: now,
+    changeFrequency: "yearly" as const,
+    priority: 0.3,
+  }));
   return [
     ...PUBLIC_ROUTES.map((route) => ({
       url: `${SITE_URL}${route.path}`,
@@ -57,5 +65,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: route.priority,
     })),
     ...learn,
+    ...legal,
   ];
 }

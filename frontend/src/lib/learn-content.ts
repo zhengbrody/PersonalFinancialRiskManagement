@@ -370,6 +370,162 @@ export const LEARN_TOPICS: LearnTopic[] = [
     ],
     related: ["portfolio-risk-management", "factor-exposure", "var-cvar-explained"],
   },
+  {
+    slug: "sharpe-ratio-explained",
+    title: "Sharpe ratio explained — and why it isn’t the whole story",
+    metaTitle: "Sharpe Ratio Explained — What It Measures and Where It Misleads",
+    description:
+      "What the Sharpe ratio actually measures, how to read it, and the cases where a high Sharpe still hides real risk — drawdowns, fat tails, and leverage.",
+    eyebrow: "Risk metrics",
+    intro:
+      "The Sharpe ratio answers one question: how much return are you earning per unit of risk you take? It’s the single most useful one-number summary of a portfolio — and also one of the easiest to misread.",
+    sections: [
+      {
+        heading: "What it measures",
+        paragraphs: [
+          "Sharpe = (your return − the risk-free rate) ÷ your volatility. It rewards return and penalizes the bumpiness of the ride. Two portfolios can both return 12%; the one that did it with half the volatility has the higher Sharpe and is the better-run book.",
+          "As a rough guide, a Sharpe below ~0.5 is weak, ~1.0 is solid for a retail portfolio, and above ~2.0 is excellent (and rare without leverage or a short sample).",
+        ],
+        example: {
+          label: "Example",
+          body: "Portfolio A returns 15% with 30% volatility; B returns 10% with 9% volatility. With a 4% risk-free rate, A’s Sharpe is (15−4)/30 ≈ 0.37 and B’s is (10−4)/9 ≈ 0.67. B is the better risk-adjusted book even though A’s headline return is higher.",
+        },
+      },
+      {
+        heading: "Where it misleads",
+        paragraphs: [
+          "Sharpe uses volatility, which treats upside and downside swings the same — so a portfolio that grinds up and then crashes can post a flattering Sharpe right up until the crash. It also assumes roughly normal returns, so it understates the danger of fat-tailed books (options, crypto, single high-beta names).",
+          "A high Sharpe over a short, calm window is not durable. And leverage scales return and volatility together, so it can leave Sharpe almost unchanged while making the drawdown — the thing that actually forces you to sell — far worse.",
+        ],
+      },
+      {
+        heading: "What to pair it with",
+        paragraphs: [
+          "Read Sharpe alongside maximum drawdown (the worst peak-to-trough fall) and a tail measure like CVaR. A strong portfolio has a good Sharpe and a drawdown you could actually have lived through.",
+          "Also check the Sharpe is computed on the asset mix, not just the leveraged equity line — borrowing can flatter or distort the number depending on how it’s measured.",
+        ],
+      },
+    ],
+    faqs: [
+      {
+        q: "What is a good Sharpe ratio?",
+        a: "For a long-term retail portfolio, around 1.0 is solid and consistently above 1.5 is very good. Be skeptical of very high Sharpe ratios measured over short or unusually calm periods — they rarely persist.",
+      },
+      {
+        q: "Why can a portfolio with a high Sharpe still be risky?",
+        a: "Sharpe uses volatility, which misses fat tails and treats up- and down-moves alike. A book heavy in options or a single high-beta name can show a fine Sharpe and still be one bad week from a severe drawdown. Always read it with maximum drawdown and CVaR.",
+      },
+      {
+        q: "Does leverage improve the Sharpe ratio?",
+        a: "Usually not much — leverage scales both return and volatility, so the ratio is roughly unchanged, while the drawdown and risk of a margin call get materially worse. A flat Sharpe under leverage is not a free lunch.",
+      },
+    ],
+    related: ["var-cvar-explained", "maximum-drawdown", "portfolio-risk-management"],
+  },
+  {
+    slug: "maximum-drawdown",
+    title: "Maximum drawdown: the loss that actually makes people sell",
+    metaTitle: "Maximum Drawdown Explained — The Risk Number That Predicts Selling",
+    description:
+      "What maximum drawdown means, why it matters more than volatility for staying invested, how long recoveries take, and how leverage deepens the hole.",
+    eyebrow: "Risk metrics",
+    intro:
+      "Maximum drawdown is the worst peak-to-trough fall a portfolio has suffered. It’s the number that best predicts whether you’ll actually stick with a strategy — because the deepest drawdown is the moment most people capitulate.",
+    sections: [
+      {
+        heading: "Why drawdown matters more than the average",
+        paragraphs: [
+          "An average return is what you earn if you stay invested. The drawdown is the test of whether you will. A book that returns 20% a year but drops 55% along the way only pays out to the investor who didn’t sell at the bottom — and most do.",
+          "Drawdown is also asymmetric to recover from: a 50% loss needs a 100% gain to get back to even. The deeper the hole, the more disproportionate the climb out.",
+        ],
+        example: {
+          label: "Example",
+          body: "A −50% drawdown requires +100% to recover; −30% needs +43%; −20% needs +25%. This is why limiting the depth of the worst fall matters more than squeezing out the last few points of return.",
+        },
+      },
+      {
+        heading: "Depth, duration, and recovery",
+        paragraphs: [
+          "Two numbers describe a drawdown: how deep it went and how long it lasted from the prior peak back to a new high. A shallow but multi-year drawdown can be as demoralizing as a sharp, fast one.",
+          "Replaying real episodes — COVID-19 in 2020, the 2022 selloff, Q4 2018, the 2008 crisis — on your actual holdings tells you far more than a single synthetic ‘down 30%’ shock, because it captures how your specific book behaved and how long it took to heal.",
+        ],
+      },
+      {
+        heading: "Leverage and concentration deepen the hole",
+        paragraphs: [
+          "Margin amplifies drawdown in both directions, and a deep enough fall can trigger a margin call that forces selling at the worst possible time — turning a paper drawdown into a realized loss.",
+          "Concentration does the same: when most of the risk sits in a few correlated names, a single theme unwinding can drive a drawdown far larger than a diversified book would have seen.",
+        ],
+      },
+    ],
+    faqs: [
+      {
+        q: "What is the difference between drawdown and volatility?",
+        a: "Volatility measures the typical size of day-to-day swings; maximum drawdown measures the single worst peak-to-trough fall you’d have endured. Volatility describes the ride; drawdown describes the worst moment of it — which is what usually makes people sell.",
+      },
+      {
+        q: "Why does a 50% loss need a 100% gain to recover?",
+        a: "Because gains compound off a smaller base. If $100 falls to $50 (−50%), it must double (+100%) to get back to $100. Deeper drawdowns require disproportionately larger recoveries, which is why limiting the depth matters.",
+      },
+      {
+        q: "Is a current drawdown the same as the maximum drawdown?",
+        a: "No. Maximum drawdown is the worst fall ever recorded for the book; the current drawdown is how far below the recent peak you are right now. A portfolio can have a scary historical maximum drawdown while sitting near a fresh high today.",
+      },
+    ],
+    related: ["sharpe-ratio-explained", "stress-testing", "margin-risk"],
+  },
+  {
+    slug: "diversification-correlation",
+    title: "Diversification and correlation: when your stocks secretly move together",
+    metaTitle: "Diversification and Correlation — Why Your Holdings Move Together",
+    description:
+      "Why owning more tickers isn’t diversification, how correlation and overlapping ETFs concentrate hidden risk, and how to measure your true number of independent bets.",
+    eyebrow: "Foundations",
+    intro:
+      "Diversification isn’t about how many positions you hold — it’s about whether they move independently. Ten holdings that all rise and fall together behave like one big position, and a market shock hits them all at once.",
+    sections: [
+      {
+        heading: "Correlation is the thing that actually diversifies",
+        paragraphs: [
+          "Two holdings reduce risk together only to the extent they don’t move in lockstep. Correlation runs from +1 (move identically) to −1 (move opposite); the diversification benefit comes from holdings well below +1.",
+          "In a selloff, correlations tend to rise toward 1 — assets that looked independent in calm markets fall together in a panic. That’s exactly when you most wanted the diversification to hold.",
+        ],
+        example: {
+          label: "Example",
+          body: "NVDA, QQQ, and SMH look like three bets, but QQQ and SMH both hold NVDA, and all three are high-beta tech. Their correlations are near 0.9 — so the trio behaves almost like a single, larger Nvidia-and-semis position.",
+        },
+      },
+      {
+        heading: "Hidden overlap and factor crowding",
+        paragraphs: [
+          "Overlapping ETFs are the most common hidden concentration: two broad funds can share most of their top holdings, so your true exposure to a few mega-caps is far higher than your position list suggests.",
+          "Even non-overlapping names can be crowded into the same factor — growth, rates-sensitivity, or a single theme like AI — so they rise and fall on the same driver despite being different tickers.",
+        ],
+      },
+      {
+        heading: "Measuring your real number of bets",
+        paragraphs: [
+          "‘Effective holdings’ (1 ÷ the Herfindahl index of your weights) estimates how many independent positions you really have. A 12-name book dominated by a few correlated winners can have an effective holding count closer to 3 or 4.",
+          "The fix isn’t necessarily more names — it’s less-correlated ones: adding exposure that behaves differently (bonds, cash, a defensive sleeve) does more than adding another tech name.",
+        ],
+      },
+    ],
+    faqs: [
+      {
+        q: "How many stocks do I need to be diversified?",
+        a: "There’s no fixed number — what matters is correlation, not count. Ten holdings that all track the Nasdaq are effectively one bet. Adding positions that move differently (bonds, cash, defensives) diversifies far more than adding another similar stock.",
+      },
+      {
+        q: "Can two ETFs overlap?",
+        a: "Yes, heavily. Two broad-market or tech ETFs can share most of their largest holdings, so your real exposure to a handful of mega-caps is much higher than your list of funds implies. Checking holdings overlap is part of measuring true concentration.",
+      },
+      {
+        q: "Why does diversification seem to fail in a crash?",
+        a: "Because correlations rise in a panic — assets that moved independently in calm markets tend to fall together when everyone de-risks at once. Diversification still helps over time, but it offers less protection in the sharpest, fastest selloffs.",
+      },
+    ],
+    related: ["portfolio-risk-management", "factor-exposure", "maximum-drawdown"],
+  },
 ];
 
 export const LEARN_BY_SLUG: Record<string, LearnTopic> = Object.fromEntries(

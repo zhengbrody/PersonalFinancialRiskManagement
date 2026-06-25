@@ -73,6 +73,13 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/",
   },
+  // Site-wide Google Search Console HTML-tag verification (was only on the
+  // Caddy-served /about.html, so the homepage URL couldn't be verified). Now
+  // every Next page — including "/" — carries it. DNS verification (Cloudflare)
+  // is the recommended primary method; this is the backup.
+  verification: {
+    google: "cpW5HG50AaWNMEfTxdGBF6JxeviA-0QFaHDYS0xw_N8",
+  },
   openGraph: {
     type: "website",
     url: "/",
