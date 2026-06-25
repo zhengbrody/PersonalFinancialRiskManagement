@@ -18,6 +18,7 @@ const PUBLIC_ROUTES: Array<{
   { path: "/product", changeFrequency: "monthly", priority: 0.9 },
   { path: "/learn", changeFrequency: "weekly", priority: 0.9 },
   { path: "/markets", changeFrequency: "daily", priority: 0.8 },
+  { path: "/risk-today", changeFrequency: "daily", priority: 0.85 },
   { path: "/pricing", changeFrequency: "monthly", priority: 0.7 },
   { path: "/portfolio-risk-management", changeFrequency: "monthly", priority: 0.9 },
   { path: "/ai-portfolio-analysis", changeFrequency: "monthly", priority: 0.85 },

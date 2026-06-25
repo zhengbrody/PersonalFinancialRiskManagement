@@ -7,12 +7,20 @@ from backend.app.services.regime_summary import CAVEAT, build_summary
 
 
 def _snapshot(
-    vix=18.4, vix_chg=0.6, vix_level="Elevated", fg=55.0, fg_rating="Greed", curve="Normal", spread=0.45
+    vix=18.4,
+    vix_chg=0.6,
+    vix_level="Elevated",
+    fg=55.0,
+    fg_rating="Greed",
+    curve="Normal",
+    spread=0.45,
 ):
     return market_regime.RegimeSnapshot(
         vix=market_regime.VixState(vix, vix_chg, vix_level),
         fear_greed=market_regime.FearGreedState(fg, fg_rating),
-        yield_curve=market_regime.YieldCurveState(curve, spread, (spread < 0) if spread is not None else None),
+        yield_curve=market_regime.YieldCurveState(
+            curve, spread, (spread < 0) if spread is not None else None
+        ),
     )
 
 
