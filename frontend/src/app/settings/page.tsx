@@ -9,10 +9,12 @@
  * right home for that. This page is billing-only.
  */
 
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
+import type { User } from "@supabase/supabase-js";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Card,
   CardContent,
@@ -25,6 +27,7 @@ import { ApiError } from "@/lib/api";
 import { isBillingEnabled } from "@/lib/billing-flag";
 import { FreeBetaNotice } from "@/components/free-beta-notice";
 import { useAuth } from "@/lib/auth-context";
+import { currentUsername } from "@/lib/user-display";
 import { useBillingMe, useStartPortal, type CreditStatus } from "@/lib/queries";
 
 export default function SettingsPage() {
@@ -81,6 +84,8 @@ function SettingsPageInner() {
           Signed in as <span className="font-mono">{me.email ?? me.user_id}</span>.
         </p>
       </header>
+
+      <ProfileCard user={user} />
 
       {!isBillingEnabled() && <FreeBetaNotice />}
 
@@ -180,6 +185,75 @@ function SettingsPageInner() {
       </Card>
       )}
     </div>
+  );
+}
+
+/**
+ * Display-name (username) editor. Persists to Supabase `user_metadata.username`
+ * via auth-context `updateUsername`; the corner account menu re-renders
+ * automatically on the resulting USER_UPDATED event. No backend / migration.
+ */
+function ProfileCard({ user }: { user: User }) {
+  const { updateUsername } = useAuth();
+  const saved = currentUsername(user);
+  const [value, setValue] = useState(saved);
+  const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  const trimmed = value.trim();
+  const dirty = trimmed !== saved;
+  const tooLong = trimmed.length > 30;
+
+  async function save() {
+    if (!dirty || tooLong) return;
+    setStatus("saving");
+    setError(null);
+    try {
+      await updateUsername(trimmed);
+      setStatus("saved");
+    } catch (e) {
+      setStatus("error");
+      setError(e instanceof Error ? e.message : "Could not save your name.");
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Display name</CardTitle>
+        <CardDescription>
+          The name shown in the top-right menu instead of your email. Visible only
+          to you.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Input
+            value={value}
+            onChange={(e) => {
+              setValue(e.target.value);
+              setStatus("idle");
+            }}
+            placeholder="e.g. Alex Chen"
+            maxLength={40}
+            aria-label="Display name"
+            className="sm:max-w-xs"
+          />
+          <Button type="button" onClick={save} disabled={!dirty || tooLong || status === "saving"}>
+            {status === "saving" ? "Saving…" : "Save"}
+          </Button>
+        </div>
+        {tooLong && (
+          <p className="text-xs text-destructive">Keep it under 30 characters.</p>
+        )}
+        {status === "saved" && !dirty && (
+          <p className="text-xs text-success">Saved.</p>
+        )}
+        {status === "error" && error && (
+          <p className="text-xs text-destructive">{error}</p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -62,6 +62,12 @@ export type AuthState = {
   signInWithGoogle: () => Promise<void>;
   /** Sign the current user out. No-op when already signed out. */
   signOut: () => Promise<void>;
+  /**
+   * Set the display name (stored in Supabase `user_metadata.username`).
+   * Supabase fires `USER_UPDATED`, so the session — and anything reading
+   * `displayName(user)` — refreshes automatically. Throws on failure.
+   */
+  updateUsername: (username: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -155,6 +161,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [supabase]);
 
+  const updateUsername = useCallback(
+    async (username: string) => {
+      if (!supabase) {
+        throw new Error("Account settings are not configured on this build.");
+      }
+      const { error } = await supabase.auth.updateUser({
+        data: { username: username.trim() },
+      });
+      if (error) {
+        throw new Error(error.message);
+      }
+    },
+    [supabase],
+  );
+
   const signOut = useCallback(async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
@@ -176,8 +197,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signUp,
       signInWithGoogle,
       signOut,
+      updateUsername,
     }),
-    [session, loading, configured, signIn, signUp, signInWithGoogle, signOut],
+    [session, loading, configured, signIn, signUp, signInWithGoogle, signOut, updateUsername],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
