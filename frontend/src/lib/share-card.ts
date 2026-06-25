@@ -64,8 +64,7 @@ export function parseShareBook(raw: string | string[] | undefined): ShareBook {
 }
 
 /** Canonical site origin for absolute share URLs (so links unfurl the prod page). */
-export const SHARE_SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
+const SHARE_SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
 
 /** Absolute URL of the shareable card page for a given book. */
 export function buildShareUrl(book: ShareBookId, origin: string = SHARE_SITE_URL): string {
