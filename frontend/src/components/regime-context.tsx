@@ -55,7 +55,7 @@ function provenance(r: MlRegime): string {
 // One source of truth for the compliance caveat — it lived in three surfaces
 // with drifting wording. Centralized so the "not advice / not your score"
 // invariant can't be weakened in just one of them.
-const REGIME_CAVEAT =
+export const REGIME_CAVEAT =
   "Risk-state only — not a price forecast, not investment advice, and it does not change your Health Score.";
 
 type RegimeView = { r: MlRegime; s: (typeof STATE)[string] };
