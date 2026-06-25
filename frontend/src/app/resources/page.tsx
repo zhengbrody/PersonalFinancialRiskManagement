@@ -12,7 +12,7 @@
 
 import type { Metadata } from "next";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
-import { C, display } from "@/components/marketing/theme";
+import { C, display, eyebrow } from "@/components/marketing/theme";
 import { LEARN_TOPICS } from "@/lib/learn-content";
 
 export const metadata: Metadata = {
@@ -78,17 +78,6 @@ const SOLUTION_PAGES: { href: string; title: string; blurb: string }[] = [
   },
 ];
 
-function eyebrowStyle() {
-  return {
-    fontSize: 12,
-    fontWeight: 500,
-    textTransform: "uppercase" as const,
-    letterSpacing: ".18em",
-    color: C.teal,
-    margin: 0,
-  };
-}
-
 function Card({ href, title, blurb }: { href: string; title: string; blurb: string }) {
   return (
     <a
@@ -124,7 +113,7 @@ export default function ResourcesPage() {
         }}
       >
         <header style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: "44em" }}>
-          <p style={eyebrowStyle()}>Resources</p>
+          <p style={{ ...eyebrow, margin: 0 }}>Resources</p>
           <h1 style={{ ...display, color: C.paper, fontSize: "clamp(34px,5vw,54px)", fontWeight: 400, margin: 0, lineHeight: 1.05 }}>
             Guides &amp; tools for portfolio risk
           </h1>

@@ -13,8 +13,14 @@
  * (score + band) so they can't silently drift.
  */
 
+// Type-only import (erased at build — no runtime/client code pulled in, so the
+// server OG route can still import this module safely).
+import type { ScoreBand } from "@/components/score-gauge";
+
 export type ShareBookId = "balanced" | "growth";
-export type ShareBand = "Poor" | "Watch" | "Healthy" | "Strong";
+// Reuse the canonical 0–1000 band union from the score gauge (type-only import,
+// erased at build) so the two can't drift.
+export type ShareBand = ScoreBand;
 
 export type ShareBook = {
   id: ShareBookId;

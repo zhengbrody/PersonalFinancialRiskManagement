@@ -15,7 +15,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ScoreGauge } from "@/components/score-gauge";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
-import { C, display } from "@/components/marketing/theme";
+import { C, display, eyebrow } from "@/components/marketing/theme";
 import {
   parseShareBook,
   xIntentUrl,
@@ -66,7 +66,7 @@ export default function ShareRiskCardPage({ searchParams }: SP) {
           gap: 28,
         }}
       >
-        <p style={{ ...eyebrow }}>Portfolio risk X-ray · sample</p>
+        <p style={{ ...eyebrow, margin: 0 }}>Portfolio risk X-ray · sample</p>
 
         <div
           style={{
@@ -177,15 +177,6 @@ export default function ShareRiskCardPage({ searchParams }: SP) {
     </MarketingShell>
   );
 }
-
-const eyebrow = {
-  fontSize: 12,
-  fontWeight: 500,
-  textTransform: "uppercase" as const,
-  letterSpacing: ".18em",
-  color: C.teal,
-  margin: 0,
-};
 
 const shareBtn = {
   flex: "1 1 140px",

@@ -18,7 +18,7 @@ import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { RegimeReadout, type RegimeSummary } from "@/components/regime-readout";
 import { MarketRegime } from "@/components/market-regime";
 import { MacroSnapshot } from "@/components/macro-snapshot";
-import { C, display } from "@/components/marketing/theme";
+import { C, display, eyebrow } from "@/components/marketing/theme";
 
 // Render on each request, NOT via ISR. The regime data isn't reachable at build
 // time (the backend isn't up during CI), so an ISR prerender would bake the
@@ -79,14 +79,7 @@ export default async function RiskTodayPage() {
         }}
       >
         <p
-          style={{
-            fontSize: 12,
-            fontWeight: 500,
-            textTransform: "uppercase",
-            letterSpacing: ".18em",
-            color: C.teal,
-            margin: 0,
-          }}
+          style={{ ...eyebrow, margin: 0 }}
         >
           Market risk-state · updated through the trading day
         </p>
