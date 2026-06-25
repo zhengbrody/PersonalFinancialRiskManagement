@@ -163,6 +163,9 @@ def test_create_strips_nan_avg_cost_before_insert(mock_supabase):
 def test_create_falls_back_when_capital_columns_not_migrated(mock_supabase):
     """Rolling deploy safety: old Supabase schemas can still create portfolios."""
     mock_supabase.execute.side_effect = [
+        # First-portfolio existence probe — user already has one, so is_default
+        # stays False and we go straight to the insert (then its retry).
+        MagicMock(data=[{"id": "existing"}]),
         Exception(
             "Could not find the 'contributed_capital' column of 'portfolios' in the schema cache"
         ),
@@ -191,6 +194,34 @@ def test_create_default_demotes_others_first(mock_supabase):
     create_portfolio(name="A", holdings={"AAPL": {"shares": 1}}, is_default=True)
     # The first execute() is the "demote" UPDATE, the second is the INSERT.
     assert mock_supabase.execute.call_count >= 2
+
+
+def test_create_first_portfolio_auto_defaults(mock_supabase):
+    """A user's very first portfolio is promoted to default even when the caller
+    passes is_default=False — so the active-portfolio resolver always has a
+    target and a fresh account never sees a 'Not the active portfolio' notice."""
+    mock_supabase.execute.side_effect = [
+        MagicMock(data=[]),  # existence probe → no portfolios yet
+        MagicMock(data=[]),  # demote (no-op)
+        MagicMock(data=[{"id": "new", "is_default": True}]),  # insert
+    ]
+    from libs.auth.portfolios import create_portfolio
+
+    out = create_portfolio(name="First", holdings={"AAPL": {"shares": 1}}, is_default=False)
+    assert out["id"] == "new"
+    sent = mock_supabase.insert.call_args[0][0]
+    assert sent["is_default"] is True
+
+
+def test_create_non_first_portfolio_stays_non_default(mock_supabase):
+    """When the user already has a portfolio, a non-default create stays
+    non-default (we don't hijack their existing active book)."""
+    mock_supabase.execute.return_value = MagicMock(data=[{"id": "existing", "is_default": True}])
+    from libs.auth.portfolios import create_portfolio
+
+    create_portfolio(name="Second", holdings={"AAPL": {"shares": 1}}, is_default=False)
+    sent = mock_supabase.insert.call_args[0][0]
+    assert sent["is_default"] is False
 
 
 def test_update_rejects_unknown_fields():

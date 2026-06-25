@@ -138,9 +138,23 @@
     display: none !important;
   }
 }
+/* Mobile hamburger (marketing nav) + sticky bottom CTA: hidden on desktop,
+   shown below 640px exactly where the inline desktop nav links collapse. */
+.mm-mobile-nav {
+  display: none;
+}
+.mm-sticky-cta {
+  display: none;
+}
 @media (max-width: 640px) {
   .mm-nav-links {
     display: none !important;
+  }
+  .mm-mobile-nav {
+    display: inline-flex !important;
+  }
+  .mm-sticky-cta {
+    display: flex !important;
   }
 }
 

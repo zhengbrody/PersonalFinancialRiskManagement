@@ -17,6 +17,8 @@ import { isBillingEnabled } from "@/lib/billing-flag";
 import { LEGAL_DOCS } from "@/lib/legal-content";
 import { C } from "./theme";
 import { CTA } from "./primitives";
+import { MobileNav } from "./mobile-nav";
+import { NAV_LINKS } from "./nav-links";
 
 export function MarketingShell({
   children,
@@ -67,13 +69,6 @@ function Wordmark({ size = 26 }: { size?: number }) {
     </Link>
   );
 }
-
-const NAV_LINKS: [string, string][] = [
-  ["Product", "/product"],
-  ["Learn", "/learn"],
-  ["Markets", "/markets"],
-  ["Demo", "/demo-risk-check"],
-];
 
 function MarketingNav({ minimal }: { minimal: boolean }) {
   const { user, configured } = useAuth();
@@ -137,6 +132,8 @@ function MarketingNav({ minimal }: { minimal: boolean }) {
               <CTA href="/signup">Get started</CTA>
             </>
           )}
+          {/* Mobile hamburger — visible <640px where .mm-nav-links collapses. */}
+          <MobileNav signedIn={signedIn} />
         </div>
       )}
     </nav>
