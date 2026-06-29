@@ -1,6 +1,6 @@
 {
   "model_version": "regime-v1",
-  "trained_at": "2026-06-22T19:27:01.142531+00:00",
+  "trained_at": "2026-06-29T10:30:48.466550+00:00",
   "sklearn_version": "1.8.0",
   "estimator": "HistGradientBoostingClassifier",
   "feature_names": [
@@ -40,69 +40,69 @@
     ]
   },
   "training_window": {
-    "start": "2012-05-29",
-    "end": "2026-06-05",
+    "start": "2012-06-04",
+    "end": "2026-06-11",
     "rows": 3526
   },
   "class_distribution": {
     "risk_on": 1860,
-    "neutral": 927,
-    "volatile": 558,
+    "neutral": 928,
+    "volatile": 557,
     "stress": 181
   },
   "metrics": {
-    "cv_macro_f1_mean": 0.3109,
-    "cv_accuracy_mean": 0.4835,
-    "holdout_accuracy": 0.5482,
-    "holdout_macro_f1": 0.4006,
-    "elevated_risk_auc": 0.7835,
+    "cv_macro_f1_mean": 0.3157,
+    "cv_accuracy_mean": 0.4937,
+    "holdout_accuracy": 0.5411,
+    "holdout_macro_f1": 0.393,
+    "elevated_risk_auc": 0.7432,
     "baseline_majority_class": "risk_on",
     "baseline_accuracy": 0.5057,
     "per_class": {
       "risk_on": {
-        "precision": 0.602,
-        "recall": 0.849,
-        "f1-score": 0.705
+        "precision": 0.608,
+        "recall": 0.854,
+        "f1-score": 0.71
       },
       "neutral": {
-        "precision": 0.505,
-        "recall": 0.201,
-        "f1-score": 0.287
+        "precision": 0.475,
+        "recall": 0.187,
+        "f1-score": 0.268
       },
       "volatile": {
-        "precision": 0.333,
-        "recall": 0.373,
-        "f1-score": 0.352
+        "precision": 0.275,
+        "recall": 0.325,
+        "f1-score": 0.298
       },
       "stress": {
-        "precision": 0.25,
+        "precision": 0.333,
         "recall": 0.267,
-        "f1-score": 0.258
+        "f1-score": 0.296
       }
     },
     "confusion_matrix": [
       [
-        303,
-        35,
-        17,
+        305,
+        37,
+        15,
+        0
+      ],
+      [
+        167,
+        48,
+        40,
         2
       ],
       [
-        173,
-        52,
-        32,
-        2
-      ],
-      [
-        27,
-        12,
-        28,
-        8
+        30,
+        16,
+        25,
+        6
       ],
       [
         0,
-        4,
-        7,
+        0,
+        11,
         4
       ]
     ],
@@ -115,38 +115,38 @@
     "holdout_size": 706
   },
   "feature_importances": {
-    "vol_63d": 0.17927,
-    "vix_level": 0.16955,
-    "golden_cross": 0.09726,
-    "yield_slope": 0.08338,
-    "vol_ratio": 0.07663,
-    "mom_60d": 0.06555,
-    "vol_21d": 0.06411,
-    "drawdown": 0.05079,
-    "qqq_trend": 0.04843,
-    "trend_sma50": 0.03506,
-    "qqq_spy_spread": 0.03239,
-    "vix_term": 0.03103,
-    "vix_change_5d": 0.026,
-    "mom_20d": 0.02482,
-    "trend_sma200": 0.02328
+    "vix_level": 0.16782,
+    "vol_63d": 0.16256,
+    "golden_cross": 0.10086,
+    "vol_ratio": 0.0854,
+    "yield_slope": 0.07332,
+    "mom_60d": 0.07245,
+    "vol_21d": 0.07017,
+    "drawdown": 0.04764,
+    "qqq_trend": 0.04264,
+    "trend_sma50": 0.04091,
+    "mom_20d": 0.03357,
+    "qqq_spy_spread": 0.03271,
+    "vix_change_5d": 0.02689,
+    "trend_sma200": 0.02454,
+    "vix_term": 0.01541
   },
   "feature_medians": {
-    "trend_sma200": 0.065962,
-    "trend_sma50": 0.019627,
+    "trend_sma200": 0.066043,
+    "trend_sma50": 0.019667,
     "golden_cross": 0.046881,
-    "mom_20d": 0.016795,
-    "mom_60d": 0.040727,
-    "vol_21d": 0.119055,
+    "mom_20d": 0.016794,
+    "mom_60d": 0.040883,
+    "vol_21d": 0.119056,
     "vol_63d": 0.124918,
-    "vol_ratio": 0.81312,
+    "vol_ratio": 0.815497,
     "drawdown": -0.014231,
     "vix_level": 16.07,
     "vix_change_5d": -0.18,
-    "vix_term": 0.881816,
-    "qqq_trend": 0.084821,
-    "qqq_spy_spread": 0.00409,
-    "yield_slope": 1.158
+    "vix_term": 0.881835,
+    "qqq_trend": 0.084943,
+    "qqq_spy_spread": 0.004123,
+    "yield_slope": 1.155
   },
   "data_coverage": {
     "sources_present": [
@@ -158,8 +158,8 @@
       "vix3m"
     ],
     "sources_missing": [],
-    "spy_start": "2011-05-27",
-    "spy_end": "2026-06-22",
+    "spy_start": "2011-06-03",
+    "spy_end": "2026-06-26",
     "observations": 3788
   }
 }
