@@ -145,7 +145,17 @@ def test_fetch_analyst_report_data_assembles_structure(monkeypatch):
     assert len(data["income_statement"]) >= 1
     assert data["price_target_consensus"][0]["targetConsensus"] == 1100
     assert set(data["peers"]) >= {"AMD", "INTC", "AVGO"}
-    assert data["transcript"].get("quarter") == 1
+    # fetch_latest_transcript_fmp derives candidates from TODAY's date (walks
+    # back from current-quarter-minus-1) and stamps the CANDIDATE's quarter on
+    # the result — the mock answers every (year, quarter) probe, so the first
+    # candidate wins. A hardcoded `== 1` was a calendar bomb: it passed all of
+    # Q2 (prev quarter = Q1) and broke on July 1 (prev quarter = Q2). Mirror
+    # the implementation's calendar math so the test is green year-round.
+    from datetime import datetime, timezone
+
+    _q_now = (datetime.now(timezone.utc).month - 1) // 3 + 1
+    expected_prev_quarter = _q_now - 1 if _q_now > 1 else 4
+    assert data["transcript"].get("quarter") == expected_prev_quarter
 
 
 def test_fetch_analyst_report_data_handles_missing_key():
