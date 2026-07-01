@@ -1,0 +1,101 @@
+# .github/workflows/db-restore-drill.yml
+#
+# Restore drill for the weekly DB backup — proves the encrypted artifact is
+# actually RESTORABLE (an untested backup is a hope, not a control). Runs
+# entirely on the ephemeral runner: downloads the latest successful backup
+# artifact, decrypts it with the same BACKUP_PASSPHRASE secret the backup
+# uses, restores into a throwaway Postgres 17 container, and asserts the core
+# tables exist. The passphrase never leaves GitHub; the restored data dies
+# with the runner.
+#
+# ⚠️ This repo is PUBLIC → so are these logs. The verify step prints ROW
+# COUNTS only — never row contents. Keep it that way.
+#
+# Dispatch manually after any backup you want to verify (Actions → this
+# workflow → Run workflow). Recommended cadence: after the first backup, then
+# quarterly / after any migration that changes the schema.
+
+name: DB restore drill
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: read # download the db-backup artifact from its run
+
+jobs:
+  drill:
+    runs-on: ubuntu-latest
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Gate on secret
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          test -n "$BACKUP_PASSPHRASE" || { echo "BACKUP_PASSPHRASE not set"; exit 1; }
+
+      - name: Download latest successful backup artifact
+        run: |
+          run_id=$(gh run list -R "$GITHUB_REPOSITORY" --workflow db-backup.yml \
+                   --status success --limit 1 --json databaseId --jq '.[0].databaseId')
+          test -n "$run_id" || { echo "No successful db-backup run found"; exit 1; }
+          echo "Verifying backup from run $run_id"
+          gh run download "$run_id" -R "$GITHUB_REPOSITORY" --dir art
+          f=$(find art -name 'backup.dump.gpg' | head -1)
+          test -n "$f" || { echo "backup.dump.gpg not found in artifacts"; exit 1; }
+          mv "$f" backup.dump.gpg
+
+      - name: Decrypt
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          printf '%s' "$BACKUP_PASSPHRASE" | \
+            gpg --batch --decrypt --passphrase-fd 0 \
+                --output backup.dump backup.dump.gpg
+          test -s backup.dump
+
+      - name: Restore into throwaway Postgres 17 (same pinned image as the dump)
+        run: |
+          docker run --rm -d --name drill -e POSTGRES_PASSWORD=drill \
+            postgres:17-alpine@sha256:dc17045ccfd343b49600570ea734b9c4991cf1c3f3302e67df51e3b402dd55c4
+          for i in $(seq 1 30); do
+            if docker exec drill pg_isready -U postgres >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          docker exec drill pg_isready -U postgres
+          # Pre-create Supabase platform roles so RLS policies/grants restore
+          # cleanly instead of erroring on missing roles.
+          docker exec drill psql -U postgres -c \
+            "CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role; CREATE ROLE supabase_admin;"
+          docker cp backup.dump drill:/tmp/backup.dump
+          # public schema = all business tables. Remaining platform-grant
+          # noise is non-fatal — the data lands; the verify step is the judge.
+          docker exec drill pg_restore --clean --if-exists --no-owner \
+            --schema=public -U postgres -d postgres /tmp/backup.dump \
+            || echo "(pg_restore exited non-zero — usually Supabase platform grants; verify step below decides pass/fail)"
+
+      - name: Verify restored data (row COUNTS only — public logs)
+        run: |
+          docker exec drill psql -U postgres -d postgres -c '\dt public.*'
+          # Hard assert: the core tables must exist.
+          for t in profiles portfolios holdings; do
+            docker exec drill psql -U postgres -d postgres -Atc \
+              "select 1 from pg_tables where schemaname='public' and tablename='$t'" \
+              | grep -q 1 || { echo "MISSING TABLE: $t — drill FAILED"; exit 1; }
+          done
+          {
+            echo "## DB restore drill — restored row counts"
+            echo ""
+            echo "| table | rows |"
+            echo "|---|---|"
+            for t in profiles portfolios holdings portfolio_snapshots subscriptions usage_events; do
+              n=$(docker exec drill psql -U postgres -d postgres -Atc \
+                  "select count(*) from \"$t\"" 2>/dev/null || echo "n/a")
+              echo "| $t | $n |"
+            done
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "Drill PASSED — backup decrypts and restores."

@@ -18,10 +18,13 @@
    in-app exceptions (a dead container/Caddy/cert/CF-52x emits none), and the
    nightly e2e is ≤24h behind. Note: GitHub auto-disables cron workflows after
    60 days of repo inactivity — the external monitor keeps watching regardless.
-2. **Test-restore the DB backup once** *(half-day).* `db-backup.yml` ships
-   encrypted weekly dumps after the owner sets `SUPABASE_DB_URL` +
-   `BACKUP_PASSPHRASE` secrets. An untested backup is a hope, not a control:
-   restore one dump into a scratch Supabase project per the workflow header.
+2. **Test-restore the DB backup** — now AUTOMATED as
+   `.github/workflows/db-restore-drill.yml` (dispatch-only): downloads the
+   latest backup artifact, decrypts with the same secret, restores into a
+   throwaway Postgres 17 on the runner, asserts core tables + prints row
+   counts. Secrets were set + first backup succeeded 2026-07-01. Re-run the
+   drill after schema migrations and quarterly (cron workflows auto-disable
+   after 60 days of repo inactivity — dispatch is deliberate).
 3. ~~**Capture the live systemd unit into git**~~ **DONE 2026-07-01** —
    `deploy/mindmarket.service` is now the verbatim on-box unit (runs as
    `User=ec2-user`, so the ec2-user GHCR login covers boot pulls). Swap
