@@ -12,7 +12,7 @@
 | Asset | Where it lives | Recovery |
 | --- | --- | --- |
 | `.env` (all secrets) | Box only | Rebuild from the key inventory below |
-| `mindmarket.service` | Box only (`/etc/systemd/system/`) | Install `deploy/mindmarket.service` (reference copy — see its header caveat) |
+| `mindmarket.service` | Box + `deploy/mindmarket.service` (verbatim copy, captured 2026-07-01) | `sudo cp` from the repo |
 | GHCR `docker login` | Box only | Re-login with a `read:packages` PAT |
 | Let's Encrypt certs | `caddy_data` named volume | Auto-reissued by Caddy on first boot **if** DNS + SG are right (see step 8) |
 
@@ -38,7 +38,8 @@
    sudo systemctl enable --now docker
    sudo usermod -aG docker ec2-user   # re-login afterwards
    # AL2023's docker package does NOT ship the compose v2 plugin, and every
-   # runbook command + the boot unit use `docker compose`:
+   # runbook command + the boot unit use `docker compose`. (The live box runs
+   # Compose v5.1.4 from this same cli-plugins path — verified 2026-07-01.)
    sudo mkdir -p /usr/local/lib/docker/cli-plugins
    sudo curl -fsSL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
         -o /usr/local/lib/docker/cli-plugins/docker-compose
@@ -49,19 +50,17 @@
    echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
    swapon --show   # verify
    ```
-4. **Clone the repo** (+ let root-run git operations work — the boot unit has
-   no `User=`, so systemd runs its `git reset` as root):
+4. **Clone the repo:**
    ```bash
    cd ~ && git clone https://github.com/zhengbrody/PersonalFinancialRiskManagement.git
    cd PersonalFinancialRiskManagement
-   sudo git config --system --add safe.directory /home/ec2-user/PersonalFinancialRiskManagement
    ```
-5. **GHCR login — for BOTH accounts** (pull-only PAT with `read:packages`).
-   The images are private; the boot unit pulls as ROOT while manual
-   `scripts/deploy-ec2.sh` runs pull as ec2-user, so both need credentials:
+5. **GHCR login as ec2-user** (pull-only PAT with `read:packages`). The
+   images are private; the boot unit runs as `User=ec2-user` (verbatim unit
+   in `deploy/mindmarket.service`), so this single login covers both the
+   boot-time pull and manual `scripts/deploy-ec2.sh` runs:
    ```bash
    echo <PAT> | docker login ghcr.io -u zhengbrody --password-stdin
-   echo <PAT> | sudo docker login ghcr.io -u zhengbrody --password-stdin
    ```
 6. **Rebuild `.env`** at the repo root from this inventory (values are NEVER
    in git — retrieve each from its dashboard; rotate anything you suspect):
