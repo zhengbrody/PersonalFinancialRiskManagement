@@ -80,6 +80,15 @@ jobs:
             "CREATE SCHEMA IF NOT EXISTS extensions;
              CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA extensions;
              CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;"
+          # Same story for Supabase's `auth` schema: table DEFAULTs use
+          # auth.uid() and FKs reference auth.users (the ONLY two auth.*
+          # references in supabase/migrations — enumerated 2026-07-01). Stub
+          # both; the empty users table makes FK re-creation fail as expected
+          # non-fatal noise, while CREATE TABLE + COPY (the data) succeed.
+          docker exec drill psql -U postgres -c \
+            "CREATE SCHEMA IF NOT EXISTS auth;
+             CREATE TABLE IF NOT EXISTS auth.users (id uuid PRIMARY KEY);
+             CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS 'select null::uuid';"
           docker cp backup.dump drill:/tmp/backup.dump
           # public schema = all business tables. Remaining platform-grant
           # noise is non-fatal — the data lands; the verify step is the judge.
@@ -90,8 +99,10 @@ jobs:
       - name: Verify restored data (row COUNTS only — public logs)
         run: |
           docker exec drill psql -U postgres -d postgres -c '\dt public.*'
-          # Hard assert: the core tables must exist.
-          for t in profiles portfolios holdings; do
+          # Hard assert: the data-critical tables must exist. NOTE: there is
+          # NO `holdings` table — holdings live as a JSONB column on
+          # `portfolios` (verified against supabase/migrations 2026-07-01).
+          for t in profiles portfolios portfolio_snapshots; do
             docker exec drill psql -U postgres -d postgres -Atc \
               "select 1 from pg_tables where schemaname='public' and tablename='$t'" \
               | grep -q 1 || { echo "MISSING TABLE: $t — drill FAILED"; exit 1; }
@@ -101,10 +112,15 @@ jobs:
             echo ""
             echo "| table | rows |"
             echo "|---|---|"
-            for t in profiles portfolios holdings portfolio_snapshots subscriptions usage_events; do
+            for t in profiles portfolios portfolio_snapshots saved_insights subscriptions usage_events; do
               n=$(docker exec drill psql -U postgres -d postgres -Atc \
                   "select count(*) from \"$t\"" 2>/dev/null || echo "n/a")
               echo "| $t | $n |"
             done
+            # Holdings are JSONB on portfolios — count books that HAVE any.
+            h=$(docker exec drill psql -U postgres -d postgres -Atc \
+                "select count(*) from portfolios where jsonb_array_length(coalesce(holdings,'[]'::jsonb)) > 0" \
+                2>/dev/null || echo "n/a")
+            echo "| portfolios with holdings (jsonb) | $h |"
           } | tee -a "$GITHUB_STEP_SUMMARY"
           echo "Drill PASSED — backup decrypts and restores."
