@@ -3,11 +3,15 @@
 #   /api/v1/*   → backend  :8000   (FastAPI)
 #   /           → frontend :3000   (Next.js)
 #
-# WHY this IS the canonical Caddyfile (not Caddyfile.split):
+# WHY the split routing lives in THIS exact file:
 # `mindmarket.service` runs `git reset --hard origin/main` on every boot,
 # wiping any local edit to this mounted file. So the split routing MUST
 # live in git's `Caddyfile` — else a reboot reverts the routing (the
-# 2026-05-31 incident). Pre-split rollback content lives in git history.
+# 2026-05-31 incident). This is also why ci.yml's `validate-config` job
+# runs `caddy validate` on every push: a bad COMMITTED Caddyfile is a
+# guaranteed boot-time outage (2026-06-20 crash-loop). Pre-split rollback
+# content and the former `Caddyfile.split` staging copy (removed
+# 2026-07-01) live in git history.
 #
 # The legacy Streamlit workbench (/legacy/*, /_stcore/*) was RETIRED 2026-06-23:
 # the `app` Streamlit container is gone, the backend no longer depends on

@@ -5,7 +5,16 @@
 > in 2026-05, and the legacy **Streamlit tier was fully retired on 2026-06-23**
 > (UI code, the backend's dependency on Streamlit, and the running `/legacy`
 > container were all removed). The design-time "Not cut over" status below is no
-> longer accurate — see CLAUDE.md §0 / §1B for the current topology.
+> longer accurate — the current deploy/rollback runbook is
+> `docs/aws/ci-image-deploy.md` (instance recovery: `docs/aws/instance-rebuild.md`).
+>
+> **2026-07-01:** `Caddyfile.split` and the `compose.split.yml` `caddy` service
+> were removed (the live, CI-validated `Caddyfile` + `compose.aws.yml` are
+> canonical). Commands below referencing them — including the §7 rollback and
+> any `docker compose -f compose.split.yml exec caddy …` — are preserved
+> verbatim as history and are **no longer runnable**; today's caddy reload is
+> `docker compose -f compose.aws.yml exec caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile`,
+> and "roll back to Streamlit" is impossible (the container and image are gone).
 
 > **Status:** Design + artifacts ready. **Not cut over to production.**
 > Production cutover requires explicit operator approval ("approve

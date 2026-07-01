@@ -73,3 +73,6 @@ docs/marketing/youtube/rendered/**/*.html
 fonts/*.ttf
 fonts/*.ttc
 fonts/*.otf
+
+# Local-only compose port overrides (docs/user/SETUP.md §5) — never deploy
+compose.override.yml

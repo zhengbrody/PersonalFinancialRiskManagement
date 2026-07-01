@@ -37,3 +37,37 @@ docs/marketing/youtube/video/
 .vscode/
 .idea/
 *.swp
+
+# ── Backend image context guards ─────────────────────────────────────────
+# The backend image builds with context = repo ROOT (compose.split.yml /
+# build-images.yml), so THIS file is the only .dockerignore Docker applies.
+# backend/.dockerignore is NOT read for that build (BuildKit would only honor
+# a `backend/Dockerfile.dockerignore`). The backend imports engine/, domain/,
+# libs/, agents/, backend/, and root *.py modules; nothing below is reachable
+# at runtime, so excluding it only shrinks the image (`COPY . /app`).
+# (assets/ + docs/ are served by Caddy from HOST bind mounts, never the image.)
+frontend
+.github
+.claude
+tests
+backend/tests
+supabase
+exports
+infra
+docs
+assets
+**/node_modules
+**/test-results
+
+# Secrets — RECURSIVE patterns, so nested copies (e.g. infra/.env) can never
+# bake into a locally-built image. CI checkouts are clean; local
+# `docker compose build` uses the working tree, which is where these live.
+# `**/.env*` deliberately covers the `cp .env .env.bak` habit too.
+**/.env*
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/id_rsa*
+**/credentials.json
+**/.npmrc

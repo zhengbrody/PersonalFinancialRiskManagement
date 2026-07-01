@@ -1,5 +1,17 @@
 # .github/workflows/deploy-services.yml
 #
+# ── STATUS (2026-07-01) ──────────────────────────────────────────────────
+# This workflow is UNRELATED to the live EC2 split-stack deploy (that path is
+# build-images.yml → GHCR → pull-only compose on EC2; docs/aws/ci-image-deploy.md).
+#   * The `deploy` job is DORMANT — permanently gated `if: ${{ false }}`,
+#     pending an AWS OIDC role that was never created.
+#   * The `test` / `test-libs` jobs ARE active on pushes/PRs touching
+#     services/**, libs/**, infra/** — they exercise the Phase-2 Lambda
+#     experiment code, which is NOT deployed anywhere today.
+# Decision pending (docs/aws/hardening-backlog.md): retire the Lambda
+# experiment (this workflow + services/ + infra/) or activate it via OIDC.
+# ─────────────────────────────────────────────────────────────────────────
+#
 # CI/CD for the Phase 2 Lambda services. Triggers on push to main:
 #   1. Run pytest on libs/ + each service's tests/
 #   2. (build + push to ECR + cdk deploy ApiStack) — gated behind manual

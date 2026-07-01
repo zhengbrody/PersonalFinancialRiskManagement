@@ -1,10 +1,17 @@
 # Phase 1 — EC2 Lift-and-Shift Runbook
 
+> **HISTORICAL (2026-06-23):** point-in-time record of the original
+> Streamlit-on-EC2 deployment. The Streamlit tier was fully retired — the live
+> stack is Next.js + FastAPI + Caddy via GHCR pull-only deploys (see
+> `docs/aws/ci-image-deploy.md`; instance recovery:
+> `docs/aws/instance-rebuild.md`). The swap-file recipe below is still the
+> canonical one.
+
 > Single EC2 in `us-east-1`, public IP via Elastic IP, Caddy sidecar terminates
 > Let's Encrypt TLS using `<eip>.nip.io`. Streamlit runs in Docker.
 > Bootstrap by `cdk` user-data, app deploy by `deploy-phase-1.sh` over SSH.
 
-## Architecture (current state)
+## Architecture (as of Phase 1 — historical)
 
 ```
 Browser

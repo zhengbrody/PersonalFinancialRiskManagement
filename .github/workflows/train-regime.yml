@@ -2,9 +2,15 @@
 #
 # Training NEVER runs on the EC2 box (RAM) or in the request path — it runs here
 # on a GH runner, fetches free market history (yfinance), trains the sklearn
-# model, and commits the refreshed artifact (backend/app/ml/artifacts/). That
-# commit to `main` then triggers build-images, so the next pull-only deploy
-# ships the retrained model automatically.
+# model, and commits the refreshed artifact (backend/app/ml/artifacts/).
+#
+# ⚠️ That artifact commit does NOT trigger any other workflow: it is pushed
+# with the default GITHUB_TOKEN (GitHub never chains workflows off such
+# pushes) AND carries [skip ci]. So the retrained model ships with the NEXT
+# code deploy — or immediately via a manual `gh workflow run build-images.yml`.
+# Note it also lands on main UNTESTED (ci.yml is skipped too); the runtime
+# loader fail-softs to a heuristic if the artifact is bad, and you can vet it
+# first with a manual ci.yml dispatch before building images.
 #
 # Manual (`workflow_dispatch`) or weekly. NOT on push — so it can't loop on its
 # own artifact commit. A flaky yfinance fetch just fails the run; re-dispatch.

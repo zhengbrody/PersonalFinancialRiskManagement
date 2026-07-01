@@ -15,6 +15,13 @@ on:
     - cron: "0 8 * * *" # 08:00 UTC daily
   workflow_dispatch:
 
+# issues:write — the failure step below opens/refreshes a tracking issue so a
+# red nightly prod smoke actively pings the owner (GitHub's default failure
+# email for scheduled runs is easy to miss; an issue is loud and persistent).
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   e2e-real:
     runs-on: ubuntu-latest
@@ -54,3 +61,21 @@ jobs:
         name: playwright-real-report
         path: frontend/playwright-report/
         retention-days: 7
+
+    # This nightly run is currently the ONLY synthetic probe of production.
+    # On failure, open (or refresh) a tracking issue — the site being down at
+    # 2am must not wait for someone to happen to read an Actions digest email.
+    - name: Alert on failure (open/refresh a tracking issue)
+      if: failure()
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        title="Nightly real-auth prod smoke FAILED"
+        body="Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+        num=$(gh issue list --state open --search "\"$title\" in:title" \
+              --json number --jq '.[0].number' || true)
+        if [ -n "$num" ]; then
+          gh issue comment "$num" --body "$body"
+        else
+          gh issue create --title "$title" --body "$body"
+        fi

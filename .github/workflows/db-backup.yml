@@ -1,0 +1,108 @@
+# .github/workflows/db-backup.yml
+#
+# Weekly logical backup of the Supabase Postgres database — the ONLY store of
+# user data (portfolios, holdings, snapshots, subscriptions, usage). Supabase's
+# FREE tier has NO automated backups, and migrations are applied by hand in the
+# SQL editor: without this, a single mistyped destructive statement permanently
+# destroys every user portfolio. For a risk-management product, losing a user's
+# portfolio is the one unforgivable failure.
+#
+# ⚠️ THIS REPOSITORY IS PUBLIC → workflow artifacts are downloadable by anyone
+# with a GitHub account. The dump is therefore gpg-encrypted (AES256,
+# symmetric) BEFORE upload and the plaintext deleted. NEVER upload an
+# unencrypted dump.
+#
+# ── SETUP (owner, one-time — two repo secrets) ──────────────────────────
+#   SUPABASE_DB_URL     The SESSION-POOLER connection string:
+#                       Supabase Dashboard → Connect → Session pooler URI
+#                       (postgresql://postgres.<ref>:<pw>@...pooler.supabase.com:5432/postgres).
+#                       Use the pooler — it is IPv4; GH runners cannot reach
+#                       the IPv6-only direct db host.
+#   BACKUP_PASSPHRASE   Long random passphrase (`openssl rand -base64 32`),
+#                       stored ALSO in the owner's password manager — a backup
+#                       you cannot decrypt is not a backup.
+# The job self-skips (green no-op) until both secrets exist.
+#
+# ── RESTORE (test this ONCE into a scratch Supabase project) ────────────
+#   gh run download <run-id> -n db-backup-<run-number>
+#   gpg --batch --decrypt --passphrase "$BACKUP_PASSPHRASE" \
+#       --output backup.dump backup.dump.gpg
+#   pg_restore --clean --if-exists --no-owner -d "$SCRATCH_DB_URL" backup.dump
+# See docs/aws/hardening-backlog.md — the untested-restore item.
+
+name: DB backup (Supabase pg_dump)
+
+on:
+  schedule:
+    - cron: "0 7 * * 0" # Sundays 07:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    # Secrets are scoped per-step (not job-wide) so only the steps that need
+    # each value ever see it. Plaintext `backup.dump` exists only on the
+    # ephemeral hosted runner and is deleted before upload; only the .gpg
+    # file is ever referenced by the artifact step.
+
+    steps:
+      - name: Gate on secrets (self-skips until configured)
+        id: gate
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ] || [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Secrets not set — skipping (safe no-op until enabled)."
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dump database (pg_dump 17 via pinned container ≥ server major)
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          # `-e SUPABASE_DB_URL` passes the env var by NAME (value never in
+          # argv), and the SINGLE-quoted `sh -c` defers `$SUPABASE_DB_URL`
+          # expansion to the shell INSIDE the container — a double-quoted
+          # host-side expansion would hand pg_dump an empty string (the var
+          # only exists in the container env) and dump nothing.
+          # Image pinned by digest: this container holds full DB credentials,
+          # so a silently re-tagged image would equal total DB compromise.
+          docker run --rm -e SUPABASE_DB_URL \
+            postgres:17-alpine@sha256:dc17045ccfd343b49600570ea734b9c4991cf1c3f3302e67df51e3b402dd55c4 \
+            sh -c 'exec pg_dump "$SUPABASE_DB_URL" --no-owner --format=custom' \
+            > backup.dump
+          # An empty dump means the connection string or perms are wrong —
+          # fail loudly rather than archive a useless file.
+          test -s backup.dump
+
+      - name: Encrypt (public repo — never upload plaintext)
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          # Passphrase via stdin (--passphrase-fd 0), not argv.
+          printf '%s' "$BACKUP_PASSPHRASE" | \
+            gpg --batch --symmetric --cipher-algo AES256 --passphrase-fd 0 \
+                --output backup.dump.gpg backup.dump
+          rm -f backup.dump
+          ls -l backup.dump.gpg
+
+      - name: Upload encrypted artifact (90-day retention)
+        if: steps.gate.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ github.run_number }}
+          path: backup.dump.gpg
+          retention-days: 90
+          if-no-files-found: error

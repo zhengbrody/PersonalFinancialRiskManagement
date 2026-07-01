@@ -137,6 +137,13 @@ fi
 # boot has nothing to start (compose.aws.yml absent → unit exits cleanly).
 # Subsequent reboots find the repo on the EBS volume and bring the stack
 # back up.
+#
+# ⚠️ STALE — DO NOT REUSE FOR RE-PROVISIONING (2026-07-01). This baked unit
+# is the pre-split-stack version: `compose.aws.yml up -d --build` would BUILD
+# on the 916MB box (the exact class that OOM'd prod twice) and never start
+# the backend/frontend services (they live in compose.split.yml now). The
+# CURRENT pull-only unit is deploy/mindmarket.service in the repo — install
+# THAT on any new instance (see docs/aws/instance-rebuild.md).
 cat > /etc/systemd/system/mindmarket.service <<'UNIT'
 [Unit]
 Description=MindMarket app stack (docker compose)
