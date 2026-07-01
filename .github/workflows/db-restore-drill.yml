@@ -71,6 +71,15 @@ jobs:
           # cleanly instead of erroring on missing roles.
           docker exec drill psql -U postgres -c \
             "CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role; CREATE ROLE supabase_admin;"
+          # Supabase installs extensions into a dedicated `extensions` schema,
+          # and several table DEFAULTs reference it (extensions.uuid_generate_v4
+          # etc.) — without it, CREATE TABLE fails and the data has nowhere to
+          # land (exactly what the first drill run caught, 2026-07-01). The
+          # official postgres image ships contrib, so both extensions install.
+          docker exec drill psql -U postgres -c \
+            "CREATE SCHEMA IF NOT EXISTS extensions;
+             CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\" WITH SCHEMA extensions;
+             CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;"
           docker cp backup.dump drill:/tmp/backup.dump
           # public schema = all business tables. Remaining platform-grant
           # noise is non-fatal — the data lands; the verify step is the judge.
