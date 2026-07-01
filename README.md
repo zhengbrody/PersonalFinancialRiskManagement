@@ -129,7 +129,7 @@ flowchart TD
 | --- | --- |
 | `/` | Next.js frontend |
 | `/api/v1/*` | FastAPI backend |
-| `/mcp` / stdio | MCP tools for AI clients |
+| — (stdio only, not an HTTP route) | MCP tools for AI clients, run outside Caddy |
 
 The production deployment uses Docker Compose, Caddy, GitHub Actions, and GHCR
 images. Frontend and backend images are built off-box in GitHub Actions so the
@@ -367,15 +367,27 @@ Production deploys are pull-only on EC2:
 4. EC2 pulls images and recreates the relevant containers.
 5. Caddy routes `/` to the frontend and `/api/v1/*` to the backend.
 
+The mental model, in one line each: **Dockerfiles** define how each service is
+packaged; **GitHub Actions** builds those images off-box; **GHCR** stores them
+(`latest` + `sha-<commit>` tags — the sha tag is the rollback lever);
+**Compose** wires the containers on EC2 (`compose.split.yml` = app,
+`compose.aws.yml` = Caddy); **Caddy** terminates TLS and routes;
+**Cloudflare** fronts DNS/WAF and hides the origin IP. EC2 never builds — it
+only pulls (`scripts/deploy-ec2.sh`).
+
 Key files:
 
 | File | Purpose |
 | --- | --- |
 | `.github/workflows/build-images.yml` | Build and push GHCR images. |
-| `compose.split.yml` | Split-stack production services. |
-| `Caddyfile.split` | Production routing. |
+| `compose.split.yml` | Production app services (backend + frontend). |
+| `compose.aws.yml` | Caddy (TLS terminator / reverse proxy). |
+| `Caddyfile` | Production routing — the file actually mounted into Caddy; validated in CI. |
+| `scripts/deploy-ec2.sh` | One-command pull-only deploy / rollback helper (run on EC2). |
+| `deploy/mindmarket.service` | Reference copy of the EC2 boot unit. |
 | `docs/aws/ci-image-deploy.md` | CI image deploy runbook. |
-| `docs/aws/operations.md` | Operations checklist. |
+| `docs/aws/instance-rebuild.md` | Instance-loss disaster-recovery runbook. |
+| `docs/aws/hardening-backlog.md` | Ranked ops/hardening backlog + risk register. |
 
 Do not build the Next.js image on the t3.micro host. That already caused an OOM
 incident; the repository now uses off-box GHCR builds.
@@ -399,8 +411,10 @@ incident; the repository now uses off-box GHCR builds.
 | Document | Description |
 | --- | --- |
 | [`docs/adr/0004-fastapi-nextjs-migration.md`](docs/adr/0004-fastapi-nextjs-migration.md) | Migration strategy from monolith to split stack. |
-| [`docs/aws/operations.md`](docs/aws/operations.md) | Production operations runbook. |
-| [`docs/aws/ci-image-deploy.md`](docs/aws/ci-image-deploy.md) | GHCR deploy process. |
+| [`docs/aws/operations.md`](docs/aws/operations.md) | AWS CDK/Lambda cookbook (Phase 1 section historical — not the live deploy path). |
+| [`docs/aws/ci-image-deploy.md`](docs/aws/ci-image-deploy.md) | GHCR deploy process — the current deploy/rollback runbook. |
+| [`docs/aws/instance-rebuild.md`](docs/aws/instance-rebuild.md) | From-scratch EC2 recovery checklist. |
+| [`docs/aws/hardening-backlog.md`](docs/aws/hardening-backlog.md) | Ranked ops backlog + production risk register. |
 | [`docs/aws/cloudflare-setup.md`](docs/aws/cloudflare-setup.md) | Putting Cloudflare in front of the origin (hide IP, DDoS/WAF, CDN). |
 | [`docs/seo/google_indexing.md`](docs/seo/google_indexing.md) | Search indexing notes. |
 | [`docs/legal/disclaimer.md`](docs/legal/disclaimer.md) | Financial disclaimer. |

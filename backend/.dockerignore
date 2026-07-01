@@ -1,6 +1,10 @@
-# Build context for the backend image is the repo root. Keep that
-# small + free of host-only or secret files. Everything the FastAPI
-# app might import at runtime must NOT be ignored here.
+# ⚠️ NOT APPLIED TO IMAGE BUILDS — documentation only.
+# The backend image builds with context = repo ROOT (`context: .` in
+# compose.split.yml and build-images.yml), and Docker only reads the
+# .dockerignore at the CONTEXT ROOT — i.e. the top-level /.dockerignore,
+# which now carries all of these exclusions. BuildKit would honor a
+# `backend/Dockerfile.dockerignore`, but never this file. Edit the ROOT
+# .dockerignore instead.
 
 # VCS + tooling
 .git

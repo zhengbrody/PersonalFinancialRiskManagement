@@ -43,8 +43,12 @@ WORKDIR /app
 # rebuilds.
 COPY requirements.txt /app/requirements.txt
 COPY backend/requirements-backend.txt /app/backend/requirements-backend.txt
-RUN pip install -r /app/requirements.txt \
- && pip install -r /app/backend/requirements-backend.txt
+# ONE joint resolution, not two sequential passes: with two passes, pass 1
+# freely resolves versions that pass 2's constraints then have to UNINSTALL
+# and downgrade (observed in the 2026-06-25 prod build log: cryptography
+# 49.0.0 installed, then downgraded to 48.0.1 by requirements-backend.txt).
+# A single command makes pip satisfy both files' constraints at once.
+RUN pip install -r /app/requirements.txt -r /app/backend/requirements-backend.txt
 
 # Application code. `.dockerignore` excludes node_modules, .git,
 # .venv, tests-only artifacts, secrets, etc. Anything an import

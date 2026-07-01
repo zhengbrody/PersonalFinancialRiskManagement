@@ -15,7 +15,12 @@
 
 services:
   caddy:
-    image: caddy:2-alpine
+    # Pinned to the 2.11 minor — the ingress must not auto-upgrade on a pull/
+    # recreate: a caddy-version-sensitive Caddyfile parse difference already
+    # crash-looped prod on the 2026-06-20 reboot. CI validates ./Caddyfile
+    # against this same image (ci.yml `validate-config`); bump the pin
+    # deliberately, together with that job.
+    image: caddy:2.11-alpine
     ports:
       - "80:80"
       - "443:443"

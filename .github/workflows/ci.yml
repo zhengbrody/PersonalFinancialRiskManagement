@@ -116,6 +116,36 @@ jobs:
     - name: Test
       run: npm test
 
+  # ── Deploy-config validation — compose files + the LIVE Caddyfile.
+  # The EC2 boot unit runs `git reset --hard origin/main`, so a bad committed
+  # Caddyfile is a GUARANTEED future outage (a parse error crash-looped Caddy
+  # on the 2026-06-20 reboot — see docs/aws/ci-image-deploy.md "Boot
+  # behavior"). This job turns that class of mistake into a red PR. Pure
+  # static validation; nothing is deployed.
+  validate-config:
+    runs-on: ubuntu-latest
+
+    env:
+      # Dummy values — interpolation-only, so `config -q` stays warning-free.
+      SITE_HOST: example.com
+      MM_IMAGE_TAG: latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Validate compose files
+      run: |
+        docker compose -f compose.split.yml config -q
+        docker compose -f compose.aws.yml config -q
+
+    - name: Validate Caddyfile (same pinned image as prod — compose.aws.yml)
+      run: |
+        docker run --rm \
+          -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
+          -e SITE_HOST=example.com \
+          caddy:2.11-alpine \
+          caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
   # ── E2E (Playwright) — the auth-gated core journey (dashboard score +
   # streaming copilot), driven against a FULLY MOCKED network: no real
   # backend, Supabase, LLM, or paid API. Deterministic, so it runs by

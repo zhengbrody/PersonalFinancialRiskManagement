@@ -1,28 +1,25 @@
-# compose.split.yml
+# compose.split.yml — CANONICAL production app services (backend + frontend).
 #
-# Split-stack compose used to deploy the Next.js frontend + FastAPI
-# backend ALONGSIDE the existing Streamlit container on EC2.
+# The live stack runs from TWO compose files sharing one project directory:
+#   * compose.split.yml (this file) — backend + frontend, GHCR pull-only images.
+#   * compose.aws.yml               — caddy (TLS terminator / reverse proxy).
+# The on-box systemd unit (`mindmarket.service`; reference copy in
+# deploy/mindmarket.service) brings both up with --no-build on boot.
 #
-# This file lives next to `compose.aws.yml`; the legacy compose stays
-# untouched as the rollback target. Cutover swaps which Caddyfile is
-# mounted, NOT which compose file Docker uses — that way `caddy reload`
-# is the only step that flips traffic, and rolling back is exactly the
-# reverse Caddyfile copy + reload.
+# Deploys are PULL-ONLY on EC2 (t3.micro, ~916 MB RAM — an on-box build has
+# OOM'd the box twice; see docs/aws/ci-image-deploy.md, or just run
+# scripts/deploy-ec2.sh):
+#   MM_IMAGE_TAG=sha-<full-sha> docker compose -f compose.split.yml pull backend frontend
+#   MM_IMAGE_TAG=sha-<full-sha> docker compose -f compose.split.yml up -d --no-deps --no-build backend frontend
+# NEVER pass --remove-orphans — it would remove the caddy container, which is
+# owned by compose.aws.yml in the same project.
 #
-# Services (all on the same default network — Caddy reaches each by
-# service name on the internal DNS):
-#   * streamlit — legacy app, identical to compose.aws.yml's `app`,
-#     renamed for clarity. Same image, same env, same healthcheck.
-#   * backend   — FastAPI from backend/Dockerfile.
-#   * frontend  — Next.js standalone from frontend/Dockerfile.
-#   * caddy     — terminates TLS, reverse-proxies to the three apps.
-#
-# MCP server is NOT a service here. It is stdio-only; operators run it
-# manually when wiring up Claude Desktop / Code. See backend/README.md.
+# History: the legacy `streamlit` service was removed 2026-06-23 (Streamlit
+# fully retired); the duplicate `caddy` service was removed 2026-07-01
+# (it shadowed compose.aws.yml's canonical caddy WITHOUT its awslogs logging —
+# a bare `up -d` here would have recreated prod caddy from the wrong
+# definition). The MCP server is stdio-only and deliberately not a service.
 
-# NOTE: the legacy `streamlit` service was REMOVED 2026-06-23 (CLAUDE.md §1B).
-# It was an on-box `build:` trap (a `next build`/streamlit build on the 916MB
-# box OOMs). The split stack is now backend + frontend (GHCR pull-only) + caddy.
 services:
 
   backend:
@@ -84,6 +81,14 @@ services:
       retries: 5
       start_period: 20s
     restart: unless-stopped
+    # Cap container logs — Docker's default json-file driver has NO size limit,
+    # and a retry-loop log storm on this disk-tight box (80%+ used) could fill
+    # the disk and take all services down. Takes effect on next recreate.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   frontend:
     # Pull the CI-built image on EC2 (`docker compose pull`); `build:` stays
@@ -115,31 +120,9 @@ services:
       retries: 5
       start_period: 15s
     restart: unless-stopped
-
-  caddy:
-    image: caddy:2-alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    environment:
-      - SITE_HOST=${SITE_HOST}
-    volumes:
-      # `Caddyfile` (the live one) is preserved at deploy time as the
-      # rollback target. During staging this can be `Caddyfile.split`
-      # via a `cp`/symlink before `docker compose up`. See
-      # docs/aws/split-stack-deployment.md §C for the exact swap.
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./assets/brand:/srv/brand:ro
-      - ./assets/seo:/srv/seo:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      backend:
-        condition: service_healthy
-      frontend:
-        condition: service_healthy
-    restart: unless-stopped
-
-volumes:
-  caddy_data:
-  caddy_config:
+    # Same log cap as backend — see the note there.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

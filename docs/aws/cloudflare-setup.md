@@ -15,7 +15,7 @@
 |-------|-------|
 | Domain | `mindmarket.app` (registrar: Porkbun) |
 | Origin | AWS EC2 **t3.micro**, Elastic IP `52.71.140.252` |
-| TLS today | Caddy + Let's Encrypt (HTTP-01 on :80), config `Caddyfile.split` |
+| TLS today | Caddy + Let's Encrypt (HTTP-01 on :80), config `Caddyfile` (the mounted, canonical file) |
 | Risk | DNS A record exposes the real IP → anyone can bypass and flood the box directly; one small instance, RAM-bound (`next build` has OOM'd it before) |
 
 The whole point: after this, public DNS resolves to **Cloudflare** IPs, the real
@@ -60,9 +60,9 @@ The clean, maintenance-free fix is a **Cloudflare Origin CA certificate** (free,
    **private key** PEMs.
 2. On EC2, drop them where Caddy can read them, e.g.
    `/srv/tls/origin.pem` + `/srv/tls/origin.key`, and mount that dir into the
-   caddy service in `compose.split.yml`.
-3. In `Caddyfile.split`, pin the cert so Caddy stops trying to issue via ACME —
-   replace the automatic-TLS site with an explicit `tls`:
+   caddy service in `compose.aws.yml` (caddy's canonical compose file).
+3. In the live `Caddyfile`, pin the cert so Caddy stops trying to issue via
+   ACME — replace the automatic-TLS site with an explicit `tls`:
 
    ```caddyfile
    {$SITE_HOST}, www.{$SITE_HOST} {
@@ -122,7 +122,8 @@ real client IP in `CF-Connecting-IP` (and appends to `X-Forwarded-For`). The
 backend (uvicorn `--proxy-headers`) already reads `X-Forwarded-For`, which
 Cloudflare populates with the true client — so app-level logic is unaffected.
 To fix **Caddy's own access logs**, add a global options block at the top of
-`Caddyfile.split` (apply together with the cutover, not before):
+the live `Caddyfile` (the mounted, canonical routing file — validate with
+ci.yml's `validate-config` job / `caddy validate` before reloading):
 
 ```caddyfile
 {
@@ -178,9 +179,11 @@ curl -sI https://mindmarket.app/ | grep -i -E 'server|cf-ray'   # expect a `cf-r
 # Origin is NO LONGER reachable directly (the key proof):
 curl -sI --max-time 8 https://52.71.140.252/ -k                 # expect timeout / refused
 
-# API + legacy still route correctly through Cloudflare:
-curl -sI https://mindmarket.app/api/v1/health
-curl -sI https://mindmarket.app/legacy/
+# API + app still route correctly through Cloudflare:
+curl -sI https://mindmarket.app/api/v1/health          # expect 200
+curl -sI https://mindmarket.app/                       # expect 200 (Next.js)
+# (the /legacy/* Streamlit routes were retired 2026-06-23 — a /legacy/ curl
+#  now returns the Next.js 404, which is correct)
 ```
 
 Also confirm in Cloudflare → Analytics that requests are flowing, and that Caddy

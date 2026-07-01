@@ -50,6 +50,19 @@ permissions:
   contents: read
   packages: write
 
+# Serialize builds per ref — two rapid pushes to main otherwise RACE on the
+# `latest` tag (whichever run finishes LAST wins, possibly the older commit;
+# the reboot path pulls `latest`, so a stale winner could silently roll prod
+# back on next boot). cancel-in-progress stays FALSE deliberately: cancelling
+# a run mid-flight can kill one of the two independent jobs after the other
+# already pushed, leaving a sha-<full> tag that exists for only ONE image —
+# which breaks pinned MM_IMAGE_TAG deploys/rollbacks. Serialized runs always
+# finish both tags; a superseded PENDING run is still replaced by the newest
+# (backfill a skipped sha with `gh workflow run build-images.yml` if needed).
+concurrency:
+  group: build-images-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   frontend:
     runs-on: ubuntu-latest
