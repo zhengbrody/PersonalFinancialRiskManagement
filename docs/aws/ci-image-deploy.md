@@ -94,7 +94,6 @@ job validates it on every push. If the instance itself is lost, see
 ## Ops notes
 - Disk is chronically tight (~80%): `docker image prune -af` after every
   deploy; check `df -h /` before.
-- On the next SSH, verify swap persistence once: `swapon --show && grep
-  swapfile /etc/fstab` (the 1 GB swapfile was added mid-incident; if the
-  fstab line is missing, a reboot returns the box to bare 916 MB — the OOM
-  precondition).
+- Swap persistence verified 2026-07-01 (`/swapfile … swap` present in
+  /etc/fstab; `swapon --show` active) — reboots keep the 1 GB swapfile. If
+  the box is ever rebuilt, `docs/aws/instance-rebuild.md` step 3 recreates it.

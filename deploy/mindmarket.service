@@ -1,40 +1,22 @@
-# deploy/mindmarket.service — REFERENCE COPY of the EC2 boot unit.
+# deploy/mindmarket.service — VERBATIM copy of the EC2 boot unit.
 #
-# ⚠️ RECONSTRUCTED (2026-07-01) from the documented behavior of the live unit
-# (installed on the box 2026-06-20, reboot-verified 2026-06-23 — see
-# docs/aws/ci-image-deploy.md "Boot behavior"). The live file at
-# /etc/systemd/system/mindmarket.service is the source of truth; it exists
-# ONLY on the box. On the next SSH session run:
-#     sudo cat /etc/systemd/system/mindmarket.service
-# diff it against this file, and commit the verbatim copy. Fields most likely
-# to differ from this reconstruction: User=/Group=, absolute binary paths,
-# timeouts.
+# Captured 2026-07-01 via `sudo cat /etc/systemd/system/mindmarket.service`
+# on the live box (which remains the source of truth — re-capture after any
+# on-box edit). Everything below this comment block is byte-identical to the
+# installed unit.
 #
-# ⚠️ With no User= set, systemd runs this as ROOT — so on a rebuilt box the
-# GHCR login must exist for root too (`sudo docker login ghcr.io …`, the GHCR
-# images are private) and git needs
-# `sudo git config --system --add safe.directory <repo path>` or the
-# root-run reset silently no-ops. Both steps are in
-# docs/aws/instance-rebuild.md.
-#
-# WHY this is in git: instance loss previously meant re-deriving the unit from
-# session-log prose (hours). With this file + docs/aws/instance-rebuild.md a
-# replacement box is a checklist, not archaeology.
-#
-# Design invariants (do NOT "fix" these):
-#   * PULL-ONLY, --no-build everywhere — an on-box build OOMs the t3.micro
-#     (two prior outages). docker's own `restart: unless-stopped` is the
-#     fallback if a boot-time pull fails.
-#   * NEVER --remove-orphans — backend/frontend (compose.split.yml) and caddy
-#     (compose.aws.yml) share one project; each file sees the other's
-#     services as orphans.
-#   * ExecStartPre `git reset --hard origin/main` — self-heals the working
-#     tree (Caddyfile, compose files, assets/) on every boot, which is also
-#     why a bad COMMITTED Caddyfile is an outage (guarded by ci.yml
-#     validate-config).
+# Notes for readers / instance rebuild (docs/aws/instance-rebuild.md):
+#   * Runs as User=ec2-user (docker group) — so the ec2-user GHCR
+#     `docker login` is the one the boot-time pull uses; no root login needed.
+#   * Some inline comments predate the 2026-06-23/2026-07-01 cleanups (the
+#     legacy `app`/`streamlit` services they mention are gone) — kept verbatim;
+#     the commands themselves are service-name-explicit and remain correct.
+#   * Design invariants: pull-only (--no-build — an on-box build OOMs the
+#     916MB box), --no-deps + explicit service names, NEVER --remove-orphans
+#     (backend/frontend and caddy share one compose project across two files).
 
 [Unit]
-Description=MindMarket split stack (pull-only; never builds on the box)
+Description=MindMarket app stack (docker compose, split — pull-only, never build on-box)
 Requires=docker.service
 After=docker.service network-online.target
 Wants=network-online.target
@@ -42,22 +24,24 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+User=ec2-user
+Group=docker
 WorkingDirectory=/home/ec2-user/PersonalFinancialRiskManagement
-
-# Self-heal the tree to origin/main (tolerate a network blip).
-ExecStartPre=-/usr/bin/git fetch --quiet origin main
-ExecStartPre=-/usr/bin/git reset --quiet --hard origin/main
-
-# Pull fresh app images (best-effort — the leading '-' means a GHCR outage
-# must not block boot; existing local images are used instead).
-ExecStart=-/usr/bin/docker compose -f compose.split.yml pull --quiet backend frontend
-
-# App services (never build, never touch other-file services).
-ExecStart=/usr/bin/docker compose -f compose.split.yml up -d --no-build --no-deps backend frontend
-
-# Ingress (caddy) from its canonical compose file.
-ExecStart=/usr/bin/docker compose -f compose.aws.yml up -d --no-build
-
+# Self-heal to main on boot (a recovered/stale EBS snapshot syncs to head).
+# Best-effort: network failures tolerated; a divergent local branch blocks the
+# fast-forward safely rather than clobbering. Keeps the compose files + the
+# canonical split ./Caddyfile at head.
+ExecStartPre=/bin/sh -c 'test -f compose.split.yml || exit 0; cd /home/ec2-user/PersonalFinancialRiskManagement && /usr/bin/git fetch --quiet origin main || true; /usr/bin/git reset --quiet --hard origin/main || true'
+# NEVER build on this 916MB box — an on-box next/streamlit build OOMs it (the
+# root cause of past outages). Pull the CI images (best-effort) then bring the
+# split stack up WITH --no-build. Order: backend+frontend (compose.split.yml,
+# json-file) first so caddy's upstreams exist; then app+caddy (compose.aws.yml:
+# caddy keeps awslogs + the canonical split ./Caddyfile, depends_on app).
+# --no-deps keeps compose.split.yml's `streamlit` build-trap untouched; NEVER
+# --remove-orphans (it would kill the legacy app / cross-compose containers).
+# Docker's own `restart: unless-stopped` is the safety net if a pull fails.
+ExecStart=/bin/sh -c 'test -f compose.split.yml || exit 0; cd /home/ec2-user/PersonalFinancialRiskManagement && /usr/bin/docker compose -f compose.split.yml pull --quiet backend frontend 2>/dev/null || true; /usr/bin/docker compose -f compose.split.yml up -d --no-build --no-deps backend frontend || true; exec /usr/bin/docker compose -f compose.aws.yml up -d --no-build'
+ExecStop=/bin/sh -c 'cd /home/ec2-user/PersonalFinancialRiskManagement && /usr/bin/docker compose -f compose.split.yml stop backend frontend; /usr/bin/docker compose -f compose.aws.yml stop app caddy'
 TimeoutStartSec=15min
 
 [Install]
