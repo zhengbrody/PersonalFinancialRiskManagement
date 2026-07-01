@@ -117,9 +117,10 @@ jobs:
                   "select count(*) from \"$t\"" 2>/dev/null || echo "n/a")
               echo "| $t | $n |"
             done
-            # Holdings are JSONB on portfolios — count books that HAVE any.
+            # Holdings are a JSONB OBJECT keyed by ticker (default '{}' — see
+            # migrations 0001 + frontend z.record) — count non-empty books.
             h=$(docker exec drill psql -U postgres -d postgres -Atc \
-                "select count(*) from portfolios where jsonb_array_length(coalesce(holdings,'[]'::jsonb)) > 0" \
+                "select count(*) from portfolios where coalesce(holdings,'{}'::jsonb) != '{}'::jsonb" \
                 2>/dev/null || echo "n/a")
             echo "| portfolios with holdings (jsonb) | $h |"
           } | tee -a "$GITHUB_STEP_SUMMARY"
