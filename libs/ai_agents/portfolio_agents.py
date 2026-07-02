@@ -219,6 +219,18 @@ def detect_reply_language(text: str) -> str | None:
     return None
 
 
+# Closed-set display labels for the Chinese deterministic fallbacks. The
+# scoring engine emits English; these two sets are finite so they are safe to
+# map at the display layer. Free-text fields (dimension `detail`, draft-trade
+# `reason`) are engine DATA and stay verbatim.
+_DIMENSION_ZH = {
+    "Risk Match": "风险匹配",
+    "Risk-adjusted Return": "风险调整后收益",
+    "Downside Protection": "下行保护",
+}
+_STATUS_ZH = {"Excellent": "优秀", "Good": "良好", "Needs Work": "待改进", "Poor": "较差"}
+
+
 # ── institutional reference comparison (the "Citadel bone") ──────────
 # Static, sourced-from-practice reference points for how a professional
 # multi-strategy / quant fund risk desk judges the same numbers. These are
@@ -393,21 +405,45 @@ def _call_llm_formatter(
 class PortfolioAnalyzerAgent:
     name = "Portfolio Analyzer Agent"
 
-    def prepare(self, score: PortfolioScore, positions: Iterable[AssetPosition]) -> dict:
+    def prepare(
+        self,
+        score: PortfolioScore,
+        positions: Iterable[AssetPosition],
+        *,
+        user_message: str | None = None,
+    ) -> dict:
         """Build the turn's context / tool_results / fallback WITHOUT the LLM
-        call, so both ``run()`` and the streaming endpoint share one path."""
+        call, so both ``run()`` and the streaming endpoint share one path.
+
+        ``user_message`` (optional) only picks the FALLBACK template's
+        language: a Chinese question gets a Chinese deterministic fallback
+        (same structure, same numbers). Default (None/English) is unchanged."""
         metric = score.metrics
         weakest = min(score.dimensions.values(), key=lambda item: item.score)
-        fallback_md = (
-            f"**Assessment:** Portfolio score is **{score.overall_score}/1000**. "
-            f"The weakest dimension is **{weakest.name}** at **{weakest.score:.1f}/10** "
-            f"({weakest.status}).\n\n"
-            f"**Evidence:** Sharpe is **{metric.sharpe_ratio:.2f}**, annual volatility is "
-            f"**{_pct(metric.annual_volatility)}**, max drawdown is "
-            f"**{_pct(metric.max_drawdown)}**, and daily VaR(95%) is "
-            f"**{_pct(metric.var_95_daily)}**.\n\n"
-            f"**Action:** Focus first on {weakest.name.lower()}: {weakest.detail}"
-        )
+        if detect_reply_language(user_message or ""):
+            zh_name = _DIMENSION_ZH.get(weakest.name, weakest.name)
+            zh_status = _STATUS_ZH.get(weakest.status, weakest.status)
+            fallback_md = (
+                f"**评估：** 组合评分为 **{score.overall_score}/1000**。"
+                f"最薄弱的维度是 **{zh_name}**，为 **{weakest.score:.1f}/10**"
+                f"（{zh_status}）。\n\n"
+                f"**证据：** Sharpe 为 **{metric.sharpe_ratio:.2f}**，年化波动率为 "
+                f"**{_pct(metric.annual_volatility)}**，最大回撤为 "
+                f"**{_pct(metric.max_drawdown)}**，日 VaR(95%) 为 "
+                f"**{_pct(metric.var_95_daily)}**。\n\n"
+                f"**行动：** 请优先关注{zh_name}：{weakest.detail}"
+            )
+        else:
+            fallback_md = (
+                f"**Assessment:** Portfolio score is **{score.overall_score}/1000**. "
+                f"The weakest dimension is **{weakest.name}** at **{weakest.score:.1f}/10** "
+                f"({weakest.status}).\n\n"
+                f"**Evidence:** Sharpe is **{metric.sharpe_ratio:.2f}**, annual volatility is "
+                f"**{_pct(metric.annual_volatility)}**, max drawdown is "
+                f"**{_pct(metric.max_drawdown)}**, and daily VaR(95%) is "
+                f"**{_pct(metric.var_95_daily)}**.\n\n"
+                f"**Action:** Focus first on {weakest.name.lower()}: {weakest.detail}"
+            )
         positions_list = list(positions)
         return {
             "agent_name": self.name,
@@ -441,7 +477,7 @@ class PortfolioAnalyzerAgent:
         *,
         llm_callable: LLMCallable | None = None,
     ) -> AgentResult:
-        plan = self.prepare(score, positions)
+        plan = self.prepare(score, positions, user_message=user_message)
         llm_text = _call_llm_formatter(
             llm_callable=llm_callable,
             user_message=user_message,
@@ -461,44 +497,85 @@ class PortfolioAnalyzerAgent:
 class StrategyOptimizerAgent:
     name = "Strategy Optimizer Agent"
 
-    def prepare(self, score: PortfolioScore, positions: Iterable[AssetPosition]) -> dict:
+    def prepare(
+        self,
+        score: PortfolioScore,
+        positions: Iterable[AssetPosition],
+        *,
+        user_message: str | None = None,
+    ) -> dict:
         """Build the turn's scans / context / tool_results / fallback WITHOUT
-        the LLM call (shared by ``run()`` and the streaming endpoint)."""
+        the LLM call (shared by ``run()`` and the streaming endpoint).
+
+        ``user_message`` (optional) only picks the FALLBACK template's
+        language — a Chinese question gets a Chinese deterministic fallback."""
         positions_list = list(positions)
         fees = scan_hidden_fees(positions_list)
         tax_losses = scan_tax_loss_harvesting(positions_list)
         draft_trades = generate_draft_trades(score, positions_list)
 
-        fee_text = (
-            "; ".join(
-                f"{row['ticker']} estimated fee {_money(row['annual_fee_usd'])}" for row in fees
+        if detect_reply_language(user_message or ""):
+            fee_text = (
+                "; ".join(
+                    f"{row['ticker']} 预计年费 {_money(row['annual_fee_usd'])}" for row in fees
+                )
+                if fees
+                else "未从可用的费率数据中发现明显的基金费用问题。"
             )
-            if fees
-            else "No material fund-fee issue detected from the available expense ratios."
-        )
-        tax_text = (
-            "; ".join(
-                f"{row['ticker']} loss {_money(row['loss_usd'])} ({_pct(row['loss_pct'])})"
-                for row in tax_losses
+            tax_text = (
+                "; ".join(
+                    f"{row['ticker']} 亏损 {_money(row['loss_usd'])}（{_pct(row['loss_pct'])}）"
+                    for row in tax_losses
+                )
+                if tax_losses
+                else "没有税损收割候选达到本地阈值。"
             )
-            if tax_losses
-            else "No tax-loss harvesting candidate crossed the local threshold."
-        )
-        trade_text = (
-            "\n".join(
-                f"- **{t['action']} {t['ticker']}** {_money(t['amount_usd'])}: {t['reason']}"
-                for t in draft_trades
+            trade_text = (
+                "\n".join(
+                    f"- **{t['action']} {t['ticker']}** {_money(t['amount_usd'])}: {t['reason']}"
+                    for t in draft_trades
+                )
+                if draft_trades
+                else "- 根据当前规则集，无需草拟任何调仓。"
             )
-            if draft_trades
-            else "- No draft trade is necessary from the current rule set."
-        )
-        fallback_md = (
-            f"**Fee scan:** {fee_text}\n\n"
-            f"**Tax-loss scan:** {tax_text}\n\n"
-            f"**Draft trades:**\n{trade_text}\n\n"
-            "These are draft suggestions only; confirm tax lots, wash-sale exposure, "
-            "liquidity, and transaction costs before execution."
-        )
+            fallback_md = (
+                f"**费用扫描：** {fee_text}\n\n"
+                f"**税损收割：** {tax_text}\n\n"
+                f"**草拟调仓：**\n{trade_text}\n\n"
+                "以上仅为草拟内容（教育性参考，不构成投资建议）；执行前请核实计税批次"
+                "（tax lots）、洗售（wash-sale）风险、流动性与交易成本。"
+            )
+        else:
+            fee_text = (
+                "; ".join(
+                    f"{row['ticker']} estimated fee {_money(row['annual_fee_usd'])}" for row in fees
+                )
+                if fees
+                else "No material fund-fee issue detected from the available expense ratios."
+            )
+            tax_text = (
+                "; ".join(
+                    f"{row['ticker']} loss {_money(row['loss_usd'])} ({_pct(row['loss_pct'])})"
+                    for row in tax_losses
+                )
+                if tax_losses
+                else "No tax-loss harvesting candidate crossed the local threshold."
+            )
+            trade_text = (
+                "\n".join(
+                    f"- **{t['action']} {t['ticker']}** {_money(t['amount_usd'])}: {t['reason']}"
+                    for t in draft_trades
+                )
+                if draft_trades
+                else "- No draft trade is necessary from the current rule set."
+            )
+            fallback_md = (
+                f"**Fee scan:** {fee_text}\n\n"
+                f"**Tax-loss scan:** {tax_text}\n\n"
+                f"**Draft trades:**\n{trade_text}\n\n"
+                "These are draft suggestions only; confirm tax lots, wash-sale exposure, "
+                "liquidity, and transaction costs before execution."
+            )
         return {
             "agent_name": self.name,
             "context": build_agent_context(score, positions_list),
@@ -526,7 +603,7 @@ class StrategyOptimizerAgent:
         *,
         llm_callable: LLMCallable | None = None,
     ) -> AgentResult:
-        plan = self.prepare(score, positions)
+        plan = self.prepare(score, positions, user_message=user_message)
         llm_text = _call_llm_formatter(
             llm_callable=llm_callable,
             user_message=user_message,
@@ -650,14 +727,14 @@ class PortfolioAgentRouter:
 
         positions = list(positions)
         if wants_both or (wants_optimizer and wants_analyzer):
-            a = self.analyzer.prepare(score, positions)
-            o = self.optimizer.prepare(score, positions)
+            a = self.analyzer.prepare(score, positions, user_message=user_message)
+            o = self.optimizer.prepare(score, positions, user_message=user_message)
             agent_name = "Portfolio Analyzer + Strategy Optimizer"
             context = a["context"]
             tool_results = {**a["tool_results"], **o["tool_results"]}
             draft_trades = o["draft_trades"]
         elif wants_optimizer:
-            p = self.optimizer.prepare(score, positions)
+            p = self.optimizer.prepare(score, positions, user_message=user_message)
             agent_name, context, tool_results, draft_trades = (
                 p["agent_name"],
                 p["context"],
@@ -665,7 +742,7 @@ class PortfolioAgentRouter:
                 p["draft_trades"],
             )
         else:
-            p = self.analyzer.prepare(score, positions)
+            p = self.analyzer.prepare(score, positions, user_message=user_message)
             agent_name, context, tool_results, draft_trades = (
                 p["agent_name"],
                 p["context"],

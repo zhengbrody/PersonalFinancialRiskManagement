@@ -143,6 +143,27 @@ def test_route_message_catches_router_exception(monkeypatch):
     assert "synthetic agent failure" in resp.response_markdown
 
 
+def test_route_message_router_exception_chinese_message(monkeypatch):
+    """A Chinese question gets the Chinese variant of the router-exception
+    fallback (deterministic — no LLM involved)."""
+    from agents import orchestrator
+
+    class _BoomRouter:
+        def route(self, *a, **kw):
+            raise RuntimeError("synthetic agent failure")
+
+    monkeypatch.setattr(orchestrator, "PortfolioAgentRouter", lambda: _BoomRouter())
+
+    portfolio = _sample_input()
+    score = score_portfolio_from_input(portfolio, _sample_returns())
+    resp = route_message("分析我的组合", score, portfolio.to_positions())
+
+    assert isinstance(resp, AgentResponse)
+    assert "无法生成回答" in resp.response_markdown
+    assert "synthetic agent failure" in resp.response_markdown
+    assert "Could not produce a response" not in resp.response_markdown
+
+
 def test_route_message_optimizer_keyword_routing():
     """Keyword 'tax' should route to optimizer (which returns
     draft_trades / fee scan content, distinct from analyzer)."""

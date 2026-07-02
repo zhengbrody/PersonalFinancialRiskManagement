@@ -11,7 +11,7 @@
  * platform's vetted evidence, never invented by the model.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +35,16 @@ const QUICK_PROMPTS = [
   "Explain my Sharpe ratio",
   "What if the market drops 20%?",
   "Am I paying hidden fees?",
+];
+
+// Chinese counterparts (same order/intent) — shown when the browser locale
+// is Chinese so the quick prompts already match the user's language.
+const QUICK_PROMPTS_ZH = [
+  "我的投资组合风险有多高？",
+  "对比 AAPL 和 MSFT",
+  "解释我的 Sharpe 比率",
+  "如果市场下跌 20% 会怎样？",
+  "我在支付隐藏费用吗？",
 ];
 
 const SOURCE_STYLE: Record<string, string> = {
@@ -63,6 +73,13 @@ export function CopilotAsk({ initialQuestion }: { initialQuestion?: string } = {
     null,
   );
   const answer = ask.data ?? savedAnswer;
+  // Default English on the first render and switch post-mount when the
+  // browser locale is Chinese (SSR-safe: never touch `navigator` in render).
+  const [zh, setZh] = useState(false);
+  useEffect(() => {
+    setZh(navigator.language?.toLowerCase().startsWith("zh") ?? false);
+  }, []);
+  const quickPrompts = zh ? QUICK_PROMPTS_ZH : QUICK_PROMPTS;
 
   function run(q: string) {
     const text = q.trim();
@@ -104,7 +121,7 @@ export function CopilotAsk({ initialQuestion }: { initialQuestion?: string } = {
         </form>
 
         <div className="flex flex-wrap gap-2">
-          {QUICK_PROMPTS.map((q) => (
+          {quickPrompts.map((q) => (
             <button
               key={q}
               type="button"

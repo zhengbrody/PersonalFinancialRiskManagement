@@ -189,6 +189,31 @@ def test_happy_path_degraded_templates(
     assert len(fake_quota.calls) == 1 and fake_quota.calls[0][0] == "user-degraded"
 
 
+def test_degraded_template_chinese_message_answers_in_chinese(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_quota, fake_llm
+):
+    """LLM unavailable + Chinese question → the deterministic template itself
+    is Chinese (the forced-language rule is no longer LLM-path-only)."""
+    fake_active_portfolio.set(
+        {
+            "SPY": {"shares": 100, "avg_cost": 400.0},
+            "BND": {"shares": 50, "avg_cost": 70.0},
+        }
+    )
+    fake_price_history.set(_make_history(["BND", "SPY"]))
+    fake_llm["callable"] = None  # degraded mode
+
+    resp = test_client.post(
+        "/api/v1/copilot/chat",
+        json={"message": "我的组合风险高吗？"},  # 风险 → analyzer route
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    assert resp.status_code == 200, resp.json()
+    md = resp.json()["data"]["response_markdown"]
+    assert "**评估：**" in md
+    assert "**Assessment:**" not in md
+
+
 def test_happy_path_with_live_llm(
     test_client, mint_token, fake_active_portfolio, fake_price_history, fake_quota, fake_llm
 ):

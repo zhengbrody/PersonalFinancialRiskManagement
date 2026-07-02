@@ -45,6 +45,19 @@ def test_extract_tickers_drops_acronyms_and_intent_words():
         ("explain my options exposure", "explain_metric"),
         # substring safety: 'put' hides in 'input' — must NOT trip options_risk.
         ("what is my input for the model", "explain_metric"),
+        # Chinese keywords — the shipped ZH quick prompts / follow-up chips
+        # must route to the SAME intents as their English counterparts.
+        ("我的投资组合风险有多高？", "portfolio_diagnosis"),
+        ("对比 AAPL 和 MSFT", "compare_tickers"),
+        ("解释我的 Sharpe 比率", "explain_metric"),
+        ("如果市场下跌 20% 会怎样？", "scenario_simulation"),
+        ("我在支付隐藏费用吗？", "tax_fee_review"),
+        ("有隐藏费用或税损收割机会吗？", "tax_fee_review"),
+        # suffix "…是什么" is a diagnosis question, NOT a definition lookup
+        ("我现在最大的单一风险是什么？", "portfolio_diagnosis"),
+        ("我的保证金杠杆安全吗？", "margin_risk"),
+        ("我的期权风险大吗？", "options_risk"),
+        ("美联储加息对市场有什么影响？", "macro_rates"),
     ],
 )
 def test_classify(msg, expected):
@@ -197,6 +210,34 @@ def test_answer_english_question_keeps_default_system(monkeypatch):
 
     cr.answer("how risky is my portfolio", user=object(), llm_callable=fake_llm)
     assert "简体中文" not in seen["system"]
+
+
+def test_answer_chinese_deterministic_without_llm(monkeypatch):
+    """No LLM key + Chinese question → the deterministic 5-section template
+    itself comes back in Chinese (translated headers, no English sections)."""
+    monkeypatch.setattr(cr, "_load_score_positions", lambda user: ([], _Score()))
+    ans = cr.answer("我的组合风险高吗？", user=object(), llm_callable=None)
+    assert ans.data_only is True
+    for section in ("**结论**", "**证据**", "**风险**", "**下一步**", "**免责声明**"):
+        assert section in ans.answer_markdown
+    assert "**Conclusion**" not in ans.answer_markdown
+    assert "组合诊断" in ans.answer_markdown  # intent rendered in Chinese, not raw token
+    assert "portfolio diagnosis" not in ans.answer_markdown
+    assert ans.evidence  # evidence labels/values stay verbatim (data)
+
+
+def test_answer_chinese_llm_failure_falls_back_chinese(monkeypatch):
+    """The LLM-failure path uses the same deterministic template — a Chinese
+    question must still get a Chinese fallback."""
+    monkeypatch.setattr(cr, "_load_score_positions", lambda user: ([], _Score()))
+
+    def boom(**kwargs):
+        raise RuntimeError("llm down")
+
+    ans = cr.answer("我的组合风险高吗？", user=object(), llm_callable=boom)
+    assert ans.data_only is True
+    assert "**结论**" in ans.answer_markdown
+    assert "**Conclusion**" not in ans.answer_markdown
 
 
 # ── option-exposure evidence (Copilot option-awareness) ──────────────────────
