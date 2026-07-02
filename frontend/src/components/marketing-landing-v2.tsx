@@ -22,6 +22,7 @@ import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { C, display, mono, eyebrow, secTitle } from "@/components/marketing/theme";
 import { Reveal, useReveal, useCountUp } from "@/components/marketing/motion";
 import { CTA, Band } from "@/components/marketing/primitives";
+import { LiveTape } from "@/components/marketing/live-tape";
 import { StickyMobileCTA } from "@/components/marketing/sticky-mobile-cta";
 
 /* SEO — the authoritative Organization + SoftwareApplication JSON-LD ships on
@@ -72,12 +73,6 @@ const SAMPLE = [
   { t: "TLT", w: 0.1, b: -0.25, varPct: 5 },
 ];
 const NOTIONAL = 100_000;
-const TICKERS: [string, string, number][] = [
-  ["NVDA", "172.41", 2.84], ["AAPL", "228.07", 0.62], ["MSFT", "461.20", 1.1],
-  ["TSLA", "241.93", -3.17], ["SPY", "548.02", 0.41], ["TLT", "89.55", -0.41],
-  ["AMZN", "201.30", 1.55], ["META", "612.88", 2.02], ["GOOGL", "178.44", -0.74],
-  ["NFLX", "915.10", 0.93], ["AMD", "168.22", -1.21], ["BND", "72.19", 0.08],
-];
 const fmtUsd = (n: number) => (n < 0 ? "−$" : "$") + Math.abs(Math.round(n)).toLocaleString("en-US");
 
 /* ───────────────────────────────────────────────────────────────────────── */
@@ -90,7 +85,7 @@ export function MarketingLandingV2() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_JSON_LD) }}
       />
       <Hero />
-      <Ticker />
+      <LiveTape />
       <MacroBand />
       <Stats />
       <Demo />
@@ -212,24 +207,6 @@ function FloatChip({ style, label, value }: { style: CSSProperties; label: strin
     <div className="mm-float-chip" style={{ position: "absolute", zIndex: 2, borderRadius: 13, border: `1px solid ${C.hairStrong}`, background: C.chipBg, backdropFilter: "blur(8px)", padding: "11px 14px", boxShadow: "0 20px 40px -20px rgba(0,0,0,.9)", ...style }}>
       <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".14em", color: C.slate }}>{label}</div>
       <div style={{ ...mono, fontSize: 17, fontWeight: 600, marginTop: 2, color: C.gold }}>{value}</div>
-    </div>
-  );
-}
-
-/* ticker ------------------------------------------------------------------- */
-function Ticker() {
-  const items = [...TICKERS, ...TICKERS];
-  return (
-    <div style={{ overflow: "hidden", borderBlock: `1px solid ${C.hair}`, background: C.surfaceFaint }}>
-      <div style={{ display: "inline-flex", gap: 40, padding: "9px 0", whiteSpace: "nowrap", ...mono, fontSize: 12.5, animation: "mm-scroll 38s linear infinite" }}>
-        {items.map(([t, p, d], i) => (
-          <span key={i} style={{ color: C.slate }}>
-            <b style={{ color: C.paper, margin: "0 6px 0 8px" }}>{t}</b>${p}{" "}
-            <span style={{ color: d >= 0 ? C.up : C.down }}>{d >= 0 ? "+" : ""}{d.toFixed(2)}%</span>
-          </span>
-        ))}
-      </div>
-      <style>{`@keyframes mm-scroll{to{transform:translateX(-50%)}}`}</style>
     </div>
   );
 }

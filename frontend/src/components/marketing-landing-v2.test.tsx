@@ -7,6 +7,11 @@ vi.mock("@/components/macro-snapshot", () => ({
   MacroSnapshot: () => <div data-testid="macro" />,
 }));
 
+// LiveTape uses a React Query hook (own tests cover it) — stub likewise.
+vi.mock("@/components/marketing/live-tape", () => ({
+  LiveTape: () => <div data-testid="tape" />,
+}));
+
 // The shared <MarketingShell> nav is auth-aware (useAuth) — stub anon.
 vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ user: null, configured: false, loading: false }),
@@ -36,6 +41,7 @@ describe("MarketingLandingV2", () => {
     expect(screen.getByText(/Move the crash slider/i)).toBeInTheDocument();
     expect(screen.getByText(/Real risk math/i)).toBeInTheDocument();
     expect(screen.getByTestId("macro")).toBeInTheDocument(); // embedded live macro
+    expect(screen.getByTestId("tape")).toBeInTheDocument(); // movers tape present
     // CTAs point at real routes.
     expect(screen.getAllByRole("link", { name: /score my portfolio/i })[0]).toHaveAttribute(
       "href",
