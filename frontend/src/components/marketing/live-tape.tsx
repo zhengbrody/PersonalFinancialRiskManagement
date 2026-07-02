@@ -28,6 +28,27 @@ const ILLUSTRATIVE: TapeItem[] = [
 
 const MAX_ITEMS = 12;
 
+// Each marquee half must be at least this many entries wide, else the doubled
+// strip can be narrower than a wide viewport (blank right region + a visible
+// snap per loop). A sparse live feed is padded by repetition — natural in a
+// scrolling tape.
+const MIN_HALF = 12;
+
+function buildHalf(items: TapeItem[]): TapeItem[] {
+  const reps = Math.ceil(MIN_HALF / items.length);
+  return Array.from({ length: reps }, () => items).flat();
+}
+
+/** Today's date in the market's own timezone (America/New_York), YYYY-MM-DD. */
+export function etDateString(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
 function toTapeItems(rows: MoverRow[]): TapeItem[] {
   const seen = new Set<string>();
   const out: TapeItem[] = [];
@@ -53,7 +74,16 @@ export function LiveTape() {
   // Fewer than 4 real rows reads as a broken feed — use the labelled fallback.
   const isLive = live.length >= 4;
   const items = isLive ? live : ILLUSTRATIVE;
-  const doubled = [...items, ...items];
+  const half = buildHalf(items);
+  const doubled = [...half, ...half];
+  // Movers are stamped with the session they were scanned in — on a weekend or
+  // holiday that is the PRIOR session, so don't call it "today".
+  const isTodaysSession = (movers.data?.scan_date ?? "").slice(0, 10) === etDateString();
+  const label = !isLive
+    ? "Illustrative"
+    : isTodaysSession
+      ? "Live · today's movers"
+      : "Live · last session movers";
 
   return (
     <div style={{ display: "flex", alignItems: "stretch", borderBlock: `1px solid ${C.hair}`, background: C.surfaceFaint }}>
@@ -65,7 +95,7 @@ export function LiveTape() {
         }}
       >
         {isLive && <span aria-hidden style={{ width: 6, height: 6, borderRadius: "50%", background: C.up }} />}
-        {isLive ? "Live · today's movers" : "Illustrative"}
+        {label}
       </span>
       <div style={{ overflow: "hidden", flex: 1, minWidth: 0 }}>
         <div style={{ display: "inline-flex", gap: 40, padding: "9px 0", whiteSpace: "nowrap", ...mono, fontSize: 12.5, animation: "mm-scroll 38s linear infinite" }}>
