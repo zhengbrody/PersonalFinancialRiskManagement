@@ -23,6 +23,15 @@ def test_health_returns_envelope(test_client):
     assert body["data"]["status"] in ("ok", "degraded")
 
 
+def test_health_answers_head_for_uptime_monitors(test_client):
+    """Uptime monitors (UptimeRobot etc.) default to HEAD; a GET-only route
+    405s and pages the owner about a healthy service (happened live on the
+    very first monitor check, 2026-07-01). HEAD must be a bodyless 200."""
+    resp = test_client.head("/api/v1/health")
+    assert resp.status_code == 200
+    assert resp.content == b""
+
+
 def test_envelope_carries_request_id_when_caller_sends_one(test_client):
     """The frontend will set X-Request-Id for log correlation; the
     envelope must echo whatever the caller sent, not mint a new one."""

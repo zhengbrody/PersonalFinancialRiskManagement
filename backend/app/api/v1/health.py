@@ -10,12 +10,22 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 
 from ...core.config import Settings, get_settings
 from ...core.responses import ok
 
 router = APIRouter(prefix="/api/v1", tags=["health"])
+
+
+@router.head("/health", include_in_schema=False)
+def health_head() -> Response:
+    """HEAD liveness — uptime monitors (UptimeRobot etc.) default to HEAD,
+    and FastAPI GET-only routes answer 405 to it (caught live by the first
+    monitor alert, 2026-07-01). Bodyless 200 = process is up and routing;
+    the GET below remains the real import-sanity probe.
+    """
+    return Response(status_code=200)
 
 
 @router.get("/health", summary="Liveness + import sanity")
