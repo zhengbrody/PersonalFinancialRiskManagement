@@ -129,6 +129,45 @@ export const GROWTH: DemoBook = {
 
 const SHOCKS = [-5, -10, -20, -30] as const;
 
+// One honest line per figure on this page — what it is and how it's derived.
+// Deterministic copy (no AI); linked to the matching /learn guide where one exists.
+const METHODOLOGY: { label: string; how: string; learn?: string }[] = [
+  {
+    label: "Health score",
+    how: "A weighted blend of three 0–10 dimensions — risk match, risk-adjusted return, downside protection — scaled to 0–1000.",
+    learn: "/learn/portfolio-risk-management",
+  },
+  {
+    label: "Annualized vol",
+    how: "The standard deviation of daily returns, scaled to a year (×√252).",
+  },
+  {
+    label: "1-day VaR & CVaR 95%",
+    how: "VaR is the daily loss you'd expect to exceed only 1 trading day in 20; CVaR is the average loss on those worst days.",
+    learn: "/learn/var-cvar-explained",
+  },
+  {
+    label: "Max drawdown",
+    how: "The largest peak-to-trough decline over the sample window — the loss that tests your nerve.",
+    learn: "/learn/maximum-drawdown",
+  },
+  {
+    label: "Sharpe",
+    how: "Return earned per unit of volatility, above the risk-free rate.",
+    learn: "/learn/sharpe-ratio-explained",
+  },
+  {
+    label: "Crash scenario",
+    how: "A transparent first-order estimate: each holding moves beta × shock, and the portfolio loss is the weighted sum.",
+    learn: "/learn/stress-testing",
+  },
+  {
+    label: "Risk drivers",
+    how: "Each holding's share of total portfolio VaR — where the downside actually concentrates.",
+    learn: "/learn/diversification-correlation",
+  },
+];
+
 function usd(n: number): string {
   return n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 }
@@ -351,6 +390,32 @@ export function SampleCockpit() {
           />
         </div>
       </div>
+
+      {/* methodology — deterministic, no AI; the "why trust these numbers" story */}
+      <details className="group rounded-xl border border-border bg-muted/20">
+        <summary className="flex cursor-pointer flex-wrap items-baseline gap-x-2 px-4 py-3 text-sm font-medium">
+          How each number is computed
+          <span className="text-xs font-normal text-muted-foreground">
+            deterministic math — no AI, nothing invented
+          </span>
+        </summary>
+        <div className="space-y-2 border-t border-border p-4 text-sm text-muted-foreground">
+          {METHODOLOGY.map((m) => (
+            <p key={m.label}>
+              <span className="font-medium text-foreground">{m.label}.</span> {m.how}{" "}
+              {m.learn && (
+                <Link href={m.learn} className="whitespace-nowrap text-primary hover:underline">
+                  Learn more →
+                </Link>
+              )}
+            </p>
+          ))}
+          <p className="pt-1 text-xs">
+            Your own cockpit runs the full engine — Monte-Carlo VaR, six-factor betas,
+            stress tests — on real market data, with a source and as-of date on every figure.
+          </p>
+        </div>
+      </details>
 
       <div className="flex flex-col items-start justify-between gap-3 border-t border-border pt-4 sm:flex-row sm:items-center">
         <p className="text-xs text-muted-foreground">

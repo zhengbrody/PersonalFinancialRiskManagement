@@ -42,4 +42,18 @@ describe("SampleCockpit", () => {
     expect(screen.getByText(/educational only/i)).toBeInTheDocument();
     expect(screen.getByText(/not live prices/i)).toBeInTheDocument();
   });
+
+  it("explains how each number is computed, linking to the learn guides", () => {
+    render(<SampleCockpit />);
+    expect(screen.getByText(/How each number is computed/i)).toBeInTheDocument();
+    expect(screen.getByText(/no AI, nothing invented/i)).toBeInTheDocument();
+    // Every methodology learn link points at a real /learn route.
+    const learnLinks = screen
+      .getAllByRole("link", { name: /learn more/i })
+      .map((l) => l.getAttribute("href"));
+    expect(learnLinks.length).toBeGreaterThanOrEqual(5);
+    for (const href of learnLinks) expect(href).toMatch(/^\/learn\/[a-z-]+$/);
+    expect(learnLinks).toContain("/learn/var-cvar-explained");
+    expect(learnLinks).toContain("/learn/stress-testing");
+  });
 });
