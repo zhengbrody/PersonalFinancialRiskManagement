@@ -140,8 +140,19 @@ jobs:
 
     - name: Validate Caddyfile (same pinned image as prod — compose.aws.yml)
       run: |
+        # The site block pins the Cloudflare Origin CA cert via
+        # `tls /srv/tls/...` and `caddy validate` LOADS cert files during
+        # provisioning — so give it a throwaway self-signed pair at the same
+        # paths, shaped like the real cert (apex + wildcard SANs).
+        mkdir -p tlsdummy
+        openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+          -keyout tlsdummy/origin.key -out tlsdummy/origin.pem \
+          -subj "/CN=example.com" \
+          -addext "subjectAltName=DNS:example.com,DNS:*.example.com" \
+          2>/dev/null
         docker run --rm \
           -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
+          -v "$PWD/tlsdummy:/srv/tls:ro" \
           -e SITE_HOST=example.com \
           caddy:2.11-alpine \
           caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile

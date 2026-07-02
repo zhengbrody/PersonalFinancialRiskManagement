@@ -30,6 +30,11 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./assets/brand:/srv/brand:ro
       - ./assets/seo:/srv/seo:ro
+      # Cloudflare Origin CA cert + key (host-only, NEVER in git) — consumed
+      # by the Caddyfile's `tls` directive. See docs/aws/cloudflare-setup.md
+      # Step 3; instance rebuild: re-download from Cloudflare → SSL/TLS →
+      # Origin Server (or re-create, free).
+      - /srv/tls:/srv/tls:ro
       - caddy_data:/data
       - caddy_config:/config
     logging:

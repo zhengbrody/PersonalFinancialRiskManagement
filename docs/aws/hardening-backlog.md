@@ -29,10 +29,10 @@
    `deploy/mindmarket.service` is now the verbatim on-box unit (runs as
    `User=ec2-user`, so the ec2-user GHCR login covers boot pulls). Swap
    persistence also verified the same session (`/swapfile` in fstab).
-4. **Cloudflare Origin CA cert** *(owner-side, ~1-2h — runbook already in
-   `cloudflare-setup.md`).* Kills the recurring ~60-day Let's Encrypt renewal
-   dependency (a silent renewal failure darkens the origin on a timer). Apply
-   behind the new `validate-config` CI gate + confirm SSL/TLS = Full (Strict).
+4. ~~**Cloudflare Origin CA cert**~~ **DONE 2026-07-02** — 15-year cert
+   (expires 2041) live at `/srv/tls`, pinned in the Caddyfile, CI-validated
+   with a dummy pair. The ~60-day LE renewal timer is gone; port 80 no longer
+   needed for ACME (optional follow-up: drop :80 from the SG).
 5. **Deep readiness probe** *(small backend PR).* `GET /api/v1/health` is
    import-sanity only — containers stay "healthy" while every authed route
    401s or Supabase is down. Add `/api/v1/health?deep=1` (timeboxed ~2s
@@ -101,11 +101,11 @@
 
 | Sev | Risk | State |
 | --- | --- | --- |
-| HIGH | No uptime alerting | **Open** → item #1 (owner, ~1h) |
+| HIGH | No uptime alerting | **Closed 2026-07-02** — monitors live on `/` + `/api/v1/health`; alert path proven by the first (405/HEAD) incident; server now answers HEAD |
 | HIGH | DB backup never restore-tested | Mitigated by `db-backup.yml` once secrets set → item #2 |
 | HIGH | On-box build → OOM | Guardrails procedural (`--no-build` in unit + script); structural fix impossible while `build:` blocks serve local dev |
 | MED | Instance loss MTTR | Mitigated: verbatim `deploy/mindmarket.service` (captured 2026-07-01) + `instance-rebuild.md` |
-| MED | LE cert ~60-day renewal behind proxy | Open → item #4 (Origin CA) |
+| MED | LE cert ~60-day renewal behind proxy | **Closed 2026-07-02** — Origin CA (15yr) pinned in Caddy |
 | MED | Shallow healthchecks (healthy ≠ working) | Open → item #5 |
 | MED | Solo-owner deploy bus factor | Reduced by `deploy-ec2.sh`; automation is item #6 |
 | MED | No CloudWatch alarms | Open (snippet above) |
