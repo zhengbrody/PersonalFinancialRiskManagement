@@ -210,7 +210,7 @@ def test_degraded_template_chinese_message_answers_in_chinese(
     )
     assert resp.status_code == 200, resp.json()
     md = resp.json()["data"]["response_markdown"]
-    assert "**评估:**" in md
+    assert "**评估：**" in md
     assert "**Assessment:**" not in md
 
 

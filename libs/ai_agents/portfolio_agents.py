@@ -219,6 +219,18 @@ def detect_reply_language(text: str) -> str | None:
     return None
 
 
+# Closed-set display labels for the Chinese deterministic fallbacks. The
+# scoring engine emits English; these two sets are finite so they are safe to
+# map at the display layer. Free-text fields (dimension `detail`, draft-trade
+# `reason`) are engine DATA and stay verbatim.
+_DIMENSION_ZH = {
+    "Risk Match": "风险匹配",
+    "Risk-adjusted Return": "风险调整后收益",
+    "Downside Protection": "下行保护",
+}
+_STATUS_ZH = {"Excellent": "优秀", "Good": "良好", "Needs Work": "待改进", "Poor": "较差"}
+
+
 # ── institutional reference comparison (the "Citadel bone") ──────────
 # Static, sourced-from-practice reference points for how a professional
 # multi-strategy / quant fund risk desk judges the same numbers. These are
@@ -409,15 +421,17 @@ class PortfolioAnalyzerAgent:
         metric = score.metrics
         weakest = min(score.dimensions.values(), key=lambda item: item.score)
         if detect_reply_language(user_message or ""):
+            zh_name = _DIMENSION_ZH.get(weakest.name, weakest.name)
+            zh_status = _STATUS_ZH.get(weakest.status, weakest.status)
             fallback_md = (
-                f"**评估:** 组合评分为 **{score.overall_score}/1000**。"
-                f"最薄弱的维度是 **{weakest.name}**，为 **{weakest.score:.1f}/10**"
-                f"（{weakest.status}）。\n\n"
-                f"**证据:** Sharpe 为 **{metric.sharpe_ratio:.2f}**，年化波动率为 "
+                f"**评估：** 组合评分为 **{score.overall_score}/1000**。"
+                f"最薄弱的维度是 **{zh_name}**，为 **{weakest.score:.1f}/10**"
+                f"（{zh_status}）。\n\n"
+                f"**证据：** Sharpe 为 **{metric.sharpe_ratio:.2f}**，年化波动率为 "
                 f"**{_pct(metric.annual_volatility)}**，最大回撤为 "
                 f"**{_pct(metric.max_drawdown)}**，日 VaR(95%) 为 "
                 f"**{_pct(metric.var_95_daily)}**。\n\n"
-                f"**行动:** 请优先关注 {weakest.name}：{weakest.detail}"
+                f"**行动：** 请优先关注{zh_name}：{weakest.detail}"
             )
         else:
             fallback_md = (
@@ -525,10 +539,10 @@ class StrategyOptimizerAgent:
                 else "- 根据当前规则集，无需草拟任何调仓。"
             )
             fallback_md = (
-                f"**费用扫描:** {fee_text}\n\n"
-                f"**税损收割:** {tax_text}\n\n"
-                f"**草拟调仓:**\n{trade_text}\n\n"
-                "以上仅为草拟内容（教育性参考，不构成投资建议）；执行前请核实税批"
+                f"**费用扫描：** {fee_text}\n\n"
+                f"**税损收割：** {tax_text}\n\n"
+                f"**草拟调仓：**\n{trade_text}\n\n"
+                "以上仅为草拟内容（教育性参考，不构成投资建议）；执行前请核实计税批次"
                 "（tax lots）、洗售（wash-sale）风险、流动性与交易成本。"
             )
         else:

@@ -87,8 +87,22 @@ def extract_tickers(message: str) -> list[str]:
 
 # ── intent classification (deterministic) ───────────────────────────
 
+# English keywords are space-delimited word tokens; Chinese has no word
+# boundaries, so CJK keywords rely on plain containment — keep them ≥2 chars
+# and unambiguous (the same "safe tokens" discipline as the English set).
 _KW = {
-    "compare_tickers": ("compare", "versus", " vs ", " vs.", "better buy", "or "),
+    "compare_tickers": (
+        "compare",
+        "versus",
+        " vs ",
+        " vs.",
+        "better buy",
+        "or ",
+        "对比",
+        "比较",
+        "相比",
+        "哪个更好",
+    ),
     "scenario_simulation": (
         "crash",
         "drop",
@@ -104,6 +118,14 @@ _KW = {
         "-10%",
         "-20%",
         "-30%",
+        "下跌",
+        "大跌",
+        "暴跌",
+        "崩盘",
+        "回调",
+        "熊市",
+        "衰退",
+        "如果市场",
     ),
     "macro_rates": (
         "rate",
@@ -118,9 +140,42 @@ _KW = {
         "market overall",
         "fear",
         "greed",
+        "利率",
+        "美联储",
+        "通胀",
+        "宏观",
+        "收益率曲线",
+        "恐慌",
+        "贪婪",
     ),
-    "tax_fee_review": ("tax", "fee", "expense ratio", "harvest", "tax-loss", "loss harvest"),
-    "explain_metric": ("what is", "what's a", "explain", "what does", "definition", "mean by"),
+    "tax_fee_review": (
+        "tax",
+        "fee",
+        "expense ratio",
+        "harvest",
+        "tax-loss",
+        "loss harvest",
+        "税务",
+        "税损",
+        "缴税",
+        "报税",
+        "费用",
+        "费率",
+    ),
+    "explain_metric": (
+        "what is",
+        "what's a",
+        "explain",
+        "what does",
+        "definition",
+        "mean by",
+        # "是什么" (suffix form) is deliberately absent — "我最大的风险是什么"
+        # is a diagnosis question, not a definition lookup.
+        "解释",
+        "什么是",
+        "怎么理解",
+        "含义",
+    ),
     "action_plan": (
         "what should i do",
         "action",
@@ -131,6 +186,13 @@ _KW = {
         "how do i",
         "recommend",
         "rebalance",
+        "怎么办",
+        "该怎么",
+        "怎么改善",
+        "如何改善",
+        "如何提高",
+        "再平衡",
+        "优化",
     ),
     "ticker_research": (
         "should i buy",
@@ -143,6 +205,11 @@ _KW = {
         "bull case",
         "bear case",
         "fair value",
+        "研究",
+        "分析一下",
+        "看法",
+        "估值",
+        "基本面",
     ),
     "portfolio_diagnosis": (
         "my portfolio",
@@ -154,6 +221,14 @@ _KW = {
         "my holdings",
         "am i diversified",
         "concentration",
+        "我的组合",
+        "我的投资组合",
+        "我的持仓",
+        "风险高",
+        "风险太高",
+        "分散",
+        "集中度",
+        "健康",
     ),
     # Safe tokens only — avoid substrings that hide in common words (e.g. "put"
     # in "input", "loan" in "download", bare "call" in a ticker question).
@@ -166,6 +241,9 @@ _KW = {
         "borrowed money",
         "buying power",
         "maintenance",
+        "保证金",
+        "杠杆",
+        "融资买入",
     ),
     "options_risk": (
         "option",
@@ -180,7 +258,26 @@ _KW = {
         "iron condor",
         "expiry",
         "assignment",
+        "期权",
+        "希腊字母",
+        "行权",
     ),
+}
+
+# Chinese display names for the closed intent set — used only by the Chinese
+# deterministic template (the English intent token mid-sentence read like an
+# unfilled blank).
+_INTENT_ZH = {
+    "portfolio_diagnosis": "组合诊断",
+    "scenario_simulation": "情景模拟",
+    "macro_rates": "宏观与利率",
+    "tax_fee_review": "税务与费用",
+    "explain_metric": "指标解释",
+    "action_plan": "行动计划",
+    "ticker_research": "个股研究",
+    "compare_tickers": "个股对比",
+    "margin_risk": "保证金风险",
+    "options_risk": "期权风险",
 }
 
 _METRIC_GLOSSARY = {
@@ -548,8 +645,9 @@ def _deterministic_answer(intent: str, message: str, evidence: list[EvidenceItem
     pretty = intent.replace("_", " ")
     if detect_reply_language(message):
         ev = _evidence_block(evidence, chinese=True)
+        pretty_zh = _INTENT_ZH.get(intent, pretty)
         return (
-            f"**结论**\n以下是与您的 **{pretty}** 问题相关的数据结果。\n\n"
+            f"**结论**\n以下是与您的**{pretty_zh}**问题相关的数据结果。\n\n"
             f"**证据**\n{ev}\n\n"
             "**风险**\n这些是来自市场数据的时点数字，可能随时变动；"
             "数据覆盖不足会降低可信度。\n\n"
