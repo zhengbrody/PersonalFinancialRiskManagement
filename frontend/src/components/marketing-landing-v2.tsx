@@ -16,6 +16,7 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 import { Icon, type IconName } from "@/components/ui/icon";
+import { isUsTradingHours } from "@/lib/market-hours";
 import { MacroSnapshot } from "@/components/macro-snapshot";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { C, display, mono, eyebrow, secTitle } from "@/components/marketing/theme";
@@ -109,6 +110,15 @@ function Hero() {
     const id = setTimeout(() => setStarted(true), 350);
     return () => clearTimeout(id);
   }, []);
+  // Honest session chip — same SSR-safe pattern as <MarketStatusBar>: null on
+  // the server/prerender (neutral label), real open/closed state post-mount.
+  const [marketOpen, setMarketOpen] = useState<boolean | null>(null);
+  useEffect(() => {
+    const tick = () => setMarketOpen(isUsTradingHours());
+    tick();
+    const id = setInterval(tick, 60_000);
+    return () => clearInterval(id);
+  }, []);
   const score = useCountUp(612, started, 1600);
   const dims = [useCountUp(5.4, started, 1600), useCountUp(7.1, started, 1600), useCountUp(4.2, started, 1600)];
 
@@ -123,7 +133,12 @@ function Hero() {
         <div>
           <Reveal>
             <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 500, textTransform: "uppercase", letterSpacing: ".18em", color: C.teal, marginBottom: 22 }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: C.up }} /> Live · US market open
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: marketOpen === false ? C.slateDim : C.up }} />
+              {marketOpen === null
+                ? "US markets"
+                : marketOpen
+                  ? "Live · US market open"
+                  : "US market closed · reopens 9:30 ET"}
             </span>
           </Reveal>
           <Reveal delay={0.08}>
@@ -146,13 +161,16 @@ function Hero() {
         </div>
 
         <div style={{ position: "relative" }}>
-          <FloatChip style={{ top: 128, left: -42 }} label="1-day VaR 95%" value="−2.52%" />
-          <FloatChip style={{ bottom: 92, right: -34 }} label="Annualized vol" value="24.3%" />
+          <FloatChip style={{ top: 128, left: -42 }} label="Sample · 1-day VaR 95%" value="−2.52%" />
+          <FloatChip style={{ bottom: 92, right: -34 }} label="Sample · annualized vol" value="24.3%" />
           <Reveal delay={0.08}>
             <div style={{ borderRadius: 22, border: `1px solid ${C.hair}`, background: C.cardGrad, boxShadow: "0 40px 90px -40px rgba(0,0,0,.8)", padding: "26px 26px 22px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                 <span style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: ".15em", color: C.slate }}>Portfolio Health Score</span>
-                <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".08em", color: C.gold, border: "1px solid rgba(224,174,42,.4)", background: "rgba(224,174,42,.1)", padding: "4px 9px", borderRadius: 999 }}>Watch</span>
+                <span style={{ display: "inline-flex", gap: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".08em", color: C.slate, border: `1px solid ${C.hair}`, padding: "4px 9px", borderRadius: 999 }}>Sample</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".08em", color: C.gold, border: "1px solid rgba(224,174,42,.4)", background: "rgba(224,174,42,.1)", padding: "4px 9px", borderRadius: 999 }}>Watch</span>
+                </span>
               </div>
               <div style={{ position: "relative" }}>
                 <svg viewBox="0 0 240 138" style={{ display: "block", width: "100%", height: "auto" }}>
@@ -167,7 +185,7 @@ function Hero() {
                 </svg>
                 <div style={{ position: "absolute", insetInline: 0, bottom: 6, textAlign: "center" }}>
                   <div style={{ ...mono, fontSize: 56, fontWeight: 600, lineHeight: 1, color: C.gold }}>{Math.round(score)}</div>
-                  <div style={{ fontSize: 14, color: C.slate, marginTop: 4 }}>/ 1000 · health band</div>
+                  <div style={{ fontSize: 14, color: C.slate, marginTop: 4 }}>/ 1000 · sample book</div>
                 </div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginTop: 12 }}>
@@ -308,6 +326,14 @@ function Demo() {
           </div>
         </Reveal>
       </div>
+      <Reveal delay={0.12}>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 14, marginTop: 32 }}>
+          <CTA href="/demo-risk-check">Open the full demo cockpit →</CTA>
+          <span style={{ fontSize: 13.5, color: C.slate }}>
+            Health score, diagnosis, and a one-click high-growth stress toggle — still no sign-in.
+          </span>
+        </div>
+      </Reveal>
     </Band>
   );
 }
