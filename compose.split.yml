@@ -20,6 +20,17 @@
 # a bare `up -d` here would have recreated prod caddy from the wrong
 # definition). The MCP server is stdio-only and deliberately not a service.
 
+# Cap container logs — Docker's default json-file driver has NO size limit,
+# and a retry-loop log storm on this disk-tight box (80%+ used) could fill
+# the disk and take all services down. Applied to both services below via
+# YAML anchor; takes effect on next container recreate. (caddy lives in
+# compose.aws.yml on the awslogs driver — not covered here by design.)
+x-logging: &log-cap
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
 
   backend:
@@ -81,14 +92,7 @@ services:
       retries: 5
       start_period: 20s
     restart: unless-stopped
-    # Cap container logs — Docker's default json-file driver has NO size limit,
-    # and a retry-loop log storm on this disk-tight box (80%+ used) could fill
-    # the disk and take all services down. Takes effect on next recreate.
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *log-cap
 
   frontend:
     # Pull the CI-built image on EC2 (`docker compose pull`); `build:` stays
@@ -120,9 +124,4 @@ services:
       retries: 5
       start_period: 15s
     restart: unless-stopped
-    # Same log cap as backend — see the note there.
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+    logging: *log-cap

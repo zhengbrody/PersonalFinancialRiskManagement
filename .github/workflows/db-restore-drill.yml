@@ -60,6 +60,9 @@ jobs:
 
       - name: Restore into throwaway Postgres 17 (same pinned image as the dump)
         run: |
+          # ⚠️ Digest MUST match db-backup.yml's dump image — bumping one
+          # without the other lets the drill pass against a pg_restore that
+          # differs from what a real recovery would use.
           docker run --rm -d --name drill -e POSTGRES_PASSWORD=drill \
             postgres:17-alpine@sha256:dc17045ccfd343b49600570ea734b9c4991cf1c3f3302e67df51e3b402dd55c4
           for i in $(seq 1 30); do

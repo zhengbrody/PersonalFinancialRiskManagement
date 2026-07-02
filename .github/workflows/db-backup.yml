@@ -78,6 +78,9 @@ jobs:
           # only exists in the container env) and dump nothing.
           # Image pinned by digest: this container holds full DB credentials,
           # so a silently re-tagged image would equal total DB compromise.
+          # ⚠️ Digest MUST stay in sync with db-restore-drill.yml — the drill
+          # must restore with the same pg major as this dump, or it can
+          # green-light against a different pg_restore than reality.
           docker run --rm -e SUPABASE_DB_URL \
             postgres:17-alpine@sha256:dc17045ccfd343b49600570ea734b9c4991cf1c3f3302e67df51e3b402dd55c4 \
             sh -c 'exec pg_dump "$SUPABASE_DB_URL" --no-owner --format=custom' \

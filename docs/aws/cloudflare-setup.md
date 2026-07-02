@@ -15,7 +15,7 @@
 |-------|-------|
 | Domain | `mindmarket.app` (registrar: Porkbun) |
 | Origin | AWS EC2 **t3.micro**, Elastic IP `52.71.140.252` |
-| TLS today | Caddy + Let's Encrypt (HTTP-01 on :80), config `Caddyfile` (the mounted, canonical file) |
+| TLS today | Cloudflare **Origin CA** cert (15-yr, `/srv/tls`), pinned via `tls` in the mounted `Caddyfile` — LE/ACME retired 2026-07-02 |
 | Risk | DNS A record exposes the real IP → anyone can bypass and flood the box directly; one small instance, RAM-bound (`next build` has OOM'd it before) |
 
 The whole point: after this, public DNS resolves to **Cloudflare** IPs, the real
