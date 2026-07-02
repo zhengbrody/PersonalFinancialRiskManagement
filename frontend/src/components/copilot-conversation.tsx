@@ -36,6 +36,7 @@ import { ApiError } from "@/lib/api";
 import { BETA_LIMIT_MESSAGE, isBillingEnabled } from "@/lib/billing-flag";
 import { env } from "@/lib/env";
 import { useAuth } from "@/lib/auth-context";
+import { hasCjk } from "@/lib/lang";
 import { readSession, writeSession } from "@/lib/use-session-state";
 
 type ChatMessage = {
@@ -53,6 +54,15 @@ const EXAMPLE_QUESTIONS = [
   "How do I protect against a crash?",
 ];
 
+// Chinese counterparts (same order/intent) — shown when the browser
+// locale is Chinese (empty state) so the first tap already matches the
+// user's language.
+const EXAMPLE_QUESTIONS_ZH = [
+  "我的投资组合风险太高了吗？",
+  "我现在最大的风险是什么？",
+  "如何防范市场大跌？",
+];
+
 // Deterministic follow-up prompts shown after each answer (no LLM call —
 // just the natural next questions). Ones already asked are filtered out.
 const FOLLOW_UP_QUESTIONS = [
@@ -61,6 +71,16 @@ const FOLLOW_UP_QUESTIONS = [
   "Am I being paid for the risk I'm taking?",
   "What would diversify my portfolio the most?",
   "Any hidden fees or tax-loss opportunities?",
+];
+
+// Chinese counterparts (same order/intent) — used when the LAST user
+// message is Chinese, so the suggestions follow the conversation language.
+const FOLLOW_UP_QUESTIONS_ZH = [
+  "我现在最大的单一风险是什么？",
+  "市场下跌 20% 会对我有多大影响？",
+  "我承担的风险有得到相应回报吗？",
+  "怎样才能让我的组合更分散？",
+  "有隐藏费用或税损收割机会吗？",
 ];
 
 export type CopilotConversationVariant = "page" | "floating";
@@ -460,9 +480,15 @@ function FollowUpChips({
   onPick: (q: string) => void;
 }) {
   const askedSet = new Set(asked.map((q) => q.trim().toLowerCase()));
-  const suggestions = FOLLOW_UP_QUESTIONS.filter(
-    (q) => !askedSet.has(q.trim().toLowerCase()),
-  ).slice(0, 3);
+  // Follow the conversation language: Chinese last user message → Chinese
+  // suggestions (asked is in message order, so the last entry is the most
+  // recent user turn).
+  const pool = hasCjk(asked[asked.length - 1] ?? "")
+    ? FOLLOW_UP_QUESTIONS_ZH
+    : FOLLOW_UP_QUESTIONS;
+  const suggestions = pool
+    .filter((q) => !askedSet.has(q.trim().toLowerCase()))
+    .slice(0, 3);
   if (suggestions.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-2">
@@ -488,6 +514,15 @@ function EmptyState({
   onPick: (q: string) => void;
   compact?: boolean;
 }) {
+  // No user message yet → follow the browser locale. Default English on
+  // the first render and switch post-mount (SSR-safe: never touch
+  // `navigator` during render).
+  const [zh, setZh] = useState(false);
+  useEffect(() => {
+    setZh(navigator.language?.toLowerCase().startsWith("zh") ?? false);
+  }, []);
+  const examples = zh ? EXAMPLE_QUESTIONS_ZH : EXAMPLE_QUESTIONS;
+
   if (compact) {
     // Dense variant for the small floating panel: no Card chrome, just
     // a one-line nudge + the tappable example questions.
@@ -498,7 +533,7 @@ function EmptyState({
           plain English.
         </p>
         <div className="flex flex-wrap gap-2">
-          {EXAMPLE_QUESTIONS.map((q) => (
+          {examples.map((q) => (
             <Button
               key={q}
               type="button"
@@ -524,7 +559,7 @@ function EmptyState({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-2">
-        {EXAMPLE_QUESTIONS.map((q) => (
+        {examples.map((q) => (
           <Button
             key={q}
             type="button"

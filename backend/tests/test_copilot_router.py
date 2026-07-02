@@ -199,6 +199,32 @@ def test_answer_english_question_keeps_default_system(monkeypatch):
     assert "简体中文" not in seen["system"]
 
 
+def test_answer_chinese_deterministic_without_llm(monkeypatch):
+    """No LLM key + Chinese question → the deterministic 5-section template
+    itself comes back in Chinese (translated headers, no English sections)."""
+    monkeypatch.setattr(cr, "_load_score_positions", lambda user: ([], _Score()))
+    ans = cr.answer("我的组合风险高吗？", user=object(), llm_callable=None)
+    assert ans.data_only is True
+    for section in ("**结论**", "**证据**", "**风险**", "**下一步**", "**免责声明**"):
+        assert section in ans.answer_markdown
+    assert "**Conclusion**" not in ans.answer_markdown
+    assert ans.evidence  # evidence labels/values stay verbatim (data)
+
+
+def test_answer_chinese_llm_failure_falls_back_chinese(monkeypatch):
+    """The LLM-failure path uses the same deterministic template — a Chinese
+    question must still get a Chinese fallback."""
+    monkeypatch.setattr(cr, "_load_score_positions", lambda user: ([], _Score()))
+
+    def boom(**kwargs):
+        raise RuntimeError("llm down")
+
+    ans = cr.answer("我的组合风险高吗？", user=object(), llm_callable=boom)
+    assert ans.data_only is True
+    assert "**结论**" in ans.answer_markdown
+    assert "**Conclusion**" not in ans.answer_markdown
+
+
 # ── option-exposure evidence (Copilot option-awareness) ──────────────────────
 
 

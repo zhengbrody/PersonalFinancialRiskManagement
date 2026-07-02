@@ -25,6 +25,7 @@ from libs.ai_agents.portfolio_agents import (  # noqa: F401 (re-export)
     PortfolioAnalyzerAgent,
     StrategyOptimizerAgent,
     build_agent_context,
+    detect_reply_language,
     generate_draft_trades,
     scan_hidden_fees,
     scan_tax_loss_harvesting,
@@ -76,13 +77,23 @@ def route_message(
             llm_callable=llm_callable,
         )
     except Exception as exc:  # noqa: BLE001 (UI seam — must not 500)
-        return AgentResponse(
-            agent_name="Portfolio Copilot",
-            response_markdown=(
+        # Deterministic fallback — match the user's language (Chinese
+        # question → Chinese error text; default English unchanged).
+        if detect_reply_language(message):
+            markdown = (
+                f"**无法生成回答。** 内部错误：{exc}\n\n"
+                "页面上方的量化指标仍然有效；故障发生在智能体层，"
+                "而非评分引擎。"
+            )
+        else:
+            markdown = (
                 f"**Could not produce a response.** Internal error: {exc}\n\n"
                 "Quant metrics on the page above are still valid; the "
                 "failure is in the agent layer, not the score engine."
-            ),
+            )
+        return AgentResponse(
+            agent_name="Portfolio Copilot",
+            response_markdown=markdown,
         )
 
     response = AgentResponse.from_agent_result(result)

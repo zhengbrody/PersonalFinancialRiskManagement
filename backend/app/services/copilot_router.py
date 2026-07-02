@@ -530,16 +530,34 @@ _SYSTEM = (
 )
 
 
-def _evidence_block(evidence: list[EvidenceItem]) -> str:
+def _evidence_block(evidence: list[EvidenceItem], *, chinese: bool = False) -> str:
     if not evidence:
+        if chinese:
+            return "（暂无可用证据 —— 可能没有活跃的投资组合，或某个数据提供方离线）"
         return "(no evidence available — likely no active portfolio or a data provider is offline)"
     # Tag each figure with its human SOURCE LABEL so the model can attribute it.
     return "\n".join(f"- {e.label}: {e.value} [source: {reg.label(e.source)}]" for e in evidence)
 
 
 def _deterministic_answer(intent: str, message: str, evidence: list[EvidenceItem]) -> str:
-    ev = _evidence_block(evidence)
+    # Deterministic template — match the user's language (same rule as the
+    # LLM path's forced-language instruction; evidence labels/values are
+    # data and stay verbatim). Default English path is unchanged.
+    from libs.ai_agents.portfolio_agents import detect_reply_language
+
     pretty = intent.replace("_", " ")
+    if detect_reply_language(message):
+        ev = _evidence_block(evidence, chinese=True)
+        return (
+            f"**结论**\n以下是与您的 **{pretty}** 问题相关的数据结果。\n\n"
+            f"**证据**\n{ev}\n\n"
+            "**风险**\n这些是来自市场数据的时点数字，可能随时变动；"
+            "数据覆盖不足会降低可信度。\n\n"
+            "**下一步**\n- 对照您的目标复查上述证据。\n"
+            "- 打开对应页面（风险、研究、情景）查看完整分析。\n\n"
+            "**免责声明**\n教育性分析，不构成投资建议。"
+        )
+    ev = _evidence_block(evidence)
     return (
         f"**Conclusion**\nHere is what the data shows for your **{pretty}** question.\n\n"
         f"**Evidence**\n{ev}\n\n"

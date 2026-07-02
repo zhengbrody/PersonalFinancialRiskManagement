@@ -133,6 +133,64 @@ def test_formatter_messages_force_chinese_reply():
     assert "Answer in the user's language." in system_en
 
 
+# ── Chinese deterministic fallbacks (no LLM) ─────────────────────────
+
+
+def _scored_positions():
+    positions = demo_asset_positions(100_000)
+    returns = _returns()
+    score = score_portfolio(positions, returns, benchmark_returns=returns["SPY"], risk_preference=3)
+    return score, positions
+
+
+def test_analyzer_fallback_chinese_for_chinese_message():
+    """Chinese question + no LLM → the analyzer's deterministic fallback
+    renders in Chinese (same structure, same numbers)."""
+    score, positions = _scored_positions()
+    router = PortfolioAgentRouter()
+
+    result = router.route("我的组合风险高吗？", score, positions)  # 风险 → analyzer
+    assert result.agent_name == "Portfolio Analyzer Agent"
+    assert "**评估:**" in result.response_markdown
+    assert "**证据:**" in result.response_markdown
+    assert "**Assessment:**" not in result.response_markdown
+    # tool_trace is untouched by the language switch.
+    assert result.tool_trace == [
+        "read_exact_quant_score",
+        "read_exact_sharpe_vol_drawdown_var_beta",
+        "compare_vs_institutional_reference",
+        "format_post_investment_diagnosis",
+    ]
+
+
+def test_optimizer_fallback_chinese_for_chinese_message():
+    score, positions = _scored_positions()
+    router = PortfolioAgentRouter()
+
+    result = router.route("有税损收割或费用问题吗？", score, positions)  # 税/费用 → optimizer
+    assert result.agent_name == "Strategy Optimizer Agent"
+    assert "**费用扫描:**" in result.response_markdown
+    assert "**税损收割:**" in result.response_markdown
+    assert "**Fee scan:**" not in result.response_markdown
+
+
+def test_fallback_stays_english_by_default():
+    """English question (and prepare() without user_message) → the English
+    fallback, byte-identical to before."""
+    score, positions = _scored_positions()
+    router = PortfolioAgentRouter()
+
+    result = router.route("How risky is my portfolio?", score, positions)
+    assert "**Assessment:**" in result.response_markdown
+    assert "**评估:**" not in result.response_markdown
+
+    # prepare() without the kwarg keeps the English fallback (existing callers).
+    from libs.ai_agents.portfolio_agents import PortfolioAnalyzerAgent
+
+    plan = PortfolioAnalyzerAgent().prepare(score, positions)
+    assert "**Assessment:**" in plan["fallback_md"]
+
+
 # ── institutional reference comparison ───────────────────────────────
 
 
