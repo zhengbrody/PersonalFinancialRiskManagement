@@ -12,11 +12,19 @@ vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ user: null, configured: false, loading: false }),
 }));
 
+// The hero session chip reads the real clock via isUsTradingHours — pin it per
+// test so assertions don't flake with the wall-clock.
+const marketHours = vi.hoisted(() => ({ open: true }));
+vi.mock("@/lib/market-hours", () => ({
+  isUsTradingHours: () => marketHours.open,
+}));
+
 import { MarketingLandingV2 } from "./marketing-landing-v2";
 
 beforeEach(() => {
   // jsdom lacks IntersectionObserver; the component guards on it (renders final
   // state). matchMedia is also absent → treated as reduced-motion.
+  marketHours.open = true;
 });
 
 describe("MarketingLandingV2", () => {
@@ -46,6 +54,31 @@ describe("MarketingLandingV2", () => {
     expect(after).not.toEqual(before);
     // -30% is 3× the -10% magnitude → a larger % of the book.
     expect(after).toMatch(/%/);
+  });
+
+  it("the hero session chip is honest — open vs closed follow the real session", () => {
+    marketHours.open = true;
+    const { unmount } = render(<MarketingLandingV2 />);
+    expect(screen.getByText(/Live · US market open/i)).toBeInTheDocument();
+    unmount();
+
+    marketHours.open = false;
+    render(<MarketingLandingV2 />);
+    expect(screen.queryByText(/US market open/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/US market closed/i)).toBeInTheDocument();
+  });
+
+  it("the hero mock cockpit is clearly labelled as sample data", () => {
+    render(<MarketingLandingV2 />);
+    expect(screen.getByText("Sample")).toBeInTheDocument(); // card pill
+    expect(screen.getByText(/1000 · sample book/i)).toBeInTheDocument(); // gauge subline
+    expect(screen.getByText(/Sample · 1-day VaR 95%/i)).toBeInTheDocument(); // float chips
+  });
+
+  it("the demo band links to the full /demo-risk-check cockpit", () => {
+    render(<MarketingLandingV2 />);
+    const links = screen.getAllByRole("link", { name: /demo/i });
+    expect(links.some((l) => l.getAttribute("href") === "/demo-risk-check")).toBe(true);
   });
 
   it("no buy/sell advice language anywhere on the page", () => {
