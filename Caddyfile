@@ -20,6 +20,16 @@
 # back, restore the routes + the `app` service from git history.
 
 {$SITE_HOST}, www.{$SITE_HOST} {
+	# Cloudflare Origin CA cert (15-year, expires 2041) — replaces Let's
+	# Encrypt, killing the recurring ~60-day HTTP-01 renewal behind the proxy
+	# (a silent renewal failure would darken the origin on a timer). The
+	# cert/key live on the HOST at /srv/tls, mounted :ro by compose.aws.yml.
+	# Only Cloudflare trusts this CA — fine, the SG only admits Cloudflare.
+	# CI validates with a throwaway self-signed pair at the same paths
+	# (ci.yml validate-config). ROLLBACK: delete this one line + recreate
+	# caddy — the still-valid LE cert in the caddy_data volume resumes.
+	tls /srv/tls/origin.pem /srv/tls/origin.key
+
 	# gzip compressible responses. NOTE: a prior attempt to exclude SSE via
 	# `encode { match { not header Content-Type text/event-stream* } }` used
 	# INVALID Caddyfile syntax — the `not` response matcher is unrecognized

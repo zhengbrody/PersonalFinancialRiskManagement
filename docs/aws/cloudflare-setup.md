@@ -51,6 +51,14 @@ Cloudflare → **SSL/TLS** → Overview → set encryption mode to **Full (Stric
 (encrypted edge→origin, origin cert validated). Do **not** use Flexible (that
 leaves edge→origin in plaintext).
 
+> **DONE 2026-07-02:** Origin CA cert (expires 2041-06-28, SANs
+> `mindmarket.app` + `*.mindmarket.app`) installed at `/srv/tls/` on the box,
+> mounted by `compose.aws.yml`, pinned via the Caddyfile `tls` directive, and
+> CI-validated with a dummy pair (ci.yml `validate-config`). Paste gotcha that
+> bit us: a leading SPACE before `-----BEGIN CERTIFICATE-----` makes OpenSSL
+> reject the whole file ("No supported data to decode") — check `head -1 | wc -c`
+> = 28 if a fresh paste won't parse.
+
 Caddy's Let's Encrypt HTTP-01 renewal gets fragile once it's behind the proxy.
 The clean, maintenance-free fix is a **Cloudflare Origin CA certificate** (free,
 15-year) on the origin instead of Let's Encrypt:
