@@ -15,23 +15,14 @@ htmlcov/
 build/
 dist/
 
-# CDK build artifacts — must be excluded or docker build (with repo root
-# context) recurses into asset.<hash>/ folders that themselves contain a
-# nested copy of repo, blowing up with ENAMETOOLONG.
-infra/cdk.out/
-infra/.venv/
+# CDK build artifacts anywhere — must be excluded or docker build (with repo
+# root context) recurses into asset.<hash>/ folders that themselves contain a
+# nested copy of the repo, blowing up with ENAMETOOLONG. (infra/ itself is
+# excluded wholesale below; this recursive guard covers any future cdk.out.)
 **/cdk.out/
 
 # Streamlit local secrets — never bake into a container image.
 .streamlit/secrets.toml
-
-# Phase 1 EC2 deploy detritus
-docs/screenshots/
-
-# Marketing/video source assets are not needed at runtime and can exceed the
-# tiny EC2 instance's Docker build storage.
-docs/marketing/youtube/audio/
-docs/marketing/youtube/video/
 
 # Editor / OS noise
 .vscode/
@@ -41,8 +32,9 @@ docs/marketing/youtube/video/
 # ── Backend image context guards ─────────────────────────────────────────
 # The backend image builds with context = repo ROOT (compose.split.yml /
 # build-images.yml), so THIS file is the only .dockerignore Docker applies.
-# backend/.dockerignore is NOT read for that build (BuildKit would only honor
-# a `backend/Dockerfile.dockerignore`). The backend imports engine/, domain/,
+# A `backend/.dockerignore` would be silently IGNORED (BuildKit honors only
+# `backend/Dockerfile.dockerignore`; one existed and was removed 2026-07-02
+# for exactly that reason). The backend imports engine/, domain/,
 # libs/, agents/, backend/, and root *.py modules; nothing below is reachable
 # at runtime, so excluding it only shrinks the image (`COPY . /app`).
 # (assets/ + docs/ are served by Caddy from HOST bind mounts, never the image.)
