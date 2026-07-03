@@ -38,9 +38,12 @@ from ...core.responses import APIError, ok, server_error, unprocessable
 from ...schemas.risk import (
     BenchmarkRow,
     BenchmarksOut,
+    BestDiversifier,
     ComponentReturnRow,
     ComponentVarRow,
     ConcentrationOut,
+    CorrelationOut,
+    CorrTopPair,
     DimensionScoreOut,
     EfficientFrontierOut,
     FactorBetaRow,
@@ -53,6 +56,8 @@ from ...schemas.risk import (
     ReasonCodeOut,
     ReportFromActiveRequest,
     RiskReportOut,
+    RollingVolatilityOut,
+    RollingVolPoint,
     ScenarioPoint,
     ScenariosOut,
     ScoreDriverOut,
@@ -903,6 +908,186 @@ def _component_return_rows(price_frame, weights: dict[str, float]) -> list[Compo
     return rows
 
 
+# ── desk analytics (correlation + rolling vol) ────────────────────────
+# Both are additive extras with the _component_return_rows contract: any
+# trouble returns None, never sinks the report. No new quant — the corr
+# matrix already exists on the engine report; rolling vol reuses the
+# project-wide simple-returns convention on the frame already fetched.
+
+_CORR_MAX_TICKERS = 30  # payload cap; UI shows fewer anyway
+_ROLL_VOL_WINDOW = 21  # ~1 trading month
+_ROLL_VOL_MIN_OBS = 42  # 2× window — below this the series is noise
+_ROLL_VOL_MAX_POINTS = 252  # ~1 year of chart
+_ROLL_VOL_CALM = 0.80  # current < 0.8× median → calm
+_ROLL_VOL_ELEVATED = 1.25  # current > 1.25× median → elevated
+
+
+def _correlation_block(report, weights: dict[str, float], price_frame) -> CorrelationOut | None:
+    """Serialize the engine's already-computed Pearson ``corr_matrix`` with
+    deterministic diversification insights. Insights use the FULL matrix;
+    the shipped matrix is capped to the top ``_CORR_MAX_TICKERS`` by weight
+    (sort key ``weights.get(t, 0.0)`` — matrix tickers and weight keys can
+    diverge under the option overlay)."""
+    try:
+        m = getattr(report, "corr_matrix", None)
+        if m is None or not isinstance(m, pd.DataFrame) or len(m.columns) < 2:
+            return None
+        tickers_all = [str(t) for t in m.columns]
+        n = len(tickers_all)
+
+        # Upper-triangle insights over the FULL matrix (skip non-finite).
+        pairs: list[tuple[str, str, float]] = []
+        for i in range(n):
+            for j in range(i + 1, n):
+                v = m.iloc[i, j]
+                if v is not None and np.isfinite(v):
+                    pairs.append((tickers_all[i], tickers_all[j], float(v)))
+        if not pairs:
+            return None
+        avg_pairwise = float(np.mean([p[2] for p in pairs]))
+        top = max(pairs, key=lambda p: p[2])
+        top_pair = CorrTopPair(a=top[0], b=top[1], rho=round(top[2], 2))
+
+        best_div = None
+        if n >= 3:
+            avg_by_ticker: dict[str, float] = {}
+            for t in tickers_all:
+                others = [p[2] for p in pairs if t in (p[0], p[1])]
+                if others:
+                    avg_by_ticker[t] = float(np.mean(others))
+            if avg_by_ticker:
+                bt = min(avg_by_ticker, key=lambda t: avg_by_ticker[t])
+                best_div = BestDiversifier(ticker=bt, avg_rho=round(avg_by_ticker[bt], 2))
+
+        # Diversification ratio = Σŵᵢσᵢ / σₚ on the SAME simple-returns frame
+        # (weights renormalized over priced columns; scale-invariant to
+        # risk_scale, so it needs no leverage adjustment).
+        div_ratio = None
+        try:
+            cols = [t for t in weights if t in price_frame.columns]
+            rets = price_frame[cols].pct_change().dropna(how="any")
+            if len(cols) >= 2 and len(rets) >= 2:
+                w = np.array([float(weights[t]) for t in cols])
+                if w.sum() > 0:
+                    w = w / w.sum()
+                    sigmas = rets[cols].std().to_numpy()
+                    port_sigma = float(rets[cols].to_numpy().dot(w).std(ddof=1))
+                    if port_sigma > 0:
+                        dr = float(np.dot(w, sigmas) / port_sigma)
+                        if np.isfinite(dr):
+                            div_ratio = round(dr, 2)
+        except Exception:  # noqa: BLE001 - insight only, matrix still ships
+            div_ratio = None
+
+        # Cap the shipped matrix at the top-N by portfolio weight.
+        order = sorted(tickers_all, key=lambda t: weights.get(t, 0.0), reverse=True)
+        shipped = order[:_CORR_MAX_TICKERS]
+        sub = m.loc[shipped, shipped]
+        matrix: list[list[float | None]] = []
+        for _, row in sub.iterrows():
+            matrix.append([round(float(v), 2) if np.isfinite(v) else None for v in row])
+
+        return CorrelationOut(
+            tickers=shipped,
+            matrix=matrix,
+            avg_pairwise=round(avg_pairwise, 2),
+            top_pair=top_pair,
+            best_diversifier=best_div,
+            diversification_ratio=div_ratio,
+            truncated=n > _CORR_MAX_TICKERS,
+            total_tickers=n,
+        )
+    except Exception:  # noqa: BLE001 - an extras block must never sink the report
+        return None
+
+
+def _rolling_volatility_block(
+    price_frame, weights: dict[str, float], *, risk_scale: float, history_days: int
+) -> RollingVolatilityOut | None:
+    """21-day rolling annualized vol of the portfolio's simple daily returns,
+    ×``risk_scale`` so the level matches the levered headline. SPY benchmark
+    is the same computation UNscaled; it reuses the frame's SPY column when
+    the book holds it, else a fail-soft cached fetch (NO shared provenance
+    dict — a second call would overwrite the report's by_ticker/missing)."""
+    try:
+        cols = [t for t in weights if t in price_frame.columns]
+        if not cols:
+            return None
+        rets = price_frame[cols].pct_change().dropna(how="any")
+        if len(rets) < _ROLL_VOL_MIN_OBS:
+            return None
+        w = np.array([float(weights[t]) for t in cols])
+        if w.sum() <= 0:
+            return None
+        w = w / w.sum()
+        port_roll = (
+            pd.Series(rets[cols].to_numpy().dot(w), index=rets.index)
+            .rolling(_ROLL_VOL_WINDOW)
+            .std()
+            * math.sqrt(252.0)
+            * float(risk_scale)
+        ).dropna()
+        if port_roll.empty:
+            return None
+        port_roll = port_roll.iloc[-_ROLL_VOL_MAX_POINTS:]
+
+        bench_roll = None
+        try:
+            if "SPY" in price_frame.columns:
+                spy = price_frame["SPY"]
+            else:
+                from ...services import market_data
+
+                spy_frame = market_data.get_price_history(["SPY"], days=history_days)
+                spy = spy_frame["SPY"] if "SPY" in spy_frame.columns else None
+            if spy is not None:
+                bench_roll = (
+                    spy.pct_change().dropna().rolling(_ROLL_VOL_WINDOW).std() * math.sqrt(252.0)
+                ).reindex(port_roll.index)
+        except Exception:  # noqa: BLE001 - benchmark is optional context
+            bench_roll = None
+
+        series: list[RollingVolPoint] = []
+        for ts, v in port_roll.items():
+            if not np.isfinite(v):
+                continue
+            b = None
+            if bench_roll is not None:
+                bv = bench_roll.get(ts)
+                if bv is not None and np.isfinite(bv):
+                    b = round(float(bv), 4)
+            series.append(
+                RollingVolPoint(
+                    date=ts.strftime("%Y-%m-%d"), portfolio=round(float(v), 4), benchmark=b
+                )
+            )
+        if not series:
+            return None
+
+        vals = [p.portfolio for p in series]
+        current = vals[-1]
+        median = float(np.median(vals))
+        if median <= 0:
+            state = "normal"
+        elif current < _ROLL_VOL_CALM * median:
+            state = "calm"
+        elif current > _ROLL_VOL_ELEVATED * median:
+            state = "elevated"
+        else:
+            state = "normal"
+
+        return RollingVolatilityOut(
+            window_days=_ROLL_VOL_WINDOW,
+            series=series,
+            current=current,
+            median=round(median, 4),
+            state=state,
+            benchmark_ticker="SPY" if any(p.benchmark is not None for p in series) else None,
+        )
+    except Exception:  # noqa: BLE001 - an extras block must never sink the report
+        return None
+
+
 def _compute_weights(
     holdings: dict, price_frame, *, tickers: list[str]
 ) -> tuple[dict[str, float], dict[str, float]]:
@@ -1470,6 +1655,10 @@ def report_from_active_endpoint(
             "price_provenance": _price_provenance(price_prov, price_frame),
             "data_quality_notes": notes,
             "component_return": _component_return_rows(price_frame, weights),
+            "correlation": _correlation_block(report, weights, price_frame),
+            "rolling_volatility": _rolling_volatility_block(
+                price_frame, weights, risk_scale=risk_scale, history_days=body.history_days
+            ),
         }
     )
     return ok(out.model_dump(), request=request, started_at=started)

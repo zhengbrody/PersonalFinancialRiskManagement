@@ -76,3 +76,6 @@ fonts/*.otf
 
 # Local-only compose port overrides (docs/user/SETUP.md §5) — never deploy
 compose.override.yml
+
+# Local export artifacts (marketing images, recordings) — never commit
+exports/

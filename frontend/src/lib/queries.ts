@@ -690,6 +690,36 @@ export type LiquidityRow = z.infer<typeof liquidityRowSchema>;
 // score response); re-exported here for existing importers of the report API.
 export { concentrationSchema, type Concentration };
 
+// Desk analytics (Risk Desk round) — additive, nullable end-to-end.
+const corrTopPairSchema = z.looseObject({ a: z.string(), b: z.string(), rho: z.number() });
+const bestDiversifierSchema = z.looseObject({ ticker: z.string(), avg_rho: z.number() });
+export const correlationSchema = z.looseObject({
+  tickers: z.array(z.string()),
+  matrix: z.array(z.array(z.number().nullable())),
+  avg_pairwise: z.number().nullable().optional(),
+  top_pair: corrTopPairSchema.nullish(),
+  best_diversifier: bestDiversifierSchema.nullish(),
+  diversification_ratio: z.number().nullable().optional(),
+  truncated: z.boolean().optional().default(false),
+  total_tickers: z.number().optional().default(0),
+});
+export type Correlation = z.infer<typeof correlationSchema>;
+
+export const rollingVolPointSchema = z.looseObject({
+  date: z.string(),
+  portfolio: z.number(),
+  benchmark: z.number().nullable().optional(),
+});
+export const rollingVolatilitySchema = z.looseObject({
+  window_days: z.number().optional().default(21),
+  series: z.array(rollingVolPointSchema).optional().default([]),
+  current: z.number().nullable().optional(),
+  median: z.number().nullable().optional(),
+  state: z.enum(["calm", "normal", "elevated"]).optional().default("normal"),
+  benchmark_ticker: z.string().nullable().optional(),
+});
+export type RollingVolatility = z.infer<typeof rollingVolatilitySchema>;
+
 export const riskReportSchema = z.looseObject({
   annual_return: z.number().nullable(),
   annual_volatility: z.number().nullable(),
@@ -721,6 +751,8 @@ export const riskReportSchema = z.looseObject({
   price_provenance: priceProvenanceSchema.nullish(),
   data_quality_notes: z.array(z.string()).optional().default([]),
   concentration: concentrationSchema.nullish(),
+  correlation: correlationSchema.nullish(),
+  rolling_volatility: rollingVolatilitySchema.nullish(),
 });
 export type RiskReport = z.infer<typeof riskReportSchema>;
 

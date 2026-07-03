@@ -263,8 +263,9 @@ describe("PortfolioRiskPage", () => {
     // KPI tiles: VaR / CVaR / Sharpe values.
     expect(await screen.findByText("1.20%")).toBeInTheDocument(); // var_95
     expect(screen.getByText("1.70%")).toBeInTheDocument(); // cvar_95
-    expect(screen.getByText("0.50")).toBeInTheDocument(); // sharpe
-    expect(screen.getByText("$51,000")).toBeInTheDocument(); // net equity
+    // Sharpe appears in the KPI tile AND the new desk stat strip.
+    expect(screen.getAllByText("0.50").length).toBeGreaterThan(0); // sharpe
+    expect(screen.getAllByText("$51,000").length).toBeGreaterThan(0); // net equity
     expect(screen.getByText("+$450")).toBeInTheDocument(); // today P&L
 
     // Factor betas table rows.

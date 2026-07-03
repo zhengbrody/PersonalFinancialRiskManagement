@@ -120,13 +120,67 @@ class ConcentrationOut(BaseModel):
     top_sector_weight: Optional[float] = None
 
 
+class CorrTopPair(BaseModel):
+    a: str
+    b: str
+    rho: float
+
+
+class BestDiversifier(BaseModel):
+    ticker: str
+    avg_rho: float
+
+
+class CorrelationOut(BaseModel):
+    """Pairwise correlation of holdings' daily returns (the engine's plain
+    Pearson ``corr_matrix``, estimated on the engine DataProvider's ~2-year
+    window) plus deterministic diversification insights. Insights are
+    computed over the FULL matrix; ``tickers``/``matrix`` are capped at the
+    top 30 by portfolio weight (``truncated`` flags the cut).
+    ``diversification_ratio`` = Σŵᵢσᵢ / σₚ — computed on the ENDPOINT's
+    price window (``history_days``, default ~1y), a different window than
+    the matrix; numerator and denominator share one frame and ddof, so
+    DR ≥ 1 holds by construction regardless. The UI labels both windows."""
+
+    tickers: list[str]
+    matrix: list[list[Optional[float]]]
+    avg_pairwise: Optional[float] = None
+    top_pair: Optional[CorrTopPair] = None
+    best_diversifier: Optional[BestDiversifier] = None
+    diversification_ratio: Optional[float] = None
+    truncated: bool = False
+    total_tickers: int = 0
+
+
+class RollingVolPoint(BaseModel):
+    date: str
+    portfolio: float
+    benchmark: Optional[float] = None
+
+
+class RollingVolatilityOut(BaseModel):
+    """21-day rolling annualized volatility of portfolio daily returns
+    (equal-weight window, sample std, ×√252, ×risk_scale so the level
+    matches the levered book). NOTE: the headline ``annual_volatility``
+    is EWMA-based — a faster-reacting estimator; the UI labels both.
+    ``benchmark`` is the same computation on SPY, UNscaled (an index has
+    no leverage)."""
+
+    window_days: int = 21
+    series: list[RollingVolPoint] = Field(default_factory=list)
+    current: Optional[float] = None
+    median: Optional[float] = None
+    state: Literal["calm", "normal", "elevated"] = "normal"
+    benchmark_ticker: Optional[str] = None
+
+
 class RiskReportOut(BaseModel):
     """JSON-safe projection of the engine's ``RiskReport`` dataclass.
 
-    Large matrices (cov, corr, MC simulation paths) are intentionally
+    Large matrices (cov, EWMA corr, MC simulation paths) are intentionally
     NOT shipped over the wire — they'd add tens of MB and the dashboard
-    doesn't render them anyway. If a chart needs them later, we add a
-    targeted endpoint that returns just that slice."""
+    doesn't render them anyway. (The plain corr matrix IS shipped since the
+    Risk Desk round, as the capped 2-dp ``correlation`` summary below.)"""
 
     # Price-data provenance for the report's 'data quality' area.
     price_provenance: Optional[PriceProvenanceOut] = None
@@ -180,6 +234,10 @@ class RiskReportOut(BaseModel):
     # Drawdown stats. Engine returns a free-form dict; we pass through
     # only the keys frontends consume so a new field doesn't leak.
     drawdown_stats: Optional[dict[str, Any]] = None
+
+    # Desk analytics (Risk Desk round) — additive, fail-soft to None.
+    correlation: Optional[CorrelationOut] = None
+    rolling_volatility: Optional[RollingVolatilityOut] = None
 
     # Human-readable caveats about the inputs behind the numbers (e.g.
     # stress test fell back to market beta for tickers with too little
