@@ -10,6 +10,7 @@
 
 import type { PortfolioMetrics } from "@/lib/schemas";
 import type { RiskReport } from "@/lib/queries";
+import { portfolioBeta } from "@/lib/portfolio-beta";
 
 export type DeskStatItem = {
   label: string;
@@ -51,16 +52,6 @@ const usd = (v: number | null | undefined) =>
     : v.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const pct = (v: number | null | undefined, d = 1) => (v == null ? "—" : `${(v * 100).toFixed(d)}%`);
 const num = (v: number | null | undefined, d = 2) => (v == null ? "—" : v.toFixed(d));
-
-/**
- * PORTFOLIO beta = the SPY row of the portfolio-level factor regression.
- * NEVER `report.betas` — that is the PER-HOLDING beta map ({ticker: βᵢ}),
- * and "first entry" would show an arbitrary holding's beta.
- */
-export function portfolioBeta(report: RiskReport): number | null {
-  const row = report.factor_betas.find((f) => f.factor === "SPY");
-  return row?.beta ?? null;
-}
 
 /** Desk strip for the full risk report (top of /risk). */
 export function ReportDeskStrip({ report }: { report: RiskReport }) {

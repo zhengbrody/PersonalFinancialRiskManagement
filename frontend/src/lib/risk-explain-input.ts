@@ -10,6 +10,7 @@
 import type { RiskExplainInput } from "@/lib/queries";
 import type { RiskReport, LastSnapshot } from "@/lib/queries";
 import type { ScoreResponse } from "@/lib/schemas";
+import { portfolioBeta } from "@/lib/portfolio-beta";
 
 const _TOP_VAR = 6; // how many VaR contributors to ship
 const _ILLIQUID_DAYS = 3; // surface holdings slower than this to exit
@@ -54,8 +55,6 @@ export function explainInputFromScore(
 
 /** Risk Report page → explain input (folds in the report-only context). */
 export function explainInputFromReport(report: RiskReport): RiskExplainInput {
-  // First benchmark beta (e.g. SPY) stands in for beta_to_benchmark.
-  const firstBeta = Object.values(report.betas ?? {})[0] ?? null;
   return {
     source: "risk",
     metrics: {
@@ -63,9 +62,14 @@ export function explainInputFromReport(report: RiskReport): RiskExplainInput {
       annual_volatility: report.annual_volatility,
       sharpe_ratio: report.sharpe_ratio,
       max_drawdown: report.max_drawdown,
-      var_95_daily: report.var_95,
-      cvar_95_daily: report.cvar_95,
-      beta_to_benchmark: firstBeta,
+      // report.var_95/cvar_95 are 21-DAY Monte-Carlo figures — feeding them
+      // into the *_daily fields made the AI diagnosis narrate a month-scale
+      // number as "Daily VaR". Omit rather than mislabel (fields optional).
+      var_95_daily: null,
+      cvar_95_daily: null,
+      // Portfolio beta = the SPY factor-regression row; report.betas is the
+      // PER-HOLDING beta map, whose "first entry" is an arbitrary holding.
+      beta_to_benchmark: portfolioBeta(report),
     },
     top_component_var: [...report.component_var_pct]
       .sort((a, b) => b.pct - a.pct)

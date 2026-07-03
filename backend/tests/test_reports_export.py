@@ -23,7 +23,16 @@ from backend.app.schemas.research import (
     ResearchVerdict,
     ValuationBlock,
 )
-from backend.app.schemas.risk import ComponentVarRow, ConcentrationOut, RiskReportOut
+from backend.app.schemas.risk import (
+    BestDiversifier,
+    ComponentVarRow,
+    ConcentrationOut,
+    CorrelationOut,
+    CorrTopPair,
+    RiskReportOut,
+    RollingVolatilityOut,
+    RollingVolPoint,
+)
 from backend.app.schemas.risk_explain import RiskExplainOutput
 from backend.app.services import report_html
 
@@ -45,6 +54,21 @@ def test_portfolio_report_has_summary_appendix_and_print_css():
         stress_loss=0.22,
         stress_market_shock=-0.2,
         data_quality_notes=["short history for 2 names"],
+        correlation=CorrelationOut(
+            tickers=["NVDA", "AAPL"],
+            matrix=[[1.0, 0.8], [0.8, 1.0]],
+            avg_pairwise=0.8,
+            top_pair=CorrTopPair(a="NVDA", b="AAPL", rho=0.8),
+            best_diversifier=BestDiversifier(ticker="AAPL", avg_rho=0.8),
+            diversification_ratio=1.12,
+            total_tickers=2,
+        ),
+        rolling_volatility=RollingVolatilityOut(
+            series=[RollingVolPoint(date="2026-06-30", portfolio=0.28)],
+            current=0.28,
+            median=0.22,
+            state="elevated",
+        ),
     )
     diagnosis = RiskExplainOutput(
         severity="elevated",
@@ -63,6 +87,10 @@ def test_portfolio_report_has_summary_appendix_and_print_css():
     assert "Factor exposure" in html and "Stress test" in html and "Data quality" in html
     # Real numbers rendered.
     assert "NVDA" in html and "41.0%" in html
+    # Desk analytics sections render with the honest 21-day horizon labels.
+    assert "21-day VaR 95%" in html and ">1-day VaR" not in html  # no bare 1-day label
+    assert "Diversification &amp; correlation" in html and "1.12" in html
+    assert "Realized volatility" in html and "elevated" in html
     # Education disclaimer present.
     assert "not investment advice" in html
 
