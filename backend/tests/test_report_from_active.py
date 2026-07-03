@@ -125,6 +125,9 @@ class _FakeReport:
     drawdown_stats: Optional[dict[str, Any]] = field(
         default_factory=lambda: {"max_drawdown_pct": -0.07, "longest_drawdown_days": 90}
     )
+    # Engine computes this (risk_engine.py run(): returns.corr()); default None
+    # keeps every pre-desk test byte-identical (correlation block → null).
+    corr_matrix: Optional[pd.DataFrame] = None
 
 
 @pytest.fixture
@@ -667,3 +670,212 @@ def test_option_overlay_folds_into_engine_weights_and_notes(
     assert "AAPL" in (fake_engine.last_dp_weights or {})
     # And a note explains the delta-equivalent fold-in.
     assert any("delta-equivalent" in n for n in body["data_quality_notes"])
+
+
+# ── desk analytics: correlation + rolling volatility ───────────────
+
+
+def _corr_df(tickers: list[str], pairs: dict[tuple[str, str], float]) -> pd.DataFrame:
+    """Symmetric correlation DataFrame with diag=1 and given off-diag pairs."""
+    import numpy as np
+
+    n = len(tickers)
+    m = np.eye(n)
+    idx = {t: i for i, t in enumerate(tickers)}
+    for (a, b), v in pairs.items():
+        m[idx[a], idx[b]] = v
+        m[idx[b], idx[a]] = v
+    return pd.DataFrame(m, index=tickers, columns=tickers)
+
+
+def _report_data(test_client, mint_token, payload=None):
+    resp = test_client.post(
+        "/api/v1/risk/report_from_active",
+        json=payload or {},
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    assert resp.status_code == 200, resp.json()
+    return resp.json()["data"]
+
+
+def test_correlation_block_insights(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_engine, fake_capital
+):
+    """Hand-computed insights: avg ρ, most-correlated pair, best diversifier,
+    weight-descending ticker order, DR ≥ 1 (a mathematical identity)."""
+    fake_active_portfolio.set(
+        {"SPY": {"shares": 100}, "QQQ": {"shares": 30}, "BND": {"shares": 50}}
+    )
+    fake_price_history.set(_make_history(["SPY", "QQQ", "BND"]))
+    fake_engine.last_report = _FakeReport(
+        corr_matrix=_corr_df(
+            ["SPY", "QQQ", "BND"],
+            {("SPY", "QQQ"): 0.9, ("SPY", "BND"): 0.2, ("QQQ", "BND"): 0.1},
+        )
+    )
+
+    corr = _report_data(test_client, mint_token)["correlation"]
+    assert corr is not None
+    # avg of upper triangle = (0.9 + 0.2 + 0.1) / 3
+    assert corr["avg_pairwise"] == pytest.approx(0.4, abs=1e-9)
+    assert corr["top_pair"] == {"a": "SPY", "b": "QQQ", "rho": 0.9}
+    # per-ticker avg ρ: SPY .55, QQQ .5, BND .15 → BND diversifies best
+    assert corr["best_diversifier"]["ticker"] == "BND"
+    assert corr["best_diversifier"]["avg_rho"] == pytest.approx(0.15, abs=1e-9)
+    # ~100-level prices → MV order by shares: SPY(100) > BND(50) > QQQ(30)
+    assert corr["tickers"] == ["SPY", "BND", "QQQ"]
+    assert corr["truncated"] is False and corr["total_tickers"] == 3
+    # matrix: rounded, symmetric, diag 1.0
+    i, j = corr["tickers"].index("SPY"), corr["tickers"].index("QQQ")
+    assert corr["matrix"][i][j] == corr["matrix"][j][i] == 0.9
+    assert all(corr["matrix"][k][k] == 1.0 for k in range(3))
+    # Σŵσ / σ_p ≥ 1 by construction — violating this means broken math.
+    assert corr["diversification_ratio"] is not None
+    assert corr["diversification_ratio"] >= 1.0
+
+
+def test_correlation_nan_pair_skipped(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_engine, fake_capital
+):
+    fake_active_portfolio.set({"SPY": {"shares": 100}, "BND": {"shares": 50}})
+    fake_price_history.set(_make_history(["SPY", "BND"]))
+    m = _corr_df(["SPY", "BND"], {("SPY", "BND"): float("nan")})
+    fake_engine.last_report = _FakeReport(corr_matrix=m)
+
+    corr = _report_data(test_client, mint_token)["correlation"]
+    # The ONLY off-diag pair is NaN → no finite pair → whole block null.
+    assert corr is None
+
+
+def test_correlation_null_when_absent_or_single(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_engine, fake_capital
+):
+    fake_active_portfolio.set({"SPY": {"shares": 100}})
+    fake_price_history.set(_make_history(["SPY"]))
+    fake_engine.last_report = _FakeReport()  # corr_matrix defaults to None
+    assert _report_data(test_client, mint_token)["correlation"] is None
+
+    fake_engine.last_report = _FakeReport(corr_matrix=_corr_df(["SPY"], {}))
+    assert _report_data(test_client, mint_token)["correlation"] is None
+
+
+def test_correlation_capped_at_30_by_weight(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_engine, fake_capital
+):
+    import numpy as np
+
+    tickers = [f"S{i:02d}" for i in range(31)]
+    # Descending shares → S00 heaviest … S30 lightest (prices all ~100).
+    fake_active_portfolio.set({t: {"shares": 310 - 10 * i} for i, t in enumerate(tickers)})
+    fake_price_history.set(_make_history(tickers))
+    m = np.full((31, 31), 0.5)
+    np.fill_diagonal(m, 1.0)
+    fake_engine.last_report = _FakeReport(
+        corr_matrix=pd.DataFrame(m, index=tickers, columns=tickers)
+    )
+
+    corr = _report_data(test_client, mint_token)["correlation"]
+    assert corr["truncated"] is True
+    assert corr["total_tickers"] == 31
+    assert len(corr["tickers"]) == 30 and len(corr["matrix"]) == 30
+    assert "S30" not in corr["tickers"]  # the lightest name is the one dropped
+
+
+def test_rolling_vol_arithmetic_with_risk_scale(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_engine, fake_capital
+):
+    """current == hand-computed rolling(21).std(ddof=1) × √252 × risk_scale;
+    the in-frame SPY benchmark is the same computation UNscaled."""
+    import math as _math
+
+    import numpy as np
+
+    fake_active_portfolio.set({"SPY": {"shares": 100}, "BND": {"shares": 50}})
+    frame = _make_history(["SPY", "BND"])
+    fake_price_history.set(frame)
+    fake_engine.last_report = _FakeReport()
+
+    # Margin = half the equity book → net = equity/2 → risk_scale = 2.0.
+    latest_equity = 100 * float(frame["SPY"].iloc[-1]) + 50 * float(frame["BND"].iloc[-1])
+    fake_capital["margin_loan"] = latest_equity / 2.0
+
+    data = _report_data(test_client, mint_token)
+    rv = data["rolling_volatility"]
+    assert rv is not None and rv["window_days"] == 21 and rv["benchmark_ticker"] == "SPY"
+
+    # Recompute exactly what the endpoint should have done.
+    mvs = {
+        "SPY": 100 * float(frame["SPY"].iloc[-1]),
+        "BND": 50 * float(frame["BND"].iloc[-1]),
+    }
+    total = sum(mvs.values())
+    w = np.array([mvs["SPY"] / total, mvs["BND"] / total])
+    rets = frame[["SPY", "BND"]].pct_change().dropna(how="any")
+    port = pd.Series(rets[["SPY", "BND"]].to_numpy().dot(w), index=rets.index)
+    expected_last = float(port.rolling(21).std().dropna().iloc[-1]) * _math.sqrt(252.0) * 2.0
+    assert rv["current"] == pytest.approx(expected_last, rel=1e-3)
+
+    spy_expected = float(
+        (frame["SPY"].pct_change().dropna().rolling(21).std() * _math.sqrt(252.0)).dropna().iloc[-1]
+    )
+    # Benchmark is UNscaled — levering the book must not touch the index line.
+    assert rv["series"][-1]["benchmark"] == pytest.approx(spy_expected, rel=1e-3)
+    # current is defined as the series' last portfolio point.
+    assert rv["series"][-1]["portfolio"] == pytest.approx(rv["current"], rel=1e-9)
+    assert rv["state"] in {"calm", "normal", "elevated"}
+    assert len(rv["series"]) <= 252
+
+
+def test_rolling_vol_benchmark_fail_soft(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_engine, fake_capital
+):
+    fake_active_portfolio.set({"QQQ": {"shares": 10}, "BND": {"shares": 50}})
+    fake_price_history.set(_make_history(["QQQ", "BND"]))  # no SPY anywhere
+    fake_engine.last_report = _FakeReport()
+
+    rv = _report_data(test_client, mint_token)["rolling_volatility"]
+    assert rv is not None
+    assert rv["benchmark_ticker"] is None
+    assert all(p["benchmark"] is None for p in rv["series"])
+    assert rv["current"] is not None  # portfolio line intact
+
+
+def test_rolling_vol_null_on_short_history(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_engine, fake_capital
+):
+    fake_active_portfolio.set({"SPY": {"shares": 100}})
+    fake_price_history.set(_make_history(["SPY"], days=30))  # < 2×window returns
+    fake_engine.last_report = _FakeReport()
+
+    assert _report_data(test_client, mint_token)["rolling_volatility"] is None
+
+
+def test_diversification_ratio_hand_pinned(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_engine, fake_capital
+):
+    """Two equal-weight, equal-vol, UNCORRELATED assets → DR = √2 exactly.
+    Pins the arithmetic (not just the ≥1 identity): a ddof mismatch between
+    numerator and denominator would shift this off √2."""
+    import numpy as np
+
+    n = 48  # multiple of 4 so the ±1% patterns are exactly uncorrelated
+    r_a = np.tile([0.01, -0.01], n // 2)  # period 2
+    r_b = np.tile([0.01, 0.01, -0.01, -0.01], n // 4)  # period 4, ρ(a,b)=0
+    idx = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=n + 1)
+    frame = pd.DataFrame(
+        {
+            "AAA": 100.0 * np.cumprod(np.concatenate([[1.0], 1 + r_a])),
+            "BBB": 100.0 * np.cumprod(np.concatenate([[1.0], 1 + r_b])),
+        },
+        index=idx,
+    )
+    # Equal weights: same share count, and both prices end near 100.
+    fake_active_portfolio.set({"AAA": {"shares": 100}, "BBB": {"shares": 100}})
+    fake_price_history.set(frame)
+    fake_engine.last_report = _FakeReport(
+        corr_matrix=_corr_df(["AAA", "BBB"], {("AAA", "BBB"): 0.0})
+    )
+
+    corr = _report_data(test_client, mint_token)["correlation"]
+    # Weights aren't exactly 50/50 (prices drift slightly), so allow ~1%.
+    assert corr["diversification_ratio"] == pytest.approx(math.sqrt(2.0), rel=0.015)

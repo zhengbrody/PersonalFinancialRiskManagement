@@ -32,6 +32,10 @@ import { LearnHint } from "@/components/learn-hint";
 import { RiskAlertsCard } from "@/components/risk-alerts-card";
 import { ReportExportButton } from "@/components/report-export-button";
 import { MetricTrend } from "@/components/metric-trend";
+import { ReportDeskStrip } from "@/components/desk-stat-strip";
+import { DiversificationCard } from "@/components/diversification-card";
+import { RollingVol } from "@/components/rolling-vol";
+import { RiskFingerprint, fingerprintAxes } from "@/components/risk-fingerprint";
 import { track } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
 import {
@@ -104,6 +108,7 @@ export function ReportSections({ report }: { report: RiskReport }) {
           label="Export risk report"
         />
       </div>
+      <ReportDeskStrip report={report} />
       <RiskDiagnosis
         explain={explain.data}
         loading={explain.isLoading}
@@ -127,17 +132,26 @@ export function ReportSections({ report }: { report: RiskReport }) {
         description="From the snapshots saved each time you score."
         kind="pct"
       />
+      {report.rolling_volatility && <RollingVol data={report.rolling_volatility} />}
       <RiskDrivers report={report} />
       {report.concentration && (
         <ConcentrationCard concentration={report.concentration} />
       )}
+      {report.correlation && <DiversificationCard correlation={report.correlation} />}
       <ScenarioExplorer
         scenarios={scenarios.data}
         loading={scenarios.isPending}
         fallbackTotal={report.annual_volatility}
       />
       <VarBacktest data={varBacktest.data} loading={varBacktest.isPending} />
-      <FactorBetasTable report={report} />
+      {fingerprintAxes(report).length >= 3 ? (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <FactorBetasTable report={report} />
+          <RiskFingerprint report={report} />
+        </div>
+      ) : (
+        <FactorBetasTable report={report} />
+      )}
       <ComponentVarTable report={report} />
       <StressSummary report={report} />
       {Object.keys(report.macro_betas).length > 0 && <MacroBetas report={report} />}
@@ -154,9 +168,12 @@ function KpiGrid({ report }: { report: RiskReport }) {
         <Kpi label="Annual vol" value={fmtPct(report.annual_volatility)} />
         <Kpi label="Sharpe" value={fmtNum(report.sharpe_ratio, 2)} />
         <Kpi label="Max DD" value={fmtPct(report.max_drawdown)} />
-        <Kpi label="VaR 95 (1d)" value={fmtPct(report.var_95)} tone="bad" />
-        <Kpi label="VaR 99 (1d)" value={fmtPct(report.var_99)} tone="bad" />
-        <Kpi label="CVaR 95 (1d)" value={fmtPct(report.cvar_95)} tone="bad" />
+        {/* Monte-Carlo horizon is 21 trading days (RiskEngine mc_horizon) —
+            these are month-scale tails, NOT daily; the old "(1d)" label was
+            wrong. The score endpoint's var_95_daily is the 1-day figure. */}
+        <Kpi label="VaR 95 (21d)" value={fmtPct(report.var_95)} tone="bad" />
+        <Kpi label="VaR 99 (21d)" value={fmtPct(report.var_99)} tone="bad" />
+        <Kpi label="CVaR 95 (21d)" value={fmtPct(report.cvar_95)} tone="bad" />
         <Kpi label="Risk-free" value={fmtPct(report.risk_free_rate)} />
       </div>
       <DataProvenance

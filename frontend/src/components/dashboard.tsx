@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MarketRegime } from "@/components/market-regime";
+import { MetricsDeskStrip } from "@/components/desk-stat-strip";
 import { PortfolioValueSummary } from "@/components/portfolio-value-summary";
 import dynamic from "next/dynamic";
 import { ScoreGauge } from "@/components/score-gauge";
@@ -107,6 +108,7 @@ export function Dashboard() {
         <>
           <ChangeSinceLastVisit current={score.data} prev={lastSnapshot.data?.snapshot} />
           <ScoreHero score={score.data} scoreTrend={scoreTrend} />
+          <MetricsDeskStrip metrics={score.data.metrics} />
           <PortfolioValueSummary metrics={score.data.metrics} />
           <RiskDiagnosis explain={explain.data} loading={explain.isLoading} source="score" />
         </>
