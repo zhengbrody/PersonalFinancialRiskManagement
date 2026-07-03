@@ -233,9 +233,10 @@ def render_portfolio_report(report: Any, diagnosis: Any) -> str:
             ("Annual vol", _pct(_g(r, "annual_volatility"))),
             ("Sharpe", _num(_g(r, "sharpe_ratio"))),
             ("Max drawdown", _pct(_g(r, "max_drawdown"))),
-            ("1-day VaR 95%", _pct(_g(r, "var_95"), 2)),
-            ("1-day VaR 99%", _pct(_g(r, "var_99"), 2)),
-            ("CVaR 95%", _pct(_g(r, "cvar_95"), 2)),
+            # RiskEngine's Monte-Carlo horizon is 21 trading days — label it.
+            ("21-day VaR 95%", _pct(_g(r, "var_95"), 2)),
+            ("21-day VaR 99%", _pct(_g(r, "var_99"), 2)),
+            ("21-day CVaR 95%", _pct(_g(r, "cvar_95"), 2)),
             ("Annual return", _pct(_g(r, "annual_return"))),
         ]
     )
@@ -262,6 +263,47 @@ def render_portfolio_report(report: Any, diagnosis: Any) -> str:
                     f"{esc(_g(conc, 'top_sector') or '—')} {_pct(_g(conc, 'top_sector_weight'))}",
                 ),
             ]
+        )
+
+    corr = _g(r, "correlation")
+    div_html = ""
+    if corr is not None:
+        pair = _g(corr, "top_pair")
+        best = _g(corr, "best_diversifier")
+        dr = _g(corr, "diversification_ratio")
+        div_html = _kpis(
+            [
+                ("Avg pairwise \u03c1", _num(_g(corr, "avg_pairwise"))),
+                ("Diversification ratio", f"{_num(dr)}\u00d7" if dr is not None else "—"),
+                (
+                    "Most correlated pair",
+                    (
+                        f"{esc(_g(pair, 'a'))} \u00d7 {esc(_g(pair, 'b'))} ({_num(_g(pair, 'rho'))})"
+                        if pair is not None
+                        else "—"
+                    ),
+                ),
+                (
+                    "Best diversifier",
+                    (
+                        f"{esc(_g(best, 'ticker'))} (avg \u03c1 {_num(_g(best, 'avg_rho'))})"
+                        if best is not None
+                        else "—"
+                    ),
+                ),
+            ]
+        )
+
+    rv = _g(r, "rolling_volatility")
+    rv_html = ""
+    if rv is not None:
+        rv_html = (
+            f"<p>21-day rolling annualized volatility: current "
+            f"<strong>{_pct(_g(rv, 'current'))}</strong> vs "
+            f"{_pct(_g(rv, 'median'))} median over the window "
+            f"(<strong>{esc(str(_g(rv, 'state') or 'normal'))}</strong>)."
+            " Leverage-adjusted; the headline annual vol is the faster-reacting"
+            " EWMA estimate.</p>"
         )
 
     factor = _table(
@@ -307,6 +349,8 @@ def render_portfolio_report(report: Any, diagnosis: Any) -> str:
         + _section("Key metrics", kpis)
         + _section("Top risk drivers", drivers)
         + (_section("Concentration", conc_html) if conc_html else "")
+        + (_section("Diversification & correlation", div_html) if div_html else "")
+        + (_section("Realized volatility", rv_html) if rv_html else "")
         + _section("Monitoring checklist", checklist)
         + _section("Factor exposure", factor, appendix=True)
         + _section("Stress test", stress, appendix=True)

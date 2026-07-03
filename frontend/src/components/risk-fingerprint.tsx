@@ -23,6 +23,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { RiskReport } from "@/lib/queries";
+import { portfolioBeta } from "@/lib/portfolio-beta";
 
 /**
  * Reference bands: the input that pegs an axis at 10/10.
@@ -43,9 +44,7 @@ const clamp10 = (v: number) => Math.max(0, Math.min(10, v));
 
 export function fingerprintAxes(report: RiskReport): { axis: string; value: number }[] {
   const axes: { axis: string; value: number }[] = [];
-  // Portfolio-level beta = the SPY row of the portfolio factor regression.
-  // report.betas is the PER-HOLDING beta map — never use its "first entry".
-  const beta = report.factor_betas.find((f) => f.factor === "SPY")?.beta;
+  const beta = portfolioBeta(report);
   if (beta != null && Number.isFinite(beta)) {
     axes.push({ axis: "Market beta", value: round1(clamp10((Math.abs(beta) / FINGERPRINT_BANDS.beta) * 10)) });
   }

@@ -83,7 +83,11 @@ class LiquidityRow(BaseModel):
 
 class PriceProvenanceOut(BaseModel):
     """Where the portfolio's price history came from + how deep it is. Surfaced
-    in the Health Score / Risk Report 'data quality' area."""
+    in the Health Score / Risk Report 'data quality' area.
+
+    NOTE ``trading_days`` reflects the ENDPOINT price window (``history_days``,
+    ~1y default) used for weights/P&L/DR/rolling vol; the engine's beta/factor/
+    correlation regressions run on the DataProvider's own ~2-year window."""
 
     primary: str = "massive"
     fallback: str = "yfinance"
