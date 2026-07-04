@@ -119,6 +119,21 @@ class Settings:
 
     anthropic_api_key: str = field(default_factory=lambda: _env_str("ANTHROPIC_API_KEY"))
 
+    # ── Weekly risk digest email (Resend) ───────────────────────────────
+    # All optional: blank key → the digest run reports "skipped" and sends
+    # nothing. DIGEST_FROM must be a Resend-verified sender; the default
+    # onboarding@resend.dev only delivers to the Resend account owner (good
+    # for testing before the domain is verified). DIGEST_CRON_TOKEN gates the
+    # POST /digest/run endpoint (shared secret with the GitHub cron).
+    resend_api_key: str = field(default_factory=lambda: _env_str("RESEND_API_KEY"))
+    digest_cron_token: str = field(default_factory=lambda: _env_str("DIGEST_CRON_TOKEN"))
+    digest_from: str = field(
+        default_factory=lambda: _env_str("DIGEST_FROM", "MindMarket <onboarding@resend.dev>")
+    )
+    digest_site_url: str = field(
+        default_factory=lambda: _env_str("DIGEST_SITE_URL", "https://mindmarket.app")
+    )
+
     # ── API-balance tracking (owner /admin "API balance" card) ──────────
     # DeepSeek exposes a real balance API (`/user/balance`); Anthropic does NOT,
     # so the owner records the Claude credit they topped up here and we count

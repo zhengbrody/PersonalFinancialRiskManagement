@@ -576,6 +576,37 @@ export function useAdminBalances(enabled: boolean) {
   });
 }
 
+// ── weekly digest preference (settings toggle) ──────────────────────
+
+export const digestPrefSchema = z.looseObject({ enabled: z.boolean() });
+export type DigestPref = z.infer<typeof digestPrefSchema>;
+
+export function useDigestPref() {
+  const { accessToken } = useAuth();
+  return useQuery<DigestPref>({
+    queryKey: ["digest", "pref"],
+    queryFn: () =>
+      apiFetch<DigestPref>("/api/v1/digest/pref", { authToken: accessToken ?? undefined, schema: digestPrefSchema }),
+    enabled: Boolean(accessToken),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useSetDigestPref() {
+  const { accessToken } = useAuth();
+  const qc = useQueryClient();
+  return useMutation<DigestPref, Error, boolean>({
+    mutationFn: (enabled) =>
+      apiFetch<DigestPref>("/api/v1/digest/pref", {
+        method: "POST",
+        body: { enabled },
+        authToken: accessToken ?? undefined,
+        schema: digestPrefSchema,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["digest", "pref"] }),
+  });
+}
+
 /** Owner sets the current Claude balance from the dashboard (after a top-up) —
  * no env edit / restart. Returns the refreshed balances + invalidates the card. */
 export function useSetAnthropicTopup() {

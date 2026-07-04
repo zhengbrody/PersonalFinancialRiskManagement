@@ -26,6 +26,12 @@ vi.mock("@/lib/auth-context", () => ({
   useAuth: () => useAuthMock(),
 }));
 
+// WeeklyDigestCard fetches its own pref (own tests cover it) — stub it so
+// this file's positional fetch-mock sequences stay aligned.
+vi.mock("@/components/weekly-digest-card", () => ({
+  WeeklyDigestCard: () => <div data-testid="digest-card" />,
+}));
+
 import SettingsPage from "./page";
 
 function mockJson(body: unknown, init: { status?: number } = {}) {

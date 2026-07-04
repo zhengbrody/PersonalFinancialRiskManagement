@@ -26,6 +26,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api";
 import { isBillingEnabled } from "@/lib/billing-flag";
 import { FreeBetaNotice } from "@/components/free-beta-notice";
+import { WeeklyDigestCard } from "@/components/weekly-digest-card";
 import { useAuth } from "@/lib/auth-context";
 import { currentUsername } from "@/lib/user-display";
 import { useBillingMe, useStartPortal, type CreditStatus } from "@/lib/queries";
@@ -86,6 +87,8 @@ function SettingsPageInner() {
       </header>
 
       <ProfileCard user={user} />
+
+      <WeeklyDigestCard />
 
       {!isBillingEnabled() && <FreeBetaNotice />}
 
