@@ -84,6 +84,11 @@ services:
       # Anthropic is optional fallback/configurable provider; deterministic
       # fallbacks keep the app usable when no LLM key is present.
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Weekly risk digest email (all optional — blank disables sends).
+      - RESEND_API_KEY=${RESEND_API_KEY:-}
+      - DIGEST_CRON_TOKEN=${DIGEST_CRON_TOKEN:-}
+      - DIGEST_FROM=${DIGEST_FROM:-}
+      - DIGEST_SITE_URL=${DIGEST_SITE_URL:-}
     healthcheck:
       test: ["CMD", "python", "-c",
              "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health').read()"]

@@ -23,6 +23,7 @@ from .api.v1 import (
     billing,
     copilot,
     data,
+    digest,
     feedback,
     health,
     institutions,
@@ -179,6 +180,7 @@ def create_app() -> FastAPI:
     app.include_router(feedback.router)
     app.include_router(data.router)
     app.include_router(ml.router)
+    app.include_router(digest.router)
 
     # Envelope-aware exception handlers. Order matters: register the
     # narrower types first so FastAPI's resolver picks them over the

@@ -1,0 +1,281 @@
+"""Weekly risk digest — service + endpoints.
+
+Everything runs hermetically: the Supabase admin client is an in-memory fake
+(test_snapshot_roundtrip.py pattern) and Resend is a captured stub. Asserts
+the retention loop's contracts: recipient filtering (opt-out / dedupe /
+never-scored), deterministic rendering, signed unsubscribe, cron-token auth,
+and fail-soft states (no key → skipped; 0007 unapplied → not_ready).
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from backend.app.services import digest as dg
+
+# ── in-memory fake supabase admin ─────────────────────────────────────
+
+
+class _FakeQuery:
+    def __init__(self, rows: list[dict]):
+        self._rows = list(rows)
+
+    def select(self, *_a, **_k):
+        return self
+
+    def eq(self, key, val):
+        self._rows = [r for r in self._rows if str(r.get(key)) == str(val)]
+        return self
+
+    def gte(self, key, val):
+        self._rows = [r for r in self._rows if str(r.get(key, "")) >= str(val)]
+        return self
+
+    def order(self, key, desc=False):
+        self._rows.sort(key=lambda r: str(r.get(key, "")), reverse=bool(desc))
+        return self
+
+    def limit(self, n):
+        self._rows = self._rows[:n]
+        return self
+
+    def execute(self):
+        class _R:
+            def __init__(self, data):
+                self.data = data
+
+        return _R(list(self._rows))
+
+
+class _FakeAdmin:
+    def __init__(self):
+        self.tables: dict[str, list[dict]] = {
+            "profiles": [],
+            "digest_prefs": [],
+            "digest_sends": [],
+            "portfolio_snapshots": [],
+        }
+        self.missing: set[str] = set()
+
+    def table(self, name):
+        fake = self
+
+        class _T(_FakeQuery):
+            def __init__(self):
+                if name in fake.missing:
+                    raise RuntimeError(f'relation "public.{name}" does not exist')
+                super().__init__(fake.tables[name])
+
+            def insert(self, row):
+                fake.tables[name].append(dict(row))
+                return _FakeQuery([row])
+
+            def upsert(self, row):
+                key = "user_id"
+                fake.tables[name] = [r for r in fake.tables[name] if r.get(key) != row.get(key)] + [
+                    dict(row)
+                ]
+                return _FakeQuery([row])
+
+        return _T()
+
+
+@pytest.fixture
+def fake_admin(monkeypatch):
+    admin = _FakeAdmin()
+    monkeypatch.setattr(dg, "_admin", lambda: admin)
+    monkeypatch.setattr(dg, "_SEND_GAP_SECONDS", 0)
+    return admin
+
+
+@pytest.fixture
+def sent_emails(monkeypatch):
+    calls: list[dict] = []
+
+    def _send(to, subject, html_body):
+        calls.append({"to": to, "subject": subject, "html": html_body})
+        return True
+
+    monkeypatch.setattr(dg, "send_email", _send)
+    return calls
+
+
+@pytest.fixture
+def digest_env(monkeypatch, jwt_secret):
+    monkeypatch.setenv("RESEND_API_KEY", "re_test_key")
+    monkeypatch.setenv("DIGEST_CRON_TOKEN", "cron-secret-1")
+    from backend.app.core.config import reset_settings_cache
+
+    reset_settings_cache()
+    yield
+    reset_settings_cache()
+
+
+def _snap(created: str, score: float, vol: float = 0.18, net: float = 50_000.0):
+    return {
+        "user_id": "u1",
+        "created_at": created,
+        "net_equity": net,
+        "risk_metrics": {
+            "overall_score": score,
+            "annual_volatility": vol,
+            "concentration": {"top_holding_ticker": "NVDA", "top_holding_weight": 0.31},
+        },
+    }
+
+
+# ── unsubscribe token ─────────────────────────────────────────────────
+
+
+def test_unsubscribe_token_roundtrip(digest_env):
+    tok = dg.unsubscribe_token("user-1")
+    assert dg.verify_unsubscribe_token(tok) == "user-1"
+    assert dg.verify_unsubscribe_token(tok[:-1] + "0") is None
+    assert dg.verify_unsubscribe_token("garbage") is None
+    assert dg.verify_unsubscribe_token("") is None
+
+
+# ── rendering ─────────────────────────────────────────────────────────
+
+
+def test_build_digest_renders_deterministic_numbers(digest_env):
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    snaps = [
+        _snap(now.isoformat(), 712.0),
+        _snap((now - timedelta(days=7)).isoformat(), 726.0),
+    ]
+    d = dg.build_digest("a@b.co", "u1", snaps, "Market risk-state: Normal")
+    assert d is not None
+    assert "712" in d["subject"] and "-14" in d["subject"]
+    assert "18.0%" in d["html"] and "$50,000" in d["html"]
+    assert "NVDA" in d["html"] and "31.0%" in d["html"]
+    assert "Market risk-state: Normal" in d["html"]
+    assert "/api/v1/digest/unsubscribe?token=" in d["html"]
+    assert "不构成投资建议" in d["html"]
+
+
+def test_build_digest_stale_snapshot_gets_comeback_variant(digest_env):
+    snaps = [_snap("2026-01-05T00:00:00+00:00", 640.0)]
+    d = dg.build_digest("a@b.co", "u1", snaps, "line")
+    assert d is not None
+    assert "过期" in d["subject"]
+    assert "2026-01-05" in d["html"]
+
+
+def test_build_digest_none_without_snapshots(digest_env):
+    assert dg.build_digest("a@b.co", "u1", [], "line") is None
+
+
+def test_build_digest_escapes_html(digest_env):
+    from datetime import datetime, timezone
+
+    snap = _snap(datetime.now(timezone.utc).isoformat(), 700.0)
+    snap["risk_metrics"]["concentration"]["top_holding_ticker"] = "<img src=x>"
+    d = dg.build_digest("a@b.co", "u1", [snap], "<script>x</script>")
+    assert "<img src=x>" not in d["html"] and "<script>x</script>" not in d["html"]
+
+
+# ── batch run ─────────────────────────────────────────────────────────
+
+
+def test_run_weekly_skipped_without_api_key(monkeypatch, jwt_secret):
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    from backend.app.core.config import reset_settings_cache
+
+    reset_settings_cache()
+    assert dg.run_weekly() == {"status": "skipped", "reason": "no_api_key"}
+
+
+def test_run_weekly_not_ready_when_tables_missing(digest_env, fake_admin, sent_emails):
+    fake_admin.missing.add("digest_prefs")
+    out = dg.run_weekly()
+    assert out["status"] == "not_ready"
+    assert "0007" in out["reason"]
+    assert sent_emails == []
+
+
+def test_run_weekly_filters_and_sends(digest_env, fake_admin, sent_emails, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    fake_admin.tables["profiles"] = [
+        {"user_id": "u1", "email": "scored@x.co"},  # snapshot → sent
+        {"user_id": "u2", "email": "optout@x.co"},  # opted out
+        {"user_id": "u3", "email": "fresh@x.co"},  # never scored → skip
+        {"user_id": "u4", "email": "recent@x.co"},  # sent 2 days ago → skip
+    ]
+    fake_admin.tables["digest_prefs"] = [{"user_id": "u2", "enabled": False}]
+    fake_admin.tables["digest_sends"] = [
+        {"user_id": "u4", "sent_at": (now - timedelta(days=2)).isoformat()}
+    ]
+    fake_admin.tables["portfolio_snapshots"] = [
+        _snap(now.isoformat(), 712.0),
+        {**_snap((now - timedelta(days=1)).isoformat(), 640.0), "user_id": "u4"},
+    ]
+    monkeypatch.setattr(dg, "_regime_line", lambda: "Market risk-state: Normal")
+
+    out = dg.run_weekly()
+    assert out["status"] == "ok"
+    assert out["sent"] == 1
+    assert out["skipped_no_snapshot"] == 1  # u3
+    assert out["skipped_recent"] == 1  # u4
+    assert out["recipients"] == 3  # u2 excluded by opt-out before counting
+    assert [c["to"] for c in sent_emails] == ["scored@x.co"]
+    # sent audit row written for dedupe
+    assert any(r["user_id"] == "u1" for r in fake_admin.tables["digest_sends"])
+
+
+def test_run_weekly_force_ignores_dedupe(digest_env, fake_admin, sent_emails, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    fake_admin.tables["profiles"] = [{"user_id": "u4", "email": "recent@x.co"}]
+    fake_admin.tables["digest_sends"] = [
+        {"user_id": "u4", "sent_at": (now - timedelta(days=2)).isoformat()}
+    ]
+    fake_admin.tables["portfolio_snapshots"] = [{**_snap(now.isoformat(), 700.0), "user_id": "u4"}]
+    monkeypatch.setattr(dg, "_regime_line", lambda: "x")
+
+    out = dg.run_weekly(force=True)
+    assert out["sent"] == 1
+
+
+# ── endpoints ─────────────────────────────────────────────────────────
+
+
+def test_run_endpoint_503_when_token_unconfigured(test_client, monkeypatch):
+    monkeypatch.delenv("DIGEST_CRON_TOKEN", raising=False)
+    from backend.app.core.config import reset_settings_cache
+
+    reset_settings_cache()
+    resp = test_client.post("/api/v1/digest/run")
+    assert resp.status_code == 503
+
+
+def test_run_endpoint_requires_matching_token(test_client, digest_env, fake_admin, sent_emails):
+    bad = test_client.post("/api/v1/digest/run", headers={"X-Digest-Token": "wrong"})
+    assert bad.status_code == 401
+
+    okresp = test_client.post("/api/v1/digest/run", headers={"X-Digest-Token": "cron-secret-1"})
+    assert okresp.status_code == 200
+    assert okresp.json()["data"]["status"] == "ok"
+
+
+def test_unsubscribe_endpoint_flow(test_client, digest_env, fake_admin):
+    tok = dg.unsubscribe_token("u9")
+    resp = test_client.get(f"/api/v1/digest/unsubscribe?token={tok}")
+    assert resp.status_code == 200
+    assert "已退订" in resp.text
+    assert any(
+        r["user_id"] == "u9" and r["enabled"] is False for r in fake_admin.tables["digest_prefs"]
+    )
+
+    bad = test_client.get("/api/v1/digest/unsubscribe?token=u9.deadbeef")
+    assert bad.status_code == 400
+
+
+def test_pref_endpoints_require_auth(test_client):
+    assert test_client.get("/api/v1/digest/pref").status_code == 401
+    assert test_client.post("/api/v1/digest/pref", json={"enabled": False}).status_code == 401
