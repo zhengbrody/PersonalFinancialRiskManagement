@@ -92,8 +92,8 @@ def fake_admin(monkeypatch):
 def sent_emails(monkeypatch):
     calls: list[dict] = []
 
-    def _send(to, subject, html_body):
-        calls.append({"to": to, "subject": subject, "html": html_body})
+    def _send(to, subject, html_body, *, unsub_url=""):
+        calls.append({"to": to, "subject": subject, "html": html_body, "unsub_url": unsub_url})
         return True
 
     monkeypatch.setattr(dg, "send_email", _send)
@@ -133,6 +133,19 @@ def test_unsubscribe_token_roundtrip(digest_env):
     assert dg.verify_unsubscribe_token(tok[:-1] + "0") is None
     assert dg.verify_unsubscribe_token("garbage") is None
     assert dg.verify_unsubscribe_token("") is None
+    # non-ASCII sig must be a quiet None, never a TypeError → 500
+    assert dg.verify_unsubscribe_token("user-1.\u00e9\u00e9") is None
+
+
+def test_unsubscribe_token_fails_closed_without_secret(monkeypatch):
+    monkeypatch.delenv("SUPABASE_JWT_SECRET", raising=False)
+    from backend.app.core.config import reset_settings_cache
+
+    reset_settings_cache()
+    with pytest.raises(RuntimeError):
+        dg.unsubscribe_token("user-1")
+    assert dg.verify_unsubscribe_token("user-1.deadbeef") is None
+    reset_settings_cache()
 
 
 # ── rendering ─────────────────────────────────────────────────────────
@@ -186,6 +199,41 @@ def test_run_weekly_skipped_without_api_key(monkeypatch, jwt_secret):
 
     reset_settings_cache()
     assert dg.run_weekly() == {"status": "skipped", "reason": "no_api_key"}
+
+
+def test_run_weekly_skipped_without_jwt_secret(monkeypatch):
+    monkeypatch.setenv("RESEND_API_KEY", "re_x")
+    monkeypatch.delenv("SUPABASE_JWT_SECRET", raising=False)
+    from backend.app.core.config import reset_settings_cache
+
+    reset_settings_cache()
+    assert dg.run_weekly() == {"status": "skipped", "reason": "no_jwt_secret"}
+    reset_settings_cache()
+
+
+def test_run_weekly_busy_when_locked(digest_env, fake_admin):
+    assert dg._run_lock.acquire(blocking=False)
+    try:
+        assert dg.run_weekly()["status"] == "busy"
+    finally:
+        dg._run_lock.release()
+
+
+def test_send_email_carries_one_click_unsubscribe_headers(digest_env, monkeypatch):
+    captured = {}
+
+    class _Resp:
+        status_code = 200
+
+    def _post(url, headers=None, json=None, timeout=None):
+        captured["json"] = json
+        return _Resp()
+
+    monkeypatch.setattr(dg.requests, "post", _post)
+    assert dg.send_email("a@b.co", "s", "<p>x</p>", unsub_url="https://m.app/u?token=t") is True
+    hdrs = captured["json"]["headers"]
+    assert hdrs["List-Unsubscribe"] == "<https://m.app/u?token=t>"
+    assert hdrs["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"
 
 
 def test_run_weekly_not_ready_when_tables_missing(digest_env, fake_admin, sent_emails):
@@ -254,26 +302,50 @@ def test_run_endpoint_503_when_token_unconfigured(test_client, monkeypatch):
     assert resp.status_code == 503
 
 
-def test_run_endpoint_requires_matching_token(test_client, digest_env, fake_admin, sent_emails):
+def test_run_endpoint_requires_matching_token(test_client, digest_env, fake_admin, monkeypatch):
+    import threading as _threading
+
     bad = test_client.post("/api/v1/digest/run", headers={"X-Digest-Token": "wrong"})
     assert bad.status_code == 401
+    # non-ASCII header (starlette decodes latin-1 → str) must be a clean 401,
+    # not a compare_digest TypeError → 500. TestClient can't send it over the
+    # wire, so exercise the dependency directly.
+    from fastapi import HTTPException
 
+    from backend.app.api.v1.digest import require_cron_token
+
+    with pytest.raises(HTTPException) as exc:
+        require_cron_token("caf\u00e9")
+    assert exc.value.status_code == 401
+
+    ran = _threading.Event()
+    monkeypatch.setattr("backend.app.services.digest.run_and_log", lambda **kw: ran.set())
     okresp = test_client.post("/api/v1/digest/run", headers={"X-Digest-Token": "cron-secret-1"})
     assert okresp.status_code == 200
-    assert okresp.json()["data"]["status"] == "ok"
+    # batch is asynchronous (Cloudflare-timeout safe) — endpoint reports started
+    assert okresp.json()["data"]["status"] == "started"
+    assert ran.wait(2.0)
 
 
 def test_unsubscribe_endpoint_flow(test_client, digest_env, fake_admin):
     tok = dg.unsubscribe_token("u9")
-    resp = test_client.get(f"/api/v1/digest/unsubscribe?token={tok}")
-    assert resp.status_code == 200
-    assert "已退订" in resp.text
+
+    # GET = confirmation page ONLY (mail scanners prefetch GETs) — no side effect.
+    page = test_client.get(f"/api/v1/digest/unsubscribe?token={tok}")
+    assert page.status_code == 200
+    assert "确认退订" in page.text
+    assert fake_admin.tables["digest_prefs"] == []
+
+    # POST (the page button / RFC 8058 one-click) performs the opt-out.
+    done = test_client.post(f"/api/v1/digest/unsubscribe?token={tok}")
+    assert done.status_code == 200
+    assert "已退订" in done.text
     assert any(
         r["user_id"] == "u9" and r["enabled"] is False for r in fake_admin.tables["digest_prefs"]
     )
 
-    bad = test_client.get("/api/v1/digest/unsubscribe?token=u9.deadbeef")
-    assert bad.status_code == 400
+    assert test_client.get("/api/v1/digest/unsubscribe?token=u9.deadbeef").status_code == 400
+    assert test_client.post("/api/v1/digest/unsubscribe?token=u9.deadbeef").status_code == 400
 
 
 def test_pref_endpoints_require_auth(test_client):

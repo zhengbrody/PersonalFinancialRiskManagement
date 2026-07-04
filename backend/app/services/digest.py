@@ -17,6 +17,7 @@ import hashlib
 import hmac
 import html as _html
 import logging
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -58,7 +59,7 @@ def list_recipients() -> list[dict[str, Any]]:
     for r in rows:
         if r.get("enabled") is False:
             optout.add(str(r.get("user_id")))
-    profiles = admin.table("profiles").select("user_id,email").execute().data or []
+    profiles = admin.table("profiles").select("user_id,email").order("user_id").execute().data or []
     out = []
     for p in profiles:
         uid, email = str(p.get("user_id") or ""), str(p.get("email") or "")
@@ -108,26 +109,39 @@ def latest_snapshots(user_id: str, limit: int = 2) -> list[dict[str, Any]]:
 # ── unsubscribe token (works without login, from the email link) ─────
 
 
-def _unsub_secret() -> bytes:
+def _unsub_secret() -> Optional[bytes]:
     # Reuse the server-only JWT secret — already required in prod, never
     # shipped to a client. Scoped by a static prefix so a digest token can
-    # never be confused with anything else.
-    return f"digest-unsub:{get_settings().supabase_jwt_secret}".encode()
+    # never be confused with anything else. FAIL CLOSED on a blank secret:
+    # signing with a public constant would make tokens forgeable.
+    secret = get_settings().supabase_jwt_secret
+    if not secret:
+        return None
+    return f"digest-unsub:{secret}".encode()
 
 
 def unsubscribe_token(user_id: str) -> str:
-    sig = hmac.new(_unsub_secret(), user_id.encode(), hashlib.sha256).hexdigest()[:32]
+    key = _unsub_secret()
+    if key is None:
+        raise RuntimeError("SUPABASE_JWT_SECRET is required to sign digest links")
+    sig = hmac.new(key, user_id.encode(), hashlib.sha256).hexdigest()[:32]
     return f"{user_id}.{sig}"
 
 
 def verify_unsubscribe_token(token: str) -> Optional[str]:
-    """Returns the user_id when the signature checks out, else None."""
+    """Returns the user_id when the signature checks out, else None. Never
+    raises — malformed/non-ASCII input from the public endpoint is a normal
+    condition, not a 500."""
+    key = _unsub_secret()
+    if key is None:
+        return None
     try:
         user_id, sig = token.rsplit(".", 1)
-    except ValueError:
+        expect = hmac.new(key, user_id.encode(), hashlib.sha256).hexdigest()[:32]
+        ok_sig = hmac.compare_digest(sig.encode("utf-8", "surrogatepass"), expect.encode())
+    except Exception:  # noqa: BLE001 - fail closed, quietly
         return None
-    expect = hmac.new(_unsub_secret(), user_id.encode(), hashlib.sha256).hexdigest()[:32]
-    return user_id if hmac.compare_digest(sig, expect) else None
+    return user_id if ok_sig else None
 
 
 def set_optout(user_id: str, *, enabled: bool) -> None:
@@ -283,19 +297,32 @@ def build_digest(
     不想再收到?<a href="{unsub}" style="color:{_SLATE};">一键退订</a>
   </p>
 </div>"""
-    return {"subject": subject, "html": html_body, "email": email}
+    return {"subject": subject, "html": html_body, "email": email, "unsub_url": unsub}
 
 
 # ── delivery ──────────────────────────────────────────────────────────
 
 
-def send_email(to: str, subject: str, html_body: str) -> bool:
+def send_email(to: str, subject: str, html_body: str, *, unsub_url: str = "") -> bool:
     s = get_settings()
+    payload: dict[str, Any] = {
+        "from": s.digest_from,
+        "to": [to],
+        "subject": subject,
+        "html": html_body,
+    }
+    if unsub_url:
+        # RFC 8058 one-click: providers POST to this URL; Gmail/Yahoo bulk
+        # rules expect the pair. Our POST /digest/unsubscribe handles it.
+        payload["headers"] = {
+            "List-Unsubscribe": f"<{unsub_url}>",
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        }
     try:
         resp = requests.post(
             _RESEND_URL,
             headers={"Authorization": f"Bearer {s.resend_api_key}"},
-            json={"from": s.digest_from, "to": [to], "subject": subject, "html": html_body},
+            json=payload,
             timeout=_HTTP_TIMEOUT,
         )
         ok = resp.status_code in (200, 201)
@@ -309,12 +336,49 @@ def send_email(to: str, subject: str, html_body: str) -> bool:
         return False
 
 
-def run_weekly(*, force: bool = False, limit: int = _MAX_PER_RUN) -> dict[str, Any]:
-    """One batch run. Returns counts only — never emails/PII in the summary."""
+_run_lock = threading.Lock()
+
+
+def preflight() -> Optional[dict[str, Any]]:
+    """Cheap synchronous checks the /run endpoint reports BEFORE spawning the
+    batch thread. Returns a terminal summary, or None when a run may start."""
     s = get_settings()
     if not s.resend_api_key:
         return {"status": "skipped", "reason": "no_api_key"}
+    if not s.supabase_jwt_secret:
+        return {"status": "skipped", "reason": "no_jwt_secret"}
+    try:
+        _admin().table("digest_prefs").select("user_id").limit(1).execute()
+    except Exception as exc:  # noqa: BLE001
+        if _table_missing(exc):
+            return {"status": "not_ready", "reason": "apply migration 0007_weekly_digest.sql"}
+        return {"status": "error", "reason": "prefs_probe_failed"}
+    if _run_lock.locked():
+        return {"status": "busy", "reason": "a digest run is already in progress"}
+    return None
 
+
+def run_and_log(**kwargs) -> None:
+    """Thread target for the /run endpoint: the batch outlives the HTTP
+    request (Cloudflare proxies time out ~100s; a full batch can be longer)."""
+    summary = run_weekly(**kwargs)
+    _log.info("digest.run %s", summary)
+
+
+def run_weekly(*, force: bool = False, limit: int = _MAX_PER_RUN) -> dict[str, Any]:
+    """One batch run. Returns counts only — never emails/PII in the summary."""
+    pre = preflight()
+    if pre is not None and pre.get("status") != "busy":
+        return pre
+    if not _run_lock.acquire(blocking=False):
+        return {"status": "busy", "reason": "a digest run is already in progress"}
+    try:
+        return _run_weekly_locked(force=force, limit=limit)
+    finally:
+        _run_lock.release()
+
+
+def _run_weekly_locked(*, force: bool, limit: int) -> dict[str, Any]:
     try:
         recipients = list_recipients()
     except Exception as exc:  # noqa: BLE001
@@ -336,7 +400,12 @@ def run_weekly(*, force: bool = False, limit: int = _MAX_PER_RUN) -> dict[str, A
             if digest is None:
                 skipped_no_snapshot += 1
                 continue
-            if send_email(digest["email"], digest["subject"], digest["html"]):
+            if send_email(
+                digest["email"],
+                digest["subject"],
+                digest["html"],
+                unsub_url=digest.get("unsub_url", ""),
+            ):
                 mark_sent(uid)
                 sent += 1
             else:
