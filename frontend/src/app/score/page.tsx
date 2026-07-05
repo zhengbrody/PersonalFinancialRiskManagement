@@ -34,7 +34,19 @@ import { RegimeContextLine } from "@/components/regime-context";
 import { track } from "@/lib/analytics";
 import { ApiError, apiFetch, isNoPortfolioError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { useActiveScore, useLastSnapshot, useRiskExplain } from "@/lib/queries";
+import {
+  useActiveScore,
+  useLastSnapshot,
+  useMarketPrices,
+  useMyPortfolios,
+  useRiskExplain,
+} from "@/lib/queries";
+import { WhatIfCompare } from "@/components/whatif-compare";
+import {
+  equityTickersFromHoldings,
+  rowsFromHoldingsAndPrices,
+  scaleValue,
+} from "@/lib/whatif";
 import { explainInputFromScore } from "@/lib/risk-explain-input";
 import { scoreResponseSchema } from "@/lib/schemas";
 import type { Holding, ScoreRequest, ScoreResponse } from "@/lib/schemas";
@@ -68,6 +80,28 @@ export default function ScorePage() {
   // and is served from cache on revisit, so it no longer recomputes + blanks
   // every time. Disabled for anon (no token).
   const active = useActiveScore();
+
+  // What-if lab plumbing (signed-in only): the saved book + latest closes so
+  // "load my holdings" can prefill the sandbox with shares × price. Both are
+  // cached queries; anon passes an empty ticker set (query disabled).
+  const myPortfolios = useMyPortfolios();
+  const activeBook = signedIn
+    ? (myPortfolios.data?.portfolios.find((p) => p.is_default) ??
+      myPortfolios.data?.portfolios[0])
+    : undefined;
+  const equityTickers = useMemo(
+    () => (activeBook ? equityTickersFromHoldings(activeBook.holdings) : []),
+    [activeBook],
+  );
+  const bookPrices = useMarketPrices(equityTickers);
+  const canLoadBook = equityTickers.length > 0 && Boolean(bookPrices.data);
+
+  function loadMyHoldings() {
+    const loaded = rowsFromHoldingsAndPrices(activeBook?.holdings, bookPrices.data);
+    if (loaded.length === 0) return;
+    setRows(loaded);
+    track("whatif_loaded_holdings"); // safe: no tickers/$ in props
+  }
 
   // What the result panel shows: a manual run takes precedence; otherwise the
   // signed-in user's auto-scored saved portfolio.
@@ -114,6 +148,7 @@ export default function ScorePage() {
         schema: scoreResponseSchema,
       });
       setResult(data);
+      if (signedIn) track("whatif_run"); // safe: no portfolio data in props
     } catch (err) {
       setError(err instanceof ApiError ? err : new ApiError(0, "unknown", String(err)));
     } finally {
@@ -123,6 +158,24 @@ export default function ScorePage() {
 
   const whatIfForm = (
     <form onSubmit={onSubmit} className="space-y-4">
+      {signedIn && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!canLoadBook}
+            onClick={loadMyHoldings}
+          >
+            从我的持仓开始
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            {canLoadBook
+              ? "载入真实账本(按最新收盘价折算),再动手调仓。"
+              : "等待持仓与最新价格加载…"}
+          </span>
+        </div>
+      )}
       <div className="space-y-2">
         {rows.map((row, i) => (
           <div key={i} className="flex gap-2">
@@ -142,6 +195,26 @@ export default function ScorePage() {
               onChange={(e) => updateRow(i, { market_value: e.target.value })}
               className="font-mono"
             />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="px-2 font-mono text-xs"
+              onClick={() => updateRow(i, { market_value: scaleValue(row.market_value, 0.9) })}
+              aria-label={`Trim ${row.ticker || "row"} 10%`}
+            >
+              −10%
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="px-2 font-mono text-xs"
+              onClick={() => updateRow(i, { market_value: scaleValue(row.market_value, 1.1) })}
+              aria-label={`Add ${row.ticker || "row"} 10%`}
+            >
+              +10%
+            </Button>
             <Button
               type="button"
               variant="ghost"
@@ -171,6 +244,11 @@ export default function ScorePage() {
           onChange={(e) => setRiskPref(Number(e.target.value) || 3)}
           className="w-20 font-mono"
         />
+        {signedIn && riskPref !== 3 && (
+          <span className="text-xs text-muted-foreground">
+            基线按偏好 3 评分 — 改动此值本身也会计入对比差异。
+          </span>
+        )}
       </div>
 
       <Button type="submit" disabled={loading} className="w-full">
@@ -181,6 +259,13 @@ export default function ScorePage() {
 
   const resultArea = (
     <div className="space-y-4">
+      {signedIn && result && active.data && (
+        <WhatIfCompare
+          baseline={active.data}
+          sandbox={result}
+          onReset={() => setResult(null)}
+        />
+      )}
       {signedIn && !result && active.data && (
         <p className="text-xs text-muted-foreground">
           Scored from your saved Holdings.{" "}
@@ -229,11 +314,11 @@ export default function ScorePage() {
         // dominates like a data-entry sandbox.
         <div className="space-y-6">
           {resultArea}
-          <details className="group rounded-xl border border-border bg-card">
+          <details id="whatif" className="group scroll-mt-24 rounded-xl border border-border bg-card">
             <summary className="flex cursor-pointer items-center gap-2 px-5 py-3 text-sm font-medium">
-              <span>Try a what-if scenario</span>
+              <span>调仓沙盘 · What-if lab</span>
               <span className="text-xs font-normal text-muted-foreground">
-                — score a hypothetical mix without touching your saved holdings
+                — 载入你的持仓,改几个数字,看分数和风险怎么变(不改动真实账本)
               </span>
             </summary>
             <div className="border-t border-border p-5">{whatIfForm}</div>

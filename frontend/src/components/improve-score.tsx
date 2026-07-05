@@ -142,6 +142,9 @@ export function ImproveScore({ score }: { score: ScoreResponse }) {
               <Link href="/portfolios" className="text-muted-foreground hover:underline">
                 Edit holdings
               </Link>
+              <a href="#whatif" className="text-muted-foreground hover:underline">
+                在调仓沙盘试试
+              </a>
             </div>
           </div>
         ))}
