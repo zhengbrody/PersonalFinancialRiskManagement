@@ -79,3 +79,6 @@ compose.override.yml
 
 # Local export artifacts (marketing images, recordings) — never commit
 exports/
+
+# MLflow local file store (training-side experiment tracking)
+mlruns/
