@@ -1,6 +1,6 @@
 {
   "model_version": "regime-v1",
-  "trained_at": "2026-06-29T10:30:48.466550+00:00",
+  "trained_at": "2026-07-06T10:04:47.855751+00:00",
   "sklearn_version": "1.8.0",
   "estimator": "HistGradientBoostingClassifier",
   "feature_names": [
@@ -40,69 +40,69 @@
     ]
   },
   "training_window": {
-    "start": "2012-06-04",
-    "end": "2026-06-11",
-    "rows": 3526
+    "start": "2012-06-11",
+    "end": "2026-06-17",
+    "rows": 3525
   },
   "class_distribution": {
     "risk_on": 1860,
-    "neutral": 928,
-    "volatile": 557,
+    "neutral": 929,
+    "volatile": 555,
     "stress": 181
   },
   "metrics": {
-    "cv_macro_f1_mean": 0.3157,
-    "cv_accuracy_mean": 0.4937,
-    "holdout_accuracy": 0.5411,
-    "holdout_macro_f1": 0.393,
-    "elevated_risk_auc": 0.7432,
+    "cv_macro_f1_mean": 0.3357,
+    "cv_accuracy_mean": 0.507,
+    "holdout_accuracy": 0.5064,
+    "holdout_macro_f1": 0.3747,
+    "elevated_risk_auc": 0.7808,
     "baseline_majority_class": "risk_on",
-    "baseline_accuracy": 0.5057,
+    "baseline_accuracy": 0.505,
     "per_class": {
       "risk_on": {
-        "precision": 0.608,
-        "recall": 0.854,
-        "f1-score": 0.71
+        "precision": 0.586,
+        "recall": 0.795,
+        "f1-score": 0.675
       },
       "neutral": {
-        "precision": 0.475,
-        "recall": 0.187,
-        "f1-score": 0.268
+        "precision": 0.4,
+        "recall": 0.156,
+        "f1-score": 0.224
       },
       "volatile": {
-        "precision": 0.275,
-        "recall": 0.325,
-        "f1-score": 0.298
+        "precision": 0.278,
+        "recall": 0.39,
+        "f1-score": 0.324
       },
       "stress": {
-        "precision": 0.333,
+        "precision": 0.286,
         "recall": 0.267,
-        "f1-score": 0.296
+        "f1-score": 0.276
       }
     },
     "confusion_matrix": [
       [
-        305,
-        37,
-        15,
-        0
+        283,
+        48,
+        24,
+        1
       ],
       [
-        167,
-        48,
+        170,
         40,
-        2
+        44,
+        3
       ],
       [
         30,
-        16,
-        25,
+        11,
+        30,
         6
       ],
       [
         0,
-        0,
-        11,
+        1,
+        10,
         4
       ]
     ],
@@ -112,41 +112,41 @@
       "volatile",
       "stress"
     ],
-    "holdout_size": 706
+    "holdout_size": 705
   },
   "feature_importances": {
-    "vix_level": 0.16782,
-    "vol_63d": 0.16256,
-    "golden_cross": 0.10086,
-    "vol_ratio": 0.0854,
-    "yield_slope": 0.07332,
-    "mom_60d": 0.07245,
-    "vol_21d": 0.07017,
-    "drawdown": 0.04764,
-    "qqq_trend": 0.04264,
-    "trend_sma50": 0.04091,
-    "mom_20d": 0.03357,
-    "qqq_spy_spread": 0.03271,
-    "vix_change_5d": 0.02689,
-    "trend_sma200": 0.02454,
-    "vix_term": 0.01541
+    "vix_level": 0.16646,
+    "vol_63d": 0.14776,
+    "golden_cross": 0.09881,
+    "yield_slope": 0.08534,
+    "vol_ratio": 0.07683,
+    "vol_21d": 0.06826,
+    "mom_60d": 0.06,
+    "qqq_trend": 0.04592,
+    "drawdown": 0.04305,
+    "trend_sma50": 0.03742,
+    "mom_20d": 0.02949,
+    "qqq_spy_spread": 0.02947,
+    "vix_change_5d": 0.02682,
+    "vix_term": 0.0232,
+    "trend_sma200": 0.01618
   },
   "feature_medians": {
-    "trend_sma200": 0.066043,
-    "trend_sma50": 0.019667,
-    "golden_cross": 0.046881,
-    "mom_20d": 0.016794,
-    "mom_60d": 0.040883,
-    "vol_21d": 0.119056,
-    "vol_63d": 0.124918,
-    "vol_ratio": 0.815497,
-    "drawdown": -0.014231,
+    "trend_sma200": 0.06618,
+    "trend_sma50": 0.019733,
+    "golden_cross": 0.046873,
+    "mom_20d": 0.016799,
+    "mom_60d": 0.041078,
+    "vol_21d": 0.119041,
+    "vol_63d": 0.124917,
+    "vol_ratio": 0.816877,
+    "drawdown": -0.014186,
     "vix_level": 16.07,
     "vix_change_5d": -0.18,
-    "vix_term": 0.881835,
-    "qqq_trend": 0.084943,
-    "qqq_spy_spread": 0.004123,
-    "yield_slope": 1.155
+    "vix_term": 0.881733,
+    "qqq_trend": 0.085066,
+    "qqq_spy_spread": 0.004173,
+    "yield_slope": 1.153
   },
   "data_coverage": {
     "sources_present": [
@@ -158,8 +158,8 @@
       "vix3m"
     ],
     "sources_missing": [],
-    "spy_start": "2011-06-03",
-    "spy_end": "2026-06-26",
-    "observations": 3788
+    "spy_start": "2011-06-10",
+    "spy_end": "2026-07-02",
+    "observations": 3787
   }
 }
