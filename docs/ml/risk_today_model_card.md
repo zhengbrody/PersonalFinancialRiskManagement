@@ -69,6 +69,10 @@ future) + a final chronological 20% hold-out (706 rows):
 | CV macro-F1 mean | 0.316 |
 | **Elevated-risk ROC-AUC** (binary volatile∪stress) | **0.743** |
 
+Per-fold walk-forward table, baseline comparison (majority / persistence /
+logistic), and the calibration table live in the auto-generated
+[validation report](validation_report.md).
+
 Read this honestly: the 4-class accuracy barely beats always-guessing
 `risk_on`. The model's real, defensible signal is the **threshold-free 0.74
 AUC on "is elevated risk ahead?"** — that binary question is what the product
@@ -122,9 +126,15 @@ but that internal split is random-order by estimator design.
 - The estimator's internal early-stopping split shuffles within each fit
   (seeded; reported eval boundaries stay chronological) — with
   autocorrelated vol labels this can mildly flatter iteration selection.
-- In-sample calibration is not yet characterized — Phase 2 of the ML
-  lifecycle plan adds a reliability diagram and baseline table
-  (`docs/ml/validation_report.md`).
+- **Walk-forward validation** (`docs/ml/validation_report.md`, Phase 2):
+  the persistence baseline (carry the last observable label) BEATS the model
+  on mean 4-class fold accuracy (0.523 vs 0.492) — regimes persist; the
+  model's value is the elevated-risk probability, not 4-class point calls.
+- **Calibration**: the elevated-risk probability is directionally sound
+  (higher bins → higher observed frequency; top bin 0.94 predicted / 0.83
+  observed) but OVER-FORECASTS in the mid bins (e.g. ~0.14 predicted vs
+  0.04 observed) — treat mid-range probabilities as a watch signal, not a
+  base rate. Reliability table + diagram in the validation report.
 
 ## Ethics & user-facing framing
 
