@@ -336,6 +336,30 @@ npx tsc --noEmit
 npm run build
 ```
 
+### ML training (Risk-Today regime classifier)
+
+```bash
+# training-side extras only — never installed into the backend image
+pip install -r backend/app/ml/requirements-train.txt
+
+python -m backend.app.ml.train \
+  --config backend/app/ml/configs/risk_today.yaml \
+  --cache-dir .cache/ml          # snapshot → reruns reproduce bit-for-bit
+
+mlflow ui --backend-store-uri mlruns/   # inspect logged runs locally
+```
+
+Config-driven and seeded end-to-end; every run's params/metrics/artifacts are
+logged to a local MLflow file store and echoed into
+`backend/app/ml/artifacts/regime_meta.json` (git sha, sklearn version, full
+config). Time-series discipline is enforced by tests: walk-forward CV only,
+no random EVAL splits (the estimator's internal early-stopping split is
+seeded — see the model card), and a no-lookahead leakage test. Snapshots
+never expire: delete the `.pkl` under `--cache-dir` to refresh data. See the
+[model card](docs/ml/risk_today_model_card.md) for honest metrics
+(hold-out 0.541 vs 0.506 majority baseline; elevated-risk ROC-AUC 0.743) and
+limitations.
+
 > The original Streamlit app was fully retired on 2026-06-23 — its UI code,
 > the backend's dependency on Streamlit, and the running `/legacy` container
 > are all gone. Product work happens in `frontend/` and `backend/`. The old
@@ -388,6 +412,7 @@ Key files:
 | `docs/aws/ci-image-deploy.md` | CI image deploy runbook. |
 | `docs/aws/instance-rebuild.md` | Instance-loss disaster-recovery runbook. |
 | `docs/aws/hardening-backlog.md` | Ranked ops/hardening backlog + risk register. |
+| `docs/ml/risk_today_model_card.md` | Risk-Today model card: features, labels, honest metrics, limitations. |
 
 Do not build the Next.js image on the t3.micro host. That already caused an OOM
 incident; the repository now uses off-box GHCR builds.

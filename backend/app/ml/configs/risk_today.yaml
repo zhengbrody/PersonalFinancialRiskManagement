@@ -1,0 +1,28 @@
+# Risk-Today regime classifier — training config.
+#
+#   python -m backend.app.ml.train --config backend/app/ml/configs/risk_today.yaml
+#
+# Every value here is the SINGLE source for a training run and is echoed into
+# regime_meta.json + the MLflow run for provenance. Label thresholds/horizon
+# must match backend/app/ml/labels.py (the loader enforces it — serving's
+# heuristic fallback buckets with those constants).
+
+model_version: regime-v1.1.0
+seed: 42
+years: 15.0
+cv_splits: 5
+holdout_fraction: 0.2
+
+# HistGradientBoostingClassifier — shallow + regularized on purpose.
+max_iter: 250
+learning_rate: 0.05
+max_depth: 3
+l2_regularization: 1.0
+early_stopping: true
+validation_fraction: 0.15
+
+# Label definition (forward 10-day realized vol, annualized, absolute bands).
+label_horizon: 10
+risk_on_vol: 0.12
+neutral_vol: 0.18
+volatile_vol: 0.28

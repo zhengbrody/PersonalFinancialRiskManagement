@@ -1,10 +1,20 @@
-"""Offline training for the regime classifier. Run: ``python -m backend.app.ml.train``.
+"""Offline training for the regime classifier.
+
+    python -m backend.app.ml.train [--config backend/app/ml/configs/risk_today.yaml]
+                                   [--cache-dir .cache/ml] [--years 15]
 
 NEVER runs in the request path or on the box -- only locally / in the
 train-regime CI job, which commits the produced artifact (it ships in the
 backend image via ``COPY . /app``). Emits a tiny joblib model + a metadata JSON
-with full provenance: training window, sklearn version, feature names, label
-thresholds, walk-forward + held-out metrics, baselines, and feature importances.
+with full provenance: training window, sklearn version, git sha, the full
+config echo, feature names, label thresholds, walk-forward + held-out metrics,
+baselines, and feature importances. With mlflow installed (training-side
+extra), the run also lands in the local MLflow file store (see tracking.py).
+
+Reproducibility: fixed seed (config) + ``--cache-dir`` (pickled raw-data
+snapshot) → rerunning against the same snapshot reproduces metrics
+bit-for-bit. Without a snapshot, live yfinance data moves daily and metrics
+drift accordingly — that's data, not nondeterminism.
 
 The eval is the point: chronological (no-shuffle) split + walk-forward CV so the
 reported numbers are honest, and the model is compared to a majority-class
@@ -13,10 +23,13 @@ baseline so "is this better than guessing?" is explicit.
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 import joblib
 import numpy as np
@@ -29,6 +42,8 @@ from sklearn.model_selection import TimeSeriesSplit
 
 from . import data as ml_data
 from . import labels as ml_labels
+from . import tracking
+from .config import TrainConfig, load_config
 from .features import FEATURE_NAMES, WARMUP_REQUIRED, build_feature_frame
 
 _log = logging.getLogger(__name__)
@@ -36,23 +51,41 @@ _log = logging.getLogger(__name__)
 ARTIFACT_DIR = Path(__file__).parent / "artifacts"
 MODEL_PATH = ARTIFACT_DIR / "regime_model.joblib"
 META_PATH = ARTIFACT_DIR / "regime_meta.json"
+# Kept as the no-config fallback identity; the config supersedes it.
 MODEL_VERSION = "regime-v1"
 RANDOM_STATE = 42
 
 
-def _make_model() -> HistGradientBoostingClassifier:
+def _make_model(cfg: Optional[TrainConfig] = None) -> HistGradientBoostingClassifier:
     # HistGBM: handles NaN natively (so a missing free source doesn't break a
     # row), fast, small, sklearn-native. Shallow + regularized to resist the
     # overfitting that plagues financial models.
+    c = cfg or TrainConfig()
     return HistGradientBoostingClassifier(
-        max_iter=250,
-        learning_rate=0.05,
-        max_depth=3,
-        l2_regularization=1.0,
-        early_stopping=True,
-        validation_fraction=0.15,
-        random_state=RANDOM_STATE,
+        max_iter=c.max_iter,
+        learning_rate=c.learning_rate,
+        max_depth=c.max_depth,
+        l2_regularization=c.l2_regularization,
+        early_stopping=c.early_stopping,
+        validation_fraction=c.validation_fraction,
+        random_state=c.seed,
     )
+
+
+def _git_sha() -> Optional[str]:
+    """Provenance only — never fails a training run."""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            cwd=Path(__file__).parent,
+        )
+        sha = out.stdout.strip()
+        return sha if out.returncode == 0 and sha else None
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def build_dataset(raw: dict[str, pd.Series]) -> tuple[pd.DataFrame, pd.Series]:
@@ -66,21 +99,22 @@ def build_dataset(raw: dict[str, pd.Series]) -> tuple[pd.DataFrame, pd.Series]:
     return df[FEATURE_NAMES], df["label"].astype(str)
 
 
-def evaluate(X: pd.DataFrame, y: pd.Series) -> dict:
+def evaluate(X: pd.DataFrame, y: pd.Series, cfg: Optional[TrainConfig] = None) -> dict:
     """Honest temporal eval: walk-forward CV (expanding window) + a final
     chronological hold-out, both compared to the majority-class baseline."""
+    c = cfg or TrainConfig()
     # Walk-forward CV (time-ordered; never trains on the future).
-    tscv = TimeSeriesSplit(n_splits=5)
+    tscv = TimeSeriesSplit(n_splits=c.cv_splits)
     cv_f1, cv_acc = [], []
     for tr, te in tscv.split(X):
-        m = _make_model().fit(X.iloc[tr], y.iloc[tr])
+        m = _make_model(c).fit(X.iloc[tr], y.iloc[tr])
         pred = m.predict(X.iloc[te])
         cv_f1.append(float(f1_score(y.iloc[te], pred, average="macro", zero_division=0)))
         cv_acc.append(float((pred == y.iloc[te]).mean()))
 
-    # Final chronological hold-out (last 20%).
-    cut = int(len(X) * 0.8)
-    m = _make_model().fit(X.iloc[:cut], y.iloc[:cut])
+    # Final chronological hold-out (last holdout_fraction).
+    cut = int(len(X) * (1.0 - c.holdout_fraction))
+    m = _make_model(c).fit(X.iloc[:cut], y.iloc[:cut])
     pred = m.predict(X.iloc[cut:])
     proba = m.predict_proba(X.iloc[cut:])
     y_te = y.iloc[cut:]
@@ -121,11 +155,18 @@ def evaluate(X: pd.DataFrame, y: pd.Series) -> dict:
     }
 
 
-def _feature_importances(model, X: pd.DataFrame, y: pd.Series) -> dict:
+def _feature_importances(
+    model, X: pd.DataFrame, y: pd.Series, cfg: Optional[TrainConfig] = None
+) -> dict:
     """Permutation importance (HistGBM has no native feature_importances_)."""
     try:
         r = permutation_importance(
-            model, X, y, n_repeats=5, random_state=RANDOM_STATE, scoring="f1_macro"
+            model,
+            X,
+            y,
+            n_repeats=5,
+            random_state=(cfg or TrainConfig()).seed,
+            scoring="f1_macro",
         )
         imps = {
             FEATURE_NAMES[i]: round(float(r.importances_mean[i]), 5)
@@ -137,27 +178,38 @@ def _feature_importances(model, X: pd.DataFrame, y: pd.Series) -> dict:
         return {}
 
 
-def train_and_save(*, years: float = 15.0, fetcher=ml_data._yf_close) -> dict:
-    raw = ml_data.fetch_history(years=years, fetcher=fetcher)
+def train_and_save(
+    *,
+    years: Optional[float] = None,
+    fetcher=ml_data._yf_close,
+    cfg: Optional[TrainConfig] = None,
+    cache_dir: Optional[str] = None,
+    track: bool = True,
+) -> dict:
+    c = cfg or TrainConfig()
+    effective_years = years if years is not None else c.years
+    raw = ml_data.fetch_history(years=effective_years, fetcher=fetcher, cache_dir=cache_dir)
     X, y = build_dataset(raw)
     if len(X) < 500:
         raise ValueError(f"too little labelled data to train: {len(X)} rows")
 
-    metrics = evaluate(X, y)
+    metrics = evaluate(X, y, c)
 
     # Production model: fit on ALL labelled data; store the per-feature training
     # median so inference can describe a current value as above/below normal.
-    model = _make_model().fit(X, y)
-    importances = _feature_importances(model, X, y)
-    medians = {c: round(float(X[c].median()), 6) for c in FEATURE_NAMES}
+    model = _make_model(c).fit(X, y)
+    importances = _feature_importances(model, X, y, c)
+    medians = {col: round(float(X[col].median()), 6) for col in FEATURE_NAMES}
 
     ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, MODEL_PATH)
     meta = {
-        "model_version": MODEL_VERSION,
+        "model_version": c.model_version,
         "trained_at": datetime.now(timezone.utc).isoformat(),
         "sklearn_version": sklearn.__version__,
+        "git_sha": _git_sha(),
         "estimator": "HistGradientBoostingClassifier",
+        "config": c.echo(),
         "feature_names": FEATURE_NAMES,
         "classes": ml_labels.CLASSES,
         "label_thresholds": ml_labels.label_thresholds(),
@@ -173,12 +225,30 @@ def train_and_save(*, years: float = 15.0, fetcher=ml_data._yf_close) -> dict:
         "data_coverage": ml_data.data_coverage(raw),
     }
     META_PATH.write_text(json.dumps(meta, indent=2))
+    if track:
+        tracking.log_run(c, meta, [MODEL_PATH, META_PATH])
     return meta
 
 
-def main() -> None:
+def main(argv: Optional[list[str]] = None) -> None:
     logging.basicConfig(level=logging.INFO)
-    meta = train_and_save()
+    parser = argparse.ArgumentParser(description="Train the Risk-Today regime classifier.")
+    parser.add_argument("--config", default=None, help="YAML config (see ml/configs/)")
+    parser.add_argument(
+        "--cache-dir",
+        default=None,
+        help="pickled raw-data snapshot dir — reruns against the same snapshot "
+        "reproduce metrics bit-for-bit",
+    )
+    parser.add_argument("--years", type=float, default=None, help="override config years")
+    args = parser.parse_args(argv)
+
+    cfg = load_config(args.config)
+    meta = train_and_save(
+        years=args.years,
+        cfg=cfg if args.config is not None else None,
+        cache_dir=args.cache_dir,
+    )
     m = meta["metrics"]
     print(
         f"\n=== {meta['model_version']} trained ({meta['training_window']['rows']} rows, "
