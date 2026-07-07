@@ -353,7 +353,9 @@ Config-driven and seeded end-to-end; every run's params/metrics/artifacts are
 logged to a local MLflow file store and echoed into
 `backend/app/ml/artifacts/regime_meta.json` (git sha, sklearn version, full
 config). Time-series discipline is enforced by tests: walk-forward CV only,
-no random splits, and a no-lookahead leakage test. See the
+no random EVAL splits (the estimator's internal early-stopping split is
+seeded — see the model card), and a no-lookahead leakage test. Snapshots
+never expire: delete the `.pkl` under `--cache-dir` to refresh data. See the
 [model card](docs/ml/risk_today_model_card.md) for honest metrics
 (hold-out 0.541 vs 0.506 majority baseline; elevated-risk ROC-AUC 0.743) and
 limitations.

@@ -88,9 +88,18 @@ def test_config_defaults_match_module_constants():
     assert cfg.risk_on_vol == ml_labels.RISK_ON_VOL
     assert cfg.neutral_vol == ml_labels.NEUTRAL_VOL
     assert cfg.volatile_vol == ml_labels.VOLATILE_VOL
-    # And the checked-in YAML mirrors the defaults except the semantic version.
+    # And the checked-in YAML mirrors the defaults field-by-field except the
+    # semantic model_version (YAML carries the bumped v1.1.0 identity).
     repo_yaml = Path(ml_train.__file__).parent / "configs" / "risk_today.yaml"
     assert repo_yaml.exists()
+    yaml = pytest.importorskip("yaml", reason="pyyaml is a training-side extra")
+    raw = yaml.safe_load(repo_yaml.read_text())
+    defaults = TrainConfig()
+    for key, value in raw.items():
+        if key == "model_version":
+            assert value == "regime-v1.1.0"
+            continue
+        assert value == getattr(defaults, key), f"YAML drifted from defaults: {key}"
 
 
 def test_config_yaml_override_and_guards(tmp_path):

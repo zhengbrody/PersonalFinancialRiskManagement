@@ -73,7 +73,30 @@ def fetch_history(
         cached = _cache_path(cache_dir, years)
         if cached.exists():
             raw = pd.read_pickle(cached)
-            _log.info("ml.data.cache_hit path=%s keys=%s", cached, sorted(raw))
+            # A snapshot bypasses the live fetch, NOT the contract: required
+            # series must still be present, and a schema drift (SYMBOLS grew
+            # since the pickle) deserves a loud warning, not silent NaN.
+            missing_required = [k for k in REQUIRED if k not in raw]
+            if missing_required:
+                raise ValueError(
+                    f"cached snapshot {cached} is missing required series "
+                    f"{missing_required} — delete it to refetch"
+                )
+            if set(raw) != set(SYMBOLS):
+                _log.warning(
+                    "ml.data.cache_schema_drift path=%s missing=%s",
+                    cached,
+                    sorted(set(SYMBOLS) - set(raw)),
+                )
+            spy = raw.get("spy")
+            end = str(spy.index[-1].date()) if spy is not None and len(spy) else "?"
+            _log.info(
+                "ml.data.cache_hit path=%s keys=%s data_end=%s "
+                "(snapshots never expire — delete the file to refresh)",
+                cached,
+                sorted(raw),
+                end,
+            )
             return raw
 
     start = (datetime.now() - timedelta(days=int(365 * years) + 30)).strftime("%Y-%m-%d")

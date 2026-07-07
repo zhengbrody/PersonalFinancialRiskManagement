@@ -25,7 +25,10 @@ from . import labels as ml_labels
 
 @dataclass(frozen=True)
 class TrainConfig:
-    model_version: str = "regime-v1.1.0"
+    # Default == train.MODEL_VERSION ("defaults are the historical constants");
+    # the semantic bump to regime-v1.1.0 lives in configs/risk_today.yaml and
+    # applies only to config-driven runs.
+    model_version: str = "regime-v1"
     seed: int = 42
     years: float = 15.0
     cv_splits: int = 5

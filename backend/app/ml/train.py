@@ -204,7 +204,7 @@ def train_and_save(
     ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, MODEL_PATH)
     meta = {
-        "model_version": c.model_version if cfg is not None else MODEL_VERSION,
+        "model_version": c.model_version,
         "trained_at": datetime.now(timezone.utc).isoformat(),
         "sklearn_version": sklearn.__version__,
         "git_sha": _git_sha(),

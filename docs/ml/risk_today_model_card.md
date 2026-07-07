@@ -52,7 +52,7 @@ forward-looking operation; the last 10 rows are unlabeled and dropped.
 ## Training data & window
 
 Free yfinance daily closes, 2012-06-04 → 2026-06-11 (**3,526 labeled rows**
-after a ~200-day warmup). Class distribution: risk_on 1,860 · neutral 928 ·
+after a ~1-year / 252-trading-day warmup — the longest feature window). Class distribution: risk_on 1,860 · neutral 928 ·
 volatile 557 · **stress 181** — the tail class is rare by nature; treat
 per-class stress metrics as low-sample.
 
@@ -98,7 +98,12 @@ mlflow ui --backend-store-uri mlruns/                  # inspect runs locally
 Seeds are fixed (config `seed: 42` drives the estimator and permutation
 importance); live yfinance data moves daily, so bit-exact reproduction
 requires the `--cache-dir` snapshot — that is a property of the data, not
-nondeterminism in the pipeline.
+nondeterminism in the pipeline. Snapshots never expire: delete the `.pkl`
+(or point at a fresh dir) to retrain on current data. One honest nuance:
+the estimator's `early_stopping` internally holds out a seeded, shuffled
+15% validation split within each fit to pick the stopping iteration — all
+REPORTED metrics use chronological walk-forward/hold-out boundaries only,
+but that internal split is random-order by estimator design.
 
 ## Limitations & risks
 
@@ -114,6 +119,9 @@ nondeterminism in the pipeline.
   commits the artifact `[skip ci]`; the runtime loader fail-softs if the
   artifact is bad). Documented trade-off: freshness over gatekeeping at
   current scale.
+- The estimator's internal early-stopping split shuffles within each fit
+  (seeded; reported eval boundaries stay chronological) — with
+  autocorrelated vol labels this can mildly flatter iteration selection.
 - In-sample calibration is not yet characterized — Phase 2 of the ML
   lifecycle plan adds a reliability diagram and baseline table
   (`docs/ml/validation_report.md`).

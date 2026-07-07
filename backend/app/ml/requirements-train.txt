@@ -3,9 +3,13 @@
 # and must stay lean for the 916MB t3.micro). Consumers: local training runs
 # and .github/workflows/train-regime.yml.
 #
-# train.py import-guards all of these: without them, training still works
-# (built-in config defaults, MLflow logging becomes a no-op). The --cache-dir
-# data snapshot uses stdlib pickle, so it needs nothing from this file.
-mlflow>=2.14,<4
+# All of these are import-guarded (config.py guards pyyaml, tracking.py guards
+# mlflow) — without them training still works: built-in config defaults, and
+# MLflow logging becomes a no-op. matplotlib is reserved for the Phase-2
+# validation plots (reliability diagram). The --cache-dir data snapshot uses
+# stdlib pickle, so it needs nothing from this file.
+#
+# mlflow floor is 3.x: tracking.py uses log_model(name=...), which 2.x lacks.
+mlflow>=3,<4
 pyyaml>=6,<7
 matplotlib>=3.8,<4
