@@ -26,6 +26,15 @@ KS: we report the KS STATISTIC as descriptive context only. An i.i.d.
 p-value would be invalid — these windows are heavily autocorrelated
 (effective sample size is a small fraction of 120) — so no p-value is
 published and KS never affects status.
+
+PSI saturation + the out-of-band channel: once a window concentrates in a
+single reference decile, PSI hits its epsilon-clipped ceiling (~12.43) and
+stops discriminating — for persistently trending features (yield_slope,
+vol_63d) the calibrated p99 can EQUAL that ceiling, making drift unreachable
+via PSI alone. The independent out-of-band rule restores out-of-support
+detection: `oob_frac` = fraction of live points outside the training
+[min, max]; it is exactly 0 for every in-sample window by construction (no
+calibration needed), and > OOB_DRIFT_FRAC forces drift regardless of PSI.
 """
 
 from __future__ import annotations
@@ -49,6 +58,9 @@ MIN_LIVE_OBS = 30  # fewer live points than this → "insufficient", not a verdi
 # Absolute fallback bands — ONLY for an uncalibrated (pre-v2) reference.
 PSI_WATCH_ABS = 0.10
 PSI_DRIFT_ABS = 0.25
+# Out-of-band: > this fraction of live points outside the training [min, max]
+# → drift regardless of PSI (which saturates and can't see beyond the support).
+OOB_DRIFT_FRAC = 0.25
 _EPS = 1e-6
 
 
@@ -200,7 +212,7 @@ def _status_calibrated(psi: float, slice_psi: Optional[dict[str, Any]]) -> tuple
 
 
 def feature_drift(live: pd.Series, ref: dict[str, Any]) -> dict[str, Any]:
-    """One feature's verdict vs its reference + calibrated null."""
+    """One feature's verdict: calibrated PSI + the out-of-band override."""
     vals = live.dropna().to_numpy(dtype=float)
     if len(vals) < MIN_LIVE_OBS:
         return {
@@ -208,18 +220,24 @@ def feature_drift(live: pd.Series, ref: dict[str, Any]) -> dict[str, Any]:
             "psi_p90": None,
             "psi_p99": None,
             "ks_stat": None,
+            "oob_frac": None,
             "n": int(len(vals)),
             "status": "insufficient",
             "calibrated": False,
         }
-    psi = psi_vs_reference(vals, ref["quantile_values"])
+    q = ref["quantile_values"]
+    psi = psi_vs_reference(vals, q)
     slice_psi = ref.get("slice_psi")
     status, calibrated = _status_calibrated(psi, slice_psi)
+    oob = float(np.mean((vals < q[0]) | (vals > q[-1])))
+    if oob > OOB_DRIFT_FRAC:
+        status = "drift"  # outside the training support — PSI can't see this far
     return {
         "psi": psi,
         "psi_p90": (slice_psi or {}).get("p90"),
         "psi_p99": (slice_psi or {}).get("p99"),
-        "ks_stat": ks_statistic(vals, ref["quantile_values"]),
+        "ks_stat": ks_statistic(vals, q),
+        "oob_frac": round(oob, 4),
         "n": int(len(vals)),
         "status": status,
         "calibrated": calibrated,
@@ -257,21 +275,23 @@ def prediction_drift(
 def evaluate_drift(frame: pd.DataFrame, model: Any, reference: dict[str, Any]) -> dict[str, Any]:
     """Full drift assessment of a recent feature window vs the reference.
 
-    ``overall_status`` is the WORST feature/prediction status (insufficient
-    features don't count against it — absence of evidence, stated as such)."""
+    ``overall_status`` is the WORST feature/prediction verdict. Insufficient
+    features never count against it, and if NO channel produced a verdict at
+    all the overall is None — "we measured nothing" must not read healthy."""
     features_out: dict[str, Any] = {}
-    worst = "healthy"
     rank = {"healthy": 0, "watch": 1, "drift": 2}
+    verdicts: list[int] = []
     for name, ref in (reference.get("features") or {}).items():
         if name not in frame.columns:
             continue
         d = feature_drift(frame[name], ref)
         features_out[name] = d
-        if d["status"] in rank and rank[d["status"]] > rank[worst]:
-            worst = d["status"]
+        if d["status"] in rank:
+            verdicts.append(rank[d["status"]])
 
     pred = prediction_drift(frame, model, reference)
-    if pred is not None and rank.get(pred["status"], 0) > rank[worst]:
-        worst = pred["status"]
+    if pred is not None and pred["status"] in rank:
+        verdicts.append(rank[pred["status"]])
 
+    worst = {v: k for k, v in rank.items()}[max(verdicts)] if verdicts else None
     return {"features": features_out, "prediction": pred, "overall_status": worst}

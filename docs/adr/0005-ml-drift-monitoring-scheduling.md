@@ -34,12 +34,22 @@ training slice vs that same mixture (p50/p90/p99). Live status compares the
 live window's PSI against its own feature's percentiles — `drift` means "the
 current window is more unusual vs training than ~99% of all windows the model
 was trained across", which is the question we actually want answered. Two
-honesty consequences are accepted and documented: the expected false-alarm
-rate is ~1% per feature by construction (≈ one watch/drift reading per feature
-per ~100 trading days is NORMAL — hence watch is a look, not an action), and
-KS is reported as a bare statistic with **no p-value** (an i.i.d. p on a
-window with lag-1 autocorrelation ≈ 0.96+ would overstate significance by
-orders of magnitude).
+honesty consequences are accepted and documented: per feature, watch fires on
+~10% and drift on ~1% of windows by construction, and the OVERALL worst-of-16
+composite is correspondingly noisier — replayed on all 684 in-sample windows:
+**watch-or-worse 60.8% (watch is the modal state), drift 7.75%, clustered in
+multi-week episodes around genuine market breaks** (2013–2023). KS is
+reported as a bare statistic with **no p-value** (an i.i.d. p on a window
+with lag-1 autocorrelation ≈ 0.96+ would overstate significance by orders of
+magnitude).
+
+Two guardrails round out the design: **out-of-band detection** — PSI
+saturates (~12.43 ceiling) once a window concentrates in one reference
+decile, and for persistently trending features the calibrated p99 EQUALS that
+ceiling, so PSI alone can never say drift there; `oob_frac` (share of live
+points outside the training min/max, exactly 0 for every in-sample window)
+forces drift above 25% regardless of PSI. And **no verdict ≠ healthy** — if
+every channel is `insufficient`, the overall status is null, not healthy.
 
 ## Rationale
 

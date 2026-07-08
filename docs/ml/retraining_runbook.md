@@ -8,7 +8,21 @@ _Applies to `backend/app/ml/` · artifact `regime_model.joblib` + `regime_meta.j
 |---|---|
 | **Scheduled** — every Monday 06:00 UTC | `train-regime.yml` (automatic; commits the artifact `[skip ci]`) |
 | **Drift** — `GET /api/v1/ml/health` shows `overall_status: drift` | daily `ml-health.yml` cron / Sentry "ML drift" warning — **investigate first, don't reflex-retrain** (see below) |
-| **Watch** — `overall_status: watch` | expected ~1% of days per feature by construction — look, don't act |
+| **Watch** — `overall_status: watch` | look, don't act — see the measured operating point below |
+
+### Measured operating point (replayed on all 684 in-sample windows)
+
+Honest base rates, so real alerts aren't discounted as noise:
+
+- Per feature, `watch` fires on ~10% of windows and `drift` on ~1% **by
+  construction** (p90/p99 thresholds).
+- The OVERALL status is the worst of 16 channels, so composite rates are much
+  higher: **watch-or-worse on 60.8% of historical windows — watch is the modal
+  state, not an anomaly.** Overall `drift` fired on **7.75% (53/684)**,
+  clustered in multi-week episodes across 2013 · 2015 · 2017 · 2019 · 2020 ·
+  2021 · 2022 · 2023 — i.e. a red cron day means "this market window is
+  extreme vs the training era" and tends to arrive in clusters during genuine
+  regime breaks, a few times a year at most.
 | **sklearn upgrade** — `sklearn_match: false` in `/ml/health` | dependency bumps (the pickle is pinned to `scikit-learn>=1.8,<1.9`) |
 | **Label/threshold change** — editing `labels.py` bands | must change `labels.py` AND `configs/risk_today.yaml` together (the config loader enforces the match) |
 
@@ -21,11 +35,16 @@ unlike the training era than ~99% of the windows the model trained across" —
 NOT necessarily that the model is broken, and NOT a signal loop where
 retraining mechanically clears it:
 
-1. **Look at which features drifted.** A rates feature (`yield_slope`) alone
-   → the macro environment moved; the model may still rank vol risk fine
-   (check `elevated_risk_auc` on the next validation run). Most features at
-   once → the world genuinely changed; retrain so the reference (and the
-   model) include the new regime.
+1. **Look at which features drifted, and through which channel.** Each
+   feature can flag via its calibrated PSI (shape unusual vs the training
+   era) or via `oob_frac > 0.25` (a quarter of the window sits OUTSIDE the
+   training min/max — PSI saturates there and can't see how far; for
+   persistently trending features like `yield_slope`/`vol_63d`, whose
+   calibrated p99 equals the PSI ceiling, out-of-band is the ONLY drift
+   path). A rates feature alone → the macro environment moved; the model may
+   still rank vol risk fine (check `elevated_risk_auc` on the next validation
+   run). Most features at once → the world genuinely changed; retrain so the
+   reference (and the model) include the new regime.
 2. **Retraining helps only if the new regime enters the training window** —
    it does (the window is anchored to today), so a retrain folds the drifted
    period into both model and reference. If drift persists AFTER a retrain,

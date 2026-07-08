@@ -49,6 +49,9 @@ class FeatureDriftOut(BaseModel):
     psi_p90: Optional[float] = None
     psi_p99: Optional[float] = None
     ks_stat: Optional[float] = None
+    # Fraction of live points outside the training [min, max]; > 0.25 forces
+    # drift (PSI saturates and can't see beyond the support).
+    oob_frac: Optional[float] = None
     n: int = 0
     status: str = "insufficient"
     calibrated: bool = False

@@ -116,7 +116,14 @@ def get_ml_health(*, force_refresh: bool = False, fetcher=None) -> dict[str, Any
         return snap
 
     drift = ml_monitoring.evaluate_drift(live, model, reference)
-    snap = _base("ok")
+    snap = _base(
+        "ok",
+        (
+            None
+            if drift["overall_status"] is not None
+            else "live data insufficient for any drift verdict"
+        ),
+    )
     snap.update(
         {
             "reference": {

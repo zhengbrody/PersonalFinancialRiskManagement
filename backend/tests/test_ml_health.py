@@ -156,6 +156,35 @@ def test_out_of_support_window_is_still_drift():
     assert out["overall_status"] == "drift"
 
 
+def test_out_of_support_drifts_even_when_psi_saturates():
+    """Review round 2: for persistently trending features the calibrated p99
+    can EQUAL the PSI ceiling (~12.43) — drift is then unreachable via PSI
+    (a fully-out-of-support window scores the same as an extreme in-sample
+    one). The out-of-band channel must flag it anyway."""
+    rng = np.random.default_rng(11)
+    ref = _ref_feature(rng.normal(0, 1, 3000))
+    cap = 12.4338
+    ref["slice_psi"] = dict(n_slices=682, window=120, stride=5, p50=cap, p90=cap, p99=cap, max=cap)
+    live = pd.Series(np.full(mon.LIVE_WINDOW, max(ref["quantile_values"]) + 10.0))
+    d = mon.feature_drift(live, ref)
+    assert d["psi"] <= cap + 1e-6  # PSI alone can never exceed the saturated p99
+    assert d["oob_frac"] == 1.0
+    assert d["status"] == "drift"
+
+
+def test_all_insufficient_overall_is_none_not_healthy():
+    """'We measured nothing' must not read healthy (review round 2)."""
+    rng = np.random.default_rng(12)
+    ref = {
+        "features": {FEATURE_NAMES[0]: _ref_feature(rng.normal(0, 1, 3000))},
+        "predicted_class_fractions": {"risk_on": 1.0},
+    }
+    frame = pd.DataFrame({FEATURE_NAMES[0]: rng.normal(0, 1, 10)})
+    out = mon.evaluate_drift(frame, _StubModel(), ref)
+    assert out["features"][FEATURE_NAMES[0]]["status"] == "insufficient"
+    assert out["overall_status"] is None
+
+
 # ── reference + prediction drift ──────────────────────────────────────
 
 
