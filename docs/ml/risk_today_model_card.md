@@ -71,11 +71,12 @@ forward-looking operation; the last 10 rows are unlabeled and dropped.
 ## Training data & window
 
 Free yfinance daily closes, 2012-06-12 → 2026-06-22 (**3,526 labeled rows**
-after a ~1-year / 252-trading-day warmup — the longest feature window). Class distribution: risk_on 1,860 · neutral 928 ·
+after a ~1-year / 252-trading-day warmup — the longest feature window). Class distribution: risk_on 1,860 · neutral 931 ·
 volatile 554 · **stress 181** — the tail class is rare by nature; treat
 per-class stress metrics as low-sample. The committed
-`regime_reference.json` (feature quantile grids + training-time predicted
-class mix) anchors the live drift monitor at `GET /api/v1/ml/health`.
+`regime_reference.json` (feature quantile grids + per-feature calibrated
+drift nulls + training-time predicted class mix) anchors the live drift
+monitor at `GET /api/v1/ml/health`.
 
 ## Evaluation (honest numbers, from `regime_meta.json`)
 
@@ -99,8 +100,8 @@ Read this honestly: the 4-class accuracy barely beats always-guessing
 `risk_on` (and loses to persistence — see the headline). The model's real,
 defensible signal is the **threshold-free 0.77 AUC on "is elevated risk ahead?"** — that binary question is what the product
 surfaces (calm/normal vs elevated/stressed coloring). Top features by
-permutation importance: `vix_level` (0.168), `vol_63d` (0.163),
-`golden_cross` (0.101), `vol_ratio` (0.085), `yield_slope` (0.073).
+permutation importance: `vol_63d` (0.168), `vix_level` (0.152),
+`golden_cross` (0.093), `vol_ratio` (0.084), `yield_slope` (0.080).
 
 ## Serving & degradation
 

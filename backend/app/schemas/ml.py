@@ -39,16 +39,25 @@ class MLRegimeOut(BaseModel):
 
 
 class FeatureDriftOut(BaseModel):
+    """One feature's drift verdict. ``psi`` is judged against the feature's OWN
+    calibrated null (psi_p90/psi_p99 = percentiles of historical same-length
+    window PSIs baked into the reference). ``ks_stat`` is descriptive only —
+    no p-value is published because live windows are autocorrelated and an
+    i.i.d. p would be invalid."""
+
     psi: Optional[float] = None
+    psi_p90: Optional[float] = None
+    psi_p99: Optional[float] = None
     ks_stat: Optional[float] = None
-    ks_p: Optional[float] = None
     n: int = 0
     status: str = "insufficient"
+    calibrated: bool = False
 
 
 class PredictionDriftOut(BaseModel):
     psi: Optional[float] = None
     status: str = "healthy"
+    calibrated: bool = False
     n: int = 0
     live_fractions: dict[str, float] = Field(default_factory=dict)
 
@@ -57,8 +66,10 @@ class MLHealthOut(BaseModel):
     """GET /api/v1/ml/health — model/artifact identity + drift status.
 
     ``status``: ok | not_ready | unavailable (service tiers).
-    ``overall_status``: healthy | watch | drift (worst feature/prediction PSI
-    band) — null unless status == ok. Read-only context; never advice."""
+    ``overall_status``: healthy | watch | drift — worst feature/prediction
+    verdict, each judged against its own calibrated null (live-window PSI vs
+    the distribution of historical same-length training windows) — null unless
+    status == ok. Read-only context; never advice."""
 
     model_config = ConfigDict(extra="ignore", protected_namespaces=())
 

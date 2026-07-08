@@ -13,9 +13,33 @@ repo's existing GitHub Actions cron pattern.
 
 **GitHub Actions daily cron curling a public read-only `GET /api/v1/ml/health`
 endpoint that computes drift on demand (10-minute in-process cache).**
-Alerting lives server-side (structured log + Sentry `capture_message` on the
-healthy→watch/drift transition, throttled by the cache), so the verdict is
-identical whether a cron, a human, or an uptime probe asks.
+Alerting lives server-side (structured log + Sentry `capture_message` when a
+known status worsens, throttled by the cache), so the verdict is identical
+whether a cron, a human, or an uptime probe asks.
+
+## The statistical design (v2 — the naive version failed review)
+
+The first draft compared the live 120-day window's PSI against the textbook
+absolute bands (0.10/0.25) using the 15-year training MIXTURE as the
+reference. Adversarial review **ran it**: 163/163 in-sample training slices
+read "drift" — a measured **100% false-alarm rate**. A contiguous,
+autocorrelated market window always occupies a narrow slice of a 15-year
+mixture (that's what a regime IS), so raw PSI is large for every normal
+window and the textbook bands (meant for i.i.d. scoring populations) are
+meaningless here.
+
+The shipped design is a **self-calibrated null**: training bakes into the
+reference, per feature, the distribution of PSIs of every historical 120-day
+training slice vs that same mixture (p50/p90/p99). Live status compares the
+live window's PSI against its own feature's percentiles — `drift` means "the
+current window is more unusual vs training than ~99% of all windows the model
+was trained across", which is the question we actually want answered. Two
+honesty consequences are accepted and documented: the expected false-alarm
+rate is ~1% per feature by construction (≈ one watch/drift reading per feature
+per ~100 trading days is NORMAL — hence watch is a look, not an action), and
+KS is reported as a bare statistic with **no p-value** (an i.i.d. p on a
+window with lag-1 autocorrelation ≈ 0.96+ would overstate significance by
+orders of magnitude).
 
 ## Rationale
 

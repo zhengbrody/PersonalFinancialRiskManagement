@@ -10,9 +10,11 @@ Tiers:
 * not_ready    — regime_reference.json absent (train hasn't produced one yet)
 * unavailable  — market data or the model artifact is down
 
-On an overall drift breach the service emits ONE structured warning + Sentry
-message per cache period (the cache is the throttle), and only on the
-healthy→(watch|drift) transition, so a stuck-red state can't spam.
+Alerting: ONE structured warning + Sentry message, only when a KNOWN overall
+status worsens (healthy→watch|drift, watch→drift), throttled by the cache
+period. A process restart or a data blip resets `previous` to unknown — the
+next computation then logs at info instead of re-alerting, so deploys and
+outages don't re-fire a standing condition.
 """
 
 from __future__ import annotations
@@ -33,7 +35,9 @@ _log = logging.getLogger(__name__)
 REFERENCE_PATH = Path(__file__).resolve().parents[1] / "ml" / "artifacts" / "regime_reference.json"
 
 _CACHE_TTL = 600.0  # matches ml_regime's serving cache
-_LIVE_WINDOW = 120  # recent trading days compared against the reference
+# The live window MUST equal the calibration window baked into the reference —
+# the slice-PSI percentiles are the null for windows of exactly this length.
+_LIVE_WINDOW = ml_monitoring.LIVE_WINDOW
 _FETCH_YEARS = 1.75  # same warmup-covering window the regime service uses
 
 _cache: dict[str, Any] = {}
@@ -76,7 +80,7 @@ def _base(status: str, note: Optional[str] = None) -> dict[str, Any]:
     }
 
 
-def get_ml_health(*, force_refresh: bool = False, fetcher=ml_data._yf_close) -> dict[str, Any]:
+def get_ml_health(*, force_refresh: bool = False, fetcher=None) -> dict[str, Any]:
     now = time.time()
     if not force_refresh and _cache.get("at", 0) + _CACHE_TTL > now:
         return _cache["snapshot"]
@@ -98,7 +102,9 @@ def get_ml_health(*, force_refresh: bool = False, fetcher=ml_data._yf_close) -> 
         return snap
 
     try:
-        raw = ml_data.fetch_history(years=_FETCH_YEARS, fetcher=fetcher)
+        # Shared with ml_regime via the process-wide serve cache — one yfinance
+        # burst covers both services within the TTL.
+        raw = ml_data.fetch_history_cached(years=_FETCH_YEARS, fetcher=fetcher)
         frame = build_feature_frame(raw).dropna(subset=WARMUP_REQUIRED)
         live = frame[FEATURE_NAMES].tail(_LIVE_WINDOW)
         if live.empty:
@@ -130,27 +136,37 @@ def get_ml_health(*, force_refresh: bool = False, fetcher=ml_data._yf_close) -> 
     return snap
 
 
+_RANK = {"healthy": 0, "watch": 1, "drift": 2}
+
+
 def _maybe_alert(*, previous: Optional[dict[str, Any]], current: dict[str, Any]) -> None:
-    """Structured log + Sentry, only on the transition INTO watch/drift —
-    the cache period is the natural throttle."""
+    """Structured log + Sentry, only when a KNOWN status worsens — the cache
+    period is the natural throttle. An unknown `previous` (process restart,
+    prior tier not ok) logs info instead of alerting: a deploy or a transient
+    data outage must not re-fire a standing condition."""
     curr = current.get("overall_status")
     prev = (previous or {}).get("overall_status")
-    if curr in ("watch", "drift") and curr != prev:
-        worst = [
-            name for name, d in (current.get("features") or {}).items() if d.get("status") == curr
-        ]
-        _log.warning(
-            "ml.health.drift_detected status=%s features=%s model=%s",
-            curr,
-            worst,
-            current.get("model_version"),
-        )
-        try:
-            import sentry_sdk
+    if curr not in _RANK:
+        return
+    if prev not in _RANK:
+        if curr != "healthy":
+            _log.info("ml.health.status_on_first_computation status=%s", curr)
+        return
+    if _RANK[curr] <= _RANK[prev]:
+        return
+    worst = [name for name, d in (current.get("features") or {}).items() if d.get("status") == curr]
+    _log.warning(
+        "ml.health.drift_detected status=%s features=%s model=%s",
+        curr,
+        worst,
+        current.get("model_version"),
+    )
+    try:
+        import sentry_sdk
 
-            sentry_sdk.capture_message(
-                f"ML drift {curr}: features={worst} model={current.get('model_version')}",
-                level="warning",
-            )
-        except Exception:  # noqa: BLE001 - alerting must never break health
-            pass
+        sentry_sdk.capture_message(
+            f"ML drift {curr}: features={worst} model={current.get('model_version')}",
+            level="warning",
+        )
+    except Exception:  # noqa: BLE001 - alerting must never break health
+        pass

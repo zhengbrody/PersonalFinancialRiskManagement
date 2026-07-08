@@ -7,9 +7,31 @@ _Applies to `backend/app/ml/` · artifact `regime_model.joblib` + `regime_meta.j
 | Trigger | Source |
 |---|---|
 | **Scheduled** — every Monday 06:00 UTC | `train-regime.yml` (automatic; commits the artifact `[skip ci]`) |
-| **Drift** — `GET /api/v1/ml/health` shows `overall_status: watch` (investigate) or `drift` (retrain) | daily `ml-health.yml` cron / Sentry "ML drift" warning |
+| **Drift** — `GET /api/v1/ml/health` shows `overall_status: drift` | daily `ml-health.yml` cron / Sentry "ML drift" warning — **investigate first, don't reflex-retrain** (see below) |
+| **Watch** — `overall_status: watch` | expected ~1% of days per feature by construction — look, don't act |
 | **sklearn upgrade** — `sklearn_match: false` in `/ml/health` | dependency bumps (the pickle is pinned to `scikit-learn>=1.8,<1.9`) |
 | **Label/threshold change** — editing `labels.py` bands | must change `labels.py` AND `configs/risk_today.yaml` together (the config loader enforces the match) |
+
+### What a drift alert means (and doesn't)
+
+Statuses are judged against a **self-calibrated null**: `drift` = the live
+120-day window's PSI exceeds the 99th percentile of all historical 120-day
+training-window PSIs for that feature. So it means "the market looks more
+unlike the training era than ~99% of the windows the model trained across" —
+NOT necessarily that the model is broken, and NOT a signal loop where
+retraining mechanically clears it:
+
+1. **Look at which features drifted.** A rates feature (`yield_slope`) alone
+   → the macro environment moved; the model may still rank vol risk fine
+   (check `elevated_risk_auc` on the next validation run). Most features at
+   once → the world genuinely changed; retrain so the reference (and the
+   model) include the new regime.
+2. **Retraining helps only if the new regime enters the training window** —
+   it does (the window is anchored to today), so a retrain folds the drifted
+   period into both model and reference. If drift persists AFTER a retrain,
+   do not loop: that means the CURRENT window is extreme even within a
+   training set that contains it — escalate to reading the validation report
+   instead of retraining again.
 
 ## How to retrain (locally, reproducible)
 
@@ -55,5 +77,8 @@ curl -s https://mindmarket.app/api/v1/ml/health | jq '.data | {status, overall_s
 ```
 
 Expect `source: "model"`, the new `model_version`, and `overall_status:
-"healthy"` right after a retrain (the reference was just rebuilt from the
-same window, so drift ≈ 0 by construction).
+"healthy"` or `"watch"` right after a retrain — the live window is one of the
+calibration windows, so it sits inside the null by construction (it can still
+land in a feature's top decile → watch; that is normal). A `drift` reading
+immediately after a retrain is the escalation case in "What a drift alert
+means" above.

@@ -1,8 +1,8 @@
 {
   "model_version": "regime-v1.1.0",
-  "trained_at": "2026-07-08T06:50:11.987471+00:00",
+  "trained_at": "2026-07-08T18:53:57.499427+00:00",
   "sklearn_version": "1.8.0",
-  "git_sha": "a732a10cd3cf949c10248c4bcf9de54639e52b84",
+  "git_sha": "35ea45e4105663487d81a43a346b06b15ec1c668",
   "estimator": "HistGradientBoostingClassifier",
   "config": {
     "model_version": "regime-v1.1.0",
