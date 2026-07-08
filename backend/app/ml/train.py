@@ -42,7 +42,7 @@ from sklearn.model_selection import TimeSeriesSplit
 
 from . import data as ml_data
 from . import labels as ml_labels
-from . import tracking
+from . import monitoring, tracking
 from .config import TrainConfig, load_config
 from .features import FEATURE_NAMES, WARMUP_REQUIRED, build_feature_frame
 
@@ -51,6 +51,7 @@ _log = logging.getLogger(__name__)
 ARTIFACT_DIR = Path(__file__).parent / "artifacts"
 MODEL_PATH = ARTIFACT_DIR / "regime_model.joblib"
 META_PATH = ARTIFACT_DIR / "regime_meta.json"
+REFERENCE_PATH = ARTIFACT_DIR / "regime_reference.json"
 # Kept as the no-config fallback identity; the config supersedes it.
 MODEL_VERSION = "regime-v1"
 RANDOM_STATE = 42
@@ -224,6 +225,8 @@ def train_and_save(
 
     ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, MODEL_PATH)
+    reference = monitoring.build_reference(X, model, model_version=c.model_version)
+    REFERENCE_PATH.write_text(json.dumps(reference, indent=2))
     meta = {
         "model_version": c.model_version,
         "trained_at": datetime.now(timezone.utc).isoformat(),
@@ -247,7 +250,7 @@ def train_and_save(
     }
     META_PATH.write_text(json.dumps(meta, indent=2))
     if track:
-        tracking.log_run(c, meta, [MODEL_PATH, META_PATH])
+        tracking.log_run(c, meta, [MODEL_PATH, META_PATH, REFERENCE_PATH])
     return meta
 
 

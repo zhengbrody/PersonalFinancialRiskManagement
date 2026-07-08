@@ -66,6 +66,7 @@ def tmp_artifacts(monkeypatch, tmp_path):
     monkeypatch.setattr(ml_train, "ARTIFACT_DIR", art)
     monkeypatch.setattr(ml_train, "MODEL_PATH", art / "regime_model.joblib")
     monkeypatch.setattr(ml_train, "META_PATH", art / "regime_meta.json")
+    monkeypatch.setattr(ml_train, "REFERENCE_PATH", art / "regime_reference.json")
     return art
 
 
