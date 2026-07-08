@@ -135,6 +135,12 @@ def test_report_is_deterministic(dataset):
 
 def test_markdown_render_contains_the_story(report):
     md = render_markdown(report)
+    assert "## Headline conclusion — read this first" in md
+    # Wording is computed from the numbers — one of the two verbs must appear
+    # and the probability-ranking positioning must be stated.
+    assert ("LOSES to" in md) or ("beats" in md)
+    assert "probability-ranking signal" in md
+    assert md.index("Headline conclusion") < md.index("## Walk-forward folds")
     assert "## Walk-forward folds" in md
     assert "## Model vs baselines" in md
     assert "Persistence (y at t−horizon)" in md

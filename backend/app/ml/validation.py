@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import f1_score, log_loss
+from sklearn.metrics import f1_score, log_loss, roc_auc_score
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -207,10 +207,12 @@ def _holdout_calibration(X: pd.DataFrame, y: pd.Series, c: TrainConfig) -> dict[
             }
         )
     base = float(y_elev.mean())
+    auc = round(float(roc_auc_score(y_elev, p_elev)), 4) if y_elev.min() != y_elev.max() else None
     return {
         "target": "P(elevated risk) = P(volatile) + P(stress)",
         "holdout_size": int(len(y_elev)),
         "elevated_base_rate": round(base, 4),
+        "elevated_risk_auc": auc,
         # Brier of the model vs always-predicting-the-base-rate (reference).
         "brier": round(float(np.mean((p_elev - y_elev) ** 2)), 4),
         "brier_base_rate": round(float(np.mean((base - y_elev) ** 2)), 4),
@@ -240,6 +242,49 @@ def _fmt(v: Any) -> str:
     return "—" if v is None else (f"{v:.4f}" if isinstance(v, float) else str(v))
 
 
+def _headline(report: dict[str, Any]) -> list[str]:
+    """The read-this-first verdict. Wording is computed from the numbers so a
+    future run whose results flip cannot leave a stale claim behind — this
+    project's narrative is an HONEST VALIDATION SYSTEM, not a prediction model."""
+    agg = report["aggregate_accuracy"]
+    cal = report["calibration"]
+    model, persist = agg.get("model"), agg.get("persistence")
+    brier, brier_ref = cal.get("brier"), cal.get("brier_base_rate")
+    auc = cal.get("elevated_risk_auc")
+
+    if model is not None and persist is not None:
+        verdict = "LOSES to" if model < persist else "beats"
+        cls_line = (
+            f"**On 4-class point accuracy the model {verdict} the persistence "
+            f"baseline ({model:.3f} vs {persist:.3f} mean fold accuracy).**"
+        )
+    else:
+        cls_line = "**4-class accuracy vs persistence could not be compared on this run.**"
+
+    if brier is not None and brier_ref is not None:
+        prob_quality = "beats" if brier < brier_ref else "does NOT beat"
+        prob_line = (
+            f"The elevated-risk probability {prob_quality} the base-rate reference "
+            f"(Brier {brier:.4f} vs {brier_ref:.4f}"
+            + (f"; hold-out ROC-AUC {auc:.3f}" if auc is not None else "")
+            + ")."
+        )
+    else:
+        prob_line = "Probabilistic skill could not be scored on this run."
+
+    return [
+        "## Headline conclusion — read this first",
+        "",
+        cls_line,
+        f"Classification is weak; the skill that survives honest validation is "
+        f"probabilistic. {prob_line} The model is therefore positioned as a "
+        "**probability-ranking signal** (how much elevated-risk pressure is "
+        "building), NOT a classifier — and this report exists to keep that "
+        "claim honest, run after run.",
+        "",
+    ]
+
+
 def render_markdown(report: dict[str, Any], *, png_rel_path: Optional[str] = None) -> str:
     cfg = report["config"]
     lines = [
@@ -257,6 +302,7 @@ def render_markdown(report: dict[str, Any], *, png_rel_path: Optional[str] = Non
         "persistence baseline uses only labels observable at prediction time "
         "(ŷ(t) = y(t−horizon)).",
         "",
+        *_headline(report),
         "## Walk-forward folds",
         "",
         "| Fold | Test window | n | Acc | Macro-F1 | Log-loss | Majority acc | "

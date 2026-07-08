@@ -352,13 +352,18 @@ mlflow ui --backend-store-uri mlruns/   # inspect logged runs locally
 Config-driven and seeded end-to-end; every run's params/metrics/artifacts are
 logged to a local MLflow file store and echoed into
 `backend/app/ml/artifacts/regime_meta.json` (git sha, sklearn version, full
-config). Time-series discipline is enforced by tests: walk-forward CV only,
-no random EVAL splits (the estimator's internal early-stopping split is
-seeded — see the model card), and a no-lookahead leakage test. Snapshots
-never expire: delete the `.pkl` under `--cache-dir` to refresh data. See the
-[model card](docs/ml/risk_today_model_card.md) for honest metrics
-(hold-out 0.541 vs 0.506 majority baseline; elevated-risk ROC-AUC 0.743) and
-limitations.
+config). Time-series discipline is enforced by tests: purged walk-forward CV
+only (embargoed fold boundaries), no random EVAL splits, and a no-lookahead
+leakage test. Snapshots never expire: delete the `.pkl` under `--cache-dir`
+to refresh data.
+
+The narrative here is an **honest validation system, not a prediction
+model**: the [model card](docs/ml/risk_today_model_card.md) and the
+auto-generated [validation report](docs/ml/validation_report.md) lead with
+the verdict that the model LOSES to a persistence baseline on 4-class
+accuracy (0.490 vs 0.523) and earns its keep only as a probability-ranking
+signal (Brier 0.1042 vs 0.1133 base-rate reference; elevated-risk ROC-AUC
+0.743).
 
 > The original Streamlit app was fully retired on 2026-06-23 — its UI code,
 > the backend's dependency on Streamlit, and the running `/legacy` container
