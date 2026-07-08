@@ -147,10 +147,13 @@ function CoverageBadge({ level, c }: { level: string; c: NonNullable<VarBacktest
   const title =
     `Kupiec + Christoffersen coverage tests at ${level}: ` +
     (passed
-      ? "PASS — the number of breaches AND their spacing are statistically consistent with a well-calibrated VaR (joint p ≥ 0.05)."
-      : "FAIL — breach frequency and/or clustering is unlikely under a well-calibrated VaR (joint p < 0.05). Treat this VaR level with caution.") +
+      ? "PASS — neither the breach-count test (Kupiec) nor the joint count+clustering test rejects a well-calibrated VaR at the 5% level."
+      : "FAIL — the breach count and/or breach clustering is unlikely under a well-calibrated VaR. Treat this VaR level with caution.") +
     ` Observed ${c.breaches} breaches vs ~${c.expected ?? "?"} expected` +
-    (p != null ? `; joint p = ${p.toFixed(3)}.` : ".");
+    (c.p_uc != null && p != null
+      ? `; count p = ${c.p_uc.toFixed(3)}, joint p = ${p.toFixed(3)}.`
+      : ".") +
+    " Note: this VaR is fitted on the same window it is scored against, and the 99% level has few expected breaches — read verdicts as a health check, not a certification.";
   return (
     <span
       title={title}

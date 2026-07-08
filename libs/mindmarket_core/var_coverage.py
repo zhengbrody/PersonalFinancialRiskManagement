@@ -17,8 +17,16 @@ Conventions: ``hits`` is the CHRONOLOGICAL breach indicator sequence
 (True = the realized loss exceeded VaR that day); ``alpha`` is the model's
 tail probability (0.05 for 95% VaR). All log terms use xlogy so the 0·log 0
 boundary cases (zero breaches, all breaches, degenerate transitions) are
-exact zeros rather than NaNs. ``passed`` uses the conventional 5% test size
-on the joint p-value: p_cc ≥ 0.05 → the VaR model is not rejected.
+exact zeros rather than NaNs. ``passed`` requires BOTH the Kupiec count test
+AND the joint test to not reject at the conventional 5% size — a joint-only
+rule can pass while the count component alone rejects (e.g. x=20, n=250,
+α=.05: p_uc=.044 but p_cc=.126), which reads as a self-contradiction next to
+the breach counts; desks look at the count first (Basel traffic-light).
+
+Honesty caveats for consumers: these asymptotics assume an EXOGENOUS VaR
+forecast — a VaR fitted on the same window it is scored against (in-sample)
+is mechanically pulled toward passing; and at small α·n (the 99% level on a
+~1-2y window) the χ² approximation is less reliable than an exact binomial.
 """
 
 from __future__ import annotations
@@ -80,7 +88,9 @@ def coverage_tests(hits: Iterable[bool], alpha: float) -> dict[str, Any]:
 
     Returns n / breaches / expected plus LR statistics and p-values for the
     Kupiec, independence, and joint conditional-coverage tests, and a
-    ``passed`` flag (joint p ≥ 0.05 → the VaR model is not rejected)."""
+    ``passed`` flag: BOTH the count test AND the joint test must fail to
+    reject at the 5% size (see the module docstring for why joint-only is
+    not enough)."""
     h = np.asarray(list(hits), dtype=bool)
     n = int(len(h))
     x = int(h.sum())
@@ -99,5 +109,6 @@ def coverage_tests(hits: Iterable[bool], alpha: float) -> dict[str, Any]:
         "p_ind": p_ind,
         "lr_cc": lr_cc,
         "p_cc": p_cc,
-        "passed": bool(p_cc >= TEST_SIZE),
+        # Count test AND joint test must both survive (see module docstring).
+        "passed": bool(p_uc >= TEST_SIZE and p_cc >= TEST_SIZE),
     }

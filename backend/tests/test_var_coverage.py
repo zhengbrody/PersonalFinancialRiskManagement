@@ -2,7 +2,7 @@
 
 The Kupiec case is verified against a HAND-COMPUTED constant (independent of
 the implementation): n=10, x=2, α=0.1 →
-LR = −2[(8·ln0.9 + 2·ln0.1) − (8·ln0.8 + 2·ln0.2)] = 0.8878…, χ²(1) p = 0.3461.
+LR = −2[(8·ln0.9 + 2·ln0.1) − (8·ln0.8 + 2·ln0.2)] = 0.88806…, χ²(1) p = 0.34600.
 Independence is verified behaviorally with constructed hit sequences where
 clustering is unambiguous (same breach COUNT, different spacing).
 """
@@ -21,8 +21,8 @@ from libs.mindmarket_core.var_coverage import (
 
 def test_kupiec_hand_computed_constant():
     lr, p = kupiec_pof(10, 2, 0.1)
-    assert lr == pytest.approx(0.8878, abs=1e-3)
-    assert p == pytest.approx(0.3461, abs=1e-3)
+    assert lr == pytest.approx(0.88806, abs=1e-4)
+    assert p == pytest.approx(0.34600, abs=1e-4)
 
 
 def test_kupiec_exact_coverage_is_zero_lr():
@@ -67,6 +67,42 @@ def test_independence_degenerate_sequences():
     assert christoffersen_independence([False] * 50) == (0.0, 1.0)
     assert christoffersen_independence([True] * 50) == (0.0, 1.0)
     assert christoffersen_independence([True]) == (0.0, 1.0)
+
+
+def test_verdict_requires_count_test_too():
+    """x=20 in 250 at α=.05: the joint test alone would pass (p_cc≈.126) while
+    Kupiec rejects the COUNT (p_uc≈.044) — the verdict must fail, or the badge
+    contradicts the breach numbers shown beside it."""
+    hits = np.zeros(250, dtype=bool)
+    # 20 irregularly spaced breaches with ONE consecutive pair — spacing
+    # consistent with Bernoulli (p_ind ≈ 0.58) so ONLY the count is off.
+    pos = [
+        5,
+        17,
+        30,
+        44,
+        59,
+        75,
+        92,
+        110,
+        129,
+        149,
+        150,
+        170,
+        191,
+        205,
+        213,
+        222,
+        230,
+        237,
+        243,
+        248,
+    ]
+    hits[pos] = True
+    out = coverage_tests(hits, 0.05)
+    assert out["breaches"] == 20
+    assert out["p_uc"] < 0.05 < out["p_cc"]  # count rejects; joint alone would pass
+    assert out["passed"] is False
 
 
 def test_conditional_coverage_is_sum_and_verdict():

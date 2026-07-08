@@ -56,8 +56,8 @@ def test_var_backtest_happy(test_client, mint_token, fake_vb):
         assert cov["alpha"] == alpha
         assert 0.0 <= cov["p_cc"] <= 1.0
         assert cov["lr_cc"] >= max(cov["lr_uc"], cov["lr_ind"]) - 1e-9
-        # The verdict must be exactly the p_cc >= 0.05 rule, whatever it is.
-        assert cov["passed"] == (cov["p_cc"] >= 0.05)
+        # The verdict is the conjunction rule: count test AND joint test.
+        assert cov["passed"] == (cov["p_uc"] >= 0.05 and cov["p_cc"] >= 0.05)
     # Seeded near-Gaussian returns → the 95% level should genuinely pass.
     assert d["coverage_95"]["passed"] is True
 

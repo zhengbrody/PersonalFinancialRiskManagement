@@ -65,7 +65,7 @@ describe("VarBacktest", () => {
     expect(strip).toHaveTextContent("99% FAIL");
     expect(strip).toHaveTextContent("p=0.94");
     // Plain-English tooltip on the badge.
-    expect(screen.getByTitle(/consistent with a well-calibrated VaR/i)).toBeInTheDocument();
+    expect(screen.getByTitle(/nor the joint count\+clustering test rejects/i)).toBeInTheDocument();
     expect(screen.getByTitle(/Treat this VaR level with caution/i)).toBeInTheDocument();
   });
 
