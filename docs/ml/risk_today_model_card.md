@@ -1,6 +1,25 @@
 # Model Card — Risk-Today Regime Classifier (`regime-risk-today`)
 
-_Last updated: 2026-07-06 · artifact `regime-v1` trained 2026-06-29 · owner: MindMarket_
+_Last updated: 2026-07-08 · artifact `regime-v1` trained 2026-06-29 · owner: MindMarket_
+
+## Headline conclusion — read this first
+
+**On 4-class point accuracy this model LOSES to the persistence baseline
+(0.490 vs 0.523 mean fold accuracy, purged walk-forward — regimes persist,
+and carrying the last observable label is genuinely hard to beat).**
+
+Classification is weak; the skill that survives honest validation is
+probabilistic: the elevated-risk probability beats the base-rate reference
+(Brier **0.1042 vs 0.1133**) and ranks risk well (elevated-risk ROC-AUC
+**0.743**). The model is therefore positioned as a **probability-ranking
+signal** — "how much elevated-risk pressure is building" — **not a
+classifier**, and every product surface uses it exactly that way
+(calm/normal vs elevated coloring, never a hard class call).
+
+This project's ML narrative is an **honest validation system**: the
+auto-generated [validation report](validation_report.md) recomputes this
+verdict from scratch on every run, with data-driven wording that flips if
+the numbers ever do.
 
 ## Intended use
 

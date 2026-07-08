@@ -113,6 +113,7 @@
     "target": "P(elevated risk) = P(volatile) + P(stress)",
     "holdout_size": 706,
     "elevated_base_rate": 0.1303,
+    "elevated_risk_auc": 0.7701,
     "brier": 0.1042,
     "brier_base_rate": 0.1133,
     "bins": [
