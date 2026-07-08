@@ -1,6 +1,6 @@
 # Model Card — Risk-Today Regime Classifier (`regime-risk-today`)
 
-_Last updated: 2026-07-08 · artifact `regime-v1` trained 2026-06-29 · owner: MindMarket_
+_Last updated: 2026-07-08 · artifact `regime-v1.1.0` trained 2026-07-08 (purged/embargoed eval) · owner: MindMarket_
 
 ## Headline conclusion — read this first
 
@@ -11,7 +11,7 @@ and carrying the last observable label is genuinely hard to beat).**
 Classification is weak; the skill that survives honest validation is
 probabilistic: the elevated-risk probability beats the base-rate reference
 (Brier **0.1042 vs 0.1133**) and ranks risk well (elevated-risk ROC-AUC
-**0.743**). The model is therefore positioned as a **probability-ranking
+**0.770**, embargoed hold-out). The model is therefore positioned as a **probability-ranking
 signal** — "how much elevated-risk pressure is building" — **not a
 classifier**, and every product surface uses it exactly that way
 (calm/normal vs elevated coloring, never a hard class call).
@@ -70,34 +70,38 @@ forward-looking operation; the last 10 rows are unlabeled and dropped.
 
 ## Training data & window
 
-Free yfinance daily closes, 2012-06-04 → 2026-06-11 (**3,526 labeled rows**
-after a ~1-year / 252-trading-day warmup — the longest feature window). Class distribution: risk_on 1,860 · neutral 928 ·
-volatile 557 · **stress 181** — the tail class is rare by nature; treat
-per-class stress metrics as low-sample.
+Free yfinance daily closes, 2012-06-12 → 2026-06-22 (**3,526 labeled rows**
+after a ~1-year / 252-trading-day warmup — the longest feature window). Class distribution: risk_on 1,860 · neutral 931 ·
+volatile 554 · **stress 181** — the tail class is rare by nature; treat
+per-class stress metrics as low-sample. The committed
+`regime_reference.json` (feature quantile grids + per-feature calibrated
+drift nulls + training-time predicted class mix) anchors the live drift
+monitor at `GET /api/v1/ml/health`.
 
 ## Evaluation (honest numbers, from `regime_meta.json`)
 
-Walk-forward CV (`TimeSeriesSplit`, expanding window, never trains on the
-future) + a final chronological 20% hold-out (706 rows):
+Purged walk-forward CV (`TimeSeriesSplit`, expanding window, a horizon-row
+embargo at every boundary — training labels overlapping the test window are
+dropped) + a final chronological 20% hold-out (706 rows):
 
 | Metric | Value |
 |---|---|
-| Hold-out accuracy (4-class) | **0.541** |
-| Majority-class baseline (`risk_on`) | 0.506 |
-| Hold-out macro-F1 | 0.393 |
-| CV macro-F1 mean | 0.316 |
-| **Elevated-risk ROC-AUC** (binary volatile∪stress) | **0.743** |
+| Hold-out accuracy (4-class) | **0.514** |
+| Majority-class baseline (`risk_on`) | 0.503 |
+| Hold-out macro-F1 | 0.372 |
+| CV macro-F1 mean | 0.319 |
+| **Elevated-risk ROC-AUC** (binary volatile∪stress) | **0.770** |
 
 Per-fold walk-forward table, baseline comparison (majority / persistence /
 logistic), and the calibration table live in the auto-generated
 [validation report](validation_report.md).
 
 Read this honestly: the 4-class accuracy barely beats always-guessing
-`risk_on`. The model's real, defensible signal is the **threshold-free 0.74
-AUC on "is elevated risk ahead?"** — that binary question is what the product
+`risk_on` (and loses to persistence — see the headline). The model's real,
+defensible signal is the **threshold-free 0.77 AUC on "is elevated risk ahead?"** — that binary question is what the product
 surfaces (calm/normal vs elevated/stressed coloring). Top features by
-permutation importance: `vix_level` (0.168), `vol_63d` (0.163),
-`golden_cross` (0.101), `vol_ratio` (0.085), `yield_slope` (0.073).
+permutation importance: `vol_63d` (0.168), `vix_level` (0.152),
+`golden_cross` (0.093), `vol_ratio` (0.084), `yield_slope` (0.080).
 
 ## Serving & degradation
 

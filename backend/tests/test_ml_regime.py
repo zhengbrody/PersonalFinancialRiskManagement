@@ -136,7 +136,8 @@ def test_inference_schema_with_artifact():
     out = ml_inference.predict(row)
     assert out["regime"] in ml_labels.CLASSES
     assert 0.0 <= out["confidence"] <= 1.0
-    assert abs(sum(out["class_probabilities"].values()) - 1.0) < 1e-6
+    # probs are rounded to 4dp each — four roundings can drift the sum by ±2e-4
+    assert abs(sum(out["class_probabilities"].values()) - 1.0) < 5e-4
     assert out["model_version"]
     assert all({"feature", "label", "value", "vs_normal"} <= set(d) for d in out["top_drivers"])
 

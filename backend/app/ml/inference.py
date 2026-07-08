@@ -85,6 +85,17 @@ def is_available() -> bool:
     return _load()
 
 
+def load_model():
+    """The fitted estimator, or None when the artifact can't load (health/
+    drift consumers; the request path keeps using predict())."""
+    return _model if _load() else None
+
+
+def model_meta() -> Optional[dict]:
+    """The artifact's provenance dict, or None."""
+    return dict(_meta) if _load() and _meta else None
+
+
 def _top_drivers(row: pd.Series, k: int = 4) -> list[dict]:
     """The most globally-important features + this day's value vs the training
     median (above/below normal). Context, NOT a per-prediction attribution."""

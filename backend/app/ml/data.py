@@ -9,6 +9,7 @@ raised. The fetcher is injectable so tests run offline.
 from __future__ import annotations
 
 import logging
+import time
 import warnings
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -119,6 +120,41 @@ def fetch_history(
 
 def _cache_path(cache_dir: str, years: float) -> Path:
     return Path(cache_dir) / f"raw_history_{years:g}y.pkl"
+
+
+# ── serving-side shared raw cache ─────────────────────────────────────
+# ml_regime + ml_health both need the same ~1.75y frame; without this each
+# kept its own cold cache → two full 6-symbol yfinance bursts per TTL from
+# the prod IP. One raw fetch now serves every consumer within the TTL.
+
+SERVE_CACHE_TTL = 600.0
+_serve_cache: dict[str, tuple[float, dict[str, pd.Series]]] = {}
+
+
+def reset_serve_cache() -> None:
+    _serve_cache.clear()
+
+
+def fetch_history_cached(
+    *,
+    years: float,
+    fetcher: Optional[Callable[[str, str], Optional[pd.Series]]] = None,
+    ttl: float = SERVE_CACHE_TTL,
+) -> dict[str, pd.Series]:
+    """`fetch_history` behind a process-wide TTL cache, shared across services.
+
+    Only the DEFAULT fetcher is cached — an injected fetcher (tests) bypasses
+    the cache entirely so offline fixtures stay deterministic."""
+    if fetcher is not None:
+        return fetch_history(years=years, fetcher=fetcher)
+    key = f"{years:g}"
+    now = time.monotonic()
+    hit = _serve_cache.get(key)
+    if hit is not None and hit[0] > now:
+        return hit[1]
+    raw = fetch_history(years=years, fetcher=_yf_close)
+    _serve_cache[key] = (now + ttl, raw)
+    return raw
 
 
 def data_coverage(raw: dict[str, pd.Series]) -> dict:

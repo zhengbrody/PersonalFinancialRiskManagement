@@ -16,7 +16,8 @@ import time
 from fastapi import APIRouter, Request
 
 from ...core.responses import ok
-from ...schemas.ml import MLRegimeOut
+from ...schemas.ml import MLHealthOut, MLRegimeOut
+from ...services import ml_health as ml_health_service
 from ...services import ml_regime as ml_regime_service
 
 _log = logging.getLogger(__name__)
@@ -29,3 +30,13 @@ def ml_regime(request: Request):
     started = time.perf_counter()
     snapshot = ml_regime_service.get_regime()
     return ok(MLRegimeOut(**snapshot).model_dump(), request=request, started_at=started)
+
+
+@router.get("/health", summary="Model + drift health (PSI/KS vs training reference)")
+def ml_health(request: Request):
+    """Read-only: artifact identity, sklearn skew, and per-feature/prediction
+    drift vs the training reference. Computed on demand off the cached serving
+    frame — a daily GH cron curls this; nothing schedules on the box."""
+    started = time.perf_counter()
+    snapshot = ml_health_service.get_ml_health()
+    return ok(MLHealthOut(**snapshot).model_dump(), request=request, started_at=started)
