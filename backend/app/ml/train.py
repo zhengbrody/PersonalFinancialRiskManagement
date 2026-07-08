@@ -72,6 +72,22 @@ def _make_model(cfg: Optional[TrainConfig] = None) -> HistGradientBoostingClassi
     )
 
 
+def _fit(c: TrainConfig, X: pd.DataFrame, y: pd.Series) -> HistGradientBoostingClassifier:
+    """Fit with a sparse-class fallback: HistGBM's early-stopping uses a
+    STRATIFIED internal split, which raises when any class has <2 members in
+    the window (a real possibility in early expanding folds after the
+    embargo). Refit that window without early stopping — logged, deterministic."""
+    try:
+        return _make_model(c).fit(X, y)
+    except ValueError as exc:
+        if "least populated" not in str(exc):
+            raise
+        _log.warning("ml.train.early_stopping_disabled_sparse_class rows=%s", len(X))
+        m = _make_model(c)
+        m.set_params(early_stopping=False)
+        return m.fit(X, y)
+
+
 def _git_sha() -> Optional[str]:
     """Provenance only — never fails a training run."""
     try:
@@ -106,19 +122,24 @@ def evaluate(X: pd.DataFrame, y: pd.Series, cfg: Optional[TrainConfig] = None) -
     # Walk-forward CV (time-ordered; never trains on the future).
     tscv = TimeSeriesSplit(n_splits=c.cv_splits)
     cv_f1, cv_acc = [], []
+    horizon = c.label_horizon
     for tr, te in tscv.split(X):
-        m = _make_model(c).fit(X.iloc[tr], y.iloc[tr])
+        # PURGE/EMBARGO: drop the last `horizon` training rows — their labels
+        # are computed from returns inside the test window (see validation.py).
+        tr = tr[:-horizon] if len(tr) > horizon else tr
+        m = _fit(c, X.iloc[tr], y.iloc[tr])
         pred = m.predict(X.iloc[te])
         cv_f1.append(float(f1_score(y.iloc[te], pred, average="macro", zero_division=0)))
         cv_acc.append(float((pred == y.iloc[te]).mean()))
 
-    # Final chronological hold-out (last holdout_fraction).
+    # Final chronological hold-out (last holdout_fraction), embargoed likewise.
     cut = int(len(X) * (1.0 - c.holdout_fraction))
-    m = _make_model(c).fit(X.iloc[:cut], y.iloc[:cut])
+    fit_end = max(1, cut - horizon)
+    m = _fit(c, X.iloc[:fit_end], y.iloc[:fit_end])
     pred = m.predict(X.iloc[cut:])
     proba = m.predict_proba(X.iloc[cut:])
     y_te = y.iloc[cut:]
-    majority = y.iloc[:cut].value_counts().idxmax()
+    majority = y.iloc[:fit_end].value_counts().idxmax()  # same window the model saw
     baseline_acc = float((y_te == majority).mean())
     report = classification_report(
         y_te, pred, output_dict=True, zero_division=0, labels=ml_labels.CLASSES

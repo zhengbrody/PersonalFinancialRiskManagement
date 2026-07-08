@@ -13,7 +13,6 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from backend.app.ml import labels as ml_labels
 from backend.app.ml import train as ml_train
 from backend.app.ml.config import TrainConfig
 from backend.app.ml.validation import (
@@ -142,11 +141,60 @@ def test_markdown_render_contains_the_story(report):
     assert "## Calibration — elevated-risk probability" in md
     assert "## Permutation feature importance" in md
     assert "chronological" in md
-    # Labels vocabulary sanity — the report never invents class names.
-    for cls in ml_labels.CLASSES:
-        assert cls not in ("",)  # vocabulary exists; md may or may not list them
+    assert "PURGE/EMBARGO" in md
     # No unresolved format placeholders.
     assert "{" not in md.replace("{'", "")
+
+
+def test_folds_are_embargoed(report):
+    """The last `horizon` training labels overlap the test window — every
+    fold's effective train end must sit ≥ horizon business days before the
+    test start (purged walk-forward)."""
+    horizon = TrainConfig().label_horizon
+    for f in report["folds"]:
+        gap_days = len(pd.bdate_range(f["train_end"], f["test_start"])) - 2
+        assert gap_days >= horizon, f
+        assert f["persistence_rows"] == f["n_test"]  # full coverage on this frame
+
+
+def test_safe_log_loss_masks_unseen_classes():
+    from backend.app.ml.validation import _safe_log_loss
+
+    y_true = pd.Series(["a", "b", "zz", "a"])
+    proba = np.array([[0.9, 0.1], [0.2, 0.8], [0.5, 0.5], [0.7, 0.3]])
+    loss, skipped = _safe_log_loss(y_true, proba, ["a", "b"])
+    assert skipped == 1
+    assert loss is not None and loss > 0
+    # every row unseen → no loss, all skipped
+    loss2, skipped2 = _safe_log_loss(pd.Series(["zz", "zz"]), proba[:2], ["a", "b"])
+    assert loss2 is None and skipped2 == 2
+
+
+def test_calibration_last_bin_includes_probability_one(dataset, monkeypatch):
+    """A predicted probability of exactly 1.0 must land in the LAST bin, and
+    the bins must still cover the whole hold-out (the `<=` edge)."""
+    from backend.app.ml import validation as v
+
+    X, y = dataset
+
+    class _Stub:
+        classes_ = np.array(["neutral", "risk_on", "stress", "volatile"])
+
+        def fit(self, *a, **k):
+            return self
+
+        def predict_proba(self, X_):
+            n = len(X_)
+            proba = np.tile([0.25, 0.25, 0.25, 0.25], (n, 1))
+            proba[0] = [0.0, 0.0, 1.0, 0.0]  # elevated exactly 1.0
+            proba[1] = [0.5, 0.5, 0.0, 0.0]  # elevated exactly 0.0
+            return proba
+
+    monkeypatch.setattr(v, "_make_model", lambda c: _Stub())
+    cal = v._holdout_calibration(X, y, TrainConfig())
+    assert sum(b["n"] for b in cal["bins"]) == cal["holdout_size"]
+    assert cal["bins"][-1]["n"] >= 1  # the p=1.0 row is counted, not dropped
+    assert cal["brier"] is not None and cal["brier_base_rate"] is not None
 
 
 def test_markdown_render_with_png_link(report):

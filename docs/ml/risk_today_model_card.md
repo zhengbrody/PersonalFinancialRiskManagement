@@ -126,15 +126,18 @@ but that internal split is random-order by estimator design.
 - The estimator's internal early-stopping split shuffles within each fit
   (seeded; reported eval boundaries stay chronological) — with
   autocorrelated vol labels this can mildly flatter iteration selection.
-- **Walk-forward validation** (`docs/ml/validation_report.md`, Phase 2):
-  the persistence baseline (carry the last observable label) BEATS the model
-  on mean 4-class fold accuracy (0.523 vs 0.492) — regimes persist; the
-  model's value is the elevated-risk probability, not 4-class point calls.
-- **Calibration**: the elevated-risk probability is directionally sound
-  (higher bins → higher observed frequency; top bin 0.94 predicted / 0.83
-  observed) but OVER-FORECASTS in the mid bins (e.g. ~0.14 predicted vs
-  0.04 observed) — treat mid-range probabilities as a watch signal, not a
-  base rate. Reliability table + diagram in the validation report.
+- **Walk-forward validation** (`docs/ml/validation_report.md`, Phase 2,
+  purged/embargoed folds): the persistence baseline (carry the last
+  observable label) BEATS the model on mean 4-class fold accuracy
+  (0.523 vs 0.490) — regimes persist; the model's value is the
+  elevated-risk probability, not 4-class point calls.
+- **Calibration** (hold-out, embargoed fit): higher predicted bins do see
+  higher observed frequency, but the probability OVER-FORECASTS in the mid
+  bins — treat mid-range probabilities as a watch signal, not a base rate.
+  Caveat on precision: bins sit on OVERLAPPING 10-day windows (effective
+  sample ≈ n/10), so sparse upper bins may reflect only a couple of market
+  episodes. Brier score vs the base-rate reference is in the validation
+  report, alongside the reliability table + diagram.
 
 ## Ethics & user-facing framing
 

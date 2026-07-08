@@ -32,7 +32,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from .config import TrainConfig
-from .train import _feature_importances, _make_model
+from .train import _feature_importances, _fit, _make_model
 
 _log = logging.getLogger(__name__)
 
@@ -106,13 +106,17 @@ def walk_forward_report(
     persist_all = persistence_predictions(y, horizon)
 
     folds: list[dict[str, Any]] = []
-    pooled: dict[str, list] = {"model": [], "majority": [], "persistence": [], "logistic": []}
+    fold_means: dict[str, list] = {"model": [], "majority": [], "persistence": [], "logistic": []}
     tscv = TimeSeriesSplit(n_splits=c.cv_splits)
     for i, (tr, te) in enumerate(tscv.split(X), start=1):
+        # PURGE/EMBARGO: the last `horizon` training rows carry labels computed
+        # from returns INSIDE the test window (y(t) spans (t, t+h]) — training
+        # on them leaks test-period information. Drop them from every fold.
+        tr = tr[:-horizon] if len(tr) > horizon else tr
         X_tr, y_tr = X.iloc[tr], y.iloc[tr]
         X_te, y_te = X.iloc[te], y.iloc[te]
 
-        model = _make_model(c).fit(X_tr, y_tr)
+        model = _fit(c, X_tr, y_tr)
         pred = model.predict(X_te)
         proba = model.predict_proba(X_te)
         loss, loss_skipped = _safe_log_loss(y_te, proba, list(model.classes_))
@@ -143,18 +147,19 @@ def walk_forward_report(
                 "log_loss_skipped_rows": loss_skipped,
                 "baseline_majority_acc": _acc(y_te, maj_pred),
                 "baseline_persistence_acc": persist_acc,
+                "persistence_rows": int(persist_mask.sum()),
                 "baseline_logistic_acc": _acc(y_te, logit_pred),
                 "baseline_logistic_log_loss": logit_loss,
             }
         )
-        pooled["model"].append(folds[-1]["accuracy"])
-        pooled["majority"].append(folds[-1]["baseline_majority_acc"])
+        fold_means["model"].append(folds[-1]["accuracy"])
+        fold_means["majority"].append(folds[-1]["baseline_majority_acc"])
         if persist_acc is not None:
-            pooled["persistence"].append(persist_acc)
-        pooled["logistic"].append(folds[-1]["baseline_logistic_acc"])
+            fold_means["persistence"].append(persist_acc)
+        fold_means["logistic"].append(folds[-1]["baseline_logistic_acc"])
 
     aggregate = {
-        name: round(float(np.mean(vals)), 4) if vals else None for name, vals in pooled.items()
+        name: round(float(np.mean(vals)), 4) if vals else None for name, vals in fold_means.items()
     }
 
     calibration = _holdout_calibration(X, y, c)
@@ -177,7 +182,10 @@ def _holdout_calibration(X: pd.DataFrame, y: pd.Series, c: TrainConfig) -> dict[
     hold-out: 10 uniform bins of predicted P(volatile∪stress) vs the observed
     frequency. This binary probability is what the product surfaces."""
     cut = int(len(X) * (1.0 - c.holdout_fraction))
-    model = _make_model(c).fit(X.iloc[:cut], y.iloc[:cut])
+    # Same embargo as the folds: the last `horizon` pre-cut labels overlap the
+    # hold-out window.
+    fit_end = max(1, cut - c.label_horizon)
+    model = _fit(c, X.iloc[:fit_end], y.iloc[:fit_end])
     proba = model.predict_proba(X.iloc[cut:])
     classes = list(model.classes_)
     idx = [i for i, cls in enumerate(classes) if cls in ELEVATED]
@@ -198,15 +206,34 @@ def _holdout_calibration(X: pd.DataFrame, y: pd.Series, c: TrainConfig) -> dict[
                 "observed_frequency": round(float(y_elev[mask].mean()), 4) if n else None,
             }
         )
+    base = float(y_elev.mean())
     return {
         "target": "P(elevated risk) = P(volatile) + P(stress)",
         "holdout_size": int(len(y_elev)),
-        "elevated_base_rate": round(float(y_elev.mean()), 4),
+        "elevated_base_rate": round(base, 4),
+        # Brier of the model vs always-predicting-the-base-rate (reference).
+        "brier": round(float(np.mean((p_elev - y_elev) ** 2)), 4),
+        "brier_base_rate": round(float(np.mean((base - y_elev) ** 2)), 4),
         "bins": rows,
     }
 
 
 # ── rendering ─────────────────────────────────────────────────────────
+
+
+def _persistence_coverage_note(report: dict[str, Any]) -> str:
+    partial = [
+        f"fold {f['fold']} ({f.get('persistence_rows', f['n_test'])}/{f['n_test']})"
+        for f in report["folds"]
+        if f.get("persistence_rows", f["n_test"]) < f["n_test"]
+    ]
+    if not partial:
+        return ""
+    return (
+        " NOTE: persistence covered only part of some test windows — "
+        + ", ".join(partial)
+        + " — so its aggregate is not row-for-row comparable."
+    )
 
 
 def _fmt(v: Any) -> str:
@@ -225,8 +252,10 @@ def render_markdown(report: dict[str, Any], *, png_rel_path: Optional[str] = Non
         f"- **Config:** seed {cfg['seed']} · {cfg['cv_splits']} expanding folds · "
         f"hold-out {cfg['holdout_fraction']:.0%} · model_version {cfg['model_version']}",
         "- **Discipline:** all boundaries chronological (`TimeSeriesSplit` + final "
-        "hold-out); no random eval splits; persistence baseline uses only labels "
-        "observable at prediction time (ŷ(t) = y(t−horizon)).",
+        "hold-out); a `horizon`-row PURGE/EMBARGO removes training labels whose "
+        "forward window overlaps the test period; no random eval splits; the "
+        "persistence baseline uses only labels observable at prediction time "
+        "(ŷ(t) = y(t−horizon)).",
         "",
         "## Walk-forward folds",
         "",
@@ -257,13 +286,15 @@ def render_markdown(report: dict[str, Any], *, png_rel_path: Optional[str] = Non
         "Log-loss rows marked — mean a fold's training window never saw some "
         "test class (the skipped-row counts are in the JSON payload); majority "
         "and persistence emit no probabilities, so log-loss applies only to the "
-        "model and the logistic baseline.",
+        "model and the logistic baseline." + _persistence_coverage_note(report),
         "",
         "## Calibration — elevated-risk probability (hold-out)",
         "",
         f"Target: {report['calibration']['target']} · hold-out "
         f"{report['calibration']['holdout_size']} rows · base rate "
-        f"{_fmt(report['calibration']['elevated_base_rate'])}",
+        f"{_fmt(report['calibration']['elevated_base_rate'])} · Brier "
+        f"{_fmt(report['calibration'].get('brier'))} (base-rate reference "
+        f"{_fmt(report['calibration'].get('brier_base_rate'))})",
         "",
         "| Predicted bin | n | Mean predicted | Observed frequency |",
         "|---|---|---|---|",
@@ -295,8 +326,13 @@ def render_markdown(report: dict[str, Any], *, png_rel_path: Optional[str] = Non
         "- 4-class accuracy near the majority baseline is expected; the "
         "product-relevant signal is the elevated-risk probability, whose "
         "calibration is tabled above.",
-        "- Persistence can be a STRONG baseline in calm stretches (regimes "
-        "persist); beating it in volatile folds is what matters.",
+        "- Persistence is a STRONG baseline (regimes persist) — judge the "
+        "model on the calibrated elevated-risk probability, not on beating "
+        "persistence at 4-class point calls.",
+        "- Calibration bins sit on OVERLAPPING 10-day forward windows: "
+        "adjacent rows share 9/10 return days, so the effective sample is "
+        "roughly n/horizon and sparse upper bins may reflect only a couple "
+        "of market episodes — read them as direction, not precision.",
         "",
     ]
     return "\n".join(lines)
