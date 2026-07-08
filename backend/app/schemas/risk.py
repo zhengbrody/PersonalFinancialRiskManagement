@@ -515,6 +515,24 @@ class HistogramBin(BaseModel):
     count: int = 0
 
 
+class CoverageTestOut(BaseModel):
+    """Kupiec POF + Christoffersen independence + joint conditional-coverage
+    verdict for one confidence level. ``passed`` = joint p ≥ 0.05 (the VaR
+    model is NOT rejected at the conventional test size)."""
+
+    n: int = 0
+    breaches: int = 0
+    expected: Optional[float] = None
+    alpha: Optional[float] = None
+    lr_uc: Optional[float] = None
+    p_uc: Optional[float] = None
+    lr_ind: Optional[float] = None
+    p_ind: Optional[float] = None
+    lr_cc: Optional[float] = None
+    p_cc: Optional[float] = None
+    passed: Optional[bool] = None
+
+
 class VarBacktestOut(BaseModel):
     n_days: int = 0
     mean_daily: Optional[float] = None
@@ -529,3 +547,6 @@ class VarBacktestOut(BaseModel):
     expected_99: Optional[float] = None
     worst_day: Optional[float] = None
     histogram: list[HistogramBin] = Field(default_factory=list)
+    # Statistical coverage verdicts (Risk Desk ML-lifecycle Phase 3).
+    coverage_95: Optional[CoverageTestOut] = None
+    coverage_99: Optional[CoverageTestOut] = None

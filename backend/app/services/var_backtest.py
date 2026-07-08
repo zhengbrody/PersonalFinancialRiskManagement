@@ -16,6 +16,8 @@ from __future__ import annotations
 import math
 from typing import Optional
 
+from libs.mindmarket_core.var_coverage import coverage_tests
+
 from ..core.responses import APIError, server_error, unprocessable
 from .quant_backtest import _resolve_active_holdings
 
@@ -91,8 +93,12 @@ def run_var_backtest(user) -> dict:
     var_99 = max(0.0, -(mu - _Z99 * sigma))
 
     losses = -port  # positive = loss
-    breaches_95 = int((losses > var_95).sum())
-    breaches_99 = int((losses > var_99).sum())
+    # Chronological breach indicator sequences (port is date-ordered) — the
+    # Kupiec/Christoffersen tests need the ORDER, not just the counts.
+    hits_95 = (losses > var_95).to_numpy()
+    hits_99 = (losses > var_99).to_numpy()
+    breaches_95 = int(hits_95.sum())
+    breaches_99 = int(hits_99.sum())
 
     # Empirical (historical) VaR for comparison.
     hist_var_95 = float(-np.quantile(port.values, 0.05))
@@ -118,4 +124,8 @@ def run_var_backtest(user) -> dict:
         "expected_99": _finite(0.01 * n),
         "worst_day": _finite(float(losses.max())),
         "histogram": histogram,
+        # Statistical coverage verdicts (Kupiec POF + Christoffersen
+        # independence + joint conditional coverage) per confidence level.
+        "coverage_95": coverage_tests(hits_95, 0.05),
+        "coverage_99": coverage_tests(hits_99, 0.01),
     }

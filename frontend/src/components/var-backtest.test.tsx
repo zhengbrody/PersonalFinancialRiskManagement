@@ -40,6 +40,40 @@ describe("VarBacktest", () => {
     expect(screen.getByText("1.9%")).toBeInTheDocument();
   });
 
+  it("shows PASS/FAIL reliability badges with a plain-English tooltip", () => {
+    const cov = (passed: boolean, p_cc: number) => ({
+      n: 252,
+      breaches: 12,
+      expected: 12.6,
+      alpha: 0.05,
+      lr_uc: 0.02,
+      p_uc: 0.9,
+      lr_ind: passed ? 0.1 : 30,
+      p_ind: passed ? 0.75 : 0.00001,
+      lr_cc: passed ? 0.12 : 30.02,
+      p_cc,
+      passed,
+    });
+    render(
+      <VarBacktest
+        data={base({ coverage_95: cov(true, 0.94), coverage_99: cov(false, 0.001) })}
+        loading={false}
+      />,
+    );
+    const strip = screen.getByTestId("var-reliability");
+    expect(strip).toHaveTextContent("95% PASS");
+    expect(strip).toHaveTextContent("99% FAIL");
+    expect(strip).toHaveTextContent("p=0.94");
+    // Plain-English tooltip on the badge.
+    expect(screen.getByTitle(/nor the joint count\+clustering test rejects/i)).toBeInTheDocument();
+    expect(screen.getByTitle(/Treat this VaR level with caution/i)).toBeInTheDocument();
+  });
+
+  it("omits the reliability strip when coverage fields are absent (old backend)", () => {
+    render(<VarBacktest data={base()} loading={false} />);
+    expect(screen.queryByTestId("var-reliability")).not.toBeInTheDocument();
+  });
+
   it("renders nothing when the window is too short", () => {
     const { container } = render(<VarBacktest data={base({ n_days: 20 })} loading={false} />);
     expect(container.firstChild).toBeNull();

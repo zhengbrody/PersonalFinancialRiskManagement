@@ -2412,6 +2412,21 @@ export function useSnapshotHistory() {
 
 // ── VaR backtest + distribution (authed) ────────────────────────────
 const histogramBinSchema = z.looseObject({ x: z.number().nullish(), count: z.number() });
+const coverageTestSchema = z.looseObject({
+  n: z.number(),
+  breaches: z.number(),
+  expected: z.number().nullish(),
+  alpha: z.number().nullish(),
+  lr_uc: z.number().nullish(),
+  p_uc: z.number().nullish(),
+  lr_ind: z.number().nullish(),
+  p_ind: z.number().nullish(),
+  lr_cc: z.number().nullish(),
+  p_cc: z.number().nullish(),
+  passed: z.boolean().nullish(),
+});
+export type CoverageTest = z.infer<typeof coverageTestSchema>;
+
 export const varBacktestSchema = z.looseObject({
   n_days: z.number(),
   mean_daily: z.number().nullish(),
@@ -2426,6 +2441,8 @@ export const varBacktestSchema = z.looseObject({
   expected_99: z.number().nullish(),
   worst_day: z.number().nullish(),
   histogram: z.array(histogramBinSchema),
+  coverage_95: coverageTestSchema.nullish(),
+  coverage_99: coverageTestSchema.nullish(),
 });
 export type VarBacktest = z.infer<typeof varBacktestSchema>;
 
