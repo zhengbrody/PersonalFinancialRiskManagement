@@ -49,6 +49,17 @@ def test_var_backtest_happy(test_client, mint_token, fake_vb):
     assert abs(d["expected_95"] - 0.05 * d["n_days"]) < 1e-6
     assert len(d["histogram"]) == 25
     assert sum(b["count"] for b in d["histogram"]) == d["n_days"]
+    # Coverage verdicts (Kupiec + Christoffersen) ride along per level.
+    for key, alpha in (("coverage_95", 0.05), ("coverage_99", 0.01)):
+        cov = d[key]
+        assert cov["n"] == d["n_days"]
+        assert cov["alpha"] == alpha
+        assert 0.0 <= cov["p_cc"] <= 1.0
+        assert cov["lr_cc"] >= max(cov["lr_uc"], cov["lr_ind"]) - 1e-9
+        # The verdict must be exactly the p_cc >= 0.05 rule, whatever it is.
+        assert cov["passed"] == (cov["p_cc"] >= 0.05)
+    # Seeded near-Gaussian returns → the 95% level should genuinely pass.
+    assert d["coverage_95"]["passed"] is True
 
 
 def test_var_backtest_too_short(test_client, mint_token, monkeypatch):

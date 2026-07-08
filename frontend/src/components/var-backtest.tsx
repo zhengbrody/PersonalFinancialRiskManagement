@@ -75,6 +75,16 @@ export function VarBacktest({
           normal model expects ~{Math.round(expected)}. That&apos;s {read}
         </p>
 
+        {(data.coverage_95 || data.coverage_99) && (
+          <div className="flex flex-wrap items-center gap-2" data-testid="var-reliability">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+              VaR reliability
+            </span>
+            {data.coverage_95 && <CoverageBadge level="95%" c={data.coverage_95} />}
+            {data.coverage_99 && <CoverageBadge level="99%" c={data.coverage_99} />}
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat label="95% VaR (1d)" value={pct(var95)} />
           <Stat label="99% VaR (1d)" value={pct(var99)} />
@@ -128,6 +138,31 @@ export function VarBacktest({
         </p>
       </CardContent>
     </Card>
+  );
+}
+
+function CoverageBadge({ level, c }: { level: string; c: NonNullable<VarBacktestData["coverage_95"]> }) {
+  const passed = c.passed === true;
+  const p = c.p_cc;
+  const title =
+    `Kupiec + Christoffersen coverage tests at ${level}: ` +
+    (passed
+      ? "PASS — the number of breaches AND their spacing are statistically consistent with a well-calibrated VaR (joint p ≥ 0.05)."
+      : "FAIL — breach frequency and/or clustering is unlikely under a well-calibrated VaR (joint p < 0.05). Treat this VaR level with caution.") +
+    ` Observed ${c.breaches} breaches vs ~${c.expected ?? "?"} expected` +
+    (p != null ? `; joint p = ${p.toFixed(3)}.` : ".");
+  return (
+    <span
+      title={title}
+      className={`inline-flex cursor-help items-center gap-1 rounded-full border px-2.5 py-0.5 font-mono text-[11px] tabular-nums ${
+        passed
+          ? "border-[hsl(var(--success))]/40 text-[hsl(var(--success))]"
+          : "border-destructive/50 text-destructive"
+      }`}
+    >
+      {level} {passed ? "PASS" : "FAIL"}
+      {p != null && <span className="text-muted-foreground">p={p.toFixed(2)}</span>}
+    </span>
   );
 }
 
