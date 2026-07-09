@@ -1,215 +1,215 @@
-# Sidebar不显示 - 故障排查指南
+# Sidebar Not Showing - Troubleshooting Guide
 
 > **HISTORICAL (2026-06-23).** Troubleshooting for the original Streamlit app
 > (sidebar / session-state / `st.*` issues), retired on 2026-06-23. None of it
 > applies to the Next.js + FastAPI split stack. Kept for reference only.
 
-## 当前情况
-- ✅ 代码检查通过（sidebar代码存在且正确）
-- ✅ initial_sidebar_state="expanded" 已设置
-- ✅ CSS没有隐藏sidebar
-- ❌ **问题**: 浏览器中看不到sidebar
+## Current situation
+- ✅ Code review passed (the sidebar code exists and is correct)
+- ✅ initial_sidebar_state="expanded" is set
+- ✅ CSS does not hide the sidebar
+- ❌ **Problem**: the sidebar is not visible in the browser
 
 ---
 
-## 立即测试步骤
+## Immediate Test Steps
 
-### 步骤1: 测试简化版本
+### Step 1: Test the simplified version
 
-**在终端运行**:
+**Run in the terminal**:
 ```bash
 cd /Users/zhengdong/RiskManagement
 streamlit run test_sidebar.py
 ```
 
-**浏览器访问**: `http://localhost:8501`
+**Open in the browser**: `http://localhost:8501`
 
-**结果判断**:
-- ✅ 如果看到左侧sidebar → 说明Streamlit本身没问题，app.py有错误
-- ❌ 如果还是没有sidebar → Streamlit配置或浏览器问题
-
----
-
-### 步骤2: 检查浏览器控制台
-
-**打开浏览器开发者工具**:
-- Chrome/Edge: `F12` 或 `Cmd+Option+I` (Mac)
-- Firefox: `F12` 或 `Cmd+Option+I` (Mac)
-
-**查看Console标签**:
-- 红色错误 → 复制给我
-- JavaScript错误 → 可能是Streamlit版本问题
-
-**查看Network标签**:
-- 刷新页面
-- 查看是否有失败的请求（红色）
+**How to interpret the result**:
+- ✅ If you see the left sidebar → Streamlit itself is fine, and app.py has a bug
+- ❌ If there's still no sidebar → a Streamlit configuration or browser issue
 
 ---
 
-### 步骤3: 强制清除缓存
+### Step 2: Check the browser console
 
-**彻底清除浏览器缓存**:
+**Open the browser developer tools**:
+- Chrome/Edge: `F12` or `Cmd+Option+I` (Mac)
+- Firefox: `F12` or `Cmd+Option+I` (Mac)
+
+**Look at the Console tab**:
+- Red errors → copy them to me
+- JavaScript errors → possibly a Streamlit version issue
+
+**Look at the Network tab**:
+- Refresh the page
+- Check for any failed requests (shown in red)
+
+---
+
+### Step 3: Force-clear the cache
+
+**Thoroughly clear the browser cache**:
 
 **Chrome/Edge**:
-1. 打开 `chrome://settings/clearBrowserData`
-2. 时间范围: "所有时间"
-3. 选中: "缓存的图像和文件", "Cookie和其他网站数据"
-4. 点击"清除数据"
-5. 重启浏览器
+1. Open `chrome://settings/clearBrowserData`
+2. Time range: "All time"
+3. Select: "Cached images and files", "Cookies and other site data"
+4. Click "Clear data"
+5. Restart the browser
 
 **Firefox**:
-1. 打开 `about:preferences#privacy`
-2. "Cookie和网站数据" → "清除数据"
-3. 勾选两个选项
-4. 清除 → 重启浏览器
+1. Open `about:preferences#privacy`
+2. "Cookies and Site Data" → "Clear Data"
+3. Check both options
+4. Clear → restart the browser
 
 **Safari**:
-1. 菜单 → 偏好设置 → 隐私
-2. "管理网站数据" → "全部移除"
-3. 重启浏览器
+1. Menu → Preferences → Privacy
+2. "Manage Website Data" → "Remove All"
+3. Restart the browser
 
 ---
 
-### 步骤4: 检查Streamlit版本
+### Step 4: Check the Streamlit version
 
 ```bash
 streamlit --version
 ```
 
-**期望**: `Streamlit, version 1.28.0` 或更高
+**Expected**: `Streamlit, version 1.28.0` or higher
 
-**如果版本过低**:
+**If the version is too low**:
 ```bash
 pip install --upgrade streamlit
 ```
 
 ---
 
-### 步骤5: 尝试不同浏览器
+### Step 5: Try a different browser
 
-如果你在用Chrome，试试：
+If you're using Chrome, try:
 - Firefox
 - Safari
 - Edge
 
-有时浏览器扩展会干扰Streamlit。
+Browser extensions can sometimes interfere with Streamlit.
 
 ---
 
-### 步骤6: 检查Streamlit配置文件
+### Step 6: Check the Streamlit config file
 
 ```bash
 cat ~/.streamlit/config.toml
 ```
 
-**如果存在，查找**:
+**If it exists, look for**:
 ```toml
 [server]
-enableCORS = false  # 应该是false或不存在
+enableCORS = false  # should be false or absent
 
 [browser]
 gatherUsageStats = false
 ```
 
-**如果有问题的配置，删除它**:
+**If there is a problematic config, delete it**:
 ```bash
 rm ~/.streamlit/config.toml
 ```
 
 ---
 
-### 步骤7: 完全重新安装Streamlit
+### Step 7: Completely reinstall Streamlit
 
 ```bash
-# 卸载
+# Uninstall
 pip uninstall streamlit -y
 
-# 清除缓存
+# Clear the cache
 rm -rf ~/.streamlit
 
-# 重新安装
+# Reinstall
 pip install streamlit
 
-# 验证
+# Verify
 streamlit hello
 ```
 
 ---
 
-## 调试信息收集
+## Collecting Debug Information
 
-请运行以下命令并告诉我输出：
+Please run the following commands and share the output with me:
 
 ```bash
-# 1. Streamlit版本
+# 1. Streamlit version
 streamlit --version
 
-# 2. Python版本
+# 2. Python version
 python3 --version
 
-# 3. 浏览器信息
-# （手动告诉我：Chrome/Firefox/Safari + 版本号）
+# 3. Browser info
+# (tell me manually: Chrome/Firefox/Safari + version number)
 
-# 4. 测试简化版本
+# 4. Test the simplified version
 streamlit run test_sidebar.py
-# 然后告诉我是否看到sidebar
+# then tell me whether you see the sidebar
 
-# 5. 检查是否有错误
+# 5. Check for errors
 python3 app.py 2>&1 | head -50
 ```
 
 ---
 
-## 可能的原因
+## Possible Causes
 
-### 1. Streamlit缓存损坏
-**症状**: 所有Streamlit应用都没有sidebar
-**解决**: 删除 `~/.streamlit` 文件夹
+### 1. Corrupted Streamlit cache
+**Symptom**: no sidebar in any Streamlit app
+**Solution**: delete the `~/.streamlit` folder
 
-### 2. 浏览器缓存
-**症状**: 只在这个项目没有sidebar
-**解决**: 完全清除浏览器缓存或用隐身模式
+### 2. Browser cache
+**Symptom**: no sidebar only in this project
+**Solution**: fully clear the browser cache or use incognito mode
 
-### 3. App.py运行时错误
-**症状**: test_sidebar.py能看到sidebar，但app.py不行
-**解决**: 需要查看详细错误日志
+### 3. Runtime error in app.py
+**Symptom**: test_sidebar.py shows the sidebar, but app.py doesn't
+**Solution**: need to review the detailed error log
 
-### 4. 多页面应用问题
-**症状**: Streamlit多页面应用有时sidebar行为异常
-**解决**: 检查pages/文件夹
+### 4. Multi-page app issue
+**Symptom**: Streamlit multi-page apps sometimes have odd sidebar behavior
+**Solution**: check the pages/ folder
 
-### 5. CSS冲突
-**症状**: Sidebar被自定义CSS隐藏
-**解决**: 临时注释掉所有st.markdown(CSS)
+### 5. CSS conflict
+**Symptom**: the sidebar is hidden by custom CSS
+**Solution**: temporarily comment out all st.markdown(CSS)
 
 ---
 
-## 快速诊断命令
+## Quick Diagnostic Commands
 
 ```bash
 cd /Users/zhengdong/RiskManagement
 
-# 诊断脚本
+# Diagnostic script
 python3 diagnose.py
 
-# 测试简化版本
+# Test the simplified version
 streamlit run test_sidebar.py
 
-# 检查app.py语法
+# Check app.py syntax
 python3 -m py_compile app.py
 ```
 
 ---
 
-## 联系信息
+## Contact Information
 
-如果以上都不行，请提供：
+If none of the above works, please provide:
 
-1. `streamlit --version` 输出
-2. `python3 --version` 输出
-3. 浏览器名称和版本
-4. `streamlit run test_sidebar.py` 是否能看到sidebar
-5. 浏览器Console的任何错误信息（F12 → Console标签）
-6. 终端运行streamlit时的完整输出
+1. The `streamlit --version` output
+2. The `python3 --version` output
+3. Browser name and version
+4. Whether `streamlit run test_sidebar.py` shows the sidebar
+5. Any error messages in the browser Console (F12 → Console tab)
+6. The full terminal output when running streamlit
 
-我会根据这些信息进一步诊断！
+I'll diagnose further based on this information!

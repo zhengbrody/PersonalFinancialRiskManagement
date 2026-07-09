@@ -5,7 +5,7 @@ import pytest
 
 @pytest.fixture
 def sample_returns():
-    """生成示例收益率数据（3个资产，252天）"""
+    """Generate sample returns data (3 assets, 252 days)."""
     np.random.seed(42)
     dates = pd.date_range("2022-01-01", periods=252)
     data = {
@@ -18,5 +18,5 @@ def sample_returns():
 
 @pytest.fixture
 def sample_weights():
-    """示例权重"""
+    """Sample weights."""
     return {"NVDA": 0.5, "SPY": 0.3, "GLD": 0.2}

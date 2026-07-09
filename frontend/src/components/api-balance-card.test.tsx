@@ -50,7 +50,7 @@ describe("ApiBalanceCard", () => {
         loading={false}
       />,
     );
-    expect(screen.getByText(/低余量/)).toBeInTheDocument();
+    expect(screen.getByText(/Low balance/)).toBeInTheDocument();
   });
 
   it("hints how to configure an unconfigured Claude top-up", () => {
@@ -67,9 +67,9 @@ describe("ApiBalanceCard", () => {
 
   it("lets the owner set the Claude balance inline (no env / restart)", () => {
     render(<ApiBalanceCard data={data()} loading={false} />);
-    fireEvent.click(screen.getByText("✎ 充值后更新余额"));
-    fireEvent.change(screen.getByPlaceholderText("新余额 $"), { target: { value: "30" } });
-    fireEvent.click(screen.getByText("保存"));
+    fireEvent.click(screen.getByText("✎ Update balance after top-up"));
+    fireEvent.change(screen.getByPlaceholderText("New balance $"), { target: { value: "30" } });
+    fireEvent.click(screen.getByText("Save"));
     expect(mutate).toHaveBeenCalledWith(30, expect.anything());
   });
 

@@ -1,10 +1,10 @@
 """
 risk_engine.py
-机构级风险引擎 v2.1
+Institutional-grade risk engine v2.1
 ──────────────────────────────────────────────────────────
-新增：宏观敏感度 (Macro Beta) · 流动性风险 (Days to Liquidate)
-保留：EWMA 动态协方差 · 动态无风险利率 · 多因子 Beta
-      保证金预警 · 马科维茨有效前沿 · 成分 VaR · 回撤统计
+Added: macro sensitivity (Macro Beta) · liquidity risk (Days to Liquidate)
+Retained: EWMA dynamic covariance · dynamic risk-free rate · multi-factor Beta
+      margin call alerts · Markowitz efficient frontier · component VaR · drawdown stats
 """
 
 import time
@@ -22,75 +22,75 @@ logger = get_logger(__name__)
 
 
 # ══════════════════════════════════════════════════════════════
-#  风险报告数据容器
+#  Risk report data container
 # ══════════════════════════════════════════════════════════════
 @dataclass
 class RiskReport:
-    """单次风险计算结果的容器。"""
+    """Container for the results of a single risk computation."""
 
     # VaR
     var_95: float = 0.0
     var_99: float = 0.0
     cvar_95: float = 0.0
-    # 基本统计
+    # Basic statistics
     annual_return: float = 0.0
     annual_volatility: float = 0.0
     sharpe_ratio: float = 0.0
     max_drawdown: float = 0.0
-    # Beta (相对基准)
+    # Beta (relative to benchmark)
     betas: Dict[str, float] = field(default_factory=dict)
-    # 多因子 Beta (SPY/QQQ/GLD/TLT) — 每个资产对每个因子的 beta 矩阵 (index=ticker)
+    # Multi-factor Beta (SPY/QQQ/GLD/TLT) — per-asset beta matrix for each factor (index=ticker)
     factor_betas: Optional[pd.DataFrame] = None
-    # 多因子 Beta 统计显著性信息
+    # Multi-factor Beta statistical-significance info
     factor_betas_significance: Optional[pd.DataFrame] = None
-    # 组合层面因子暴露：组合收益对每个因子的单因子回归
+    # Portfolio-level factor exposure: univariate regression of portfolio returns on each factor
     # (index=factor ticker, columns=[beta, r_squared, t_stat, p_value])
     portfolio_factor_betas: Optional[pd.DataFrame] = None
-    # 协方差 & 相关系数矩阵（EWMA）
+    # Covariance & correlation matrices (EWMA)
     cov_matrix: Optional[pd.DataFrame] = None
     cov_matrix_ewma: Optional[pd.DataFrame] = None
     corr_matrix: Optional[pd.DataFrame] = None
     corr_matrix_ewma: Optional[pd.DataFrame] = None
-    # 蒙特卡洛模拟路径
+    # Monte Carlo simulation paths
     mc_portfolio_returns: Optional[np.ndarray] = None
-    # 压力测试
+    # Stress test
     stress_loss: float = 0.0
     stress_asset_losses: Dict[str, float] = field(default_factory=dict)
     # Actual market_shock used when computing stress_loss (so UI/AI/exports
     # report the same number the engine used, not a mismatched default).
     stress_market_shock: float = -0.10
-    # 回撤序列
+    # Drawdown series
     drawdown_series: Optional[pd.Series] = None
-    # 成分VaR贡献度
+    # Component VaR contributions
     component_var_pct: Optional[pd.Series] = None
-    # 滚动相关性
+    # Rolling correlation
     rolling_corr_with_port: Optional[pd.DataFrame] = None
-    # 回撤统计
+    # Drawdown statistics
     drawdown_stats: Optional[dict] = None
-    # 动态无风险利率
+    # Dynamic risk-free rate
     risk_free_rate: float = np.nan
-    # 保证金预警
+    # Margin call alert
     margin_call_info: Optional[dict] = None
-    # 有效前沿
+    # Efficient frontier
     efficient_frontier: Optional[dict] = None
 
-    # ── v2.1 新增 ─────────────────────────────────────────────
-    # 宏观敏感度 Beta（组合对 利率 / 美元 / 原油 的回归系数）
+    # ── v2.1 additions ────────────────────────────────────────
+    # Macro sensitivity Beta (portfolio regression coefficients vs. rates / USD / oil)
     macro_betas: Optional[dict] = None
-    # 流动性风险（每个资产的清仓天数和 ADV）
+    # Liquidity risk (days-to-liquidate and ADV per asset)
     liquidity_risk: Optional[pd.DataFrame] = None
 
 
 # ══════════════════════════════════════════════════════════════
-#  风险引擎
+#  Risk engine
 # ══════════════════════════════════════════════════════════════
 class RiskEngine:
-    """机构级风险计算引擎。"""
+    """Institutional-grade risk-computation engine."""
 
     TRADING_DAYS = 252
     EWMA_LAMBDA = 0.94
 
-    # 多因子基准
+    # Multi-factor benchmarks
     FACTOR_TICKERS = {
         "SPY": "S&P 500",
         "QQQ": "NASDAQ 100",
@@ -100,7 +100,7 @@ class RiskEngine:
         "VTV": "Value (Style)",
     }
 
-    # 机构标准参与率（ADV 的 10%）
+    # Institutional-standard participation rate (10% of ADV)
     LIQUIDITY_PARTICIPATION_RATE = 0.10
 
     def __init__(
@@ -124,10 +124,10 @@ class RiskEngine:
         self._report: Optional[RiskReport] = None
 
     # ══════════════════════════════════════════════════════════
-    #  公共接口
+    #  Public interface
     # ══════════════════════════════════════════════════════════
     def run(self) -> RiskReport:
-        """执行全部风险计算。"""
+        """Run all risk computations."""
         if self._report is not None:
             return self._report
 
@@ -144,10 +144,10 @@ class RiskEngine:
 
         report = RiskReport()
 
-        # ── 动态无风险利率 ────────────────────────────────────
+        # ── Dynamic risk-free rate ────────────────────────────
         report.risk_free_rate = self._fetch_risk_free_rate()
 
-        # ── 协方差矩阵（传统 + EWMA）────────────────────────
+        # ── Covariance matrix (classic + EWMA) ────────────────
         report.cov_matrix = returns.cov() * self.TRADING_DAYS
         report.corr_matrix = returns.corr()
 
@@ -167,14 +167,14 @@ class RiskEngine:
             columns=returns.columns,
         )
 
-        # ── 蒙特卡洛 VaR / CVaR（使用 EWMA 协方差）─────────
+        # ── Monte Carlo VaR / CVaR (using EWMA covariance) ────
         mc_port = self._monte_carlo_var(returns, weights, ewma_cov_daily)
         report.mc_portfolio_returns = mc_port
         report.var_95 = float(-np.percentile(mc_port, 5))
         report.var_99 = float(-np.percentile(mc_port, 1))
         report.cvar_95 = float(-mc_port[mc_port <= np.percentile(mc_port, 5)].mean())
 
-        # ── 年化收益 / 波动率 / 夏普 ─────────────────────────
+        # ── Annualized return / volatility / Sharpe ───────────
         port_daily = returns.dot(weights)
         report.annual_return = float(port_daily.mean() * self.TRADING_DAYS)
         ewma_port_var = float(weights @ ewma_cov_daily @ weights) * self.TRADING_DAYS
@@ -183,24 +183,24 @@ class RiskEngine:
             report.annual_return, report.annual_volatility, report.risk_free_rate
         )
 
-        # ── 最大回撤 ─────────────────────────────────────────
+        # ── Maximum drawdown ──────────────────────────────────
         cum = (1 + port_daily).cumprod()
         running_max = cum.cummax()
         dd = (cum - running_max) / running_max
         report.max_drawdown = float(dd.min())
         report.drawdown_series = dd
 
-        # ── 单因子 Beta (SPY) ────────────────────────────────
+        # ── Single-factor Beta (SPY) ──────────────────────────
         report.betas = self._compute_betas(returns, self.benchmark_ticker)
 
-        # ── 多因子 Beta (SPY/QQQ/GLD/TLT) ───────────────────
+        # ── Multi-factor Beta (SPY/QQQ/GLD/TLT) ───────────────
         factor_result = self._compute_multi_factor_betas(returns)
         report.factor_betas = factor_result["betas"]
         report.factor_betas_significance = factor_result["significance"]
-        # 组合层面因子暴露（组合收益 vs 每个因子）
+        # Portfolio-level factor exposure (portfolio returns vs. each factor)
         report.portfolio_factor_betas = self._compute_portfolio_factor_betas(returns, weights)
 
-        # ── 压力测试 (uses user-configured market_shock, not default) ───
+        # ── Stress test (uses user-configured market_shock, not default) ───
         stress_loss, asset_losses = self._stress_test(
             returns,
             weights,
@@ -212,21 +212,21 @@ class RiskEngine:
         # can reference the same number.
         report.stress_market_shock = self.market_shock
 
-        # ── 成分 VaR ─────────────────────────────────────────
+        # ── Component VaR ─────────────────────────────────────
         report.component_var_pct = self._component_var(ewma_cov_daily, weights, returns.columns)
 
-        # ── 滚动相关性 ───────────────────────────────────────
+        # ── Rolling correlation ───────────────────────────────
         report.rolling_corr_with_port = self._rolling_correlation_with_portfolio(
             returns, weights, window=60
         )
 
-        # ── 回撤统计 ─────────────────────────────────────────
+        # ── Drawdown statistics ───────────────────────────────
         report.drawdown_stats = self._drawdown_statistics(dd)
 
-        # ── v2.1: 宏观敏感度 ─────────────────────────────────
+        # ── v2.1: macro sensitivity ───────────────────────────
         report.macro_betas = self._compute_macro_betas(returns, weights)
 
-        # ── v2.1: 流动性风险 ─────────────────────────────────
+        # ── v2.1: liquidity risk ──────────────────────────────
         report.liquidity_risk = self._compute_liquidity_risk()
 
         run_duration = (time.time() - run_start_time) * 1000
@@ -245,7 +245,7 @@ class RiskEngine:
         return report
 
     # ══════════════════════════════════════════════════════════
-    #  保证金 / 有效前沿 / 历史情景（保持不变）
+    #  Margin / efficient frontier / historical scenarios (unchanged)
     # ══════════════════════════════════════════════════════════
     def compute_margin_call(
         self,
@@ -357,7 +357,7 @@ class RiskEngine:
             "tickers": tickers,
         }
 
-    # ── 风控合规检查 ───────────────────────────────────────
+    # ── Risk-limit compliance checks ───────────────────────
 
     DEFAULT_RISK_LIMITS = {
         "max_single_stock_weight": 0.15,
@@ -544,10 +544,10 @@ class RiskEngine:
         return pd.DataFrame(results)
 
     # ══════════════════════════════════════════════════════════
-    #  内部方法
+    #  Internal methods
     # ══════════════════════════════════════════════════════════
 
-    # ── 无风险利率 ────────────────────────────────────────────
+    # ── Risk-free rate ────────────────────────────────────────
     def _fetch_risk_free_rate(self) -> float:
         # Delegated to DataProvider so risk_engine has no direct yfinance calls.
         # DataProvider.get_risk_free_rate() returns fallback on any failure.
@@ -561,7 +561,7 @@ class RiskEngine:
             )
             return self.risk_free_rate_fallback
 
-    # ── EWMA 协方差 ──────────────────────────────────────────
+    # ── EWMA covariance ───────────────────────────────────────
     def _ewma_covariance(self, returns: pd.DataFrame) -> np.ndarray:
         data = returns.values
         T, n = data.shape
@@ -576,7 +576,7 @@ class RiskEngine:
             cov = lam * cov + (1 - lam) * (r @ r.T)
         return cov
 
-    # ── 蒙特卡洛 ─────────────────────────────────────────────
+    # ── Monte Carlo ───────────────────────────────────────────
     def _monte_carlo_var(self, returns, weights, cov_daily):
         """
         Fully vectorized Monte Carlo VaR calculation.
@@ -651,7 +651,7 @@ class RiskEngine:
     def _sharpe(self, annual_ret, annual_vol, rf):
         return (annual_ret - rf) / annual_vol if annual_vol != 0 else 0.0
 
-    # ── 单因子 Beta ──────────────────────────────────────────
+    # ── Single-factor Beta ────────────────────────────────────
     def _compute_betas(self, returns, benchmark):
         logger.info("risk.beta.start", benchmark=benchmark)
         start_time = time.time()
@@ -685,40 +685,40 @@ class RiskEngine:
         )
         return betas
 
-    # ── Beta统计显著性检验 ───────────────────────────────────
+    # ── Beta statistical-significance test ─────────────────────
     def _compute_beta_with_significance(
         self, asset_returns: np.ndarray, factor_returns: np.ndarray
     ) -> dict:
         """
-        计算Beta及统计显著性（单因子OLS回归）
+        Compute Beta and its statistical significance (single-factor OLS regression)
 
         Args:
-            asset_returns: 资产收益率 (T,)
-            factor_returns: 因子收益率 (T,)
+            asset_returns: asset returns (T,)
+            factor_returns: factor returns (T,)
 
         Returns:
             {
-                'beta': float,           # 因子beta系数
-                'intercept': float,      # 截距（alpha）
-                't_stat': float,         # t统计量
-                'p_value': float,        # p值（双尾检验）
-                'is_significant': bool,  # 是否显著（p<0.05）
-                'r_squared': float,      # 拟合优度
-                'std_error': float       # 标准误
+                'beta': float,           # factor beta coefficient
+                'intercept': float,      # intercept (alpha)
+                't_stat': float,         # t-statistic
+                'p_value': float,        # p-value (two-tailed test)
+                'is_significant': bool,  # whether significant (p<0.05)
+                'r_squared': float,      # goodness of fit
+                'std_error': float       # standard error
             }
         """
         from scipy import stats
 
-        # 添加截距项
+        # Add intercept term
         n = len(asset_returns)
         X = np.column_stack([np.ones(n), factor_returns])
         y = asset_returns
 
-        # OLS回归
+        # OLS regression
         try:
             beta_coefs, residuals, rank, s = np.linalg.lstsq(X, y, rcond=None)
         except np.linalg.LinAlgError:
-            # 奇异矩阵
+            # Singular matrix
             return {
                 "beta": np.nan,
                 "intercept": np.nan,
@@ -729,14 +729,14 @@ class RiskEngine:
                 "std_error": np.nan,
             }
 
-        # 计算统计量
-        k = X.shape[1]  # 参数数量（2: 截距+斜率）
+        # Compute statistics
+        k = X.shape[1]  # number of parameters (2: intercept + slope)
 
-        # 残差标准差
+        # Residual standard deviation
         if len(residuals) > 0:
             mse = residuals[0] / (n - k)
         else:
-            # lstsq对秩亏矩阵可能不返回residuals
+            # lstsq may not return residuals for a rank-deficient matrix
             predictions = X @ beta_coefs
             residuals_manual = y - predictions
             mse = np.sum(residuals_manual**2) / (n - k) if n > k else np.nan
@@ -752,28 +752,28 @@ class RiskEngine:
                 "std_error": np.nan,
             }
 
-        # Beta的方差-协方差矩阵
+        # Variance-covariance matrix of Beta
         try:
             XtX_inv = np.linalg.inv(X.T @ X)
             var_covar = mse * XtX_inv
             std_errors = np.sqrt(var_covar.diagonal())
         except np.linalg.LinAlgError:
-            # 完全共线
+            # Perfectly collinear
             std_errors = np.full(k, np.nan)
 
-        # t统计量 = beta / se(beta)
+        # t-statistic = beta / se(beta)
         t_stats = np.full(k, np.nan)
         for i in range(k):
             if std_errors[i] > 0:
                 t_stats[i] = beta_coefs[i] / std_errors[i]
 
-        # p值（双尾检验）
+        # p-value (two-tailed test)
         p_values = np.full(k, np.nan)
         for i in range(k):
             if not np.isnan(t_stats[i]):
                 p_values[i] = 2 * (1 - stats.t.cdf(np.abs(t_stats[i]), df=n - k))
 
-        # R²（拟合优度）
+        # R² (goodness of fit)
         ss_total = np.sum((y - np.mean(y)) ** 2)
         ss_residual = np.sum((y - X @ beta_coefs) ** 2)
         r_squared = 1 - (ss_residual / ss_total) if ss_total > 0 else 0
@@ -788,15 +788,15 @@ class RiskEngine:
             "std_error": float(std_errors[1]) if len(std_errors) > 1 else np.nan,
         }
 
-    # ── 多因子 Beta (SPY/QQQ/GLD/TLT) ───────────────────────
+    # ── Multi-factor Beta (SPY/QQQ/GLD/TLT) ───────────────────
     def _compute_multi_factor_betas(self, returns):
         """
-        计算多因子beta及统计显著性
+        Compute multi-factor beta and its statistical significance
 
         Returns:
             dict: {
-                'betas': DataFrame,          # beta值表格
-                'significance': DataFrame,   # 统计信息表格（t_stat, p_value等）
+                'betas': DataFrame,          # table of beta values
+                'significance': DataFrame,   # table of statistics (t_stat, p_value, etc.)
             }
         """
         factor_tickers = list(self.FACTOR_TICKERS.keys())
@@ -827,7 +827,7 @@ class RiskEngine:
             )
             return {"betas": empty_df, "significance": pd.DataFrame()}
 
-        # 存储beta值和统计信息
+        # Store beta values and statistics
         beta_result = {}
         sig_result = []
 
@@ -839,7 +839,7 @@ class RiskEngine:
             y = aligned[ticker].values
             beta_result[ticker] = {}
 
-            # 对每个因子单独计算beta和显著性
+            # Compute beta and significance separately for each factor
             for f in factor_cols:
                 X_factor = aligned[f].values
                 factor_name = self.FACTOR_TICKERS.get(f, f)
@@ -848,7 +848,7 @@ class RiskEngine:
                     stats = self._compute_beta_with_significance(y, X_factor)
                     beta_result[ticker][factor_name] = stats["beta"]
 
-                    # 记录统计信息
+                    # Record statistics
                     sig_result.append(
                         {
                             "Ticker": ticker,
@@ -932,7 +932,7 @@ class RiskEngine:
             return None
         return pd.DataFrame(rows).T
 
-    # ── Barra 风格因子风险归因 ────────────────────────────────
+    # ── Barra-style factor risk attribution ───────────────────
     def compute_factor_risk_attribution(
         self,
         returns: pd.DataFrame,
@@ -1056,7 +1056,7 @@ class RiskEngine:
             },
         }
 
-    # ── 压力测试 ──────────────────────────────────────────────
+    # ── Stress test ───────────────────────────────────────────
     def _stress_test(self, returns, weights, market_shock=-0.10):
         logger.info("risk.stress.start", market_shock=market_shock)
         start_time = time.time()
@@ -1085,7 +1085,7 @@ class RiskEngine:
 
         return float(port_loss), asset_losses
 
-    # ── 条件压力测试（黑天鹅冲击传导）────────────────────
+    # ── Conditional stress test (black-swan shock propagation) ─
 
     # Preset scenarios for Black Swan testing
     PRESET_SCENARIOS = {
@@ -1176,7 +1176,7 @@ class RiskEngine:
             "observed_tickers": obs_names,
         }
 
-    # ── 成分 VaR ─────────────────────────────────────────────
+    # ── Component VaR ─────────────────────────────────────────
     def _component_var(self, cov_daily, weights, columns):
         port_var = float(weights @ cov_daily @ weights)
         if port_var <= 0:
@@ -1186,14 +1186,14 @@ class RiskEngine:
         pct = np.nan_to_num(pct, nan=0.0, posinf=0.0, neginf=0.0)
         return pd.Series(pct, index=columns)
 
-    # ── 滚动相关性 ───────────────────────────────────────────
+    # ── Rolling correlation ───────────────────────────────────
     def _rolling_correlation_with_portfolio(self, returns, weights, window=60):
         port_ret = returns.dot(weights)
         return pd.DataFrame(
             {col: returns[col].rolling(window).corr(port_ret) for col in returns.columns}
         )
 
-    # ── 回撤统计 ─────────────────────────────────────────────
+    # ── Drawdown statistics ───────────────────────────────────
     def _drawdown_statistics(self, dd_series):
         is_dd = dd_series < -0.005
         episodes = []
@@ -1221,7 +1221,7 @@ class RiskEngine:
         }
 
     # ══════════════════════════════════════════════════════════
-    #  v2.1 新增：宏观敏感度 (Macro Beta)
+    #  v2.1 addition: macro sensitivity (Macro Beta)
     # ══════════════════════════════════════════════════════════
     def _compute_macro_betas(
         self,
@@ -1229,19 +1229,19 @@ class RiskEngine:
         weights: np.ndarray,
     ) -> dict:
         """
-        多元线性回归：Portfolio_Return ~ β1·ΔRate + β2·ΔUSD + β3·ΔOil + ε
+        Multivariate linear regression: Portfolio_Return ~ β1·ΔRate + β2·ΔUSD + β3·ΔOil + ε
 
-        使用纯 numpy OLS (np.linalg.lstsq)，无需任何付费 API。
+        Uses pure numpy OLS (np.linalg.lstsq), no paid API required.
 
         Returns
         -------
         dict with keys:
-            "betas"   : {factor_name: beta_value}  — 组合对各宏观因子的敏感度
-            "r_squared": float                      — 回归 R²（宏观因子的解释力）
-            "alpha"   : float                       — 截距项（alpha, 年化）
-            "residual_vol": float                   — 残差波动率（年化）
-            "t_stats" : {factor_name: t_statistic}  — t 统计量
-            "per_asset": DataFrame                  — 每个资产对宏观因子的 beta
+            "betas"   : {factor_name: beta_value}  — portfolio sensitivity to each macro factor
+            "r_squared": float                      — regression R² (explanatory power of the macro factors)
+            "alpha"   : float                       — intercept term (alpha, annualized)
+            "residual_vol": float                   — residual volatility (annualized)
+            "t_stats" : {factor_name: t_statistic}  — t-statistics
+            "per_asset": DataFrame                  — per-asset beta to the macro factors
         """
         try:
             macro_ret = self.dp.get_macro_returns()
@@ -1253,10 +1253,10 @@ class RiskEngine:
         if macro_ret is None or macro_ret.empty:
             return self._empty_macro_result()
 
-        # 组合日收益率
+        # Portfolio daily returns
         port_daily = returns.dot(weights)
 
-        # 对齐日期
+        # Align dates
         aligned = pd.concat(
             [port_daily.rename("Portfolio"), macro_ret], axis=1, join="inner"
         ).dropna()
@@ -1270,9 +1270,9 @@ class RiskEngine:
 
         y = aligned["Portfolio"].values  # (T,)
         X = aligned[factor_names].values  # (T, k)
-        X_aug = np.column_stack([np.ones(len(X)), X])  # 加截距列
+        X_aug = np.column_stack([np.ones(len(X)), X])  # add intercept column
 
-        # ── OLS：beta = (X'X)^{-1} X'y ──────────────────────
+        # ── OLS: beta = (X'X)^{-1} X'y ──────────────────────
         beta, residuals, rank, sv = np.linalg.lstsq(X_aug, y, rcond=None)
 
         alpha = float(beta[0])
@@ -1284,13 +1284,13 @@ class RiskEngine:
         ss_tot = float(np.sum((y - y.mean()) ** 2))
         r_squared = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
 
-        # ── 残差波动率（年化）──────────────────────────────────
+        # ── Residual volatility (annualized) ──────────────────
         T = len(y)
-        k = len(factor_names) + 1  # 含截距
+        k = len(factor_names) + 1  # includes intercept
         resid_var = ss_res / (T - k) if T > k else ss_res / max(T, 1)
         residual_vol = float(np.sqrt(resid_var) * np.sqrt(self.TRADING_DAYS))
 
-        # ── t 统计量 ─────────────────────────────────────────
+        # ── t-statistics ──────────────────────────────────────
         t_stats = {}
         try:
             XtX_inv = np.linalg.inv(X_aug.T @ X_aug)
@@ -1300,7 +1300,7 @@ class RiskEngine:
         except np.linalg.LinAlgError:
             t_stats = {fn: np.nan for fn in factor_names}
 
-        # ── 每个资产的宏观 beta ──────────────────────────────
+        # ── Per-asset macro beta ──────────────────────────────
         per_asset = {}
         for ticker in returns.columns:
             asset_aligned = pd.concat([returns[ticker], macro_ret], axis=1, join="inner").dropna()
@@ -1327,14 +1327,14 @@ class RiskEngine:
         return {
             "betas": factor_betas,
             "r_squared": r_squared,
-            "alpha": alpha * self.TRADING_DAYS,  # 年化
+            "alpha": alpha * self.TRADING_DAYS,  # annualized
             "residual_vol": residual_vol,
             "t_stats": t_stats,
             "per_asset": per_asset_df,
         }
 
     def _empty_macro_result(self) -> dict:
-        """宏观数据不可用时的空结果。"""
+        """Empty result when macro data is unavailable."""
         return {
             "betas": {},
             "r_squared": 0.0,
@@ -1345,14 +1345,14 @@ class RiskEngine:
         }
 
     # ══════════════════════════════════════════════════════════
-    #  v2.1 新增：流动性风险 (Days to Liquidate)
+    #  v2.1 addition: liquidity risk (Days to Liquidate)
     # ══════════════════════════════════════════════════════════
     def _compute_liquidity_risk(self) -> pd.DataFrame:
         """
-        流动性风险分析。
+        Liquidity risk analysis.
 
-        公式：Days to Liquidate = Shares / (ADV × Participation Rate)
-        参与率 = 10%（机构标准：单日交易量中你的卖出不超过总量的 10%）
+        Formula: Days to Liquidate = Shares / (ADV × Participation Rate)
+        Participation rate = 10% (institutional standard: your sell never exceeds 10% of a single day's total volume)
 
         Returns
         -------
@@ -1362,7 +1362,7 @@ class RiskEngine:
         """
         holdings = self.dp.holdings
         if not holdings:
-            # 没有持仓股数信息，返回仅含 ADV 的表
+            # No share-count data available; return a table with ADV only
             try:
                 adv = self.dp.get_adv_30d()
                 df = pd.DataFrame(
@@ -1392,26 +1392,26 @@ class RiskEngine:
             avg_vol = float(adv.get(ticker, 0))
             weight = self.dp.weights.get(ticker, 0)
 
-            # 清仓天数
+            # Days to liquidate
             tradable_per_day = avg_vol * self.LIQUIDITY_PARTICIPATION_RATE
             if tradable_per_day > 0 and shares > 0:
                 days_to_liq = shares / tradable_per_day
             else:
                 days_to_liq = np.nan
 
-            # 流动性分级
+            # Liquidity tier
             if np.isnan(days_to_liq) or avg_vol == 0:
                 tier = "Unknown"
             elif days_to_liq < 0.01:
-                tier = "Instant"  # 秒级清仓
+                tier = "Instant"  # liquidate within seconds
             elif days_to_liq < 0.1:
-                tier = "High"  # 分钟级
+                tier = "High"  # minutes
             elif days_to_liq < 1.0:
-                tier = "Good"  # 当日可清
+                tier = "Good"  # same-day
             elif days_to_liq < 5.0:
-                tier = "Moderate"  # 1-5 日
+                tier = "Moderate"  # 1-5 days
             else:
-                tier = "⚠️ Low"  # 超过 5 日
+                tier = "⚠️ Low"  # more than 5 days
 
             rows.append(
                 {

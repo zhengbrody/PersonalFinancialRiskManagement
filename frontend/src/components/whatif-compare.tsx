@@ -24,12 +24,12 @@ const pct = (v: number) => `${(v * 100).toFixed(1)}%`;
 
 const METRICS: MetricSpec[] = [
   { label: "Health Score", read: (s) => s.overall_score, fmt: (v) => v.toFixed(0), direction: "higher" },
-  { label: "年化波动", read: (s) => s.metrics.annual_volatility, fmt: pct, direction: "lower" },
+  { label: "Annual volatility", read: (s) => s.metrics.annual_volatility, fmt: pct, direction: "lower" },
   { label: "VaR 95 (1d)", read: (s) => s.metrics.var_95_daily, fmt: pct, direction: "lower" },
   { label: "Sharpe", read: (s) => s.metrics.sharpe_ratio, fmt: (v) => v.toFixed(2), direction: "higher" },
   { label: "β", read: (s) => s.metrics.beta_to_benchmark, fmt: (v) => v.toFixed(2), direction: "neutral" },
   {
-    label: "最大单一持仓",
+    label: "Top single holding",
     read: (s) => s.concentration?.top_holding_weight,
     fmt: pct,
     direction: "lower",
@@ -58,10 +58,10 @@ export function WhatIfCompare({
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold">
-          调仓沙盘结果 <span className="font-normal text-muted-foreground">vs 你的真实账本</span>
+          What-if result <span className="font-normal text-muted-foreground">vs your real book</span>
         </p>
         <Button variant="outline" size="sm" onClick={onReset}>
-          返回真实账本
+          Back to real book
         </Button>
       </div>
 
@@ -96,8 +96,9 @@ export function WhatIfCompare({
       </div>
 
       <p className="text-[11px] text-muted-foreground">
-        下方驾驶舱当前显示的是沙盘账本的完整分析。沙盘不会保存、不改动你的持仓,也不构成投资建议
-        — 只是同一个确定性引擎对另一组数字的重算。
+        The cockpit below now shows the full analysis of the sandbox book. The sandbox isn&apos;t saved,
+        doesn&apos;t change your holdings, and isn&apos;t investment advice — it&apos;s just the same
+        deterministic engine rerun on a different set of numbers.
       </p>
     </div>
   );

@@ -238,27 +238,28 @@ def build_digest(
 
     score_txt = f"{float(score):.0f}" if score is not None else "—"
     subject = (
-        f"你的账本本周:Health Score {score_txt}"
+        f"Your portfolio this week: Health Score {score_txt}"
         + (
             f"({'+' if score_delta >= 0 else ''}{score_delta:.0f})"
             if score_delta is not None
             else ""
         )
         if not stale
-        else "你的风险快照已过期 — 一分钟更新一次评分"
+        else "Your risk snapshot is out of date — refresh your score in a minute"
     )
 
     stale_note = (
         f'<p style="margin:14px 0;padding:10px 14px;background:#FFF6E5;border:1px solid #F0D9A8;'
-        f'border-radius:8px;color:#7A5B12;font-size:14px;">最近一次评分是 {_html.escape(as_of)}'
-        " — 数字可能已过期。打开 Health Score 刷新一次,下周的简报就会跟上你的最新持仓。</p>"
+        f'border-radius:8px;color:#7A5B12;font-size:14px;">Your last score was on {_html.escape(as_of)}'
+        " — these numbers may be out of date. Refresh your Health Score once and next week's digest"
+        " will track your latest holdings.</p>"
         if stale
         else ""
     )
 
     conc_line = (
-        f'<p style="margin:6px 0;color:{_SLATE};font-size:14px;">最大单一持仓 '
-        f"<strong>{_html.escape(str(top_tk))}</strong> 占 {_fmt_pct(top_w)}。</p>"
+        f'<p style="margin:6px 0;color:{_SLATE};font-size:14px;">Largest single holding '
+        f"<strong>{_html.escape(str(top_tk))}</strong> accounts for {_fmt_pct(top_w)}.</p>"
         if top_tk and top_w is not None
         else ""
     )
@@ -267,15 +268,15 @@ def build_digest(
 <div style="max-width:560px;margin:0 auto;padding:28px 20px;background:{_PAPER};
      font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;color:{_INK};">
   <div style="font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:{_TEAL};">
-    MindMarket · 每周风险简报</div>
-  <h1 style="margin:10px 0 2px;font-size:22px;">你的账本,本周一览</h1>
-  <p style="margin:0 0 16px;color:{_SLATE};font-size:13px;">数据截至 {_html.escape(as_of)} 的最近一次评分 · 全部为确定性计算,无 AI 生成数字</p>
+    MindMarket · Weekly risk digest</div>
+  <h1 style="margin:10px 0 2px;font-size:22px;">Your portfolio, this week at a glance</h1>
+  <p style="margin:0 0 16px;color:{_SLATE};font-size:13px;">As of your latest score on {_html.escape(as_of)} · every figure is deterministically computed, no AI-generated numbers</p>
   {stale_note}
   <table role="presentation" cellspacing="6" cellpadding="0" style="border-collapse:separate;width:100%;">
     <tr>
       {_stat_cell("Health Score", score_txt, _delta_chip(score_delta))}
-      {_stat_cell("年化波动", _fmt_pct(vol))}
-      {_stat_cell("净值", _fmt_usd(net))}
+      {_stat_cell("Annualized vol", _fmt_pct(vol))}
+      {_stat_cell("Net equity", _fmt_usd(net))}
     </tr>
   </table>
   {conc_line}
@@ -285,16 +286,16 @@ def build_digest(
     <tr>
       <td style="border-radius:8px;background:{_INK};">
         <a href="{site}/risk" style="display:inline-block;padding:11px 18px;color:#fff;
-           text-decoration:none;font-size:14px;font-weight:600;">打开 Risk Desk →</a></td>
+           text-decoration:none;font-size:14px;font-weight:600;">Open Risk Desk →</a></td>
       <td style="width:10px;"></td>
       <td style="border-radius:8px;border:1px solid #C9D2DB;">
         <a href="{site}/score" style="display:inline-block;padding:11px 18px;color:{_INK};
-           text-decoration:none;font-size:14px;">更新评分</a></td>
+           text-decoration:none;font-size:14px;">Update score</a></td>
     </tr>
   </table>
   <p style="margin:22px 0 0;border-top:1px solid #E3E8EE;padding-top:12px;color:{_SLATE};font-size:11px;">
-    教育性分析,不构成投资建议。数字来自你自己最近一次评分的存档快照。<br>
-    不想再收到?<a href="{unsub}" style="color:{_SLATE};">一键退订</a>
+    Educational analysis, not investment advice. The numbers come from your own most recent saved score snapshot.<br>
+    Don't want these? <a href="{unsub}" style="color:{_SLATE};">Unsubscribe in one click</a>
   </p>
 </div>"""
     return {"subject": subject, "html": html_body, "email": email, "unsub_url": unsub}
@@ -432,6 +433,6 @@ def _regime_line() -> str:
         from .regime_summary import get_regime_summary
 
         line = (get_regime_summary() or {}).get("headline") or ""
-        return str(line) or "市场状态数据暂不可用。"
+        return str(line) or "Market-conditions data is temporarily unavailable."
     except Exception:  # noqa: BLE001 - context only
-        return "市场状态数据暂不可用。"
+        return "Market-conditions data is temporarily unavailable."

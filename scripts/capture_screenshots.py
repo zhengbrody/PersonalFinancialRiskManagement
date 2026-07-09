@@ -137,7 +137,7 @@ def _capture_ticker_research(page: Page, out: pathlib.Path, search_ticker: str =
     # Find the page's own ticker input (aria-label="Ticker Symbol")
     filled = False
     try:
-        target = page.locator('input[aria-label="Ticker Symbol"], input[aria-label="股票代码"]')
+        target = page.locator('input[aria-label="Ticker Symbol"]')
         if target.count() > 0:
             target.first.fill(search_ticker)
             target.first.press("Enter")
@@ -166,7 +166,7 @@ def _capture_ticker_research(page: Page, out: pathlib.Path, search_ticker: str =
 
     # Click the Search button to be explicit
     try:
-        page.locator('button:has-text("Search"), button:has-text("搜索")').first.click(timeout=3000)
+        page.locator('button:has-text("Search")').first.click(timeout=3000)
     except PlaywrightTimeout:
         pass
 
@@ -188,7 +188,7 @@ def _capture_trading_floor(page: Page, out: pathlib.Path) -> bool:
     time.sleep(3)
 
     # Click LOAD MARKET DATA button
-    btn = page.locator('button:has-text("LOAD MARKET DATA"), button:has-text("加载市场数据")')
+    btn = page.locator('button:has-text("LOAD MARKET DATA")')
     try:
         btn.first.click(timeout=4000)
     except PlaywrightTimeout:

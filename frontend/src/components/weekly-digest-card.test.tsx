@@ -33,9 +33,9 @@ describe("WeeklyDigestCard", () => {
       .mockResolvedValue(mockJson(envelope(false))); // refetch
     renderWithQuery(<WeeklyDigestCard />);
 
-    expect(await screen.findByText("已开启")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /关闭简报/ }));
-    await waitFor(() => expect(screen.getByText("已关闭")).toBeInTheDocument());
+    expect(await screen.findByText("Enabled")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Turn off digest/ }));
+    await waitFor(() => expect(screen.getByText("Disabled")).toBeInTheDocument());
 
     const post = fetchSpy.mock.calls.find(([, init]) => init?.method === "POST");
     expect(post?.[0]).toContain("/api/v1/digest/pref");

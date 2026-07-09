@@ -1,6 +1,6 @@
 """
-结构化日志配置
-使用structlog提供JSON格式的日志
+Structured logging configuration
+Uses structlog to provide JSON-formatted logs
 """
 
 import logging
@@ -10,35 +10,35 @@ from typing import Optional
 
 import structlog
 
-# 日志目录
+# Log directory
 LOG_DIR = Path("logs")
 LOG_DIR.mkdir(exist_ok=True)
 
 
 def configure_standard_logging():
-    """配置标准库logging作为structlog的后端"""
+    """Configure the standard library logging as structlog's backend"""
 
-    # 创建根logger
+    # Create the root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.INFO)
 
-    # 清除现有handlers
+    # Clear existing handlers
     root_logger.handlers.clear()
 
-    # Console handler（开发时使用）
+    # Console handler (used during development)
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
     console_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     console_handler.setFormatter(console_formatter)
     root_logger.addHandler(console_handler)
 
-    # File handler（JSON格式，自动滚动）
+    # File handler (JSON format, auto-rotating)
     file_handler = logging.handlers.RotatingFileHandler(
         LOG_DIR / "app.log", maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"  # 10MB
     )
     file_handler.setLevel(logging.INFO)
 
-    # JSON formatter（使用python-json-logger）
+    # JSON formatter (uses python-json-logger)
     from pythonjsonlogger import jsonlogger
 
     json_formatter = jsonlogger.JsonFormatter("%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -47,24 +47,24 @@ def configure_standard_logging():
 
 
 def configure_structlog():
-    """配置structlog处理器链"""
+    """Configure the structlog processor chain"""
 
     structlog.configure(
         processors=[
-            # 添加logger名称
+            # Add the logger name
             structlog.stdlib.add_log_level,
-            # 添加时间戳
+            # Add a timestamp
             structlog.processors.TimeStamper(fmt="iso"),
-            # 添加调用位置（文件:行号）
+            # Add the call site (file:line number)
             structlog.processors.CallsiteParameterAdder(
                 parameters=[
                     structlog.processors.CallsiteParameter.FILENAME,
                     structlog.processors.CallsiteParameter.LINENO,
                 ]
             ),
-            # 格式化异常
+            # Format exceptions
             structlog.processors.format_exc_info,
-            # 使用JSON渲染
+            # Render as JSON
             structlog.processors.JSONRenderer(),
         ],
         wrapper_class=structlog.stdlib.BoundLogger,
@@ -75,11 +75,11 @@ def configure_structlog():
 
 
 def setup_logging():
-    """一键设置日志系统"""
+    """Set up the logging system in one call"""
     configure_standard_logging()
     configure_structlog()
 
 
 def get_logger(name: Optional[str] = None):
-    """获取structlog logger"""
+    """Get a structlog logger"""
     return structlog.get_logger(name)

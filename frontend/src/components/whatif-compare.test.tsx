@@ -33,21 +33,21 @@ describe("WhatIfCompare", () => {
     expect(strip).toHaveTextContent("20.0%");
     expect(strip).toHaveTextContent("16.0%");
     expect(strip).toHaveTextContent("-4.0%"); // vol down = good
-    expect(strip).toHaveTextContent("不构成投资建议");
+    expect(strip).toHaveTextContent("investment advice");
   });
 
   it("missing concentration renders an em dash, not a crash", () => {
     render(
       <WhatIfCompare baseline={score(700, 0.2, null)} sandbox={score(710, 0.19, null)} onReset={() => {}} />,
     );
-    expect(screen.getByTestId("whatif-compare")).toHaveTextContent("最大单一持仓");
+    expect(screen.getByTestId("whatif-compare")).toHaveTextContent("Top single holding");
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 
   it("reset button hands control back to the real book", () => {
     const onReset = vi.fn();
     render(<WhatIfCompare baseline={score(700, 0.2)} sandbox={score(650, 0.25)} onReset={onReset} />);
-    fireEvent.click(screen.getByRole("button", { name: /返回真实账本/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Back to real book/ }));
     expect(onReset).toHaveBeenCalledTimes(1);
   });
 });
