@@ -81,7 +81,11 @@ def _base(status: str, note: Optional[str] = None) -> dict[str, Any]:
 
 
 def get_ml_health(*, force_refresh: bool = False, fetcher=None) -> dict[str, Any]:
-    now = time.monotonic()  # monotonic for interval measurement, like ml_regime
+    # Wall-clock, NOT monotonic: the empty-cache guard relies on the `at`
+    # default (0) being far in the past, which holds for time.time() (~1.7e9)
+    # but not for monotonic() (small on a fresh process → would falsely report
+    # a hit and KeyError on the absent "snapshot").
+    now = time.time()
     if not force_refresh and _cache.get("at", 0) + _CACHE_TTL > now:
         return _cache["snapshot"]
 
