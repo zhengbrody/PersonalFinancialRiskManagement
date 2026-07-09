@@ -365,6 +365,12 @@ accuracy (0.490 vs 0.523) and earns its keep only as a probability-ranking
 signal (Brier 0.1042 vs 0.1133 base-rate reference; elevated-risk ROC-AUC
 0.743).
 
+**Copilot grounding: 100% of numeric claims traceable to evidence across 30
+eval cases** ([evals/copilot](evals/copilot/README.md)) — in deterministic
+template mode, where that figure is a structural regression guarantee, not a
+model score; run `python evals/run_grounding_eval.py --llm` against a real
+key for a live-LLM faithfulness measurement.
+
 > The original Streamlit app was fully retired on 2026-06-23 — its UI code,
 > the backend's dependency on Streamlit, and the running `/legacy` container
 > are all gone. Product work happens in `frontend/` and `backend/`. The old
