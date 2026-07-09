@@ -133,6 +133,10 @@ def run_case(case: dict, llm_callable) -> dict:
         "intent_actual": ans.intent,
         "intent_ok": ans.intent == case["intent_expected"],
         "evidence_count": len(ans.evidence),
+        # answer() swallows EVERY llm_callable failure and falls back to the
+        # verbatim-evidence template (structurally 100% faithful) — a live
+        # run must not let those rows inflate the LLM's number.
+        "data_only": bool(ans.data_only),
         "trap": case.get("trap"),
         **result,
         "violations": [
@@ -145,17 +149,24 @@ def run_case(case: dict, llm_callable) -> dict:
 # ── report ────────────────────────────────────────────────────────────
 
 
-def summarize(rows: list[dict]) -> dict:
+def summarize(rows: list[dict], *, llm_mode: bool = False) -> dict:
+    """Aggregate. In --llm mode, rows where the router silently fell back to
+    the deterministic template (data_only=True) are EXCLUDED from the
+    faithfulness aggregate — the template is structurally 100% faithful, so
+    counting fallbacks would inflate the live-LLM number — and reported in
+    ``template_fallbacks`` instead."""
+    fallbacks = [r["id"] for r in rows if r.get("data_only")] if llm_mode else []
+    scored = [r for r in rows if r["id"] not in set(fallbacks)]
     cats: dict[str, dict] = {}
-    for r in rows:
+    for r in scored:
         c = cats.setdefault(r["category"], {"cases": 0, "total": 0, "matched": 0})
         c["cases"] += 1
         c["total"] += r["total"]
         c["matched"] += r["matched"]
     for c in cats.values():
         c["faithfulness"] = (c["matched"] / c["total"]) if c["total"] else 1.0
-    total = sum(r["total"] for r in rows)
-    matched = sum(r["matched"] for r in rows)
+    total = sum(r["total"] for r in scored)
+    matched = sum(r["matched"] for r in scored)
     return {
         "categories": cats,
         "total_claims": total,
@@ -163,6 +174,8 @@ def summarize(rows: list[dict]) -> dict:
         "faithfulness": (matched / total) if total else 1.0,
         "intent_mismatches": [r["id"] for r in rows if not r["intent_ok"]],
         "cases": len(rows),
+        "scored_cases": len(scored),
+        "template_fallbacks": fallbacks,
     }
 
 
@@ -190,10 +203,19 @@ def main() -> int:
         return 2
 
     rows = [run_case(c, llm_callable) for c in cases]
-    s = summarize(rows)
+    s = summarize(rows, llm_mode=args.llm)
 
     mode = "LIVE LLM" if args.llm else "deterministic template (offline)"
     print(f"Copilot grounding eval — {len(rows)} cases, mode: {mode}")
+    if args.llm and s["template_fallbacks"]:
+        print(
+            f"WARNING: {len(s['template_fallbacks'])} case(s) silently fell back to the"
+            f" deterministic template (LLM call failed) and are EXCLUDED from the"
+            f" aggregate: {', '.join(s['template_fallbacks'])}"
+        )
+        if s["scored_cases"] == 0:
+            print("ERROR: every case fell back — nothing measured the LLM", file=sys.stderr)
+            return 2
     if not args.llm:
         print(
             "NOTE: the template prints evidence verbatim — ~100% here is structural;"

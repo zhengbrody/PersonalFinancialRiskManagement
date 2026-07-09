@@ -69,8 +69,11 @@ _SUFFIX_MULT = {
     "billion": 1e9,
 }
 
+# Boundary classes are ASCII-only (NOT \w/\b, which are Unicode-aware and
+# would treat CJK characters as word chars — "贝塔是1.18" must extract 1.18).
 _MONEY_CLAIM_RE = re.compile(
-    r"\$\s?(-?\d[\d,]*(?:\.\d+)?)\s*(k|m|bn|b|billion|million|thousand)?\b", re.IGNORECASE
+    r"\$\s?(-?\d[\d,]*(?:\.\d+)?)\s*(k|m|bn|b|billion|million|thousand)?(?![0-9A-Za-z_])",
+    re.IGNORECASE,
 )
 # The sign is a minus only when NOT preceded by a digit — "3-5%" is a range
 # whose right side is +5%, not -5%.
@@ -78,7 +81,7 @@ _PCT_CLAIM_RE = re.compile(r"((?:(?<!\d)-)?\d[\d,]*(?:\.\d+)?)\s?%")
 _MULT_CLAIM_RE = re.compile(
     r"((?:(?<!\d)-)?\d[\d,]*(?:\.\d+)?)\s?[x×](?![A-Za-z0-9])", re.IGNORECASE
 )
-_BARE_CLAIM_RE = re.compile(r"(?<![\w.,])-?\d[\d,]*(?:\.\d+)?(?![\w%×])")
+_BARE_CLAIM_RE = re.compile(r"(?<![0-9A-Za-z_.,])-?\d[\d,]*(?:\.\d+)?(?![0-9A-Za-z_%×])")
 
 # Structural digit patterns masked BEFORE extraction (spaces of equal length,
 # so spans stay aligned): ISO/slash dates and small "2-4"-style ranges. A
@@ -174,20 +177,34 @@ def _close(a: float, b: float, rtol: float) -> bool:
     return abs(a - b) <= rtol * max(abs(a), abs(b))
 
 
+def _candidates(value: float, kind: str) -> set[float]:
+    """Representations the SAME number can legitimately take, BY KIND.
+    A percent may map DOWN to its ratio ("8.3%" ↔ 0.083) but never up ×100 —
+    granting percents ×100 let a fabricated "10%" match the ubiquitous /1000
+    score denominator (review-caught trap-killer). Money and multiples are
+    absolute — no scale transforms at all. Bare numbers are ambiguous (could
+    be a ratio or an unwritten percent) so they keep both directions."""
+    base = {value, abs(value), -value}
+    if kind == "percent":
+        base |= {value / 100.0, abs(value) / 100.0}
+    elif kind == "number":
+        base |= {value * 100.0, value / 100.0, abs(value) * 100.0, abs(value) / 100.0}
+    return base
+
+
 def match_claims(claims: list[dict], evidence_values: list[float], *, rtol: float = 0.06) -> dict:
     """Tolerance-match each claim against the evidence value set.
 
     Candidates per claim cover representation differences the SAME number can
-    legitimately take: percent↔ratio (×100 / ÷100) and sign/absolute phrasing
-    ("drawdown of 31%" vs evidence "-31.0%"). A claim with no candidate within
-    ``rtol`` of any evidence value is a violation. No claims → faithfulness
-    1.0 (nothing asserted, nothing to invent)."""
+    legitimately take (kind-aware — see ``_candidates``) plus sign/absolute
+    phrasing ("drawdown of 31%" vs evidence "-31.0%"). A claim with no
+    candidate within ``rtol`` of any evidence value is a violation. No claims
+    → faithfulness 1.0 (nothing asserted, nothing to invent)."""
     ev = [float(v) for v in evidence_values]
     matched = 0
     violations: list[dict] = []
     for c in claims:
-        v = float(c["value"])
-        candidates = {v, v * 100.0, v / 100.0, abs(v), -v, abs(v) * 100.0, abs(v) / 100.0}
+        candidates = _candidates(float(c["value"]), str(c.get("kind", "number")))
         if any(_close(cand, e, rtol) for cand in candidates for e in ev):
             matched += 1
         else:

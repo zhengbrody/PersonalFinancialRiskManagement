@@ -80,10 +80,39 @@ def test_rtol_boundary():
 def test_no_claims_is_faithful_and_violations_carry_context():
     assert ai_eval.match_claims([], [1.0])["faithfulness"] == 1.0
     claims = ai_eval.extract_numeric_claims("the fund charges 47 bps under the hood")
-    res = ai_eval.match_claims(claims, [0.5])
+    res = ai_eval.match_claims(claims, [0.6])  # 0.47 vs 0.6 is well past rtol
     assert res["faithfulness"] == 0.0
     assert "47" in res["violations"][0]["raw"]
     assert "under the hood" in res["violations"][0]["context"]
+
+
+def test_percent_claims_never_scale_up():
+    """Review-caught trap-killer: a fabricated '10%' must NOT match the /1000
+    score denominator (or any big evidence number) via a ×100 candidate.
+    Percent → ratio (÷100) stays legitimate; ×100 does not exist for percents."""
+    ev = [720.0, 1000.0, 0.12, 0.18, 0.67, -0.25, -0.021, 1.05, 19700.0]
+    claims = ai_eval.extract_numeric_claims("expect around 10% next year")
+    assert ai_eval.match_claims(claims, ev)["faithfulness"] == 0.0
+    claims2 = ai_eval.extract_numeric_claims("a 7.2% gain")
+    assert ai_eval.match_claims(claims2, ev)["faithfulness"] == 0.0
+    # the legitimate direction still works: "12%" ↔ ratio 0.12 evidence
+    claims3 = ai_eval.extract_numeric_claims("returned 12% historically")
+    assert ai_eval.match_claims(claims3, ev)["faithfulness"] == 1.0
+
+
+def test_money_and_multiples_are_absolute():
+    # scale transforms don't exist for $/×: $193 must not match ratio 1.93
+    # (×100 apart), and 2.4× must not match 240 — same-scale rtol still works
+    claims = ai_eval.extract_numeric_claims("roughly $193 in fees at 2.4× leverage")
+    assert ai_eval.match_claims(claims, [1.93, 240.0])["faithfulness"] == 0.0
+    assert ai_eval.match_claims(claims, [193.0, 2.4])["faithfulness"] == 1.0
+
+
+def test_cjk_adjacent_bare_numbers_extract():
+    """Unicode \\w treated CJK as word chars, hiding unspaced numbers — normal
+    Chinese typography ('贝塔是1.18') must extract."""
+    vals = ai_eval.numeric_values("贝塔是1.18，夏普比率0.67，波动率为18%")
+    assert 1.18 in vals and 0.67 in vals and 18.0 in vals
 
 
 # ── the 30-case suite ─────────────────────────────────────────────────
@@ -116,6 +145,35 @@ def _load_runner():
     assert spec.loader is not None
     spec.loader.exec_module(mod)
     return mod
+
+
+def test_llm_mode_excludes_silent_template_fallbacks():
+    """answer() swallows every LLM failure and returns the verbatim-evidence
+    template (structurally 100% faithful) — summarize must keep those rows
+    out of the --llm aggregate and name them."""
+    runner = _load_runner()
+
+    def row(rid: str, *, data_only: bool, matched: int, total: int) -> dict:
+        return {
+            "id": rid,
+            "category": "normal",
+            "intent_ok": True,
+            "data_only": data_only,
+            "matched": matched,
+            "total": total,
+        }
+
+    rows = [
+        row("a", data_only=True, matched=10, total=10),  # silent fallback — perfect score
+        row("b", data_only=False, matched=1, total=2),  # the real LLM answer
+    ]
+    s = runner.summarize(rows, llm_mode=True)
+    assert s["template_fallbacks"] == ["a"]
+    assert s["scored_cases"] == 1
+    assert s["faithfulness"] == 0.5  # NOT inflated to 11/12 by the fallback
+    # template mode counts everything (data_only is True for every row there)
+    s2 = runner.summarize(rows, llm_mode=False)
+    assert s2["template_fallbacks"] == [] and s2["scored_cases"] == 2
 
 
 def test_template_mode_full_run_is_fully_traceable_offline():

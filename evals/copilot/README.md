@@ -19,10 +19,34 @@ python evals/run_grounding_eval.py --json out.json
 ~100% faithfulness in template mode is a STRUCTURAL guarantee — its value is
 a regression harness (router intents, evidence building, the
 extraction/matching machinery) and the measurement frame. Only `--llm`
-produces a meaningful faithfulness number. The metric is numeric
+produces a meaningful faithfulness number (and rows where the router
+silently fell back to the template on an LLM failure are excluded from that
+aggregate and reported as `template_fallbacks`). The metric is numeric
 TRACEABILITY, not semantic correctness: an answer citing an evidence number
 for the wrong metric still matches (known limit, documented in
 `induced-07`).
+
+### What this harness cannot see (read `--llm` numbers with these in mind)
+
+Measured blind classes of the extractor/matcher — a fabrication in these
+shapes scores as faithful:
+
+- **Small-integer metrics** — the ≤12 counting-cardinal exclusion (needed to
+  ignore "top 5" / "2 steps") also forgives "a P/E of 8" or "leverage of 3".
+- **Non-numeric or unspaced forms** — worded numbers ("doubled", "two
+  hundred dollars"), unspaced units ("15bp", "48k" without `$`), CJK
+  numerals (三成 / 百分之十五), scientific notation.
+- **Year-shaped values** — a bare 4-digit number in 1900–2100 reads as a
+  year ("worth 1950 dollars" extracts nothing).
+- **Tolerance laundering** — any fabrication within ±6% of ANY evidence
+  value matches: a made-up AAPL price target passes anywhere in $274–$309
+  around the $291.4 spot (realistic 12-month targets beyond that ARE
+  caught), and cross-fact collisions exist ("0.67% fee" ↔ Sharpe 0.67;
+  "45% chance of recession" ↔ the 0.45 yield spread via percent→ratio).
+
+None of these affect the template-mode gate (claims and evidence come from
+identical strings); they bound what a live-LLM faithfulness number can
+claim.
 
 ## cases.jsonl — 30 cases
 
