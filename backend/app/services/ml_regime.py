@@ -103,12 +103,10 @@ def get_regime(
             return hit[1]
 
     try:
-        # ~1.75y is enough to warm the longest feature window (SMA200 + the 252d
-        # vol/drawdown rollups) with margin; we only predict on the latest row, so
-        # fetching more is wasted bytes on the cold-cache request. (Training uses
-        # the full 15y.) The raw frame is shared with ml_health via the
-        # process-wide serve cache — one yfinance burst covers both.
-        raw = ml_data.fetch_history_cached(years=1.75, fetcher=fetcher)
+        # The raw frame is shared with ml_health via the process-wide serve
+        # cache (one yfinance burst covers both) — keyed on the window, so both
+        # callers source it from ml_data.SERVE_YEARS. (Training uses the full 15y.)
+        raw = ml_data.fetch_history_cached(years=ml_data.SERVE_YEARS, fetcher=fetcher)
         coverage = ml_data.data_coverage(raw)
     except Exception as exc:  # noqa: BLE001 - data down
         _log.warning("ml_regime.data_unavailable err=%s", type(exc).__name__)

@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -65,6 +65,15 @@ class PredictionDriftOut(BaseModel):
     live_fractions: dict[str, float] = Field(default_factory=dict)
 
 
+class ReferenceSummary(BaseModel):
+    """Identity of the committed drift reference the live window is scored
+    against (a 3-field summary, not the full quantile grids)."""
+
+    model_version: Optional[str] = None
+    rows: Optional[int] = None
+    features: int = 0
+
+
 class MLHealthOut(BaseModel):
     """GET /api/v1/ml/health — model/artifact identity + drift status.
 
@@ -83,7 +92,7 @@ class MLHealthOut(BaseModel):
     sklearn_runtime: Optional[str] = None
     sklearn_trained: Optional[str] = None
     sklearn_match: Optional[bool] = None
-    reference: Optional[dict[str, Any]] = None
+    reference: Optional[ReferenceSummary] = None
     features: dict[str, FeatureDriftOut] = Field(default_factory=dict)
     prediction: Optional[PredictionDriftOut] = None
     overall_status: Optional[str] = None

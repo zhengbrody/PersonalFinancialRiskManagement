@@ -123,10 +123,14 @@ def _cache_path(cache_dir: str, years: float) -> Path:
 
 
 # ── serving-side shared raw cache ─────────────────────────────────────
-# ml_regime + ml_health both need the same ~1.75y frame; without this each
-# kept its own cold cache → two full 6-symbol yfinance bursts per TTL from
-# the prod IP. One raw fetch now serves every consumer within the TTL.
-
+# ml_regime + ml_health both need the same frame; without this each kept its
+# own cold cache → two full 6-symbol yfinance bursts per TTL from the prod IP.
+# One raw fetch now serves every consumer within the TTL — which requires both
+# callers to request the SAME window, so SERVE_YEARS is the single source (a
+# divergence here would silently split the cache key and revert to two bursts).
+# ~1.75y warms the longest feature window (SMA200 + 252d rollups) with margin;
+# only the latest row is predicted on, so more would be wasted bytes.
+SERVE_YEARS = 1.75
 SERVE_CACHE_TTL = 600.0
 _serve_cache: dict[str, tuple[float, dict[str, pd.Series]]] = {}
 

@@ -63,6 +63,19 @@ PSI_DRIFT_ABS = 0.25
 OOB_DRIFT_FRAC = 0.25
 _EPS = 1e-6
 
+# Severity lattice — the single source of the status ordering. Every "take the
+# worst signal" site (per-feature OOB fold-in, per-window aggregation, the
+# health service's alert edge) derives from this one tuple.
+STATUS_ORDER = ("healthy", "watch", "drift")
+_STATUS_RANK = {s: i for i, s in enumerate(STATUS_ORDER)}
+
+
+def worst_status(statuses) -> Optional[str]:
+    """Highest-severity status among the inputs; None if none rank (all
+    ``insufficient`` / empty — "measured nothing" must not read healthy)."""
+    ranked = [_STATUS_RANK[s] for s in statuses if s in _STATUS_RANK]
+    return STATUS_ORDER[max(ranked)] if ranked else None
+
 
 # ── PSI vs a reference quantile grid ──────────────────────────────────
 
@@ -83,20 +96,35 @@ def _ref_cdf_factory(quantile_values: np.ndarray):
     return cdf
 
 
-def psi_vs_reference(vals: np.ndarray, quantile_values: list[float] | np.ndarray) -> float:
-    """PSI of a sample against the reference distribution described by its
-    201-point quantile grid. Decile edges with duplicates merged; expected
-    mass per merged bin from the reference CDF (atom-safe)."""
+def _reference_bins(quantile_values: list[float] | np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """The reference-side of PSI — merged decile ``edges`` + ``expected`` mass
+    per bin — which depends ONLY on the reference, not the live sample. Hoist
+    this out of any per-slice loop: the training calibration scores ~700
+    windows against the SAME reference, so building this once per feature
+    (not once per (feature, window)) removes ~10k redundant CDF rebuilds."""
     q = np.asarray(quantile_values, dtype=float)
     cdf = _ref_cdf_factory(q)
     inner = np.unique(q[::20][1:-1])  # decile edges, duplicates collapsed
     edges = np.concatenate(([-np.inf], inner, [np.inf]))
-    counts = np.histogram(vals, bins=edges)[0]
-    observed = counts / max(1, len(vals))
     upper = np.concatenate((cdf(inner), [1.0]))
     lower = np.concatenate(([0.0], cdf(inner)))
     expected = np.clip(upper - lower, 0.0, 1.0)
+    return edges, expected
+
+
+def _psi_with_bins(vals: np.ndarray, edges: np.ndarray, expected: np.ndarray) -> float:
+    """PSI of a live sample given precomputed reference ``edges``/``expected``."""
+    counts = np.histogram(vals, bins=edges)[0]
+    observed = counts / max(1, len(vals))
     return psi_from_fractions(observed, expected)
+
+
+def psi_vs_reference(vals: np.ndarray, quantile_values: list[float] | np.ndarray) -> float:
+    """PSI of a sample against the reference distribution described by its
+    201-point quantile grid. Decile edges with duplicates merged; expected
+    mass per merged bin from the reference CDF (atom-safe). Thin wrapper over
+    ``_reference_bins`` + ``_psi_with_bins`` for one-off / serving calls."""
+    return _psi_with_bins(vals, *_reference_bins(quantile_values))
 
 
 def psi_from_fractions(observed: np.ndarray, expected: np.ndarray) -> float:
@@ -158,7 +186,9 @@ def build_reference(X: pd.DataFrame, model: Any, *, model_version: str) -> dict[
             "quantile_values": [round(float(v), 8) for v in qv],
         }
 
-    # Null distribution: PSI of every historical live-window slice.
+    # Null distribution: PSI of every historical live-window slice. The
+    # reference bins are constant per feature — build them ONCE, not per slice.
+    bins = {name: _reference_bins(quantiles[name]) for name in feats}
     slice_psis: dict[str, list[float]] = {name: [] for name in feats}
     all_pred = np.asarray(model.predict(X[FEATURE_NAMES]))
     classes = sorted(set(all_pred.astype(str)))
@@ -172,7 +202,7 @@ def build_reference(X: pd.DataFrame, model: Any, *, model_version: str) -> dict[
         for name in feats:
             vals = window[name].dropna().to_numpy(dtype=float)
             if len(vals) >= MIN_LIVE_OBS:
-                slice_psis[name].append(psi_vs_reference(vals, quantiles[name]))
+                slice_psis[name].append(_psi_with_bins(vals, *bins[name]))
         wpred = pd.Series(all_pred[s : s + LIVE_WINDOW]).value_counts(normalize=True)
         obs = np.array([float(wpred.get(c, 0.0)) for c in classes])
         exp = np.array([float(full_frac.get(c, 0.0)) for c in classes])
@@ -228,10 +258,12 @@ def feature_drift(live: pd.Series, ref: dict[str, Any]) -> dict[str, Any]:
     q = ref["quantile_values"]
     psi = psi_vs_reference(vals, q)
     slice_psi = ref.get("slice_psi")
-    status, calibrated = _status_calibrated(psi, slice_psi)
+    psi_status, calibrated = _status_calibrated(psi, slice_psi)
+    # Out-of-band is an INDEPENDENT detector for what PSI can't see: once a
+    # window exceeds the training support, PSI saturates. Fold it in as a
+    # contributed verdict (worst-of), same idiom as the window aggregation.
     oob = float(np.mean((vals < q[0]) | (vals > q[-1])))
-    if oob > OOB_DRIFT_FRAC:
-        status = "drift"  # outside the training support — PSI can't see this far
+    status = worst_status([psi_status, "drift" if oob > OOB_DRIFT_FRAC else "healthy"])
     return {
         "psi": psi,
         "psi_p90": (slice_psi or {}).get("p90"),
@@ -279,19 +311,17 @@ def evaluate_drift(frame: pd.DataFrame, model: Any, reference: dict[str, Any]) -
     features never count against it, and if NO channel produced a verdict at
     all the overall is None — "we measured nothing" must not read healthy."""
     features_out: dict[str, Any] = {}
-    rank = {"healthy": 0, "watch": 1, "drift": 2}
-    verdicts: list[int] = []
     for name, ref in (reference.get("features") or {}).items():
         if name not in frame.columns:
             continue
-        d = feature_drift(frame[name], ref)
-        features_out[name] = d
-        if d["status"] in rank:
-            verdicts.append(rank[d["status"]])
+        features_out[name] = feature_drift(frame[name], ref)
 
     pred = prediction_drift(frame, model, reference)
-    if pred is not None and pred["status"] in rank:
-        verdicts.append(rank[pred["status"]])
-
-    worst = {v: k for k, v in rank.items()}[max(verdicts)] if verdicts else None
-    return {"features": features_out, "prediction": pred, "overall_status": worst}
+    statuses = [d["status"] for d in features_out.values()]
+    if pred is not None:
+        statuses.append(pred["status"])
+    return {
+        "features": features_out,
+        "prediction": pred,
+        "overall_status": worst_status(statuses),
+    }
