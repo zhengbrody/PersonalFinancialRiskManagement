@@ -75,10 +75,10 @@ def patched_seams(fixture: dict):
     boundary. Desk-view/option evidence are pinned empty so the value set is
     exactly the fixture-derived packet."""
     fx = fixture or {}
-    saved: dict[tuple, object] = {}
+    saved: list[tuple] = []
 
     def put(obj, name, val):
-        saved[(id(obj), name)] = (obj, getattr(obj, name))
+        saved.append((obj, name, getattr(obj, name)))
         setattr(obj, name, val)
 
     def no_portfolio(_user):
@@ -108,7 +108,7 @@ def patched_seams(fixture: dict):
     try:
         yield
     finally:
-        for (_oid, name), (obj, original) in saved.items():
+        for obj, name, original in reversed(saved):
             setattr(obj, name, original)
 
 
@@ -119,10 +119,11 @@ def run_case(case: dict, llm_callable) -> dict:
     with patched_seams(case.get("fixture")):
         ans = cr.answer(case["question"], user=object(), llm_callable=llm_callable)
 
-    evidence_values: list[float] = []
-    for e in ans.evidence:
-        evidence_values += ai_eval.numeric_values(f"{e.label}: {e.value}")
-    evidence_values += ai_eval.numeric_values(case["question"])
+    # One extraction over all evidence lines + the question, joined by newlines
+    # (the extractor's boundary classes are newline-aware, so the value set is
+    # identical to extracting each line separately).
+    evidence_text = "\n".join([f"{e.label}: {e.value}" for e in ans.evidence] + [case["question"]])
+    evidence_values = ai_eval.numeric_values(evidence_text)
 
     claims = ai_eval.extract_numeric_claims(ans.answer_markdown)
     result = ai_eval.match_claims(claims, evidence_values)
@@ -156,7 +157,8 @@ def summarize(rows: list[dict], *, llm_mode: bool = False) -> dict:
     counting fallbacks would inflate the live-LLM number — and reported in
     ``template_fallbacks`` instead."""
     fallbacks = [r["id"] for r in rows if r.get("data_only")] if llm_mode else []
-    scored = [r for r in rows if r["id"] not in set(fallbacks)]
+    fb = set(fallbacks)
+    scored = [r for r in rows if r["id"] not in fb]
     cats: dict[str, dict] = {}
     for r in scored:
         c = cats.setdefault(r["category"], {"cases": 0, "total": 0, "matched": 0})
@@ -165,8 +167,8 @@ def summarize(rows: list[dict], *, llm_mode: bool = False) -> dict:
         c["matched"] += r["matched"]
     for c in cats.values():
         c["faithfulness"] = (c["matched"] / c["total"]) if c["total"] else 1.0
-    total = sum(r["total"] for r in scored)
-    matched = sum(r["matched"] for r in scored)
+    total = sum(c["total"] for c in cats.values())
+    matched = sum(c["matched"] for c in cats.values())
     return {
         "categories": cats,
         "total_claims": total,
