@@ -35,7 +35,7 @@ export const metadata: Metadata = {
       "Health Score, Risk Report, Stock Research, and an AI Copilot grounded in deterministic risk math — for individual investors.",
     url: `${SITE_URL}/product`,
     siteName: "MindMarket",
-    images: ["/og.jpg"],
+    images: ["/og.jpg?v=2"],
   },
   twitter: { card: "summary_large_image" },
 };

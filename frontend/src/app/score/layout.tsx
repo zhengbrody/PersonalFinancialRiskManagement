@@ -13,7 +13,7 @@ export const metadata: Metadata = {
       "Score a portfolio with deterministic risk math and plain-English AI explanations.",
     url: "/score",
     siteName: "MindMarket",
-    images: ["/og.jpg"],
+    images: ["/og.jpg?v=2"],
   },
   twitter: {
     card: "summary_large_image",

@@ -32,7 +32,7 @@ export function generateMetadata({ params }: { params: { doc: string } }): Metad
       description: d.description,
       url,
       siteName: "MindMarket",
-      images: ["/og.jpg"],
+      images: ["/og.jpg?v=2"],
     },
     twitter: { card: "summary_large_image", title: d.metaTitle, description: d.description },
   };

@@ -89,7 +89,7 @@ export const metadata: Metadata = {
       "Score your portfolio, inspect downside risk, and understand macro exposure with deterministic risk math plus AI explanations.",
     images: [
       {
-        url: "/og.jpg",
+        url: "/og.jpg?v=2",
         width: 1200,
         height: 630,
         alt: "MindMarket AI — know your portfolio's risk before the market tests it",
@@ -101,7 +101,7 @@ export const metadata: Metadata = {
     title: "MindMarket | AI Portfolio Risk Analytics",
     description:
       "Portfolio health score, VaR/CVaR, stress tests, factor exposure, and live US rates data for individual investors.",
-    images: ["/og.jpg"],
+    images: ["/og.jpg?v=2"],
   },
   robots: {
     index: true,
