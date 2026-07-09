@@ -143,7 +143,7 @@ export function ImproveScore({ score }: { score: ScoreResponse }) {
                 Edit holdings
               </Link>
               <a href="#whatif" className="text-muted-foreground hover:underline">
-                在调仓沙盘试试
+                Try it in the What-if lab
               </a>
             </div>
           </div>

@@ -166,14 +166,14 @@ def test_build_digest_renders_deterministic_numbers(digest_env):
     assert "NVDA" in d["html"] and "31.0%" in d["html"]
     assert "Market risk-state: Normal" in d["html"]
     assert "/api/v1/digest/unsubscribe?token=" in d["html"]
-    assert "不构成投资建议" in d["html"]
+    assert "not investment advice" in d["html"]
 
 
 def test_build_digest_stale_snapshot_gets_comeback_variant(digest_env):
     snaps = [_snap("2026-01-05T00:00:00+00:00", 640.0)]
     d = dg.build_digest("a@b.co", "u1", snaps, "line")
     assert d is not None
-    assert "过期" in d["subject"]
+    assert "out of date" in d["subject"]
     assert "2026-01-05" in d["html"]
 
 
@@ -333,13 +333,13 @@ def test_unsubscribe_endpoint_flow(test_client, digest_env, fake_admin):
     # GET = confirmation page ONLY (mail scanners prefetch GETs) — no side effect.
     page = test_client.get(f"/api/v1/digest/unsubscribe?token={tok}")
     assert page.status_code == 200
-    assert "确认退订" in page.text
+    assert "Confirm unsubscribe" in page.text
     assert fake_admin.tables["digest_prefs"] == []
 
     # POST (the page button / RFC 8058 one-click) performs the opt-out.
     done = test_client.post(f"/api/v1/digest/unsubscribe?token={tok}")
     assert done.status_code == 200
-    assert "已退订" in done.text
+    assert "Unsubscribed" in done.text
     assert any(
         r["user_id"] == "u9" and r["enabled"] is False for r in fake_admin.tables["digest_prefs"]
     )

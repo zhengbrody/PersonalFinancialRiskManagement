@@ -1,6 +1,6 @@
 """
 test_beta_significance.py
-测试多因子Beta统计显著性检验功能
+Tests for the multi-factor Beta statistical-significance functionality
 """
 
 from unittest.mock import Mock
@@ -13,66 +13,70 @@ from data_provider import DataProvider
 from risk_engine import RiskEngine
 
 # ══════════════════════════════════════════════════════════════
-#  测试 _compute_beta_with_significance 方法
+#  Tests for the _compute_beta_with_significance method
 # ══════════════════════════════════════════════════════════════
 
 
 def test_beta_significance_highly_correlated():
-    """测试高度相关数据（beta应该显著）"""
-    # 创建完全相关的数据（beta=1.5, 低噪声）
+    """Test highly correlated data (beta should be significant)"""
+    # Create perfectly correlated data (beta=1.5, low noise)
     np.random.seed(42)
     n_samples = 252
     X = np.random.randn(n_samples)
-    y = 1.5 * X + np.random.randn(n_samples) * 0.05  # beta=1.5, 低噪声
+    y = 1.5 * X + np.random.randn(n_samples) * 0.05  # beta=1.5, low noise
 
-    # 创建mock的DataProvider和RiskEngine
+    # Create a mock DataProvider and RiskEngine
     mock_dp = Mock(spec=DataProvider)
     engine = RiskEngine(mock_dp)
 
-    # 调用统计显著性方法
+    # Call the significance method
     stats = engine._compute_beta_with_significance(y, X)
 
-    # 验证结果
-    assert 1.4 < stats["beta"] < 1.6, f"Beta应该接近1.5，实际: {stats['beta']}"
-    assert stats["p_value"] < 0.001, f"p值应该非常小（高度显著），实际: {stats['p_value']}"
-    assert stats["is_significant"] == True, "beta应该显著"
-    assert stats["r_squared"] > 0.9, f"R²应该很高，实际: {stats['r_squared']}"
-    assert not np.isnan(stats["t_stat"]), "t统计量不应该是NaN"
-    assert not np.isnan(stats["std_error"]), "标准误不应该是NaN"
+    # Verify results
+    assert 1.4 < stats["beta"] < 1.6, f"Beta should be close to 1.5, actual: {stats['beta']}"
+    assert (
+        stats["p_value"] < 0.001
+    ), f"p-value should be very small (highly significant), actual: {stats['p_value']}"
+    assert stats["is_significant"] == True, "beta should be significant"
+    assert stats["r_squared"] > 0.9, f"R² should be high, actual: {stats['r_squared']}"
+    assert not np.isnan(stats["t_stat"]), "t-statistic should not be NaN"
+    assert not np.isnan(stats["std_error"]), "standard error should not be NaN"
 
 
 def test_beta_significance_no_correlation():
-    """测试无相关数据（beta应该不显著）"""
-    # 创建完全独立的随机数据
+    """Test uncorrelated data (beta should be insignificant)"""
+    # Create completely independent random data
     np.random.seed(42)
     n_samples = 252
     X = np.random.randn(n_samples)
-    y = np.random.randn(n_samples)  # 完全独立
+    y = np.random.randn(n_samples)  # completely independent
 
     mock_dp = Mock(spec=DataProvider)
     engine = RiskEngine(mock_dp)
 
     stats = engine._compute_beta_with_significance(y, X)
 
-    # 验证结果
-    assert stats["p_value"] > 0.05, f"p值应该大于0.05（不显著），实际: {stats['p_value']}"
-    assert stats["is_significant"] == False, "beta不应该显著"
-    assert stats["r_squared"] < 0.1, f"R²应该很低，实际: {stats['r_squared']}"
+    # Verify results
+    assert (
+        stats["p_value"] > 0.05
+    ), f"p-value should be greater than 0.05 (insignificant), actual: {stats['p_value']}"
+    assert stats["is_significant"] == False, "beta should not be significant"
+    assert stats["r_squared"] < 0.1, f"R² should be low, actual: {stats['r_squared']}"
 
 
 def test_beta_significance_small_sample():
-    """测试小样本（可能不显著，取决于噪声）"""
+    """Test small sample (may be insignificant, depending on noise)"""
     np.random.seed(42)
-    n_samples = 30  # 只有30个样本
+    n_samples = 30  # only 30 samples
     X = np.random.randn(n_samples)
-    y = 0.8 * X + np.random.randn(n_samples) * 0.5  # beta=0.8, 中等噪声
+    y = 0.8 * X + np.random.randn(n_samples) * 0.5  # beta=0.8, moderate noise
 
     mock_dp = Mock(spec=DataProvider)
     engine = RiskEngine(mock_dp)
 
     stats = engine._compute_beta_with_significance(y, X)
 
-    # 小样本应该仍然能返回合理结果
+    # A small sample should still return reasonable results
     assert "beta" in stats
     assert "p_value" in stats
     assert "t_stat" in stats
@@ -81,67 +85,67 @@ def test_beta_significance_small_sample():
 
 
 def test_beta_significance_negative_beta():
-    """测试负beta系数"""
+    """Test negative beta coefficient"""
     np.random.seed(42)
     n_samples = 252
     X = np.random.randn(n_samples)
-    y = -1.2 * X + np.random.randn(n_samples) * 0.1  # 负beta，低噪声
+    y = -1.2 * X + np.random.randn(n_samples) * 0.1  # negative beta, low noise
 
     mock_dp = Mock(spec=DataProvider)
     engine = RiskEngine(mock_dp)
 
     stats = engine._compute_beta_with_significance(y, X)
 
-    # 验证结果
-    assert -1.3 < stats["beta"] < -1.1, f"Beta应该接近-1.2，实际: {stats['beta']}"
-    assert stats["p_value"] < 0.001, "负beta也应该显著"
+    # Verify results
+    assert -1.3 < stats["beta"] < -1.1, f"Beta should be close to -1.2, actual: {stats['beta']}"
+    assert stats["p_value"] < 0.001, "negative beta should also be significant"
     assert stats["is_significant"] == True
-    assert stats["t_stat"] < 0, "负beta的t统计量应该为负"
+    assert stats["t_stat"] < 0, "t-statistic of a negative beta should be negative"
 
 
 def test_beta_significance_edge_cases():
-    """测试边界情况"""
+    """Test edge cases"""
     mock_dp = Mock(spec=DataProvider)
     engine = RiskEngine(mock_dp)
 
-    # 测试1: 常数数组（无变化）
+    # Test 1: constant array (no variation)
     X_const = np.ones(100)
     y_const = np.random.randn(100)
 
     stats_const = engine._compute_beta_with_significance(y_const, X_const)
 
-    # 应该返回NaN或接近零（因为X无变化，X'X矩阵奇异）
-    # 在实际情况中，lstsq会尝试处理，可能返回很小的值或NaN
+    # Should return NaN or near zero (X has no variation, so the X'X matrix is singular)
+    # In practice lstsq will attempt to handle it and may return a very small value or NaN
     assert np.isnan(stats_const["beta"]) or abs(stats_const["beta"]) < 1.0
 
-    # 测试2: 包含NaN的数据
+    # Test 2: data containing NaN
     X_nan = np.array([1, 2, np.nan, 4, 5])
     y_nan = np.array([2, 4, 6, 8, 10])
 
-    # 这应该能处理或返回合理的错误
+    # This should be handled or return a reasonable error
     try:
         stats_nan = engine._compute_beta_with_significance(y_nan, X_nan)
-        # 如果没有报错，检查结果
+        # If no error is raised, check the result
         assert "beta" in stats_nan
     except (ValueError, np.linalg.LinAlgError):
-        # 允许抛出异常
+        # Raising an exception is allowed
         pass
 
 
 # ══════════════════════════════════════════════════════════════
-#  测试 _compute_multi_factor_betas 方法（集成测试）
+#  Tests for the _compute_multi_factor_betas method (integration test)
 # ══════════════════════════════════════════════════════════════
 
 
 @pytest.mark.integration
 def test_multi_factor_betas_with_significance():
-    """集成测试：多因子beta计算及显著性检验。
+    """Integration test: multi-factor beta calculation and significance test.
     Benchmark data now flows through DataProvider.get_benchmark_returns,
     not yfinance directly, so we stub the provider method."""
-    # 创建模拟数据
+    # Create mock data
     dates = pd.date_range("2023-01-01", periods=252, freq="D")
 
-    # 模拟资产收益率
+    # Mock asset returns
     np.random.seed(42)
     asset_returns = pd.DataFrame(
         {
@@ -151,7 +155,7 @@ def test_multi_factor_betas_with_significance():
         index=dates,
     )
 
-    # 模拟因子收益率（SPY, QQQ 等） — 直接提供 simple return 级别
+    # Mock factor returns (SPY, QQQ, etc.) — provided directly at the simple-return level
     np.random.seed(7)
     factor_ret = pd.DataFrame(
         {
@@ -174,23 +178,23 @@ def test_multi_factor_betas_with_significance():
 
     engine = RiskEngine(mock_dp)
 
-    # 调用多因子 beta 计算
+    # Call the multi-factor beta calculation
     result = engine._compute_multi_factor_betas(asset_returns)
 
-    # 验证返回结构
-    assert "betas" in result, "应该返回betas"
-    assert "significance" in result, "应该返回significance"
+    # Verify the return structure
+    assert "betas" in result, "should return betas"
+    assert "significance" in result, "should return significance"
 
     betas_df = result["betas"]
     sig_df = result["significance"]
 
-    # 验证betas DataFrame
+    # Verify the betas DataFrame
     assert isinstance(betas_df, pd.DataFrame)
     assert not betas_df.empty
     assert "AAPL" in betas_df.index
     assert "TSLA" in betas_df.index
 
-    # 验证significance DataFrame
+    # Verify the significance DataFrame
     assert isinstance(sig_df, pd.DataFrame)
     assert not sig_df.empty
     assert "Ticker" in sig_df.columns
@@ -201,12 +205,12 @@ def test_multi_factor_betas_with_significance():
     assert "is_significant" in sig_df.columns
     assert "r_squared" in sig_df.columns
 
-    # 检查每个资产都有6个因子的统计信息
+    # Check that each asset has statistics for all 6 factors
     for ticker in ["AAPL", "TSLA"]:
         ticker_data = sig_df[sig_df["Ticker"] == ticker]
-        assert len(ticker_data) == 6, f"{ticker}应该有6个因子"
+        assert len(ticker_data) == 6, f"{ticker} should have 6 factors"
 
-        # 检查所有必要字段都存在且格式正确
+        # Check that all required fields exist and are correctly formatted
         for _, row in ticker_data.iterrows():
             assert "Beta" in row
             assert "t_stat" in row
@@ -248,12 +252,12 @@ def test_portfolio_factor_betas_shape_is_factor_indexed():
 
 
 # ══════════════════════════════════════════════════════════════
-#  性能测试
+#  Performance test
 # ══════════════════════════════════════════════════════════════
 
 
 def test_beta_significance_performance():
-    """测试统计检验的性能（应该很快）"""
+    """Test the performance of the significance test (should be fast)"""
     import time
 
     np.random.seed(42)
@@ -264,23 +268,23 @@ def test_beta_significance_performance():
     mock_dp = Mock(spec=DataProvider)
     engine = RiskEngine(mock_dp)
 
-    # 执行100次，测量时间
+    # Run 100 times and measure the elapsed time
     start = time.time()
     for _ in range(100):
         stats = engine._compute_beta_with_significance(y, X)
     elapsed = time.time() - start
 
-    # 100次应该在1秒内完成
-    assert elapsed < 1.0, f"100次beta计算耗时{elapsed:.2f}秒，太慢了"
+    # 100 runs should complete within 1 second
+    assert elapsed < 1.0, f"100 beta computations took {elapsed:.2f}s, too slow"
 
 
 # ══════════════════════════════════════════════════════════════
-#  文档测试（确保返回结构符合文档）
+#  Documentation test (ensure the return structure matches the docs)
 # ══════════════════════════════════════════════════════════════
 
 
 def test_beta_significance_return_structure():
-    """测试返回字典的结构符合文档说明"""
+    """Test that the structure of the returned dict matches the documentation"""
     np.random.seed(42)
     n_samples = 252
     X = np.random.randn(n_samples)
@@ -291,7 +295,7 @@ def test_beta_significance_return_structure():
 
     stats = engine._compute_beta_with_significance(y, X)
 
-    # 验证所有必需字段都存在
+    # Verify all required fields exist
     required_fields = [
         "beta",
         "intercept",
@@ -303,9 +307,9 @@ def test_beta_significance_return_structure():
     ]
 
     for field in required_fields:
-        assert field in stats, f"缺少必需字段: {field}"
+        assert field in stats, f"missing required field: {field}"
 
-    # 验证类型
+    # Verify types
     assert isinstance(stats["beta"], (float, np.floating))
     assert isinstance(stats["intercept"], (float, np.floating))
     assert isinstance(stats["t_stat"], (float, np.floating))
@@ -314,18 +318,18 @@ def test_beta_significance_return_structure():
     assert isinstance(stats["r_squared"], (float, np.floating))
     assert isinstance(stats["std_error"], (float, np.floating))
 
-    # 验证合理范围
-    assert 0 <= stats["r_squared"] <= 1, f"R²应该在[0,1]之间，实际: {stats['r_squared']}"
+    # Verify reasonable ranges
+    assert 0 <= stats["r_squared"] <= 1, f"R² should be in [0,1], actual: {stats['r_squared']}"
     assert 0 <= stats["p_value"] <= 1 or np.isnan(
         stats["p_value"]
-    ), f"p值应该在[0,1]之间，实际: {stats['p_value']}"
+    ), f"p-value should be in [0,1], actual: {stats['p_value']}"
     assert stats["std_error"] >= 0 or np.isnan(
         stats["std_error"]
-    ), f"标准误应该非负，实际: {stats['std_error']}"
+    ), f"standard error should be non-negative, actual: {stats['std_error']}"
 
 
 if __name__ == "__main__":
-    # 运行基本测试
+    # Run basic tests
     print("Running basic beta significance tests...")
 
     print("\n1. Testing highly correlated data...")

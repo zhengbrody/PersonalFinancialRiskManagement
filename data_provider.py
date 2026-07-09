@@ -1,9 +1,9 @@
 """
 data_provider.py
-数据下载与预处理模块 v2.2
+Market-data download and preprocessing module v2.2
 ──────────────────────────────────────────────────────────
-新增：宏观因子下载（^TNX / DX-Y.NYB / CL=F）· 成交量下载
-v2.2: 健壮的数据管道 - 缓存机制 + 数据质量验证 + 错误处理
+New: macro-factor download (^TNX / DX-Y.NYB / CL=F) · volume download
+v2.2: robust data pipeline - caching + data-quality validation + error handling
 """
 
 import os
@@ -24,19 +24,19 @@ logger = get_logger(__name__)
 
 
 class CachedDataProvider:
-    """带缓存的数据提供者 - 避免重复下载，提升性能和可靠性"""
+    """Cached data provider - avoids redundant downloads, improving performance and reliability"""
 
     def __init__(self, cache_dir: str = ".cache/market_data"):
         self.cache_dir = cache_dir
         os.makedirs(cache_dir, exist_ok=True)
 
     def _get_cache_path(self, ticker: str, start: str, end: str, data_type: str = "prices") -> str:
-        """生成缓存文件路径"""
+        """Build the cache file path"""
         safe_ticker = ticker.replace("/", "_").replace("^", "").replace("=", "")
         return os.path.join(self.cache_dir, f"{safe_ticker}_{start}_{end}_{data_type}.pkl")
 
     def _is_cache_valid(self, cache_path: str, max_age_hours: int = 24) -> bool:
-        """检查缓存是否有效（未过期）"""
+        """Check whether the cache is valid (not expired)"""
         if not os.path.exists(cache_path):
             return False
 
@@ -55,23 +55,23 @@ class CachedDataProvider:
         max_age_hours: int = 24,
     ) -> Optional[pd.DataFrame]:
         """
-        带缓存的数据获取
+        Cached data fetch
 
         Args:
-            ticker: 股票代码
-            start_date: 开始日期 (YYYY-MM-DD)
-            end_date: 结束日期 (YYYY-MM-DD)
-            force_refresh: 强制刷新（忽略缓存）
-            data_type: 数据类型 (prices/volume)
-            max_age_hours: 缓存有效期（小时）
+            ticker: stock symbol
+            start_date: start date (YYYY-MM-DD)
+            end_date: end date (YYYY-MM-DD)
+            force_refresh: force refresh (ignore cache)
+            data_type: data type (prices/volume)
+            max_age_hours: cache validity period (hours)
 
         Returns:
-            DataFrame 或 None（如果下载失败）
+            DataFrame, or None (if the download fails)
         """
         cache_path = self._get_cache_path(ticker, start_date, end_date, data_type)
         start_time = time.time()
 
-        # 尝试从缓存加载
+        # Try loading from cache
         if not force_refresh and self._is_cache_valid(cache_path, max_age_hours):
             try:
                 with open(cache_path, "rb") as f:
@@ -87,9 +87,9 @@ class CachedDataProvider:
                 return data
             except Exception as e:
                 logger.warning("data.cache.load_failed", ticker=ticker, error=str(e))
-                warnings.warn(f"缓存加载失败 ({ticker}): {e}，重新下载")
+                warnings.warn(f"Cache load failed ({ticker}): {e}, re-downloading")
 
-        # 从网络下载
+        # Download from the network
         try:
             download_start = time.time()
             with warnings.catch_warnings():
@@ -101,20 +101,20 @@ class CachedDataProvider:
 
             if data.empty:
                 logger.warning("data.download.empty", ticker=ticker, data_type=data_type)
-                # 如果网络下载为空，尝试使用过期缓存
+                # If the network download is empty, fall back to the stale cache
                 if os.path.exists(cache_path):
-                    warnings.warn(f"下载数据为空 ({ticker})，使用过期缓存")
+                    warnings.warn(f"Downloaded data empty ({ticker}), using stale cache")
                     with open(cache_path, "rb") as f:
                         return pickle.load(f)
                 return None
 
-            # 保存到缓存
+            # Save to cache
             try:
                 with open(cache_path, "wb") as f:
                     pickle.dump(data, f)
             except Exception as e:
                 logger.warning("data.cache.save_failed", ticker=ticker, error=str(e))
-                warnings.warn(f"缓存保存失败 ({ticker}): {e}")
+                warnings.warn(f"Cache save failed ({ticker}): {e}")
 
             total_duration = (time.time() - start_time) * 1000
             logger.info(
@@ -130,30 +130,30 @@ class CachedDataProvider:
 
         except Exception as e:
             logger.error("data.download.failed", ticker=ticker, data_type=data_type, error=str(e))
-            # 如果网络失败，尝试使用过期缓存
+            # If the network fails, fall back to the stale cache
             if os.path.exists(cache_path):
-                warnings.warn(f"网络下载失败 ({ticker}): {e}，使用过期缓存")
+                warnings.warn(f"Network download failed ({ticker}): {e}, using stale cache")
                 try:
                     with open(cache_path, "rb") as f:
                         return pickle.load(f)
                 except Exception as cache_error:
-                    warnings.warn(f"过期缓存也加载失败: {cache_error}")
+                    warnings.warn(f"Stale cache also failed to load: {cache_error}")
             return None
 
 
 class DataProvider:
-    """负责从 Yahoo Finance 下载行情数据并进行预处理。
+    """Downloads market data from Yahoo Finance and preprocesses it.
 
     Note on batch efficiency: yf.download() already handles multiple tickers
     in a single HTTP batch request internally, so no additional ThreadPoolExecutor
     concurrency is needed for price/volume downloads in this class.
     """
 
-    # 宏观因子 ticker → 可读名
+    # Macro factor ticker → readable name
     MACRO_FACTOR_TICKERS = {
-        "^TNX": "US10Y Rate",  # 10 年美债收益率 — 利率因子
-        "DX-Y.NYB": "USD Index",  # 美元指数 — 汇率因子
-        "CL=F": "Crude Oil",  # WTI 原油期货 — 通胀因子
+        "^TNX": "US10Y Rate",  # 10-year Treasury yield — rate factor
+        "DX-Y.NYB": "USD Index",  # US dollar index — FX factor
+        "CL=F": "Crude Oil",  # WTI crude futures — inflation factor
     }
 
     def __init__(
@@ -168,7 +168,7 @@ class DataProvider:
         ----------
         weights : dict   ticker → portfolio weight (0-1)
         holdings : dict  ticker → {"shares": float}  (from portfolio_config)
-                         用于流动性风险计算；可选。
+                         Used for liquidity-risk calculation; optional.
         """
         self.weights = weights
         self.tickers = list(weights.keys())
@@ -177,7 +177,7 @@ class DataProvider:
         self.start_date = self.end_date - timedelta(days=365 * period_years)
         self.holdings = holdings  # optional, for liquidity calc
 
-        # 缓存
+        # Caches
         self._prices: Optional[pd.DataFrame] = None
         self._returns: Optional[pd.DataFrame] = None
         self._macro_prices: Optional[pd.DataFrame] = None
@@ -193,39 +193,39 @@ class DataProvider:
         self._benchmark_returns_cache: dict[tuple, pd.DataFrame] = {}
         self._risk_free_rate_cached: Optional[float] = None
 
-        # 初始化缓存提供者
+        # Initialize the cache provider
         self._cache_provider = CachedDataProvider()
 
-        # 失败记录
+        # Failure records
         self._failed_tickers: List[Tuple[str, str]] = []
 
     # ══════════════════════════════════════════════════════════
-    #  数据质量验证与清洗
+    #  Data-quality validation and cleaning
     # ══════════════════════════════════════════════════════════
 
     @staticmethod
     def _detect_currency_mixing(prices: pd.DataFrame, tickers: List[str]) -> Tuple[bool, str]:
         """
-        检测投资组合中是否混合了不同货币的资产
+        Detect whether the portfolio mixes assets denominated in different currencies
 
         Args:
-            prices: 价格DataFrame
-            tickers: ticker列表
+            prices: price DataFrame
+            tickers: list of tickers
 
         Returns:
             (has_mixing, warning_message)
         """
-        # 常见的非美元资产后缀
+        # Common non-USD asset suffixes
         foreign_indicators = {
-            ".L": "GBP (伦敦)",
-            ".T": "JPY (东京)",
-            ".TO": "CAD (多伦多)",
-            ".HK": "HKD (香港)",
-            ".SS": "CNY (上海)",
-            ".SZ": "CNY (深圳)",
-            ".AX": "AUD (澳洲)",
-            ".PA": "EUR (巴黎)",
-            ".DE": "EUR (德国)",
+            ".L": "GBP (London)",
+            ".T": "JPY (Tokyo)",
+            ".TO": "CAD (Toronto)",
+            ".HK": "HKD (Hong Kong)",
+            ".SS": "CNY (Shanghai)",
+            ".SZ": "CNY (Shenzhen)",
+            ".AX": "AUD (Australia)",
+            ".PA": "EUR (Paris)",
+            ".DE": "EUR (Germany)",
         }
 
         detected_currencies = {}
@@ -239,11 +239,11 @@ class DataProvider:
             if not is_foreign:
                 detected_currencies[ticker] = "USD"
 
-        # 检查是否有多种货币
+        # Check whether multiple currencies are present
         unique_currencies = set(detected_currencies.values())
         if len(unique_currencies) > 1:
             currency_list = ", ".join(f"{t}({c})" for t, c in detected_currencies.items())
-            return True, f"检测到混合货币: {currency_list}。VaR计算可能不准确。"
+            return True, f"Mixed currencies detected: {currency_list}. VaR may be inaccurate."
 
         return False, ""
 
@@ -252,15 +252,15 @@ class DataProvider:
         returns: pd.Series, lower_pct: float = 0.01, upper_pct: float = 0.99
     ) -> pd.Series:
         """
-        Winsorization: 将极端值裁剪到百分位数阈值
+        Winsorization: clip extreme values to percentile thresholds
 
         Args:
-            returns: 收益率序列
-            lower_pct: 下界百分位数 (默认1%)
-            upper_pct: 上界百分位数 (默认99%)
+            returns: return series
+            lower_pct: lower percentile bound (default 1%)
+            upper_pct: upper percentile bound (default 99%)
 
         Returns:
-            清洗后的收益率序列
+            cleaned return series
         """
         if len(returns) < 10:
             return returns
@@ -272,10 +272,10 @@ class DataProvider:
         lower_bound = valid_returns.quantile(lower_pct)
         upper_bound = valid_returns.quantile(upper_pct)
 
-        # 裁剪到阈值
+        # Clip to the thresholds
         clipped = returns.clip(lower=lower_bound, upper=upper_bound)
 
-        # 记录被裁剪的数量
+        # Record how many were clipped
         n_clipped = ((returns < lower_bound) | (returns > upper_bound)).sum()
         if n_clipped > 0:
             logger.info(
@@ -292,17 +292,17 @@ class DataProvider:
         data: pd.Series, max_gap_days: int = 5
     ) -> List[Tuple[pd.Timestamp, pd.Timestamp, int]]:
         """
-        检测数据中的缺口（连续缺失）
+        Detect gaps in the data (consecutive missing values)
 
         Args:
-            data: 价格或收益率序列
-            max_gap_days: 最大允许缺口天数
+            data: price or return series
+            max_gap_days: maximum allowed gap length in days
 
         Returns:
-            缺口列表 [(start_date, end_date, gap_days), ...]
+            list of gaps [(start_date, end_date, gap_days), ...]
         """
         if data.index.freq is None:
-            # 推断频率
+            # Infer the frequency
             try:
                 inferred_freq = pd.infer_freq(data.index[:20])
                 if inferred_freq is None:
@@ -310,7 +310,7 @@ class DataProvider:
             except Exception:
                 return []
 
-        # 找到所有缺失值的位置
+        # Find the positions of all missing values
         missing_mask = data.isnull()
         gaps = []
 
@@ -337,17 +337,17 @@ class DataProvider:
     @staticmethod
     def _smart_fill_gaps(data: pd.Series, method: str = "auto") -> pd.Series:
         """
-        智能填充数据缺口
+        Smart-fill data gaps
 
         Args:
-            data: 带缺失值的序列
-            method: 填充方法
-                - 'auto': 小缺口用线性插值，大缺口用前向填充
-                - 'ffill': 前向填充
-                - 'interpolate': 线性插值
+            data: series with missing values
+            method: fill method
+                - 'auto': linear interpolation for small gaps, forward-fill for large gaps
+                - 'ffill': forward-fill
+                - 'interpolate': linear interpolation
 
         Returns:
-            填充后的序列
+            filled series
         """
         if data.isnull().sum() == 0:
             return data
@@ -357,13 +357,13 @@ class DataProvider:
         elif method == "interpolate":
             return data.interpolate(method="linear", limit_direction="both")
         elif method == "auto":
-            # 对小缺口（<=3天）用插值，大缺口用前向填充
+            # Interpolate small gaps (<=3 days); forward-fill large gaps
             filled = data.copy()
 
-            # 先前向填充
+            # Forward-fill first
             filled = filled.ffill()
 
-            # 找连续缺失<=3的区间用插值
+            # Interpolate runs with <=3 consecutive missing values
             missing_runs = (
                 filled.isnull().astype(int).groupby(filled.notnull().astype(int).cumsum()).cumsum()
             )
@@ -371,7 +371,7 @@ class DataProvider:
             small_gaps = missing_runs <= 3
             filled[small_gaps] = data[small_gaps].interpolate(method="linear")
 
-            # 最后再填充剩余的
+            # Finally fill any remaining values
             filled = filled.ffill().bfill()
 
             return filled
@@ -380,19 +380,19 @@ class DataProvider:
 
     def _validate_ticker_data(self, ticker: str, data: pd.DataFrame) -> Tuple[bool, str]:
         """
-        验证ticker数据质量
+        Validate ticker data quality
 
         Returns:
             (is_valid, error_message)
         """
         if data is None or data.empty:
-            return False, "数据为空"
+            return False, "Data is empty"
 
-        # 获取 Close 列（如果是 MultiIndex）
+        # Get the Close column (if it is a MultiIndex)
         if isinstance(data.columns, pd.MultiIndex):
             if "Close" in data.columns.get_level_values(0):
                 close_data = data["Close"]
-                # 如果还是DataFrame，取第一列
+                # If it is still a DataFrame, take the first column
                 if isinstance(close_data, pd.DataFrame):
                     close_data = close_data.iloc[:, 0]
             else:
@@ -403,33 +403,33 @@ class DataProvider:
             else:
                 close_data = data.iloc[:, 0] if len(data.columns) > 0 else data
 
-        # 确保是Series
+        # Ensure it is a Series
         if isinstance(close_data, pd.DataFrame):
             close_data = close_data.iloc[:, 0]
 
-        # 检查1: 数据量不足
-        if len(close_data) < 20:  # 至少20个交易日
-            return False, f"数据量不足({len(close_data)}天)"
+        # Check 1: insufficient data
+        if len(close_data) < 20:  # at least 20 trading days
+            return False, f"Insufficient data ({len(close_data)} days)"
 
-        # 检查2: 缺失率
+        # Check 2: missing rate
         missing_pct = close_data.isnull().sum() / len(close_data)
         if missing_pct > 0.3:
-            return False, f"缺失率{missing_pct:.1%}超过30%"
+            return False, f"Missing rate {missing_pct:.1%} exceeds 30%"
 
-        # 检查3: 价格<=0
+        # Check 3: price <= 0
         valid_prices = close_data.dropna()
         if len(valid_prices) > 0 and (valid_prices <= 0).any():
-            return False, "存在<=0的价格"
+            return False, "Contains prices <= 0"
 
-        # 检查4: 极端单日涨跌幅 (可能是股票分拆/合并)
+        # Check 4: extreme single-day move (possibly a stock split/merger)
         if len(valid_prices) > 1:
             returns = valid_prices.pct_change().dropna()
             if len(returns) > 0:
                 extreme_count = (abs(returns) > 0.5).sum()
                 if extreme_count > 0:
-                    # 允许1-2次极端值（可能是真实的市场事件）
+                    # Allow 1-2 extreme values (may be genuine market events)
                     if extreme_count > 2:
-                        return False, f"存在{extreme_count}次极端单日涨跌幅(>50%)"
+                        return False, f"Contains {extreme_count} extreme single-day moves (>50%)"
                     else:
                         logger.warning(
                             "data.validation.extreme_returns",
@@ -438,19 +438,22 @@ class DataProvider:
                             max_return=round(returns.abs().max(), 3),
                         )
 
-        # 检查5: 连续相同价格(停牌) - 放宽标准，因为某些资产可能正常停滞
+        # Check 5: consecutive identical prices (suspended trading) - relaxed threshold, since some assets may legitimately stall
         if len(valid_prices) > 10:
             price_changes = valid_prices.diff().fillna(0)
             consecutive_zeros = (price_changes == 0).rolling(window=15).sum().max()
-            if consecutive_zeros >= 15:  # 连续15天相同价格
-                return False, f"存在{int(consecutive_zeros)}天连续相同价格(可能停牌)"
+            if consecutive_zeros >= 15:  # 15 consecutive days of identical prices
+                return (
+                    False,
+                    f"Contains {int(consecutive_zeros)} days of consecutive identical prices (possibly halted)",
+                )
 
-        # 检查6: 检测大缺口
+        # Check 6: detect large gaps
         gaps = self._detect_gaps(close_data, max_gap_days=5)
         if gaps:
             total_gap_days = sum(g[2] for g in gaps)
-            if total_gap_days > 20:  # 累计缺口超过20天
-                return False, f"数据缺口过多: {len(gaps)}个缺口, 累计{total_gap_days}天"
+            if total_gap_days > 20:  # cumulative gap exceeds 20 days
+                return False, f"Too many data gaps: {len(gaps)} gaps, {total_gap_days} days total"
             else:
                 logger.info(
                     "data.validation.gaps_detected",
@@ -459,12 +462,12 @@ class DataProvider:
                     total_gap_days=total_gap_days,
                 )
 
-        # 检查7: 价格波动性异常（可能是数据错误）
+        # Check 7: abnormal price volatility (may be a data error)
         if len(valid_prices) > 30:
             returns = valid_prices.pct_change().dropna()
             if len(returns) > 0:
                 volatility = returns.std()
-                # 年化波动率 > 200% 非常异常
+                # Annualized volatility > 200% is highly abnormal
                 if volatility * np.sqrt(252) > 2.0:
                     logger.warning(
                         "data.validation.extreme_volatility",
@@ -475,22 +478,22 @@ class DataProvider:
         return True, ""
 
     def get_failed_tickers(self) -> List[Tuple[str, str]]:
-        """返回下载失败的ticker列表及失败原因"""
+        """Return the list of tickers that failed to download along with the failure reasons"""
         return self._failed_tickers.copy()
 
     # ══════════════════════════════════════════════════════════
-    #  资产价格 & 收益率（改进版：健壮的批量下载）
+    #  Asset prices & returns (improved: robust batch download)
     # ══════════════════════════════════════════════════════════
     def fetch_prices(self, force_refresh: bool = False) -> pd.DataFrame:
         """
-        下载调整后收盘价，返回 DataFrame (date × ticker)。
-        健壮版本：单个ticker失败不影响其他，支持缓存和数据验证。
+        Download adjusted close prices; returns a DataFrame (date × ticker).
+        Robust version: a single ticker's failure doesn't affect the others; supports caching and data validation.
 
         Args:
-            force_refresh: 强制刷新数据（忽略缓存）
+            force_refresh: force-refresh the data (ignore cache)
 
         Returns:
-            DataFrame: 成功下载的ticker的价格数据
+            DataFrame: price data for the tickers that downloaded successfully
         """
         if self._prices is not None and not force_refresh:
             return self._prices
@@ -513,8 +516,8 @@ class DataProvider:
         batch_start_time = time.time()
 
         print(f"\n{'='*60}")
-        print(f"数据下载开始: {len(self.tickers)} 个ticker")
-        print(f"时间范围: {start_str} 至 {end_str}")
+        print(f"Data download started: {len(self.tickers)} tickers")
+        print(f"Date range: {start_str} to {end_str}")
         print(f"{'='*60}")
 
         # Parallel fetch — yfinance is I/O bound and the per-ticker cache
@@ -535,7 +538,7 @@ class DataProvider:
                     data_type="prices",
                 )
                 if data is None:
-                    return ticker, None, "下载返回空数据"
+                    return ticker, None, "empty download data"
 
                 is_valid, error_msg = self._validate_ticker_data(ticker, data)
                 if not is_valid:
@@ -556,7 +559,7 @@ class DataProvider:
 
                 return ticker, close, None
             except Exception as e:
-                return ticker, None, f"异常: {str(e)}"
+                return ticker, None, f"Exception: {str(e)}"
 
         # Preserve deterministic per-ticker logging order by collecting
         # results in submission order. ThreadPoolExecutor.map() guarantees
@@ -567,22 +570,22 @@ class DataProvider:
         for ticker, close, error in results:
             if error is not None:
                 self._failed_tickers.append((ticker, error))
-                if error.startswith("异常:"):
+                if error.startswith("Exception:"):
                     print(f"  ✗ {ticker}: {error}")
-                elif error == "下载返回空数据":
-                    print(f"  ✗ {ticker}: 下载失败（空数据）")
+                elif error == "empty download data":
+                    print(f"  ✗ {ticker}: download failed (empty data)")
                 else:
                     logger.warning(
                         "data.fetch_prices.validation_failed",
                         ticker=ticker,
                         error=error,
                     )
-                    print(f"  ✗ {ticker}: 验证失败 - {error}")
+                    print(f"  ✗ {ticker}: validation failed - {error}")
                 continue
             successful_prices[ticker] = close
-            print(f"  ✓ {ticker}: 成功 ({len(close)} 个数据点)")
+            print(f"  ✓ {ticker}: success ({len(close)} data points)")
 
-        # 报告结果
+        # Report the results
         batch_duration = (time.time() - batch_start_time) * 1000
         logger.info(
             "data.fetch_prices.complete",
@@ -593,12 +596,12 @@ class DataProvider:
         )
 
         print(f"\n{'='*60}")
-        print("数据下载完成:")
-        print(f"  成功: {len(successful_prices)}/{len(self.tickers)}")
-        print(f"  失败: {len(self._failed_tickers)}")
+        print("Data download complete:")
+        print(f"  Success: {len(successful_prices)}/{len(self.tickers)}")
+        print(f"  Failed: {len(self._failed_tickers)}")
 
         if self._failed_tickers:
-            print("\n失败详情:")
+            print("\nFailure details:")
             for ticker, error in self._failed_tickers:
                 logger.warning("data.fetch_prices.ticker_failed", ticker=ticker, error=error)
                 print(f"  - {ticker}: {error}")
@@ -608,35 +611,35 @@ class DataProvider:
         if not successful_prices:
             logger.error("data.fetch_prices.all_failed", ticker_count=len(self.tickers))
             raise ValueError(
-                "所有ticker数据获取失败！请检查:\n"
-                "  1. 网络连接\n"
-                "  2. 股票代码是否正确\n"
-                "  3. 日期范围是否有效"
+                "Failed to fetch data for all tickers! Please check:\n"
+                "  1. Network connection\n"
+                "  2. Whether the ticker symbols are correct\n"
+                "  3. Whether the date range is valid"
             )
 
-        # 合并为 DataFrame
+        # Merge into a DataFrame
         self._prices = pd.DataFrame(successful_prices)
 
-        # 检测货币混合
+        # Detect currency mixing
         has_mixing, currency_warning = self._detect_currency_mixing(
             self._prices, list(successful_prices.keys())
         )
         if has_mixing:
             logger.warning("data.currency_mixing", message=currency_warning)
-            print(f"\n⚠️  货币警告: {currency_warning}")
+            print(f"\n⚠️  Currency warning: {currency_warning}")
 
-        # 智能填充缺口（使用前向填充+插值处理节假日差异和小缺口）
+        # Smart-fill gaps (forward-fill + interpolation to handle holiday differences and small gaps)
         for col in self._prices.columns:
             self._prices[col] = self._smart_fill_gaps(self._prices[col], method="auto")
 
-        # 移除仍有缺失的行
+        # Drop rows that still have missing values
         self._prices = self._prices.dropna()
 
         return self._prices
 
     def get_daily_returns(self, winsorize: bool = False) -> pd.DataFrame:
         """
-        计算简单日收益率 (simple/arithmetic returns).
+        Compute simple daily returns (simple/arithmetic returns).
 
         Project-wide convention: SIMPLE returns, (P_t / P_{t-1}) - 1.
         Rationale: retail UX familiarity, backtest_engine uses simple, and
@@ -644,10 +647,10 @@ class DataProvider:
         performance_attribution / drawdown.
 
         Args:
-            winsorize: 是否应用Winsorization处理极端值 (默认False)
+            winsorize: whether to apply Winsorization to handle extreme values (default False)
 
         Returns:
-            DataFrame: 日简单收益率 (date × ticker)
+            DataFrame: simple daily returns (date × ticker)
         """
         if self._returns is not None:
             return self._returns
@@ -656,7 +659,7 @@ class DataProvider:
         returns = prices.pct_change().dropna()
 
         if winsorize:
-            # 对每个ticker应用winsorization
+            # Apply winsorization to each ticker
             for col in returns.columns:
                 returns[col] = self._winsorize_returns(returns[col])
             logger.info("data.returns.winsorized", ticker_count=len(returns.columns))
@@ -665,7 +668,7 @@ class DataProvider:
         return self._returns
 
     def get_portfolio_cumulative_returns(self) -> pd.Series:
-        """按权重加权，返回组合的累计净值曲线。"""
+        """Weight by portfolio weights and return the portfolio's cumulative net-value curve."""
         ret = self.get_daily_returns()
         w = np.array([self.weights[t] for t in ret.columns])
         port_ret = ret.dot(w)
@@ -678,30 +681,30 @@ class DataProvider:
         return np.array([self.weights[t] for t in ret.columns])
 
     # ══════════════════════════════════════════════════════════
-    #  便捷属性访问器
+    #  Convenience property accessors
     # ══════════════════════════════════════════════════════════
     @property
     def prices(self) -> pd.DataFrame:
-        """便捷访问: 获取价格数据"""
+        """Convenience accessor: get price data"""
         return self.fetch_prices()
 
     @property
     def returns(self) -> pd.DataFrame:
-        """便捷访问: 获取收益率数据"""
+        """Convenience accessor: get return data"""
         return self.get_daily_returns()
 
     # ══════════════════════════════════════════════════════════
-    #  宏观因子数据（改进版：健壮下载）
+    #  Macro-factor data (improved: robust download)
     # ══════════════════════════════════════════════════════════
     def fetch_macro_prices(self, force_refresh: bool = False) -> pd.DataFrame:
         """
-        下载宏观因子价格：
-          ^TNX   — 10 年美债收益率 (利率因子)
-          DX-Y.NYB — 美元指数 (汇率因子)
-          CL=F   — WTI 原油期货 (通胀因子)
+        Download macro-factor prices:
+          ^TNX   — 10-year Treasury yield (rate factor)
+          DX-Y.NYB — US dollar index (FX factor)
+          CL=F   — WTI crude futures (inflation factor)
 
-        返回 DataFrame, columns 为可读名 ("US10Y Rate", "USD Index", "Crude Oil")
-        健壮版本：支持缓存和部分失败
+        Returns a DataFrame whose columns are readable names ("US10Y Rate", "USD Index", "Crude Oil")
+        Robust version: supports caching and partial failure
         """
         if self._macro_prices is not None and not force_refresh:
             return self._macro_prices
@@ -726,7 +729,7 @@ class DataProvider:
                 )
 
                 if data is None or data.empty:
-                    return ticker, None, "下载返回空数据"
+                    return ticker, None, "empty download data"
 
                 # Extract Close.
                 if isinstance(data.columns, pd.MultiIndex):
@@ -763,16 +766,16 @@ class DataProvider:
         if failed_macro:
             for ticker, error in failed_macro:
                 logger.warning("data.fetch_macro.ticker_failed", ticker=ticker, error=error)
-            warnings.warn(f"宏观因子部分下载失败: {failed_macro}")
+            warnings.warn(f"Some macro factors failed to download: {failed_macro}")
 
         if not successful_data:
-            # 如果全部失败，返回空 DataFrame 而不是抛出异常
+            # If all fail, return an empty DataFrame instead of raising
             logger.warning("data.fetch_macro.all_failed", duration_ms=round(duration_ms, 2))
-            warnings.warn("所有宏观因子下载失败，返回空数据")
+            warnings.warn("All macro factors failed to download, returning empty data")
             self._macro_prices = pd.DataFrame()
             return self._macro_prices
 
-        # 合并数据并前向填充
+        # Merge the data and forward-fill
         self._macro_prices = pd.DataFrame(successful_data)
         self._macro_prices = self._macro_prices.ffill().dropna(how="all")
 
@@ -786,7 +789,7 @@ class DataProvider:
         return self._macro_prices
 
     def get_macro_returns(self) -> pd.DataFrame:
-        """宏观因子的简单日收益率 (project-wide convention)."""
+        """Simple daily returns for the macro factors (project-wide convention)."""
         if self._macro_returns is not None:
             return self._macro_returns
         prices = self.fetch_macro_prices()
@@ -957,19 +960,19 @@ class DataProvider:
         return None
 
     # ══════════════════════════════════════════════════════════
-    #  成交量数据（30 日）（改进版：健壮下载）
+    #  Volume data (30-day) (improved: robust download)
     # ══════════════════════════════════════════════════════════
     def fetch_volume_30d(self, force_refresh: bool = False) -> pd.DataFrame:
         """
-        下载各持仓资产最近 30 个交易日的日成交量。
-        返回 DataFrame (date × ticker)，只包含 volume 不为 0 的 ticker。
-        加密货币（ticker 含 "-USD"）也能从 Yahoo Finance 获取成交量。
-        健壮版本：支持缓存和部分失败
+        Download each holding's daily volume over the last 30 trading days.
+        Returns a DataFrame (date × ticker) containing only tickers whose volume is non-zero.
+        Cryptocurrencies (tickers containing "-USD") also expose volume via Yahoo Finance.
+        Robust version: supports caching and partial failure
         """
         if self._volume_30d is not None and not force_refresh:
             return self._volume_30d
 
-        # 下载最近 45 天数据以确保有 30 个交易日
+        # Download the last 45 days to ensure 30 trading days are available
         end = self.end_date
         start = end - timedelta(days=45)
         start_str = start.strftime("%Y-%m-%d")
@@ -995,7 +998,7 @@ class DataProvider:
                 )
 
                 if data is None or data.empty:
-                    return ticker, None, "下载返回空数据"
+                    return ticker, None, "empty download data"
 
                 # Extract Volume column. Yahoo's MultiIndex shape can be
                 # ("Volume", ticker) or just "Volume" for single ticker.
@@ -1040,24 +1043,26 @@ class DataProvider:
             successful_volumes[ticker] = volume
 
         if failed_volumes and len(failed_volumes) > len(self.tickers) * 0.3:
-            warnings.warn(f"成交量数据部分下载失败 ({len(failed_volumes)}/{len(self.tickers)})")
+            warnings.warn(
+                f"Some volume data failed to download ({len(failed_volumes)}/{len(self.tickers)})"
+            )
 
         if not successful_volumes:
-            # 返回空 DataFrame 而不是抛出异常
+            # Return an empty DataFrame instead of raising
             self._volume_30d = pd.DataFrame()
             return self._volume_30d
 
-        # 合并数据
+        # Merge the data
         self._volume_30d = pd.DataFrame(successful_volumes)
         return self._volume_30d
 
     def get_adv_30d(self) -> pd.Series:
         """
-        30 日平均日成交量 (Average Daily Volume)。
-        返回 Series: ticker → ADV (shares)。
+        30-day Average Daily Volume (ADV).
+        Returns a Series: ticker → ADV (shares).
         """
         vol = self.fetch_volume_30d().replace([np.inf, -np.inf], np.nan).fillna(0)
-        # 使用中位数降低停牌缺口和单日异常放量对 ADV 的扭曲。
+        # Use the median to reduce distortion of ADV from suspension gaps and single-day volume spikes.
         adv = vol.median()
         adv.name = "ADV_30d"
         return adv

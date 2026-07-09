@@ -29,15 +29,16 @@ export function WeeklyDigestCard() {
       <CardHeader>
         <CardTitle>Weekly risk digest</CardTitle>
         <CardDescription>
-          每周一早上一封邮件:你的 Health Score 变化、波动、集中度和市场状态 —
-          全部来自你自己最近一次评分的确定性数字,教育性内容,随时可退订。
+          One email every Monday morning: your Health Score changes, volatility,
+          concentration, and market state — all from the deterministic numbers of your
+          own most recent score, educational content, unsubscribe anytime.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm">
-          状态:{" "}
+          Status:{" "}
           <span className={enabled ? "font-medium text-[hsl(var(--success))]" : "text-muted-foreground"}>
-            {pref.isLoading ? "…" : enabled ? "已开启" : "已关闭"}
+            {pref.isLoading ? "…" : enabled ? "Enabled" : "Disabled"}
           </span>
         </p>
         <Button
@@ -46,10 +47,10 @@ export function WeeklyDigestCard() {
           disabled={pref.isLoading || setPref.isPending}
           onClick={() => setPref.mutate(!enabled)}
         >
-          {setPref.isPending ? "保存中…" : enabled ? "关闭简报" : "开启简报"}
+          {setPref.isPending ? "Saving…" : enabled ? "Turn off digest" : "Turn on digest"}
         </Button>
         {setPref.isError && (
-          <p className="w-full text-xs text-destructive">保存失败,请稍后重试。</p>
+          <p className="w-full text-xs text-destructive">Save failed, please try again later.</p>
         )}
       </CardContent>
     </Card>

@@ -75,20 +75,20 @@ def unsubscribe_confirm(token: str = ""):
     user_id = digest_service.verify_unsubscribe_token(token or "")
     if user_id is None:
         return HTMLResponse(
-            f'<div style="{_PAGE_STYLE}"><h3>链接无效</h3><p>退订链接已损坏或过期。'
-            "你也可以在 MindMarket 的 Settings 页关闭每周简报。</p></div>",
+            f'<div style="{_PAGE_STYLE}"><h3>Invalid link</h3><p>This unsubscribe link is broken or has expired.'
+            " You can also turn off the weekly digest from the Settings page in MindMarket.</p></div>",
             status_code=400,
         )
     from urllib.parse import quote
 
     action = f"/api/v1/digest/unsubscribe?token={quote(token)}"
     return HTMLResponse(
-        f'<div style="{_PAGE_STYLE}"><h3>退订每周风险简报?</h3>'
-        "<p>确认后将不再收到 MindMarket 的每周简报,随时可在 Settings 页重新开启。</p>"
+        f'<div style="{_PAGE_STYLE}"><h3>Unsubscribe from the weekly risk digest?</h3>'
+        "<p>Once you confirm, you'll no longer receive MindMarket's weekly digest — you can re-enable it anytime from the Settings page.</p>"
         f'<form method="post" action="{action}">'
         '<button type="submit" style="padding:10px 18px;border-radius:8px;'
         "border:none;background:#0B0E11;color:#fff;font-size:15px;cursor:pointer;"
-        '">确认退订</button></form></div>'
+        '">Confirm unsubscribe</button></form></div>'
     )
 
 
@@ -97,7 +97,7 @@ def unsubscribe_apply(token: str = ""):
     user_id = digest_service.verify_unsubscribe_token(token or "")
     if user_id is None:
         return HTMLResponse(
-            f'<div style="{_PAGE_STYLE}"><h3>链接无效</h3><p>退订链接已损坏或过期。</p></div>',
+            f'<div style="{_PAGE_STYLE}"><h3>Invalid link</h3><p>This unsubscribe link is broken or has expired.</p></div>',
             status_code=400,
         )
     try:
@@ -105,13 +105,13 @@ def unsubscribe_apply(token: str = ""):
     except Exception:  # noqa: BLE001 - show an honest failure page, never a 500 trace
         _log.warning("digest.unsubscribe_failed", exc_info=True)
         return HTMLResponse(
-            f'<div style="{_PAGE_STYLE}"><h3>暂时无法退订</h3><p>请稍后重试,'
-            "或在 Settings 页关闭每周简报。</p></div>",
+            f'<div style="{_PAGE_STYLE}"><h3>Unable to unsubscribe right now</h3><p>Please try again later,'
+            " or turn off the weekly digest from the Settings page.</p></div>",
             status_code=503,
         )
     return HTMLResponse(
-        f'<div style="{_PAGE_STYLE}"><h3>已退订 ✓</h3><p>你不会再收到 MindMarket '
-        "每周风险简报。随时可以在 Settings 页重新开启。</p></div>"
+        f'<div style="{_PAGE_STYLE}"><h3>Unsubscribed ✓</h3><p>You will no longer receive the MindMarket '
+        "weekly risk digest. You can re-enable it anytime from the Settings page.</p></div>"
     )
 
 

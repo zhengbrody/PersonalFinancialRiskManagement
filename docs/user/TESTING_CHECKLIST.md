@@ -1,68 +1,68 @@
-# 🧪 MindMarket AI - 功能测试清单
+# 🧪 MindMarket AI - Feature Testing Checklist
 
 > **HISTORICAL (2026-06-23).** Manual-test checklist for the original Streamlit
 > app, retired on 2026-06-23. The split stack is verified by the automated gates
 > (`pytest backend/tests` + root `pytest` + `npm test` + Playwright E2E). Kept
 > for reference only.
 
-完成sidebar修复后，使用此清单验证所有功能是否正常工作。
+After completing the sidebar fix, use this checklist to verify that all features work correctly.
 
 ---
 
-## 📋 测试步骤
+## 📋 Test Steps
 
-### 准备工作
+### Preparation
 ```bash
 cd /Users/zhengdong/RiskManagement
 pkill -9 streamlit
 streamlit run app.py
 ```
 
-打开浏览器: `http://localhost:8501`
-强制刷新: `Cmd+Shift+R`
+Open your browser: `http://localhost:8501`
+Hard refresh: `Cmd+Shift+R`
 
 ---
 
-## ✅ 测试清单
+## ✅ Test Checklist
 
-### 1️⃣ 主页 (Home) 测试
+### 1️⃣ Home Page Test
 
-**Sidebar可见性**:
-- [ ] 左侧sidebar完整显示
-- [ ] 包含Language切换
-- [ ] 包含Weights JSON输入框
-- [ ] 包含Parameters滑块
-- [ ] 包含Run Analysis按钮
+**Sidebar visibility**:
+- [ ] The left sidebar is fully displayed
+- [ ] Includes the Language switch
+- [ ] Includes the Weights JSON input box
+- [ ] Includes the Parameters sliders
+- [ ] Includes the Run Analysis button
 
 **Welcome Page**:
-- [ ] 看到"MindMarket AI"大标题
-- [ ] 看到Quick Start Guide (3个步骤)
-- [ ] 看到"Try Example Portfolios"标题
+- [ ] See the large "MindMarket AI" title
+- [ ] See the Quick Start Guide (3 steps)
+- [ ] See the "Try Example Portfolios" heading
 
-**Example Portfolio按钮**:
-- [ ] 点击"🚀 Tech-Heavy Portfolio"
-  - Weights JSON应该更新为6个科技股
-  - Sidebar的Weights输入框应该显示新的JSON
-- [ ] 点击"🛡️ Balanced Portfolio"
-  - Weights JSON应该更新为SPY/TLT/GLD/QQQ/IWM
-- [ ] 点击"🌐 Crypto-Enhanced"
-  - Weights JSON应该包含BTC-USD和ETH-USD
+**Example Portfolio buttons**:
+- [ ] Click "🚀 Tech-Heavy Portfolio"
+  - The Weights JSON should update to 6 tech stocks
+  - The sidebar Weights input box should show the new JSON
+- [ ] Click "🛡️ Balanced Portfolio"
+  - The Weights JSON should update to SPY/TLT/GLD/QQQ/IWM
+- [ ] Click "🌐 Crypto-Enhanced"
+  - The Weights JSON should include BTC-USD and ETH-USD
 
 **Floating AI Chat**:
-- [ ] 右下角看到蓝色🤖圆形按钮
-- [ ] 按钮有脉冲光晕动画
-- [ ] 点击按钮，聊天面板从下方滑出
-- [ ] 可以在输入框输入文字
-- [ ] 点击Send或按Enter发送消息
-- [ ] 收到AI响应（目前是demo："This is a demo response..."）
-- [ ] 再次点击🤖或X按钮关闭面板
+- [ ] See the blue 🤖 circular button in the bottom-right corner
+- [ ] The button has a pulsing glow animation
+- [ ] Click the button; the chat panel slides up from the bottom
+- [ ] You can type text in the input box
+- [ ] Click Send or press Enter to send a message
+- [ ] Receive an AI response (currently a demo: "This is a demo response...")
+- [ ] Click 🤖 or the X button again to close the panel
 
 ---
 
-### 2️⃣ Run Analysis测试
+### 2️⃣ Run Analysis Test
 
-**准备**:
-- [ ] 在Sidebar的Weights JSON输入框中有有效的JSON
+**Preparation**:
+- [ ] The sidebar Weights JSON input box contains valid JSON
   ```json
   {
     "AAPL": 0.4,
@@ -71,267 +71,267 @@ streamlit run app.py
   }
   ```
 
-**执行分析**:
-- [ ] 点击Sidebar的"🚀 Run Analysis"按钮
-- [ ] 看到spinner/loading提示
-- [ ] 数据下载开始（可能需要5-30秒）
-- [ ] **期望结果**:
-  - 数据下载完成
-  - 风险计算完成
-  - 自动跳转到Overview标签页
-  - 看到分析结果
+**Run the analysis**:
+- [ ] Click the sidebar's "🚀 Run Analysis" button
+- [ ] See a spinner/loading indicator
+- [ ] Data download begins (may take 5-30 seconds)
+- [ ] **Expected result**:
+  - Data download completes
+  - Risk calculation completes
+  - Automatically switches to the Overview tab
+  - Analysis results are displayed
 
-**如果失败**:
-- 记录错误信息
-- 检查ticker是否有效（如BTC-USD在Yahoo Finance存在）
-- 检查网络连接
+**If it fails**:
+- Note the error message
+- Check whether the tickers are valid (e.g. BTC-USD exists on Yahoo Finance)
+- Check your network connection
 
 ---
 
-### 3️⃣ Overview标签页测试
+### 3️⃣ Overview Tab Test
 
-**前提**: 已成功运行分析
+**Prerequisite**: Analysis has run successfully
 
-**Sidebar持久性**:
-- [ ] 从Home切换到Overview标签
-- [ ] Sidebar仍然完整显示
-- [ ] 所有controls仍然可用
+**Sidebar persistence**:
+- [ ] Switch from Home to the Overview tab
+- [ ] The sidebar is still fully displayed
+- [ ] All controls are still available
 
-**页面内容**:
-- [ ] 看到"AI Risk Digest"（AI风险摘要）
-- [ ] 看到4个核心KPI卡片：
+**Page content**:
+- [ ] See the "AI Risk Digest"
+- [ ] See the 4 core KPI cards:
   - VaR 95%
   - Sharpe Ratio
   - Max Drawdown
   - Total Return
-- [ ] 看到Cumulative Returns图表
-- [ ] 看到Portfolio Composition饼图或条形图
+- [ ] See the Cumulative Returns chart
+- [ ] See the Portfolio Composition pie or bar chart
 
 **Floating Chat**:
-- [ ] 右下角🤖按钮仍然可见
-- [ ] 点击能正常打开/关闭
+- [ ] The 🤖 button in the bottom-right corner is still visible
+- [ ] Clicking it opens/closes normally
 
-**无旧Chat**:
-- [ ] 页面底部**没有**旧的chat输入框
-- [ ] **没有**"render_chat_popover"相关UI
+**No old Chat**:
+- [ ] There is **no** old chat input box at the bottom of the page
+- [ ] There is **no** "render_chat_popover" related UI
 
 ---
 
-### 4️⃣ Risk标签页测试
+### 4️⃣ Risk Tab Test
 
-**Sidebar持久性**:
-- [ ] 切换到Risk标签
-- [ ] Sidebar完整显示
+**Sidebar persistence**:
+- [ ] Switch to the Risk tab
+- [ ] The sidebar is fully displayed
 
-**页面内容**:
-- [ ] VaR Summary部分
-  - MC Histogram图表
-  - VaR 95%, VaR 99%, CVaR 95%指标
-- [ ] Beta Analysis部分
-  - 每个资产的beta值
-  - ✓/✗ 显著性指标
-  - t-stat和p-value
-- [ ] Stress Testing部分
-  - Market Shock场景
-  - **关键**: 不应该有"market_shock undefined"错误
-  - 显示portfolio loss
+**Page content**:
+- [ ] VaR Summary section
+  - MC Histogram chart
+  - VaR 95%, VaR 99%, CVaR 95% metrics
+- [ ] Beta Analysis section
+  - Beta value for each asset
+  - ✓/✗ significance indicator
+  - t-stat and p-value
+- [ ] Stress Testing section
+  - Market Shock scenario
+  - **Key**: there should be no "market_shock undefined" error
+  - Displays portfolio loss
 
 **Floating Chat**:
-- [ ] 🤖按钮可见并可用
+- [ ] The 🤖 button is visible and usable
 
-**无旧Chat**:
-- [ ] **没有**旧的chat输入框
+**No old Chat**:
+- [ ] There is **no** old chat input box
 
 ---
 
-### 5️⃣ Markets标签页测试
+### 5️⃣ Markets Tab Test
 
-**Sidebar持久性**:
-- [ ] 切换到Markets标签
-- [ ] Sidebar完整显示
+**Sidebar persistence**:
+- [ ] Switch to the Markets tab
+- [ ] The sidebar is fully displayed
 
-**页面内容**:
-- [ ] Market Overview部分
-  - VIX当前值
+**Page content**:
+- [ ] Market Overview section
+  - Current VIX value
   - Fear & Greed Index
-- [ ] Yield Curve（如果数据可用）
-- [ ] Macro News（如果API配置）
-- [ ] Fundamentals表格
+- [ ] Yield Curve (if data is available)
+- [ ] Macro News (if the API is configured)
+- [ ] Fundamentals table
 
 **Floating Chat**:
-- [ ] 🤖按钮可见
+- [ ] The 🤖 button is visible
 
-**无旧Chat**:
-- [ ] **没有**旧chat
+**No old Chat**:
+- [ ] There is **no** old chat
 
 ---
 
-### 6️⃣ Portfolio标签页测试
+### 6️⃣ Portfolio Tab Test
 
-**Sidebar持久性**:
-- [ ] 切换到Portfolio标签
-- [ ] Sidebar完整显示
+**Sidebar persistence**:
+- [ ] Switch to the Portfolio tab
+- [ ] The sidebar is fully displayed
 
-**页面内容**:
-- [ ] Efficient Frontier图表（如果实现）
-- [ ] Portfolio Optimization建议
-- [ ] Compliance检查（单股/行业限制）
+**Page content**:
+- [ ] Efficient Frontier chart (if implemented)
+- [ ] Portfolio Optimization suggestions
+- [ ] Compliance checks (single-stock / sector limits)
 
 **Floating Chat**:
-- [ ] 🤖按钮可见
+- [ ] The 🤖 button is visible
 
-**无旧Chat**:
-- [ ] **没有**旧chat
-
----
-
-### 7️⃣ 参数修改测试
-
-**在任意页面的Sidebar**:
-- [ ] 修改History (yr)滑块 → 应该保存到session_state
-- [ ] 修改MC Paths → 应该保存
-- [ ] 修改Horizon (d) → 应该保存
-- [ ] 修改Weights JSON
-- [ ] 再次点击"Run Analysis" → 应该用新参数重新计算
+**No old Chat**:
+- [ ] There is **no** old chat
 
 ---
 
-### 8️⃣ 跨页面导航测试
+### 7️⃣ Parameter Modification Test
 
-**测试场景**:
+**In the sidebar on any page**:
+- [ ] Change the History (yr) slider → it should save to session_state
+- [ ] Change MC Paths → it should save
+- [ ] Change Horizon (d) → it should save
+- [ ] Change the Weights JSON
+- [ ] Click "Run Analysis" again → it should recalculate with the new parameters
+
+---
+
+### 8️⃣ Cross-Page Navigation Test
+
+**Test scenario**:
 1. [ ] Home → Overview → Risk → Markets → Portfolio
-2. [ ] 每次切换，Sidebar都应该保持可见
-3. [ ] 参数设置应该在所有页面保持一致
-4. [ ] 🤖按钮在所有页面都可见
+2. [ ] On every switch, the sidebar should stay visible
+3. [ ] Parameter settings should stay consistent across all pages
+4. [ ] The 🤖 button should be visible on all pages
 
 ---
 
-### 9️⃣ Quick Actions测试（Sidebar折叠菜单）
+### 9️⃣ Quick Actions Test (Sidebar collapsible menu)
 
-**展开"⚡ Quick Actions"**:
-- [ ] 点击"📋 Load Tech Portfolio"
-  - Weights JSON应该更新
-- [ ] 点击"🛡️ Load Balanced Portfolio"
-  - Weights JSON应该更新
-- [ ] 点击"🔥 Clear Cache"
-  - 应该看到"Cache cleared!"提示
-
----
-
-### 🔟 Advanced Settings测试（Sidebar折叠菜单）
-
-**展开"🔧 Advanced"**:
-- [ ] 修改Max Stock %
-- [ ] 修改Max Sector %
-- [ ] 勾选"Enable Margin Monitoring"
-- [ ] 设置应该保存到session_state
+**Expand "⚡ Quick Actions"**:
+- [ ] Click "📋 Load Tech Portfolio"
+  - The Weights JSON should update
+- [ ] Click "🛡️ Load Balanced Portfolio"
+  - The Weights JSON should update
+- [ ] Click "🔥 Clear Cache"
+  - You should see a "Cache cleared!" message
 
 ---
 
-## 🐛 常见问题排查
+### 🔟 Advanced Settings Test (Sidebar collapsible menu)
 
-### 问题1: Sidebar不显示
-**解决**:
+**Expand "🔧 Advanced"**:
+- [ ] Change Max Stock %
+- [ ] Change Max Sector %
+- [ ] Check "Enable Margin Monitoring"
+- [ ] Settings should save to session_state
+
+---
+
+## 🐛 Common Troubleshooting
+
+### Issue 1: Sidebar not showing
+**Solution**:
 ```bash
-# 清除缓存并重启
+# Clear the cache and restart
 pkill -9 streamlit
 rm -rf ~/.streamlit/cache
 streamlit run app.py
-# 浏览器强制刷新: Cmd+Shift+R
+# Hard refresh in the browser: Cmd+Shift+R
 ```
 
-### 问题2: Example Portfolio按钮无响应
-**检查**:
-- 浏览器Console (F12) 是否有错误
-- Streamlit终端是否有错误信息
-- 尝试手动在Weights JSON输入框粘贴JSON
+### Issue 2: Example Portfolio buttons unresponsive
+**Check**:
+- Whether the browser Console (F12) shows any errors
+- Whether the Streamlit terminal shows any error messages
+- Try manually pasting JSON into the Weights JSON input box
 
-### 问题3: Run Analysis失败
-**可能原因**:
-- Ticker无效（如某些加密货币ticker在yfinance不存在）
-- 网络问题（无法连接Yahoo Finance）
-- JSON格式错误（weights总和不为1）
+### Issue 3: Run Analysis fails
+**Possible causes**:
+- Invalid ticker (e.g. some crypto tickers don't exist on yfinance)
+- Network issue (unable to reach Yahoo Finance)
+- Malformed JSON (weights don't sum to 1)
 
-**解决**:
-- 使用标准ticker (AAPL, GOOGL, SPY等)
-- 检查JSON格式
-- 查看终端错误信息
+**Solution**:
+- Use standard tickers (AAPL, GOOGL, SPY, etc.)
+- Check the JSON format
+- Review the terminal error message
 
-### 问题4: Floating Chat不显示
-**检查**:
-- 浏览器Console是否有JavaScript错误
-- 尝试不同浏览器
-- 检查浏览器是否阻止了某些脚本
+### Issue 4: Floating Chat not showing
+**Check**:
+- Whether the browser Console shows any JavaScript errors
+- Try a different browser
+- Check whether the browser is blocking certain scripts
 
-### 问题5: 数据加载慢
-**正常**: 首次运行可能需要5-30秒下载数据
-**优化**: 后续运行会使用缓存，快很多（<3秒）
-
----
-
-## ✅ 测试通过标准
-
-**所有功能正常**:
-- ✅ Sidebar在所有页面可见
-- ✅ Example portfolio按钮能更新weights
-- ✅ Run Analysis能完成分析
-- ✅ 所有4个标签页能正常显示内容
-- ✅ Floating chat按钮在所有页面可见
-- ✅ **没有**旧的chat popover
-- ✅ 参数修改后能保存
-- ✅ 无"market_shock undefined"等错误
-
-**如果有失败项**:
-1. 记录具体是哪个测试失败
-2. 记录错误信息（浏览器Console + 终端）
-3. 截图（如果可能）
-4. 告诉我，我会立即修复
+### Issue 5: Slow data loading
+**Normal**: The first run may take 5-30 seconds to download data
+**Optimization**: Subsequent runs use the cache and are much faster (<3 seconds)
 
 ---
 
-## 📊 测试结果记录
+## ✅ Test Pass Criteria
 
-**测试日期**: ___________
-**浏览器**: ___________
-**Streamlit版本**: ___________
+**All features working**:
+- ✅ Sidebar visible on all pages
+- ✅ Example portfolio buttons can update weights
+- ✅ Run Analysis can complete the analysis
+- ✅ All 4 tabs display content correctly
+- ✅ The floating chat button is visible on all pages
+- ✅ There is **no** old chat popover
+- ✅ Parameter changes are saved
+- ✅ No errors such as "market_shock undefined"
 
-| 测试项 | 通过 | 失败 | 备注 |
+**If there are any failures**:
+1. Note exactly which test failed
+2. Note the error message (browser Console + terminal)
+3. Take a screenshot (if possible)
+4. Let me know, and I'll fix it immediately
+
+---
+
+## 📊 Test Result Log
+
+**Test date**: ___________
+**Browser**: ___________
+**Streamlit version**: ___________
+
+| Test item | Pass | Fail | Notes |
 |--------|------|------|------|
-| 1. 主页 | ☐ | ☐ | |
+| 1. Home page | ☐ | ☐ | |
 | 2. Run Analysis | ☐ | ☐ | |
-| 3. Overview标签 | ☐ | ☐ | |
-| 4. Risk标签 | ☐ | ☐ | |
-| 5. Markets标签 | ☐ | ☐ | |
-| 6. Portfolio标签 | ☐ | ☐ | |
-| 7. 参数修改 | ☐ | ☐ | |
-| 8. 跨页面导航 | ☐ | ☐ | |
+| 3. Overview tab | ☐ | ☐ | |
+| 4. Risk tab | ☐ | ☐ | |
+| 5. Markets tab | ☐ | ☐ | |
+| 6. Portfolio tab | ☐ | ☐ | |
+| 7. Parameter modification | ☐ | ☐ | |
+| 8. Cross-page navigation | ☐ | ☐ | |
 | 9. Quick Actions | ☐ | ☐ | |
 | 10. Advanced Settings | ☐ | ☐ | |
 
-**总体评分**: _____ / 10
+**Overall score**: _____ / 10
 
 ---
 
-## 🎯 下一步建议
+## 🎯 Next-Step Suggestions
 
-### 如果所有测试通过 ✅
-项目的**核心功能**已经完成！可以考虑：
-1. 完善Floating Chat的AI集成（连接真实AI后端）
-2. 添加更多example portfolios
-3. 实施REDESIGN.md中的UI改进
-4. 添加更多risk metrics
-5. 部署到云端
+### If all tests pass ✅
+The project's **core features** are complete! Consider:
+1. Finishing the Floating Chat's AI integration (connect a real AI backend)
+2. Adding more example portfolios
+3. Implementing the UI improvements in REDESIGN.md
+4. Adding more risk metrics
+5. Deploying to the cloud
 
-### 如果有测试失败 ❌
-1. 记录失败的具体测试和错误
-2. 提供给我，我会立即修复
-3. 重新测试
+### If there are test failures ❌
+1. Note the specific failing test and error
+2. Send them to me, and I'll fix them immediately
+3. Re-test
 
 ---
 
-**开始测试吧！** 🚀
+**Let's start testing!** 🚀
 
-完成后告诉我：
-- 有多少项通过
-- 哪些项失败（如果有）
-- 你想优先改进什么功能
+When you're done, let me know:
+- How many items passed
+- Which items failed (if any)
+- What feature you'd like to improve first

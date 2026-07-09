@@ -49,12 +49,12 @@ export function ApiBalanceCard({ data, loading }: { data?: AdminBalances; loadin
           <span>API balance</span>
           {anyLow && (
             <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
-              ⚠ 低余量 · 该充值
+              ⚠ Low balance · top up
             </span>
           )}
         </CardTitle>
         <CardDescription>
-          每 45 秒刷新 · DeepSeek 实时余额,Claude 为估算(你的充值额 − 已用)
+          Refreshes every 45s · DeepSeek is a live balance, Claude is an estimate (your top-up − spent)
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3 sm:grid-cols-2">
@@ -86,11 +86,11 @@ function ProviderBalance({ p }: { p: BalanceProvider }) {
       {!p.configured ? (
         <p className="mt-2 text-xs text-muted-foreground">
           {p.provider.startsWith("Claude")
-            ? "未配置 — 在 EC2 .env 设 ANTHROPIC_TOPUP_USD(你充值的 Claude 额度)"
-            : "未配置 — 缺 DEEPSEEK_API_KEY"}
+            ? "Not configured — set ANTHROPIC_TOPUP_USD in EC2 .env (the Claude credit you topped up)"
+            : "Not configured — missing DEEPSEEK_API_KEY"}
         </p>
       ) : p.error ? (
-        <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">暂时取不到余额({p.error})</p>
+        <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">Balance temporarily unavailable ({p.error})</p>
       ) : (
         <>
           <p className={cn("mt-1 font-mono text-2xl font-semibold tabular-nums", tone)}>
@@ -98,10 +98,10 @@ function ProviderBalance({ p }: { p: BalanceProvider }) {
           </p>
           <p className="text-xs text-muted-foreground">
             {p.source === "estimate"
-              ? `充 ${money(p.topped_up)} · 已用 ${money(p.spent)}`
+              ? `Topped up ${money(p.topped_up)} · spent ${money(p.spent)}`
               : topped > 0
-                ? `含充值 ${money(p.topped_up)}`
-                : "可用余额"}
+                ? `Includes top-up ${money(p.topped_up)}`
+                : "Available balance"}
           </p>
           {topped > 0 && (
             <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
@@ -111,7 +111,7 @@ function ProviderBalance({ p }: { p: BalanceProvider }) {
               />
             </div>
           )}
-          {p.low && <p className={cn("mt-1.5 text-xs font-medium", tone)}>⚠ 余量偏低 — 建议充值</p>}
+          {p.low && <p className={cn("mt-1.5 text-xs font-medium", tone)}>⚠ Running low — consider topping up</p>}
         </>
       )}
       {/* Claude has no balance API → owner enters the new balance after a top-up
@@ -133,7 +133,7 @@ function ClaudeTopupEditor() {
         onClick={() => setOpen(true)}
         className="mt-2 text-xs text-primary hover:underline"
       >
-        ✎ 充值后更新余额
+        ✎ Update balance after top-up
       </button>
     );
   }
@@ -154,7 +154,7 @@ function ClaudeTopupEditor() {
         min="0"
         value={val}
         onChange={(e) => setVal(e.target.value)}
-        placeholder="新余额 $"
+        placeholder="New balance $"
         autoFocus
         className="w-28 rounded border border-border bg-background px-2 py-1 text-sm tabular-nums"
       />
@@ -163,16 +163,16 @@ function ClaudeTopupEditor() {
         disabled={mut.isPending}
         className="rounded bg-primary px-2 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
       >
-        {mut.isPending ? "…" : "保存"}
+        {mut.isPending ? "…" : "Save"}
       </button>
       <button
         type="button"
         onClick={() => setOpen(false)}
         className="text-xs text-muted-foreground hover:underline"
       >
-        取消
+        Cancel
       </button>
-      {mut.isError && <span className="text-xs text-red-600 dark:text-red-400">保存失败</span>}
+      {mut.isError && <span className="text-xs text-red-600 dark:text-red-400">Save failed</span>}
     </form>
   );
 }

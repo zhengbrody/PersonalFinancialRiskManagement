@@ -1,7 +1,7 @@
 """
 tests/integration/test_risk_pipeline.py
-集成测试：DataProvider → RiskEngine 完整管道
-使用合成数据，不依赖网络。
+Integration tests: DataProvider → RiskEngine full pipeline
+Uses synthetic data; no network dependency.
 """
 
 from unittest.mock import patch
@@ -99,7 +99,7 @@ def risk_engine(data_provider):
 
 
 class TestDataProviderPipeline:
-    """DataProvider 数据管道测试"""
+    """DataProvider data-pipeline tests"""
 
     def test_returns_shape_and_columns(self, data_provider, weights):
         returns = data_provider.get_daily_returns()
@@ -120,7 +120,7 @@ class TestDataProviderPipeline:
 
 
 class TestFullRiskPipeline:
-    """DataProvider → RiskEngine.run() 完整管道"""
+    """DataProvider → RiskEngine.run() full pipeline"""
 
     @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     @patch("data_provider.yf.download", side_effect=_mock_yf_download)
@@ -169,7 +169,7 @@ class TestFullRiskPipeline:
 
 
 class TestMarginCall:
-    """保证金预警计算"""
+    """Margin-call warning calculation"""
 
     @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     @patch("data_provider.yf.download", side_effect=_mock_yf_download)
@@ -194,7 +194,7 @@ class TestMarginCall:
 
 
 class TestComplianceWorkflow:
-    """风控合规检查集成测试"""
+    """Risk-compliance check integration tests"""
 
     @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     @patch("data_provider.yf.download", side_effect=_mock_yf_download)
@@ -241,7 +241,7 @@ class TestComplianceWorkflow:
 
 
 class TestEfficientFrontier:
-    """有效前沿计算"""
+    """Efficient-frontier calculation"""
 
     @patch("data_provider.yf.download", side_effect=_mock_yf_download)
     @patch("data_provider.yf.download", side_effect=_mock_yf_download)

@@ -1,5 +1,5 @@
 """
-测试日志系统
+Tests for the logging system
 """
 
 import json
@@ -13,22 +13,22 @@ from logging_config import get_logger, setup_logging
 
 @pytest.fixture(scope="module")
 def setup_test_logging():
-    """在测试开始时设置日志"""
+    """Set up logging at the start of the tests"""
     setup_logging()
     yield
-    # 测试后清理不需要（日志文件可以保留）
+    # No cleanup needed after tests (the log file can be kept)
 
 
 def test_logging_setup(setup_test_logging):
-    """测试日志配置成功"""
+    """Test that logging is configured successfully"""
     logger = get_logger("test")
 
-    # 应该不抛异常
+    # Should not raise
     logger.info("test_message", key="value")
 
 
 def test_logger_creation():
-    """测试可以创建多个logger"""
+    """Test that multiple loggers can be created"""
     logger1 = get_logger("test.module1")
     logger2 = get_logger("test.module2")
 
@@ -37,7 +37,7 @@ def test_logger_creation():
 
 
 def test_log_levels(setup_test_logging):
-    """测试不同日志级别"""
+    """Test the different log levels"""
     logger = get_logger("test.levels")
 
     logger.debug("debug_message", level="debug")
@@ -47,7 +47,7 @@ def test_log_levels(setup_test_logging):
 
 
 def test_log_with_context(setup_test_logging):
-    """测试日志包含上下文信息"""
+    """Test that logs include context information"""
     logger = get_logger("test.context")
 
     logger.info(
@@ -56,12 +56,12 @@ def test_log_with_context(setup_test_logging):
 
 
 def test_json_log_format(setup_test_logging):
-    """测试日志是JSON格式"""
+    """Test that logs are in JSON format"""
     logger = get_logger("test.json")
 
     logger.info("test_event", ticker="AAPL", price=150.0)
 
-    # 读取日志文件最后一行
+    # Read the last line of the log file
     log_file = Path("logs/app.log")
     assert log_file.exists(), "Log file should exist"
 
@@ -70,14 +70,14 @@ def test_json_log_format(setup_test_logging):
         if len(lines) > 0:
             last_line = lines[-1]
 
-            # 验证是有效的JSON
+            # Verify it is valid JSON
             log_entry = json.loads(last_line)
             assert "message" in log_entry or "event" in log_entry
 
 
 def test_log_rotation_config():
-    """测试日志滚动配置"""
-    # 验证配置了RotatingFileHandler
+    """Test the log rotation configuration"""
+    # Verify a RotatingFileHandler is configured
     root_logger = logging.getLogger()
     handlers = [
         h for h in root_logger.handlers if isinstance(h, logging.handlers.RotatingFileHandler)
@@ -89,14 +89,14 @@ def test_log_rotation_config():
 
 
 def test_log_directory_creation():
-    """测试日志目录自动创建"""
+    """Test that the log directory is created automatically"""
     log_dir = Path("logs")
     assert log_dir.exists(), "Log directory should be created automatically"
     assert log_dir.is_dir(), "logs should be a directory"
 
 
 def test_exception_logging(setup_test_logging):
-    """测试异常日志记录"""
+    """Test exception logging"""
     logger = get_logger("test.exception")
 
     try:
@@ -106,20 +106,20 @@ def test_exception_logging(setup_test_logging):
 
 
 def test_performance_metrics(setup_test_logging):
-    """测试性能指标日志"""
+    """Test performance-metrics logging"""
     logger = get_logger("test.performance")
 
     import time
 
     start = time.time()
-    time.sleep(0.01)  # 模拟操作
+    time.sleep(0.01)  # Simulate an operation
     duration_ms = (time.time() - start) * 1000
 
     logger.info("operation.complete", operation="test_operation", duration_ms=round(duration_ms, 2))
 
 
 def test_multiple_fields(setup_test_logging):
-    """测试多字段日志"""
+    """Test multi-field logging"""
     logger = get_logger("test.multifield")
 
     logger.info(

@@ -1,16 +1,16 @@
 """
 market_intelligence.py
-市场情报模块 v2.0
+Market intelligence module v2.0
 ──────────────────────────────────────────────────────────
-功能：
-  1. 国际宏观新闻聚合（RSS + yfinance）
-  2. 持仓股票基本面数据（P/E、市值、EPS、股息率等）
-  3. VIX 恐慌指数 & 收益率曲线
-  4. AI 综合风险简报生成
+Features:
+  1. International macro news aggregation (RSS + yfinance)
+  2. Holdings fundamentals (P/E, market cap, EPS, dividend yield, etc.)
+  3. VIX fear index & yield curve
+  4. AI comprehensive risk briefing generation
   5. CNN Fear & Greed Index
   6. Insider Trading + Technical Signals
-  7. Reddit 散户情绪 (Apify)
-  8. FMP 财报电话会议逐字稿 + Claude 深度分析
+  7. Reddit retail sentiment (Apify)
+  8. FMP earnings-call transcripts + Claude deep analysis
 """
 
 import logging
@@ -65,10 +65,10 @@ _http_session = _build_http_session()
 
 
 # ══════════════════════════════════════════════════════════════
-#  1. 国际宏观新闻聚合
+#  1. International macro news aggregation
 # ══════════════════════════════════════════════════════════════
 
-# RSS 源列表：覆盖美联储、全球宏观、地缘政治
+# RSS feed list: covers the Fed, global macro, and geopolitics
 MACRO_RSS_FEEDS = {
     "Reuters Business": "https://www.rss.app/feeds/v1.1/tgSjPfjTQYNME2cZ.json",
     "CNBC Economy": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258",
@@ -94,7 +94,7 @@ def _fetch_single_rss(
 
         content_type = resp.headers.get("Content-Type", "")
 
-        # JSON feed (rss.app 格式)
+        # JSON feed (rss.app format)
         if "json" in url or "json" in content_type:
             data = resp.json()
             items = data.get("items", [])
@@ -109,7 +109,7 @@ def _fetch_single_rss(
                     }
                 )
         else:
-            # XML RSS 解析（轻量级，不依赖 feedparser）
+            # XML RSS parsing (lightweight, no feedparser dependency)
             items = _parse_rss_xml(resp.text, per_source_limit)
             for item in items:
                 item["source"] = source_name
@@ -123,8 +123,8 @@ def _fetch_single_rss(
 
 def fetch_macro_news_rss(max_items: int = 30, timeout: int = 8) -> List[Dict]:
     """
-    从多个 RSS 源抓取全球宏观新闻。
-    返回 [{source, title, link, published, summary}] 按时间降序。
+    Fetch global macro news from multiple RSS feeds.
+    Returns [{source, title, link, published, summary}] sorted newest-first.
     Uses ThreadPoolExecutor to fetch all RSS feeds concurrently.
     """
     all_items = []
@@ -143,15 +143,15 @@ def fetch_macro_news_rss(max_items: int = 30, timeout: int = 8) -> List[Dict]:
             except Exception:
                 continue
 
-    # 按时间排序（最新在前）
+    # Sort by time (newest first)
     all_items.sort(key=lambda x: x.get("published", ""), reverse=True)
     return all_items[:max_items]
 
 
 def _parse_rss_xml(xml_text: str, max_items: int = 10) -> List[Dict]:
-    """简单的 XML RSS 解析，不依赖外部库。"""
+    """Simple XML RSS parsing, no external libraries required."""
     items = []
-    # 匹配 <item> 或 <entry> 块
+    # Match <item> or <entry> blocks
     item_pattern = re.compile(r"<(?:item|entry)>(.*?)</(?:item|entry)>", re.DOTALL)
     title_pattern = re.compile(r"<title[^>]*>(.*?)</title>", re.DOTALL)
     link_pattern = re.compile(
@@ -181,7 +181,7 @@ def _parse_rss_xml(xml_text: str, max_items: int = 10) -> List[Dict]:
 
         desc_m = desc_pattern.search(block)
         summary = _strip_cdata(desc_m.group(1))[:200] if desc_m else ""
-        # 移除 HTML 标签
+        # Strip HTML tags
         summary = re.sub(r"<[^>]+>", "", summary).strip()
 
         items.append(
@@ -197,7 +197,7 @@ def _parse_rss_xml(xml_text: str, max_items: int = 10) -> List[Dict]:
 
 
 def _strip_cdata(text: str) -> str:
-    """移除 CDATA 包裹。"""
+    """Strip the CDATA wrapper."""
     text = re.sub(r"<!\[CDATA\[", "", text)
     text = re.sub(r"\]\]>", "", text)
     return text.strip()
@@ -205,7 +205,7 @@ def _strip_cdata(text: str) -> str:
 
 def fetch_yfinance_market_news(max_items: int = 10) -> List[Dict]:
     """
-    通过 yfinance 获取市场级别新闻（SPY/^GSPC 的新闻通常是宏观性质的）。
+    Fetch market-level news via yfinance (SPY/^GSPC news is usually macro in nature).
     """
     items = []
     for symbol in ["SPY", "^GSPC", "^VIX"]:
@@ -231,11 +231,11 @@ def fetch_yfinance_market_news(max_items: int = 10) -> List[Dict]:
 
 
 def get_all_macro_news(max_items: int = 30) -> List[Dict]:
-    """合并所有宏观新闻源。"""
+    """Merge all macro news sources."""
     rss_news = fetch_macro_news_rss(max_items=max_items)
     yf_news = fetch_yfinance_market_news(max_items=10)
 
-    # 去重（按标题前 40 字符）
+    # Deduplicate (by the first 40 characters of the title)
     seen = set()
     merged = []
     for item in rss_news + yf_news:
@@ -248,7 +248,7 @@ def get_all_macro_news(max_items: int = 30) -> List[Dict]:
 
 
 # ══════════════════════════════════════════════════════════════
-#  2. 持仓基本面数据
+#  2. Holdings fundamentals
 # ══════════════════════════════════════════════════════════════
 
 FUNDAMENTAL_FIELDS = {
@@ -281,7 +281,7 @@ def _fetch_single_fundamental(tk: str) -> Optional[tuple]:
         for field, label in FUNDAMENTAL_FIELDS.items():
             val = info.get(field)
             row[label] = val
-        # 额外计算：距 52 周高点跌幅
+        # Extra calculation: drawdown from the 52-week high
         high = info.get("fiftyTwoWeekHigh")
         price = info.get("currentPrice") or info.get("regularMarketPrice")
         if high and price and high > 0:
@@ -293,9 +293,9 @@ def _fetch_single_fundamental(tk: str) -> Optional[tuple]:
 
 def fetch_fundamentals(tickers: List[str]) -> pd.DataFrame:
     """
-    批量获取持仓股票的基本面数据。
-    返回 DataFrame: index=ticker, columns=基本面指标。
-    跳过加密货币（-USD 后缀）。
+    Batch-fetch fundamentals for the holdings.
+    Returns a DataFrame: index=ticker, columns=fundamental metrics.
+    Skips cryptocurrencies (-USD suffix).
     Uses ThreadPoolExecutor to fetch all tickers in parallel.
     """
     rows = {}
@@ -320,13 +320,13 @@ def fetch_fundamentals(tickers: List[str]) -> pd.DataFrame:
 
 
 def format_fundamentals_for_display(df: pd.DataFrame) -> pd.DataFrame:
-    """格式化基本面数据用于 UI 展示。"""
+    """Format the fundamentals data for UI display."""
     if df.empty:
         return df
 
     display = df.copy()
 
-    # 格式化特定列
+    # Format specific columns
     fmt_pct = ["Div Yield", "Rev Growth", "Earn Growth", "Profit Margin", "ROE", "% from 52W High"]
     fmt_ratio = ["P/E (TTM)", "P/E (Fwd)", "Beta (5Y)", "D/E Ratio", "Current Ratio"]
     fmt_dollar = ["EPS (TTM)", "EPS (Fwd)", "52W High", "52W Low"]
@@ -361,7 +361,7 @@ def format_fundamentals_for_display(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _fmt_market_cap(val) -> str:
-    """格式化市值为可读字符串。"""
+    """Format the market cap as a human-readable string."""
     if pd.isna(val) or not isinstance(val, (int, float)):
         return "—"
     if val >= 1e12:
@@ -374,7 +374,7 @@ def _fmt_market_cap(val) -> str:
 
 
 # ══════════════════════════════════════════════════════════════
-#  3. VIX 恐慌指数 & 收益率曲线
+#  3. VIX fear index & yield curve
 # ══════════════════════════════════════════════════════════════
 
 
@@ -385,7 +385,7 @@ def _fetch_vix_data_uncached(period: str = "1y") -> pd.DataFrame:
         if isinstance(vix.columns, pd.MultiIndex):
             vix = vix.droplevel(1, axis=1) if vix.columns.nlevels > 1 else vix
         if "Close" not in vix.columns:
-            # 可能列名为 ticker
+            # The column may be named after the ticker
             vix.columns = ["Open", "High", "Low", "Close", "Volume"][: len(vix.columns)]
 
         df = pd.DataFrame(
@@ -437,7 +437,7 @@ def _get_vix_current_uncached() -> Dict:
 
         change = (current - prev_close) / prev_close if current and prev_close else None
 
-        # VIX 等级判定
+        # VIX level classification
         if current is None:
             level = "N/A"
             level_icon = "⚪"
@@ -485,15 +485,15 @@ def get_vix_current() -> Dict:
         return _get_vix_current_uncached()
 
 
-# 美债收益率曲线关键期限
+# Key maturities of the US Treasury yield curve
 YIELD_CURVE_TICKERS = {
-    "^IRX": "3M",  # 3 个月 T-Bill
-    "^FVX": "5Y",  # 5 年期
-    "^TNX": "10Y",  # 10 年期
-    "^TYX": "30Y",  # 30 年期
+    "^IRX": "3M",  # 3-month T-Bill
+    "^FVX": "5Y",  # 5-year
+    "^TNX": "10Y",  # 10-year
+    "^TYX": "30Y",  # 30-year
 }
 
-# 更完整的收益率曲线（通过 FRED 或 yfinance）
+# A fuller yield curve (via FRED or yfinance)
 YIELD_TICKERS_FULL = {
     "^IRX": ("3M", 0.25),
     "^FVX": ("5Y", 5.0),
@@ -507,7 +507,7 @@ def _fetch_yield_curve_uncached() -> Tuple[pd.DataFrame, Dict]:
     tickers = list(YIELD_TICKERS_FULL.keys())
 
     try:
-        # 下载 90 天数据
+        # Download 90 days of data
         raw = yf.download(
             tickers,
             period="90d",
@@ -527,12 +527,12 @@ def _fetch_yield_curve_uncached() -> Tuple[pd.DataFrame, Dict]:
         if close.empty:
             return pd.DataFrame(), {}
 
-        # 当前收益率
+        # Current yields
         current = close.iloc[-1]
-        # 30天前
+        # 30 days ago
         idx_30d = max(0, len(close) - 22)
         month_ago = close.iloc[idx_30d]
-        # 90天前
+        # 90 days ago
         quarter_ago = close.iloc[0]
 
         rows = []
@@ -550,7 +550,7 @@ def _fetch_yield_curve_uncached() -> Tuple[pd.DataFrame, Dict]:
 
         curve_df = pd.DataFrame(rows)
 
-        # 分析
+        # Analysis
         analysis = {}
         c3m = current.get("^IRX")
         c10y = current.get("^TNX")
@@ -1007,7 +1007,7 @@ def fetch_macro_releases(max_age_days: int = 60) -> List[dict]:
 
 
 # ══════════════════════════════════════════════════════════════
-#  4. AI 综合风险简报
+#  4. AI comprehensive risk briefing
 # ══════════════════════════════════════════════════════════════
 
 
@@ -1023,48 +1023,40 @@ def build_ai_risk_briefing(
     lang: str = "en",
 ) -> str:
     """
-    综合所有维度的数据，生成结构化的 AI 风险简报提示词。
-    返回文本供 LLM 生成最终简报。
+    Combine data across all dimensions into a structured AI risk-briefing prompt.
+    Returns the text for the LLM to generate the final briefing.
     """
     sections = []
 
-    use_zh = lang == "zh"
-
     # ── A. Market sentiment overview ────────────────────────────
-    sections.append("## A. 市场情绪概览" if use_zh else "## A. Market Sentiment Overview")
+    sections.append("## A. Market Sentiment Overview")
 
     if vix_info.get("current") is not None:
         vix_val = vix_info["current"]
         vix_change = vix_info.get("change")
         change_str = f" ({vix_change:+.1%} vs prev close)" if vix_change else ""
-        label = "VIX 恐慌指数" if use_zh else "VIX fear index"
+        label = "VIX fear index"
         sections.append(f"  {label}: {vix_val:.2f}{change_str} - {vix_info['level']}")
 
     if yield_analysis:
         status = yield_analysis.get("curve_status", "N/A")
         spread = yield_analysis.get("3M-10Y Spread")
         spread_str = f", 3M-10Y spread: {spread:+.2f}%" if spread is not None else ""
-        label = "收益率曲线" if use_zh else "Yield curve"
+        label = "Yield curve"
         sections.append(f"  {label}: {status}{spread_str}")
 
     sections.append("")
 
     # ── B. Macro news summary ───────────────────────────────────
     if macro_news:
-        sections.append(
-            "## B. 最新宏观新闻（前 10 条）" if use_zh else "## B. Latest Macro News (Top 10)"
-        )
+        sections.append("## B. Latest Macro News (Top 10)")
         for i, item in enumerate(macro_news[:10], 1):
             sections.append(f"  {i}. [{item['source']}] {item['title']}")
         sections.append("")
 
     # ── C. Holdings fundamentals snapshot ───────────────────────
     if fundamentals_df is not None and not fundamentals_df.empty:
-        sections.append(
-            "## C. 持仓基本面快照（前 10 大持仓）"
-            if use_zh
-            else "## C. Holdings Fundamentals Snapshot (Top 10)"
-        )
+        sections.append("## C. Holdings Fundamentals Snapshot (Top 10)")
         top_tickers = sorted(weights, key=lambda x: -weights[x])[:10]
         for tk in top_tickers:
             if tk in fundamentals_df.index:
@@ -1093,35 +1085,25 @@ def build_ai_risk_briefing(
         sections.append("")
 
     # ── D. Quantitative risk metrics ────────────────────────────
-    sections.append("## D. 核心量化风险指标" if use_zh else "## D. Core Quantitative Risk Metrics")
+    sections.append("## D. Core Quantitative Risk Metrics")
     sections.append(
         f"  VaR 95%: {report.var_95:.2%} | VaR 99%: {report.var_99:.2%} | CVaR 95%: {report.cvar_95:.2%}"
     )
     sections.append(
-        (
-            f"  年化波动率: {report.annual_volatility:.2%} | 夏普: {report.sharpe_ratio:.2f} | 最大回撤: {report.max_drawdown:.2%}"
-            if use_zh
-            else f"  Annual volatility: {report.annual_volatility:.2%} | Sharpe: {report.sharpe_ratio:.2f} | Max drawdown: {report.max_drawdown:.2%}"
-        )
+        f"  Annual volatility: {report.annual_volatility:.2%} | Sharpe: {report.sharpe_ratio:.2f} | Max drawdown: {report.max_drawdown:.2%}"
     )
-    sections.append(
-        f"  压力损失: {report.stress_loss:.2%}"
-        if use_zh
-        else f"  Stress loss: {report.stress_loss:.2%}"
-    )
+    sections.append(f"  Stress loss: {report.stress_loss:.2%}")
 
     if report.margin_call_info and report.margin_call_info.get("has_margin"):
         mi = report.margin_call_info
         sections.append(
-            f"  杠杆: {mi['leverage']:.2f}x | 距强平: {mi['distance_to_call_pct']:.1%}"
-            if use_zh
-            else f"  Leverage: {mi['leverage']:.2f}x | Distance to margin call: {mi['distance_to_call_pct']:.1%}"
+            f"  Leverage: {mi['leverage']:.2f}x | Distance to margin call: {mi['distance_to_call_pct']:.1%}"
         )
     sections.append("")
 
     # ── E. Sentiment scores ─────────────────────────────────────
     if sentiment_data:
-        sections.append("## E. 个股情绪评分" if use_zh else "## E. Single-Name Sentiment Scores")
+        sections.append("## E. Single-Name Sentiment Scores")
         for tk, data in sorted(sentiment_data.items(), key=lambda x: x[1]["score"]):
             sections.append(f"  {tk}: {data['score']:+d}/10 — {data['summary'][:60]}")
         sections.append("")
@@ -1145,11 +1127,7 @@ def build_ai_risk_briefing(
         if not focused:
             focused = macro_releases[:6]
         if focused:
-            sections.append(
-                "## F. 最新宏观经济数据（FRED）"
-                if use_zh
-                else "## F. Recent Macroeconomic Releases (FRED)"
-            )
+            sections.append("## F. Recent Macroeconomic Releases (FRED)")
             for row in focused:
                 series = row.get("Series", "?")
                 latest = row.get("Latest", "--")
@@ -1159,19 +1137,8 @@ def build_ai_risk_briefing(
                 sections.append(f"  {series}{fred_tag}: {latest} as of {date}")
             sections.append("")
 
-    # ── 生成提示 ──────────────────────────────────────────────
-    if use_zh:
-        instruction = """## 请求
-基于以上所有信息，生成一份简洁的综合风险简报（3-5 段），包括：
-1. **市场环境判断** — VIX、收益率曲线、宏观新闻的综合含义
-2. **持仓风险诊断** — 基于基本面数据，哪些持仓估值偏高/低？哪些有增长动力？
-3. **量化风险警示** — VaR、压力损失、杠杆等量化指标的含义
-4. **可操作建议** — 基于当前市场环境，建议的具体调仓/对冲行动
-5. **关键监控事项** — 未来一周需要重点关注的事件或指标
-
-语气：机构晨会简报风格，简洁有力，引用具体数字。"""
-    else:
-        instruction = """## Request
+    # ── Generation prompt ──────────────────────────────────────
+    instruction = """## Request
 Based on all the information above, generate a concise comprehensive risk briefing (3-5 paragraphs):
 1. **Market Environment** — What VIX, yield curve, and macro news collectively signal
 2. **Holdings Risk Diagnosis** — Which holdings are overvalued/undervalued based on fundamentals? Growth catalysts?
@@ -1195,7 +1162,7 @@ def build_market_intelligence_context(
     fear_greed_data: Optional[Dict] = None,
 ) -> str:
     """
-    构建市场情报文本，注入到 AI 聊天的系统上下文中。
+    Build the market-intelligence text injected into the AI chat's system context.
     """
     lines = []
 
@@ -1287,7 +1254,7 @@ def build_market_intelligence_context(
 
 
 # ══════════════════════════════════════════════════════════════
-#  5. 简易 DCF 估值 (Gordon Growth Model)
+#  5. Simple DCF valuation (Gordon Growth Model)
 # ══════════════════════════════════════════════════════════════
 
 
@@ -1641,7 +1608,7 @@ def compute_technical_signals(prices: pd.DataFrame) -> pd.DataFrame:
 
 
 # ══════════════════════════════════════════════════════════════
-#  8. Reddit 散户情绪（Apify）
+#  8. Reddit retail sentiment (Apify)
 # ══════════════════════════════════════════════════════════════
 
 
@@ -1875,7 +1842,7 @@ def fetch_stock_news_fmp(
 
 
 # ══════════════════════════════════════════════════════════════
-#  9. FMP 财报电话会议逐字稿 + Claude 深度分析
+#  9. FMP earnings-call transcripts + Claude deep analysis
 # ══════════════════════════════════════════════════════════════
 
 FMP_BASE = "https://financialmodelingprep.com/stable"

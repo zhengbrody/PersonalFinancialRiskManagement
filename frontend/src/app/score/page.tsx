@@ -167,12 +167,12 @@ export default function ScorePage() {
             disabled={!canLoadBook}
             onClick={loadMyHoldings}
           >
-            从我的持仓开始
+            Start from my holdings
           </Button>
           <span className="text-xs text-muted-foreground">
             {canLoadBook
-              ? "载入真实账本(按最新收盘价折算),再动手调仓。"
-              : "等待持仓与最新价格加载…"}
+              ? "Load your real book (valued at the latest close), then adjust the mix."
+              : "Waiting for holdings and latest prices to load…"}
           </span>
         </div>
       )}
@@ -246,7 +246,7 @@ export default function ScorePage() {
         />
         {signedIn && riskPref !== 3 && (
           <span className="text-xs text-muted-foreground">
-            基线按偏好 3 评分 — 改动此值本身也会计入对比差异。
+            The baseline is scored at preference 3 — changing this value will itself show up in the comparison.
           </span>
         )}
       </div>
@@ -316,9 +316,9 @@ export default function ScorePage() {
           {resultArea}
           <details id="whatif" className="group scroll-mt-24 rounded-xl border border-border bg-card">
             <summary className="flex cursor-pointer items-center gap-2 px-5 py-3 text-sm font-medium">
-              <span>调仓沙盘 · What-if lab</span>
+              <span>What-if lab</span>
               <span className="text-xs font-normal text-muted-foreground">
-                — 载入你的持仓,改几个数字,看分数和风险怎么变(不改动真实账本)
+                — load your holdings, change a few numbers, and see how the score and risk move (your real book stays untouched)
               </span>
             </summary>
             <div className="border-t border-border p-5">{whatIfForm}</div>
