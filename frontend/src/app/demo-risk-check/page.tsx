@@ -28,7 +28,7 @@ export const metadata: Metadata = {
       "Score a sample portfolio and stress a high-growth book in 30 seconds — no sign-in. Deterministic risk math, not AI guesswork.",
     url: `${SITE_URL}/demo-risk-check`,
     siteName: "MindMarket",
-    images: ["/og.jpg"],
+    images: ["/og.jpg?v=2"],
   },
   twitter: { card: "summary_large_image" },
 };

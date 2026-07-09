@@ -1,29 +1,45 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#0B0E11"/>
       <stop offset="1" stop-color="#10171D"/>
     </linearGradient>
-    <linearGradient id="glow" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#0B7285" stop-opacity=".28"/>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#0B7285" stop-opacity="0.30"/>
       <stop offset="1" stop-color="#0B7285" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="goldline" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#D4A017" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#D4A017"/>
     </linearGradient>
   </defs>
-  <rect width="1200" height="1200" fill="url(#bg)"/>
-  <g transform="translate(0,285)">
-    <circle cx="1050" cy="-40" r="360" fill="url(#glow)"/>
-    <g transform="translate(84,76) scale(0.30)">
-      <rect width="512" height="512" rx="96" fill="#0B0E11" stroke="#1E2A33" stroke-width="6"/>
-      <circle cx="256" cy="256" r="188" fill="#0B7285"/>
-      <path d="M128 344V168h52l76 108 76-108h52v176h-52V250l-58 82h-36l-58-82v94h-52z" fill="#F8FAFC"/>
-      <path d="M122 372h268" stroke="#F8FAFC" stroke-width="22" stroke-linecap="round" opacity=".95"/>
-      <path d="M306 372l70-76 54 39" fill="none" stroke="#D4A017" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
-    </g>
-    <text x="268" y="166" font-family="Helvetica Neue, Arial, sans-serif" font-size="56" font-weight="700" fill="#F8FAFC">MindMarket AI</text>
-    <text x="84" y="330" font-family="Helvetica Neue, Arial, sans-serif" font-size="54" font-weight="700" fill="#F8FAFC">Know your portfolio&#8217;s risk</text>
-    <text x="84" y="398" font-family="Helvetica Neue, Arial, sans-serif" font-size="54" font-weight="700" fill="#39A3B5">before the market tests it.</text>
-    <text x="84" y="468" font-family="Helvetica Neue, Arial, sans-serif" font-size="24" fill="#AAB4C2">Portfolio Health Score &#183; VaR &amp; stress tests &#183; AI explanations, never invented numbers</text>
-    <path d="M84 560 L340 560 L430 516 L560 542 L700 482 L840 506 L1100 430" fill="none" stroke="#D4A017" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>
-    <circle cx="1100" cy="430" r="12" fill="#D4A017"/>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="1080" cy="70" r="440" fill="url(#glow)"/>
+  <rect x="0.75" y="0.75" width="1198.5" height="628.5" fill="none" stroke="#1A2530" stroke-width="1.5"/>
+
+  <!-- Brand lockup: the "M + rising line" mark (from ui/logo.tsx) + wordmark -->
+  <g transform="translate(72,50) scale(1.35)">
+    <rect width="64" height="64" rx="16" fill="#0B0E11"/>
+    <rect x="0.75" y="0.75" width="62.5" height="62.5" rx="15.25" fill="none" stroke="#223039" stroke-width="1.5"/>
+    <circle cx="32" cy="28" r="20" fill="#0B7285" opacity="0.16"/>
+    <path d="M14 46 V20 L32 38 L50 20 V46" fill="none" stroke="#F8FAFC" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M13 50 L31 42 L50 30" fill="none" stroke="#D4A017" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="50" cy="30" r="3.1" fill="#D4A017"/>
   </g>
+  <text x="182" y="103" font-family="Helvetica Neue, Arial, sans-serif" font-size="40" font-weight="600" letter-spacing="-0.5" fill="#F8FAFC">MindMarket</text>
+
+  <!-- Eyebrow -->
+  <text x="74" y="248" font-family="Helvetica Neue, Arial, sans-serif" font-size="20" font-weight="600" letter-spacing="3.5" fill="#39A3B5">AI PORTFOLIO RISK ANALYTICS</text>
+
+  <!-- Display headline (serif, matching the brand's editorial display type) -->
+  <text x="72" y="330" font-family="Georgia, 'Times New Roman', serif" font-size="66" fill="#F8FAFC">Know your portfolio&#8217;s risk</text>
+  <text x="72" y="404" font-family="Georgia, 'Times New Roman', serif" font-size="66" fill="#39A3B5">before the market tests it.</text>
+
+  <!-- Sub-line -->
+  <text x="74" y="466" font-family="Helvetica Neue, Arial, sans-serif" font-size="25" fill="#AAB4C2">Health Score &#183; VaR &amp; stress tests &#183; factor exposure &#183; AI explanations, never invented numbers</text>
+
+  <!-- The gold "rising line" risk motif — the brand signature -->
+  <path d="M74 566 L300 566 L400 536 L540 554 L700 508 L860 528 L1126 474" fill="none" stroke="url(#goldline)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="1126" cy="474" r="12" fill="#D4A017"/>
 </svg>
