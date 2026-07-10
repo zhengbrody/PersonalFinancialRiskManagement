@@ -79,6 +79,9 @@ class ProvenanceOut(BaseModel):
     priced: list[str] = Field(default_factory=list)
     missing: list[str] = Field(default_factory=list)
     sources: dict[str, str] = Field(default_factory=dict)
+    # When the joint return window is thin, the shortest-history ticker that
+    # truncated it (so a dashed metric reads as a data-window limit, not a bug).
+    window_limited_by: Optional[str] = None
 
 
 class PublicRiskCheckOut(BaseModel):

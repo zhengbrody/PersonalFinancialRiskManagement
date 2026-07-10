@@ -73,8 +73,16 @@ def run_check(holdings: Iterable) -> dict:
         "weights": {t: round(w, 4) for t, w in weights.items()},
     }
 
-    # Portfolio daily returns (fixed current weights over the joint window).
+    # Portfolio daily returns (fixed current weights over the joint window —
+    # the intersection of every priced ticker's history).
     returns = closes.pct_change().dropna(how="any")
+    # If the joint window is thin, name the shortest-history ticker so the UI
+    # can explain the dashes ("truncated by a recent IPO") rather than reading
+    # them as a failure. Honest, additive — no math change.
+    window_limited_by = None
+    if len(returns) < 60:
+        per_ticker_obs = {t: int(closes[t].dropna().shape[0]) for t in priced}
+        window_limited_by = min(per_ticker_obs, key=per_ticker_obs.get)
     metrics: dict = {"total_value": round(total, 2)}
     var_95 = cvar_95 = None
     if len(returns) >= 30:
@@ -129,6 +137,7 @@ def run_check(holdings: Iterable) -> dict:
             "priced": priced,
             "missing": missing,
             "sources": {t: by_ticker.get(t, "yfinance") for t in priced},
+            "window_limited_by": window_limited_by,
         },
     }
     _log.info("public_risk_check.ok holdings=%d priced=%d", len(rows), len(priced))

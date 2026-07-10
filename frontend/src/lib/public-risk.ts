@@ -89,6 +89,7 @@ export const publicRiskCheckSchema = z.looseObject({
     priced: z.array(z.string()),
     missing: z.array(z.string()),
     sources: z.record(z.string(), z.string()),
+    window_limited_by: z.string().nullable().optional(),
   }),
   disclaimer: z.string(),
 });

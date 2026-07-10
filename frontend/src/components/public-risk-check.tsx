@@ -262,6 +262,13 @@ function ResultPanel({
         {p.observations} trading days · as of {p.as_of ?? "—"}
         {p.missing.length > 0 && ` · unpriced: ${p.missing.join(", ")}`}
       </p>
+      {p.window_limited_by && (
+        <p className="text-xs text-muted-foreground">
+          Volatility and VaR need a longer shared history —{" "}
+          <span className="font-mono">{p.window_limited_by}</span> has too little price
+          history to span the window.
+        </p>
+      )}
       <p className="text-xs text-muted-foreground">{result.disclaimer}</p>
 
       <div className="rounded-md border border-primary/30 bg-primary/5 p-3">

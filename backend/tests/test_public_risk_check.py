@@ -249,3 +249,45 @@ def test_check_math_is_deterministic(fake_prices):
     b = public_risk_check.run_check([_H("AAPL", 10), _H("MSFT", 5)])
     assert a == b
     assert math.isclose(sum(a["concentration"]["weights"].values()), 1.0, rel_tol=1e-6)
+
+
+def test_oversized_chunked_body_capped_without_content_length(test_client, enabled):
+    """Review-caught: the old Content-Length-only guard was bypassable by a
+    chunked request. The streaming cap must refuse an oversized body even with
+    NO Content-Length header (starlette's stream honors the cap)."""
+    big = b'{"holdings":[{"ticker":"AAPL","shares":1}],"pad":"' + b"x" * 20_000 + b'"}'
+
+    def gen():
+        # yield in chunks with no length header → chunked transfer
+        for i in range(0, len(big), 4096):
+            yield big[i : i + 4096]
+
+    resp = test_client.post(URL, content=gen(), headers={"Content-Type": "application/json"})
+    assert resp.status_code == 400
+    assert resp.json()["error"]["details"]["reason"] == "payload_too_large"
+
+
+def test_flag_and_rate_limit_gate_before_body_ingestion(test_client, monkeypatch):
+    """Cheap gates run BEFORE the body is read: with the feature OFF, a huge
+    body returns 503 (feature_disabled) — it is never buffered/parsed."""
+    # feature stays OFF (no `enabled` fixture)
+    big = b'{"holdings":[{"ticker":"AAPL","shares":1}],"pad":"' + b"x" * 50_000 + b'"}'
+    resp = test_client.post(URL, content=big, headers={"Content-Type": "application/json"})
+    assert resp.status_code == 503
+    assert resp.json()["error"]["details"]["reason"] == "feature_disabled"
+
+
+def test_global_budget_throttles_across_ips(test_client, enabled, fake_prices, monkeypatch):
+    """A DISTRIBUTED scan (each IP under its own per-IP limit) still can't
+    hammer the shared yfinance egress IP: the global bucket 429s once the
+    platform-wide budget is spent, protecting the authed product."""
+    # per-IP unlimited, global capacity 2 → the 3rd request (even from a NEW
+    # IP each time) hits the global ceiling.
+    monkeypatch.setattr(public_risk, "_bucket", TokenBucket(capacity=1e9, refill_per_sec=1e9))
+    monkeypatch.setattr(
+        public_risk, "_global_bucket", TokenBucket(capacity=2.0, refill_per_sec=0.0)
+    )
+    body = [{"ticker": "AAPL", "shares": 1}]
+    assert _post(test_client, body).status_code == 200
+    assert _post(test_client, body).status_code == 200
+    assert _post(test_client, body).status_code == 429
