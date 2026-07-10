@@ -76,7 +76,6 @@ We rely on these providers:
 | PostHog (US) | Product analytics | Account UUID + filtered funnel events only |
 | Sentry | Error tracking + in-app feedback | Stack traces, request metadata (never request bodies — disabled in code); feedback message text attributed by account id |
 | DeepSeek / Anthropic | LLM inference for AI features | Your questions + computed portfolio context |
-| Stripe | Billing infrastructure | INACTIVE during the free beta — no charges, no payment data collected |
 | Resend | Weekly digest email delivery | Email + digest content, only if you opt in |
 | Massive / Financial Modeling Prep / Yahoo Finance | Market prices + fundamentals | By-ticker only; no account identity |
 | FRED / US Treasury / SEC EDGAR | Public macro + filings data | No personal data sent |
@@ -88,10 +87,7 @@ We rely on these providers:
   request touches our servers or any third party.
 - **Deletion:** Settings → Danger zone → type the confirmation phrase. This
   immediately deletes your auth account and cascades your profile,
-  portfolios, score history, usage records, and email preferences. If a live
-  paid subscription exists it is canceled first; if that cancel fails,
-  deletion is refused with a clear error rather than leaving a subscription
-  running.
+  portfolios, score history, usage records, and email preferences.
 - **Backups:** encrypted database backups are retained for up to 90 days;
   deleted data disappears from them as they rotate.
 - **Weekly digest:** OFF by default. You can opt in from Settings, and every
