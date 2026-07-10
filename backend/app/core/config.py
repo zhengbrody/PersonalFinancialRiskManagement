@@ -85,6 +85,23 @@ class Settings:
 
     environment: Environment = field(default_factory=_detect_environment)
 
+    # ── Public (no-signup) portfolio risk check ─────────────────────
+    # FEATURE-FLAGGED, DEFAULT OFF. Serving anonymous, arbitrary-ticker
+    # analysis amplifies unofficial-market-data usage and shares the box's
+    # egress IP with the core product (abuse → throttling hurts signed-in
+    # features). Enable only after an explicit data-licensing decision:
+    # PUBLIC_RISK_CHECK_ENABLED=true on the backend env.
+    public_risk_check_enabled: bool = field(
+        default_factory=lambda: _env_str("PUBLIC_RISK_CHECK_ENABLED", "false").lower() == "true"
+    )
+    # Trust the CF-Connecting-IP header for rate-limit identity. ONLY safe
+    # when the deployment guarantees Cloudflare-only ingress (our prod SG
+    # admits only Cloudflare ranges); anywhere else the header is
+    # client-forgeable and must be ignored.
+    trust_cf_connecting_ip: bool = field(
+        default_factory=lambda: _env_str("TRUST_CF_CONNECTING_IP", "false").lower() == "true"
+    )
+
     # Application identity (surfaced in /health, response meta).
     app_name: str = "mindmarket-backend"
     app_version: str = "0.1.0"

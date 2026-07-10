@@ -33,6 +33,7 @@ from .api.v1 import (
     ml,
     options,
     portfolios,
+    public_risk,
     quant,
     regime_summary,
     reports,
@@ -171,6 +172,7 @@ def create_app() -> FastAPI:
     # this file stays a directory of imports.
     app.include_router(health.router)
     app.include_router(account.router)
+    app.include_router(public_risk.router)
     app.include_router(risk.router)
     app.include_router(portfolios.router)
     app.include_router(market.router)

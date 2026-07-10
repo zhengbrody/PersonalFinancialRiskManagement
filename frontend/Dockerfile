@@ -45,6 +45,10 @@ ARG NEXT_PUBLIC_SENTRY_DSN=
 # Free-beta flag: set "false" to hide all user-facing billing UI. Unset/anything
 # else = billing UI enabled (default).
 ARG NEXT_PUBLIC_BILLING_ENABLED=
+# Public no-signup risk check: "true" enables the anonymous check UI.
+# DEFAULT OFF (unset) — a data-licensing decision gates enabling; the
+# build-images build-arg wiring rides the pending workflow-scope batch.
+ARG NEXT_PUBLIC_PUBLIC_RISK_CHECK=
 
 # Expose the args as env vars so `next build` picks them up and inlines
 # them into the static bundle.
@@ -53,6 +57,7 @@ ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL \
     NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY \
     NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN \
     NEXT_PUBLIC_BILLING_ENABLED=$NEXT_PUBLIC_BILLING_ENABLED \
+    NEXT_PUBLIC_PUBLIC_RISK_CHECK=$NEXT_PUBLIC_PUBLIC_RISK_CHECK \
     NEXT_TELEMETRY_DISABLED=1
 
 COPY --from=deps /app/node_modules ./node_modules
