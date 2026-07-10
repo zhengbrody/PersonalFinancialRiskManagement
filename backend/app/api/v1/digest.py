@@ -118,7 +118,8 @@ def unsubscribe_apply(token: str = ""):
 @router.get("/pref")
 def get_pref(request: Request, user: AuthedUser = Depends(require_user)):
     started = time.perf_counter()
-    enabled = True
+    # Consent default: no digest_prefs row = NOT subscribed (explicit opt-in).
+    enabled = False
     try:
         from libs.auth.client import get_supabase
 
@@ -133,13 +134,13 @@ def get_pref(request: Request, user: AuthedUser = Depends(require_user)):
             or []
         )
         if rows:
-            enabled = bool(rows[0].get("enabled", True))
+            enabled = bool(rows[0].get("enabled", False))
     except Exception as exc:  # noqa: BLE001
         # 0007 unapplied → 503 so the settings card HIDES (its contract)
         # instead of showing a toggle whose save can only fail.
         if digest_service._table_missing(exc):
             raise HTTPException(status_code=503, detail="digest preferences unavailable") from None
-        # transient read blip → default-on is the honest fallback
+        # transient read blip → default-OFF (the consent-safe fallback)
     return ok({"enabled": enabled}, request=request, started_at=started)
 
 

@@ -249,12 +249,18 @@ def test_run_weekly_filters_and_sends(digest_env, fake_admin, sent_emails, monke
 
     now = datetime.now(timezone.utc)
     fake_admin.tables["profiles"] = [
-        {"user_id": "u1", "email": "scored@x.co"},  # snapshot → sent
-        {"user_id": "u2", "email": "optout@x.co"},  # opted out
-        {"user_id": "u3", "email": "fresh@x.co"},  # never scored → skip
-        {"user_id": "u4", "email": "recent@x.co"},  # sent 2 days ago → skip
+        {"user_id": "u1", "email": "scored@x.co"},  # opted in + snapshot → sent
+        {"user_id": "u2", "email": "optout@x.co"},  # explicit opt-out row
+        {"user_id": "u3", "email": "fresh@x.co"},  # opted in, never scored → skip
+        {"user_id": "u4", "email": "recent@x.co"},  # opted in, sent 2 days ago → skip
+        {"user_id": "u5", "email": "silent@x.co"},  # NO pref row → NOT subscribed
     ]
-    fake_admin.tables["digest_prefs"] = [{"user_id": "u2", "enabled": False}]
+    fake_admin.tables["digest_prefs"] = [
+        {"user_id": "u1", "enabled": True},
+        {"user_id": "u2", "enabled": False},
+        {"user_id": "u3", "enabled": True},
+        {"user_id": "u4", "enabled": True},
+    ]
     fake_admin.tables["digest_sends"] = [
         {"user_id": "u4", "sent_at": (now - timedelta(days=2)).isoformat()}
     ]
@@ -269,7 +275,7 @@ def test_run_weekly_filters_and_sends(digest_env, fake_admin, sent_emails, monke
     assert out["sent"] == 1
     assert out["skipped_no_snapshot"] == 1  # u3
     assert out["skipped_recent"] == 1  # u4
-    assert out["recipients"] == 3  # u2 excluded by opt-out before counting
+    assert out["recipients"] == 3  # u2 (opt-out) and u5 (no row = no consent) excluded
     assert [c["to"] for c in sent_emails] == ["scored@x.co"]
     # sent audit row written for dedupe
     assert any(r["user_id"] == "u1" for r in fake_admin.tables["digest_sends"])
@@ -280,6 +286,7 @@ def test_run_weekly_force_ignores_dedupe(digest_env, fake_admin, sent_emails, mo
 
     now = datetime.now(timezone.utc)
     fake_admin.tables["profiles"] = [{"user_id": "u4", "email": "recent@x.co"}]
+    fake_admin.tables["digest_prefs"] = [{"user_id": "u4", "enabled": True}]
     fake_admin.tables["digest_sends"] = [
         {"user_id": "u4", "sent_at": (now - timedelta(days=2)).isoformat()}
     ]
@@ -351,3 +358,13 @@ def test_unsubscribe_endpoint_flow(test_client, digest_env, fake_admin):
 def test_pref_endpoints_require_auth(test_client):
     assert test_client.get("/api/v1/digest/pref").status_code == 401
     assert test_client.post("/api/v1/digest/pref", json={"enabled": False}).status_code == 401
+
+
+def test_new_user_is_not_subscribed_by_default(digest_env, fake_admin):
+    """Consent (Privacy Policy): a profile with NO digest_prefs row must never
+    receive the digest — subscription is explicit opt-in only."""
+    fake_admin.tables["profiles"] = [{"user_id": "u7", "email": "new@x.co"}]
+    fake_admin.tables["digest_prefs"] = []
+    assert dg.list_recipients() == []
+    fake_admin.tables["digest_prefs"] = [{"user_id": "u7", "enabled": True}]
+    assert [r["user_id"] for r in dg.list_recipients()] == ["u7"]

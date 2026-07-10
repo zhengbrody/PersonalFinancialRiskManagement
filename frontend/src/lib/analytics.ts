@@ -22,11 +22,17 @@ export function initAnalytics(): void {
     posthog.init(POSTHOG_KEY, {
       api_host: POSTHOG_HOST,
       capture_pageview: false, // App Router → manual pageviews (see provider)
-      capture_pageleave: true,
+      // pageleave adds no funnel value and would auto-attach the full URL.
+      capture_pageleave: false,
       person_profiles: "identified_only",
       // Finance UX can expose sensitive text through buttons, forms, and URLs.
       // Keep analytics to explicit, reviewed `track(...)` calls only.
       autocapture: false,
+      // posthog-js attaches $current_url = location.href (query included!) to
+      // EVERY event, bypassing redactProps — this hook scrubs those
+      // library-attached URL properties on the way out (review-caught:
+      // /copilot?q=<prompt> deep links would otherwise leak the prompt).
+      sanitize_properties: (props) => sanitizeEventProps(props),
     });
     started = true;
   } catch {
@@ -74,6 +80,44 @@ export function redactProps(
   return out;
 }
 
+// Library-attached URL properties that ride on every posthog-js event.
+const _URL_PROP_KEYS = [
+  "$current_url",
+  "$referrer",
+  "$initial_current_url",
+  "$initial_referrer",
+] as const;
+
+/**
+ * Scrub the properties posthog-js itself attaches to every event: URL props
+ * lose query/hash (OAuth codes, ?q= prompts) and dynamic path segments
+ * (portfolio UUIDs) are templated to ":id" so no per-object identifier is
+ * tied to the person. Applied via `sanitize_properties` in init, so it runs
+ * on EVERY outgoing event — including ones this module didn't send.
+ */
+export function sanitizeEventProps(
+  props: Record<string, unknown>,
+): Record<string, unknown> {
+  const out = { ...props };
+  for (const key of _URL_PROP_KEYS) {
+    if (typeof out[key] === "string") {
+      out[key] = sanitizePageviewUrl(out[key] as string);
+    }
+  }
+  if (typeof out["$pathname"] === "string") {
+    out["$pathname"] = maskDynamicPathSegments(out["$pathname"] as string);
+  }
+  return out;
+}
+
+const _UUID_SEGMENT =
+  /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+/** Template dynamic path segments (e.g. /portfolios/<uuid>/risk → /portfolios/:id/risk). */
+export function maskDynamicPathSegments(path: string): string {
+  return path.replace(_UUID_SEGMENT, ":id");
+}
+
 export function track(event: string, props?: Record<string, unknown>): void {
   if (!started) return;
   try {
@@ -86,7 +130,11 @@ export function track(event: string, props?: Record<string, unknown>): void {
 export function identifyUser(id: string, props?: Record<string, unknown>): void {
   if (!started) return;
   try {
-    posthog.identify(id, props);
+    // Same defense-in-depth as track(): person properties go through the
+    // deny-list scrub, so email / tickers / amounts can never be attached to
+    // the PostHog identity even by a careless future call site. The id
+    // itself must be the opaque Supabase UUID.
+    posthog.identify(id, redactProps(props));
   } catch {
     /* ignore */
   }
@@ -119,8 +167,9 @@ export function capturePageview(url: string): void {
 export function sanitizePageviewUrl(url: string): string {
   try {
     const parsed = new URL(url);
-    return `${parsed.origin}${parsed.pathname}`;
+    return `${parsed.origin}${maskDynamicPathSegments(parsed.pathname)}`;
   } catch {
-    return url.split("#", 1)[0]?.split("?", 1)[0] ?? url;
+    const bare = url.split("#", 1)[0]?.split("?", 1)[0] ?? url;
+    return maskDynamicPathSegments(bare);
   }
 }

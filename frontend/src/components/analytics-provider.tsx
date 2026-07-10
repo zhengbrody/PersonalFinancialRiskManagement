@@ -42,12 +42,14 @@ export function AnalyticsProvider() {
     const uid = user?.id ?? null;
     if (uid && identified.current !== uid) {
       identified.current = uid;
-      identifyUser(uid, user?.email ? { email: user.email } : undefined);
+      // Privacy: identify with the Supabase UUID ONLY — email (or any other
+      // person property) never leaves the browser for PostHog.
+      identifyUser(uid);
     } else if (!uid && identified.current) {
       identified.current = null;
       resetAnalytics(); // sign-out → unlink the anonymous session
     }
-  }, [user?.id, user?.email]);
+  }, [user?.id]);
 
   // useSearchParams must sit under a Suspense boundary in the App Router.
   return (

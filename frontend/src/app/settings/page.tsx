@@ -26,6 +26,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api";
 import { isBillingEnabled } from "@/lib/billing-flag";
 import { FreeBetaNotice } from "@/components/free-beta-notice";
+import { DangerZoneCard } from "@/components/danger-zone-card";
 import { WeeklyDigestCard } from "@/components/weekly-digest-card";
 import { useAuth } from "@/lib/auth-context";
 import { currentUsername } from "@/lib/user-display";
@@ -187,6 +188,8 @@ function SettingsPageInner() {
         </CardContent>
       </Card>
       )}
+
+      <DangerZoneCard />
     </div>
   );
 }

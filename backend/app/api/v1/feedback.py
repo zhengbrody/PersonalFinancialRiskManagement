@@ -44,8 +44,10 @@ def submit_feedback(
         # Embed attribution in the message so no scope manipulation is needed
         # (robust across sentry-sdk versions); only sends when Sentry is inited
         # (production), a no-op otherwise.
+        # Privacy: attribute by ACCOUNT ID only — the user's email must not
+        # be stored in the error tracker (Privacy Policy, review-caught).
         sentry_sdk.capture_message(
-            f"[Feedback] page={page} user={user.email or user.id}: {text}",
+            f"[Feedback] page={page} user={user.id}: {text}",
             level="info",
         )
     except Exception:  # noqa: BLE001 - feedback submit must never fail

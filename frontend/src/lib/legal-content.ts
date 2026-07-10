@@ -180,10 +180,10 @@ const privacy: LegalDoc = {
   title: "Privacy Policy",
   metaTitle: "Privacy Policy — MindMarket",
   description:
-    "How MindMarket AI handles your data: what we collect, what we do (and don’t) do with it, our subprocessors, and your rights.",
-  lastUpdated: "2026-05-09",
+    "How MindMarket AI handles your data: what we collect, where portfolio data goes, our subprocessors, retention, export, and deletion.",
+  lastUpdated: "2026-07-10",
   intro:
-    "This privacy policy explains how MindMarket AI (mindmarket.app) handles data during the beta preview period. It may be updated before a broader public launch.",
+    "This privacy policy explains how MindMarket AI (mindmarket.app) handles data during the beta preview period. Every statement here corresponds to behavior implemented in the product — export and deletion are self-service, and the analytics filters described below are enforced in code.",
   sections: [
     {
       heading: "What we collect",
@@ -192,49 +192,53 @@ const privacy: LegalDoc = {
         {
           kind: "list",
           items: [
-            "Email address",
+            "Email address and account UUID",
             "Hashed password (or OAuth identity if you sign in with Google)",
-            "Account creation timestamp",
+            "Optional display name; account timestamps",
           ],
         },
-        { kind: "lead", label: "Portfolio data", text: " (only what you enter):" },
+        { kind: "lead", label: "Portfolio data", text: " (only what you enter or import):" },
         {
           kind: "list",
           items: [
-            "Tickers, share counts, optional cost basis",
-            "Margin loan dollar amount",
-            "Portfolio names you assign",
+            "Tickers, share counts, optional cost basis, option-contract details",
+            "Cash balance, margin loan, contributed capital, portfolio names",
+            "Daily snapshots of your computed Health Score and risk metrics (drives the “what changed” view and, only if you opt in, the weekly digest)",
           ],
         },
-        { kind: "lead", label: "Usage data", text: " (for fair-use limits during the beta):" },
+        { kind: "lead", label: "Usage and AI telemetry", text: ":" },
         {
           kind: "list",
           items: [
-            "Number of AI analyses + chat messages per month",
-            "Usage tier",
-            "Timestamps of usage events",
+            "Per-feature usage events with timestamps (fair-use limits during the beta)",
+            "AI token counts, model, cost, latency, and a one-way hash of inputs — we do not store your prompt text in telemetry",
           ],
         },
-        { kind: "lead", label: "Inferred data", text: ":" },
+        { kind: "lead", label: "Diagnostics", text: ":" },
         {
           kind: "list",
-          items: ["IP address, browser user-agent (collected by hosting provider for security)"],
+          items: [
+            "Error reports (stack traces and request metadata; never request bodies) via Sentry when something breaks — plus in-app feedback messages you choose to send (message text + account id)",
+            "Product analytics via PostHog, keyed to your account UUID ONLY — a code-enforced filter strips email, tickers, holdings, amounts, and prompt text before any event leaves your browser",
+            "IP address and browser user-agent in server/CDN logs, for security",
+          ],
         },
         {
           kind: "text",
-          text: "We do not collect: real name, address, phone, social security number, brokerage account numbers, or any banking credentials.",
+          text: "We do not collect: real name, address, phone, social security number, brokerage account numbers, or any banking credentials. We never connect to your brokerage.",
         },
       ],
     },
     {
-      heading: "What we do with it",
+      heading: "Where your portfolio data goes",
       blocks: [
         {
           kind: "list",
           items: [
-            "Operate the service: store your portfolios, render your dashboards, run analyses you request.",
-            "Apply usage limits: track usage events to apply fair-use limits during the beta.",
-            "Improve the product: aggregate, anonymized usage statistics. We do not sell user data.",
+            "Risk math (VaR, stress tests, scores) runs on our own servers — deterministic Python, no third party involved.",
+            "Market-data providers receive ONLY ticker symbols we look up — never your identity, email, or account.",
+            "When you use AI features (Copilot, AI explanations, research verdicts), your question plus the computed metrics and holdings context needed to answer are sent to the configured LLM provider (DeepSeek or Anthropic). These requests are governed by the provider’s API terms.",
+            "The weekly digest email (opt-in only) sends your email address and your own score summary to our email provider for delivery.",
           ],
         },
       ],
@@ -247,22 +251,43 @@ const privacy: LegalDoc = {
           items: [
             "We do not sell or rent your portfolio holdings or contact info.",
             "We do not share your data with advertisers.",
-            "We do not connect to your brokerage accounts; we only see what you type into the portfolio editor.",
+            "We do not send your email, tickers, dollar amounts, or prompts to our analytics provider — identification is by account UUID only.",
+            "We do not subscribe you to any marketing or digest email by default — email beyond transactional auth flows is explicit opt-in.",
           ],
         },
       ],
     },
     {
-      heading: "Third parties",
+      heading: "Subprocessors",
       blocks: [
-        { kind: "lead", label: "We rely on these subprocessors:" },
+        { kind: "lead", label: "We rely on these providers:" },
         {
           kind: "list",
           items: [
-            "Supabase — auth + Postgres database",
-            "Anthropic / DeepSeek / OpenAI — LLM inference (we send the prompts you generate; we do NOT send your auth credentials)",
-            "Yahoo Finance, Financial Modeling Prep, SEC EDGAR — market data lookups (these are by-ticker only; the providers do not see your portfolio)",
-            "AWS / Cloudflare — hosting + DNS",
+            "Supabase (US) — authentication and Postgres database (account + portfolio data)",
+            "Amazon Web Services (US) — application hosting",
+            "Cloudflare — DNS, CDN, and security proxy (sees traffic metadata incl. IPs)",
+            "PostHog (US) — product analytics (account UUID + filtered funnel events only)",
+            "Sentry — error tracking (stack traces and request metadata — request bodies are never attached, disabled in code) and in-app feedback messages (your message text, attributed by account id, not email)",
+            "DeepSeek and Anthropic — LLM inference for AI features (your questions + computed portfolio context)",
+            "Stripe — billing infrastructure (INACTIVE during the free beta: no charges, no payment data collected)",
+            "Resend — weekly digest email delivery (email + digest content, only if you opt in)",
+            "Massive, Financial Modeling Prep, Yahoo Finance — market prices and fundamentals (by-ticker only)",
+            "FRED, US Treasury, SEC EDGAR — public macro and filings data (no personal data sent)",
+          ],
+        },
+      ],
+    },
+    {
+      heading: "Retention, export, and deletion",
+      blocks: [
+        {
+          kind: "list",
+          items: [
+            "Export: Portfolios page → “Export CSV / JSON” on any portfolio. The file is generated in your browser from data already loaded — no export request touches our servers or any third party.",
+            "Deletion: Settings → Danger zone → type the confirmation phrase. This immediately deletes your auth account and cascades your profile, portfolios, score history, usage records, and email preferences. If a live paid subscription exists it is canceled first; if that cancel fails, deletion is refused with a clear error rather than leaving a subscription running.",
+            "Backups: encrypted database backups are retained for up to 90 days; deleted data disappears from them as they rotate.",
+            "Weekly digest: OFF by default. You can opt in from Settings, and every email carries a one-click unsubscribe that works without logging in.",
           ],
         },
       ],
@@ -270,13 +295,13 @@ const privacy: LegalDoc = {
     {
       heading: "Your rights",
       blocks: [
-        { kind: "lead", label: "You can:" },
+        { kind: "lead", label: "You can, self-service:" },
         {
           kind: "list",
           items: [
-            "Export your portfolios via the Portfolios page",
-            "Delete your account, which removes profile + portfolios + usage events",
-            `Email ${CONTACT} for any data request`,
+            "Export your portfolios (CSV or JSON) from the Portfolios page",
+            "Delete your account and all associated data from Settings",
+            `Email ${CONTACT} for any other data request`,
           ],
         },
       ],

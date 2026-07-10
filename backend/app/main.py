@@ -20,6 +20,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.v1 import (
+    account,
     billing,
     copilot,
     data,
@@ -130,6 +131,10 @@ def _maybe_init_sentry(settings) -> None:
             release=settings.app_version,
             traces_sample_rate=0.0,  # error tracking only for now
             send_default_pii=False,  # don't ship user PII to Sentry
+            # Privacy Policy: error reports carry stack traces + request
+            # metadata, NEVER request bodies (a failing POST /copilot/chat
+            # would otherwise attach the user's prompt text).
+            max_request_body_size="never",
         )
     except Exception:  # noqa: BLE001 - monitoring must never break boot
         pass
@@ -165,6 +170,7 @@ def create_app() -> FastAPI:
     # Routers. Each router carries its own ``prefix`` and ``tags`` so
     # this file stays a directory of imports.
     app.include_router(health.router)
+    app.include_router(account.router)
     app.include_router(risk.router)
     app.include_router(portfolios.router)
     app.include_router(market.router)
