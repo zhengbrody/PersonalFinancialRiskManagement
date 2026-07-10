@@ -131,6 +131,10 @@ def _maybe_init_sentry(settings) -> None:
             release=settings.app_version,
             traces_sample_rate=0.0,  # error tracking only for now
             send_default_pii=False,  # don't ship user PII to Sentry
+            # Privacy Policy: error reports carry stack traces + request
+            # metadata, NEVER request bodies (a failing POST /copilot/chat
+            # would otherwise attach the user's prompt text).
+            max_request_body_size="never",
         )
     except Exception:  # noqa: BLE001 - monitoring must never break boot
         pass

@@ -218,7 +218,7 @@ const privacy: LegalDoc = {
         {
           kind: "list",
           items: [
-            "Error reports (stack traces and request metadata) via Sentry when something breaks",
+            "Error reports (stack traces and request metadata; never request bodies) via Sentry when something breaks — plus in-app feedback messages you choose to send (message text + account id)",
             "Product analytics via PostHog, keyed to your account UUID ONLY — a code-enforced filter strips email, tickers, holdings, amounts, and prompt text before any event leaves your browser",
             "IP address and browser user-agent in server/CDN logs, for security",
           ],
@@ -268,7 +268,7 @@ const privacy: LegalDoc = {
             "Amazon Web Services (US) — application hosting",
             "Cloudflare — DNS, CDN, and security proxy (sees traffic metadata incl. IPs)",
             "PostHog (US) — product analytics (account UUID + filtered funnel events only)",
-            "Sentry — error tracking (stack traces, request metadata)",
+            "Sentry — error tracking (stack traces and request metadata — request bodies are never attached, disabled in code) and in-app feedback messages (your message text, attributed by account id, not email)",
             "DeepSeek and Anthropic — LLM inference for AI features (your questions + computed portfolio context)",
             "Stripe — billing infrastructure (INACTIVE during the free beta: no charges, no payment data collected)",
             "Resend — weekly digest email delivery (email + digest content, only if you opt in)",

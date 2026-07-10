@@ -30,8 +30,9 @@ analytics filters described below are enforced in code.
   not store your prompt text in telemetry
 
 **Diagnostics:**
-- Error reports (stack traces and request metadata) via Sentry when something
-  breaks
+- Error reports (stack traces and request metadata; never request bodies)
+  via Sentry when something breaks — plus in-app feedback messages you choose
+  to send (message text + account id)
 - Product analytics via PostHog, keyed to your account UUID ONLY — a
   code-enforced filter strips email, tickers, holdings, amounts, and prompt
   text before any event leaves your browser
@@ -73,7 +74,7 @@ We rely on these providers:
 | Amazon Web Services (US) | Application hosting | Traffic; data at rest on our instance |
 | Cloudflare | DNS, CDN, security proxy | Traffic metadata incl. IPs |
 | PostHog (US) | Product analytics | Account UUID + filtered funnel events only |
-| Sentry | Error tracking | Stack traces, request metadata |
+| Sentry | Error tracking + in-app feedback | Stack traces, request metadata (never request bodies — disabled in code); feedback message text attributed by account id |
 | DeepSeek / Anthropic | LLM inference for AI features | Your questions + computed portfolio context |
 | Stripe | Billing infrastructure | INACTIVE during the free beta — no charges, no payment data collected |
 | Resend | Weekly digest email delivery | Email + digest content, only if you opt in |

@@ -60,14 +60,42 @@ def _cancel_stripe_subscription(subscription_id: str) -> None:
         ) from exc
 
 
+def _read_subscription(user_id: str) -> dict | None:
+    """Read the user's subscription row with the SERVICE-ROLE client.
+
+    Deliberately not libs.billing.usage.get_subscription_record: that helper
+    reads with the anon/user client (RLS would hide the row here) and swallows
+    every error as "no subscription" — review-caught: in the streamlit-free
+    backend image its client bootstrap even raises, making the Stripe check
+    dead code. A read ERROR here fails CLOSED (deletion refused) so a DB blip
+    can never masquerade as "no live subscription"."""
+    try:
+        from libs.auth.admin_client import get_supabase_admin
+
+        rows = (
+            get_supabase_admin()
+            .table("subscriptions")
+            .select("stripe_subscription_id,status")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+        return rows[0] if rows else None
+    except Exception as exc:  # noqa: BLE001 - fail closed, never fail open
+        raise SubscriptionCancelError(
+            "Could not verify your subscription state — nothing was deleted. "
+            "Please retry, or contact support."
+        ) from exc
+
+
 def delete_account(user_id: str) -> dict:
     """Cancel any live subscription, then delete the auth user (cascades all
     user data). Raises SubscriptionCancelError / AccountDeleteError — the
     router maps them to clear HTTP errors. Never partially deletes."""
-    from libs.billing.usage import get_subscription_record
-
     subscription_canceled = False
-    sub = get_subscription_record(user_id)
+    sub = _read_subscription(user_id)
     if sub and sub.get("stripe_subscription_id"):
         status = str(sub.get("status") or "").lower()
         if status not in _INACTIVE_SUB_STATUSES:
@@ -80,6 +108,12 @@ def delete_account(user_id: str) -> dict:
 
         get_supabase_admin().auth.admin.delete_user(user_id)
     except Exception as exc:  # noqa: BLE001
+        # Idempotency: a retry after a timed-out-but-completed first request
+        # (or a double-click) hits "user not found" — that IS success, not a
+        # failure to report as "nothing was removed".
+        if "not found" in str(exc).lower():
+            _log.info("account.delete.already_gone user=%s", user_id)
+            return {"deleted": True, "subscription_canceled": subscription_canceled}
         _log.error("account.delete.failed user=%s err=%s", user_id, type(exc).__name__)
         raise AccountDeleteError(
             "Account deletion failed on the server — nothing was removed. "
