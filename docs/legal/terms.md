@@ -25,9 +25,7 @@ suspect unauthorized access.
 
 ## 5. Beta access
 MindMarket AI is currently a free educational beta. There are no charges, and
-no payment information is collected. If paid plans are introduced later,
-separate billing terms will be presented for your review before any charge
-applies.
+no payment information is collected.
 
 ## 6. Acceptable use
 You agree NOT to:

@@ -83,7 +83,7 @@ const terms: LegalDoc = {
       blocks: [
         {
           kind: "text",
-          text: "MindMarket AI is currently a free educational beta. There are no charges, and no payment information is collected. If paid plans are introduced later, separate billing terms will be presented for your review before any charge applies.",
+          text: "MindMarket AI is currently a free educational beta. There are no charges, and no payment information is collected.",
         },
       ],
     },
@@ -270,7 +270,6 @@ const privacy: LegalDoc = {
             "PostHog (US) — product analytics (account UUID + filtered funnel events only)",
             "Sentry — error tracking (stack traces and request metadata — request bodies are never attached, disabled in code) and in-app feedback messages (your message text, attributed by account id, not email)",
             "DeepSeek and Anthropic — LLM inference for AI features (your questions + computed portfolio context)",
-            "Stripe — billing infrastructure (INACTIVE during the free beta: no charges, no payment data collected)",
             "Resend — weekly digest email delivery (email + digest content, only if you opt in)",
             "Massive, Financial Modeling Prep, Yahoo Finance — market prices and fundamentals (by-ticker only)",
             "FRED, US Treasury, SEC EDGAR — public macro and filings data (no personal data sent)",
@@ -285,7 +284,7 @@ const privacy: LegalDoc = {
           kind: "list",
           items: [
             "Export: Portfolios page → “Export CSV / JSON” on any portfolio. The file is generated in your browser from data already loaded — no export request touches our servers or any third party.",
-            "Deletion: Settings → Danger zone → type the confirmation phrase. This immediately deletes your auth account and cascades your profile, portfolios, score history, usage records, and email preferences. If a live paid subscription exists it is canceled first; if that cancel fails, deletion is refused with a clear error rather than leaving a subscription running.",
+            "Deletion: Settings → Danger zone → type the confirmation phrase. This immediately deletes your auth account and cascades your profile, portfolios, score history, usage records, and email preferences.",
             "Backups: encrypted database backups are retained for up to 90 days; deleted data disappears from them as they rotate.",
             "Weekly digest: OFF by default. You can opt in from Settings, and every email carries a one-click unsubscribe that works without logging in.",
           ],
