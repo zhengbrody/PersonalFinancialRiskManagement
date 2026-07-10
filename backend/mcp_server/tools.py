@@ -418,9 +418,10 @@ async def run_portfolio_scenario(arguments: dict[str, Any]) -> dict[str, Any]:
 
 
 async def generate_action_cards(arguments: dict[str, Any]) -> dict[str, Any]:
-    """Concrete next-step cards (fee/tax-loss scans + non-binding draft trades)
-    for a portfolio — reuses the resident StrategyOptimizer agent (same scans
-    the Copilot uses)."""
+    """Non-transactional risk-management cards (fee drag, unrealized-loss
+    review, risk levers) — reuses the resident StrategyOptimizer agent. Cards
+    quantify risk dimensions against neutral reference bands; they NEVER
+    contain buy/sell instructions, securities to trade, or trade amounts."""
     holdings = arguments.get("holdings") or []
     risk_pref = int(arguments.get("risk_preference", 3))
     score, positions = _score_from_holdings(holdings, risk_pref=risk_pref)
@@ -430,14 +431,46 @@ async def generate_action_cards(arguments: dict[str, Any]) -> dict[str, Any]:
     prep = StrategyOptimizerAgent().prepare(score, positions)
     tr = prep.get("tool_results", {}) or {}
     cards = []
-    for key in ("hidden_fees", "fees", "tax_loss_harvest", "tax_loss"):
-        block = tr.get(key)
-        if isinstance(block, dict) and block.get("summary"):
-            cards.append({"kind": key, "summary": str(block["summary"])})
-    draft = prep.get("draft_trades") or []
+    for row in (tr.get("hidden_fees") or [])[:5]:
+        cards.append(
+            {
+                "kind": "fee_drag",
+                "risk_dimension": "cost",
+                "headline": f"{row['ticker']} expense drag",
+                "detail": str(row.get("note", "")),
+            }
+        )
+    losses = tr.get("unrealized_losses") or []
+    if losses:
+        cards.append(
+            {
+                "kind": "unrealized_losses",
+                "risk_dimension": "tax",
+                "headline": f"{len(losses)} position(s) carry unrealized losses",
+                "detail": (
+                    "Realizing a loss is a tax decision — wash-sale and lot-selection "
+                    "rules apply; review with a tax professional."
+                ),
+            }
+        )
+    for lever in prep.get("risk_levers") or []:
+        cards.append(
+            {
+                "kind": "risk_lever",
+                "risk_dimension": lever["risk_dimension"],
+                "headline": lever["headline"],
+                "detail": (
+                    f"Now: {lever['current']}. Reference: {lever['reference']}. "
+                    f"Evaluate: {lever['evaluate']}."
+                ),
+            }
+        )
     return {
         "action_cards": cards,
-        "draft_trades": [t.to_dict() if hasattr(t, "to_dict") else t for t in draft],
+        "note": (
+            "Risk-management levers, not trade instructions — this tool does not "
+            "recommend buying or selling any specific security. Educational only."
+        ),
     }
 
 
@@ -533,8 +566,9 @@ TOOLS = [
     {
         "name": "mindmarket_generate_action_cards",
         "description": (
-            "Concrete next-step cards for a portfolio: hidden-fee + tax-loss "
-            "scans and non-binding draft trades from the StrategyOptimizer."
+            "Non-transactional risk-management cards for a portfolio: fee drag, "
+            "unrealized-loss review, and risk levers (concentration, leverage, "
+            "liquidity, downside) — never buy/sell instructions."
         ),
         "input_schema": PORTFOLIO_HOLDINGS_SCHEMA,
         "handler": generate_action_cards,

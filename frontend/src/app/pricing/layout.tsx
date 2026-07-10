@@ -12,8 +12,8 @@ export const metadata: Metadata = {
     description:
       "Choose a plan for AI portfolio risk analytics, Health Score, risk reports, and Copilot credits.",
     url: "/pricing",
-    siteName: "MindMarket",
-    images: ["/og.jpg?v=2"],
+    siteName: "mindmarket.app",
+    images: ["/og.jpg?v=3"],
   },
   twitter: {
     card: "summary_large_image",

@@ -37,7 +37,7 @@ const geistMono = localFont({
   variable: "--font-geist-mono",
   weight: "100 900",
 });
-// Display serif for marketing headlines only (the "Citadel" editorial look).
+// Display serif for marketing headlines only (the premium editorial look).
 // Geist stays the UI/body font.
 const instrumentSerif = Instrument_Serif({
   weight: "400",
@@ -83,13 +83,13 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     url: "/",
-    siteName: "MindMarket",
+    siteName: "mindmarket.app",
     title: "MindMarket | AI Portfolio Risk Analytics",
     description:
       "Score your portfolio, inspect downside risk, and understand macro exposure with deterministic risk math plus AI explanations.",
     images: [
       {
-        url: "/og.jpg?v=2",
+        url: "/og.jpg?v=3",
         width: 1200,
         height: 630,
         alt: "MindMarket AI — know your portfolio's risk before the market tests it",
@@ -101,7 +101,7 @@ export const metadata: Metadata = {
     title: "MindMarket | AI Portfolio Risk Analytics",
     description:
       "Portfolio health score, VaR/CVaR, stress tests, factor exposure, and live US rates data for individual investors.",
-    images: ["/og.jpg?v=2"],
+    images: ["/og.jpg?v=3"],
   },
   robots: {
     index: true,

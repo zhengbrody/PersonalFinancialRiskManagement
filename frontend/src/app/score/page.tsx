@@ -304,7 +304,7 @@ export default function ScorePage() {
         <p className="text-sm text-muted-foreground">
           {signedIn
             ? "A 0–1000 score across risk match, risk-adjusted return, and downside protection — with the drivers, what changed, and what to do."
-            : "A 0–1000 institutional-grade health score from the same engine signed-in members use. Edit the holdings and run it."}
+            : "A 0–1000 health score from the same deterministic risk engine signed-in members use. Edit the holdings and run it."}
         </p>
       </header>
 

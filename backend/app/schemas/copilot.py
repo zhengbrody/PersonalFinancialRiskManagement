@@ -30,7 +30,8 @@ class ChatResponse(BaseModel):
 
     agent_name: str
     response_markdown: str
-    draft_trades: list[dict] = Field(default_factory=list)
+    # Non-transactional risk-management levers — never buy/sell instructions.
+    risk_levers: list[dict] = Field(default_factory=list)
     tool_trace: list[str] = Field(default_factory=list)
     grounded_in: dict[str, Any] = Field(default_factory=dict)
     # True = LLM-synthesized markdown; False = deterministic fallback template.

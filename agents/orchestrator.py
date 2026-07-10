@@ -26,9 +26,9 @@ from libs.ai_agents.portfolio_agents import (  # noqa: F401 (re-export)
     StrategyOptimizerAgent,
     build_agent_context,
     detect_reply_language,
-    generate_draft_trades,
+    generate_risk_levers,
     scan_hidden_fees,
-    scan_tax_loss_harvesting,
+    scan_unrealized_losses,
 )
 
 LLMCallable = Callable[..., str]
@@ -61,10 +61,9 @@ def route_message(
         return AgentResponse(
             agent_name="Portfolio Copilot",
             response_markdown=(
-                "Ask a question to get a portfolio analysis or "
-                "optimization plan. Examples: 'diagnose my risk', "
-                "'find tax-loss harvesting candidates', 'draft trades "
-                "to reduce drawdown'."
+                "Ask a question to get a portfolio risk analysis. "
+                "Examples: 'diagnose my risk', 'am I too concentrated?', "
+                "'how would a 20% drawdown hit my book?'."
             ),
         )
 

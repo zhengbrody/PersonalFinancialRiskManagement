@@ -136,11 +136,37 @@ def test_generate_action_cards(monkeypatch):
     class _Agent:
         def prepare(self, score, positions):
             return {
-                "tool_results": {"hidden_fees": {"summary": "You pay $42/yr in fees"}},
-                "draft_trades": [],
+                "tool_results": {
+                    "hidden_fees": [
+                        {
+                            "ticker": "SPY",
+                            "annual_fee_usd": 42.0,
+                            "note": "Estimated annual fund fee: $42.",
+                        }
+                    ],
+                    "unrealized_losses": [{"ticker": "QQQ", "loss_usd": 900.0, "loss_pct": 0.12}],
+                },
+                "risk_levers": [
+                    {
+                        "lever": "review_leverage",
+                        "risk_dimension": "leverage",
+                        "headline": "Review margin leverage",
+                        "current": "gross exposure is 1.40x net equity",
+                        "reference": "an unlevered book is 1.00x",
+                        "evaluate": "stress a -20% move in Scenarios",
+                    }
+                ],
             }
 
     monkeypatch.setattr("libs.ai_agents.portfolio_agents.StrategyOptimizerAgent", lambda: _Agent())
     out = _run(tools.generate_action_cards({"holdings": [{"ticker": "SPY", "market_value": 1}]}))
-    assert out["action_cards"][0]["kind"] == "hidden_fees"
-    assert "fees" in out["action_cards"][0]["summary"]
+    kinds = [c["kind"] for c in out["action_cards"]]
+    assert kinds == ["fee_drag", "unrealized_losses", "risk_lever"]
+    # Compliance: no BUY/SELL/ticker-amount trade combos anywhere in the payload.
+    import json as _json
+    import re as _re
+
+    payload = _json.dumps(out)
+    assert not _re.search(r"\b(BUY|SELL)\b", payload)
+    assert "draft_trades" not in out
+    assert "not trade instructions" in out["note"]

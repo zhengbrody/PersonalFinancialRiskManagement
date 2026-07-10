@@ -32,8 +32,8 @@ export function generateMetadata({ params }: { params: { slug: string } }): Meta
       title: topic.metaTitle,
       description: topic.description,
       url,
-      siteName: "MindMarket",
-      images: ["/og.jpg?v=2"],
+      siteName: "mindmarket.app",
+      images: ["/og.jpg?v=3"],
     },
     twitter: { card: "summary_large_image", title: topic.metaTitle, description: topic.description },
   };

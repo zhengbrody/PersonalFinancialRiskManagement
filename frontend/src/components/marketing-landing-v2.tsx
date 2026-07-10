@@ -3,7 +3,7 @@
 /**
  * MindMarket — animated marketing landing (V2).
  *
- * A premium ("Citadel × Robinhood") anonymous marketing view. Market-synced:
+ * A premium, editorial anonymous marketing view. Market-synced:
  * the --mm-* palette (via the C tokens) flips light/dark with the app theme, so
  * it's light during the trading day and dark overnight. Zero new deps — motion
  * is CSS transitions + IntersectionObserver + rAF (shared with the other
@@ -143,7 +143,7 @@ function Hero() {
           </Reveal>
           <Reveal delay={0.16}>
             <p style={{ maxWidth: "30em", fontSize: "clamp(16px,1.5vw,19px)", lineHeight: 1.6, color: C.slate, margin: "0 0 32px" }}>
-              Paste your holdings — or import from your broker — and get a hedge-fund-grade risk X-ray in seconds: a 0–1000 Health Score, real VaR, stress tests, and concentration, explained in plain English. Free, no signup to try.
+              Paste your holdings — or import from your broker — and get a transparent risk X-ray in seconds: a 0–1000 Health Score, real VaR, stress tests, and concentration, explained in plain English. Free, no signup to try.
             </p>
           </Reveal>
           <Reveal delay={0.24}>

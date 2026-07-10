@@ -215,13 +215,13 @@ def test_agent_response_from_legacy_result():
     legacy = AgentResult(
         agent_name="Portfolio Analyzer Agent",
         response_markdown="**Assessment:** all good",
-        draft_trades=[{"action": "BUY", "ticker": "SPY"}],
+        risk_levers=[{"lever": "review_leverage", "headline": "Review margin leverage"}],
         tool_trace=["read_quant_score"],
     )
     resp = AgentResponse.from_agent_result(legacy)
     assert resp.agent_name == "Portfolio Analyzer Agent"
     assert "Assessment" in resp.response_markdown
-    assert resp.draft_trades[0]["ticker"] == "SPY"
+    assert resp.risk_levers[0]["lever"] == "review_leverage"
     assert resp.tool_trace == ["read_quant_score"]
 
 

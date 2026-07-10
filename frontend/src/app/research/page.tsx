@@ -3,7 +3,7 @@
 /**
  * Ticker Research 2.0 — single-name FactPack cockpit.
  *
- * Two-stage, Robinhood-skin / Citadel-bone:
+ * Two-stage — plain-English surface over a rigorous data engine:
  *   1. Search a ticker → the deterministic FACT PACK paints instantly
  *      (header + valuation/quality/growth/analyst cards + peers + news +
  *      pre-written drivers/risk-flags). Authed, no credit.

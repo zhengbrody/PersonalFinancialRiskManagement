@@ -1,5 +1,5 @@
 /**
- * Shared marketing design tokens — the premium, always-dark "Citadel ×
+ * Shared marketing design tokens — the premium "editorial ×
  * Robinhood" palette used by every pre-login surface (landing + /product +
  * /learn + /demo-risk-check + auth pages). These are intentional MARKETING
  * LITERALS, distinct from the app's `.dark` theme tokens (globals.css), so the

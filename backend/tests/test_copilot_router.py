@@ -175,15 +175,15 @@ def test_ask_endpoint_requires_auth():
     assert client.post("/api/v1/copilot/ask", json={"message": "hi"}).status_code == 401
 
 
-def test_gather_portfolio_includes_desk_view(monkeypatch):
+def test_gather_portfolio_includes_risk_reference(monkeypatch):
     monkeypatch.setattr(cr, "_load_score_positions", lambda user: ([], _Score()))
     ev = cr._gather("portfolio_diagnosis", "how risky am I", [], user=object())
-    desk = [e for e in ev if e.label.startswith("Desk view — ")]
-    assert desk, "institutional comparison rows missing"
-    assert all(e.source == "reference" for e in desk)
-    sharpe = next(e for e in desk if "Sharpe" in e.label)
-    # Both sides deterministic: the user's value and the static reference.
-    assert "0.67" in sharpe.value and "multi-strategy" in sharpe.value
+    ref = [e for e in ev if e.label.startswith("Risk reference — ")]
+    assert ref, "risk reference rows missing"
+    assert all(e.source == "reference" for e in ref)
+    sharpe = next(e for e in ref if "Sharpe" in e.label)
+    # Both sides deterministic: the user's value and the static reference band.
+    assert "0.67" in sharpe.value and "long-run bar" in sharpe.value
 
 
 def test_answer_chinese_question_forces_chinese_reply(monkeypatch):
