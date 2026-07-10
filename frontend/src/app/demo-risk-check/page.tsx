@@ -9,6 +9,8 @@
 
 import type { Metadata } from "next";
 import { SampleCockpit } from "@/components/sample-cockpit";
+import { PublicRiskCheck } from "@/components/public-risk-check";
+import { isPublicRiskCheckEnabled } from "@/lib/public-risk";
 import { DemoStartedPing } from "@/components/demo-started-ping";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { C } from "@/components/marketing/theme";
@@ -56,6 +58,12 @@ export default function DemoRiskCheckPage() {
       <div style={{ maxWidth: 920, margin: "0 auto", padding: "28px 24px 8px" }}>
         <SampleCockpit />
       </div>
+
+      {isPublicRiskCheckEnabled() && (
+        <div style={{ maxWidth: 920, margin: "0 auto", padding: "8px 24px 16px" }}>
+          <PublicRiskCheck />
+        </div>
+      )}
 
       <div style={{ maxWidth: 920, margin: "0 auto", padding: "16px 24px 64px" }}>
         <CTABox

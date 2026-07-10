@@ -44,6 +44,12 @@ services:
     expose:
       - "8000"
     environment:
+      # Public no-signup risk check — DEFAULT OFF (data-licensing decision
+      # pending; see backend/app/api/v1/public_risk.py). Flip via EC2 .env.
+      - PUBLIC_RISK_CHECK_ENABLED=${PUBLIC_RISK_CHECK_ENABLED:-false}
+      # Prod ingress is Cloudflare-only (SG locked to CF ranges), so the
+      # CF-Connecting-IP header is trustworthy HERE for rate-limit identity.
+      - TRUST_CF_CONNECTING_IP=${TRUST_CF_CONNECTING_IP:-true}
       # Server-side secrets only. NEVER overlap with NEXT_PUBLIC_*.
       # Modern Supabase projects verify JWTs through JWKS from
       # SUPABASE_URL. SUPABASE_JWT_SECRET is only required for legacy

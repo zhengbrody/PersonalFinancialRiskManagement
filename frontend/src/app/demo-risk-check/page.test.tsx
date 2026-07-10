@@ -35,4 +35,21 @@ describe("DemoRiskCheckPage", () => {
     // safe: no ticker symbols, no dollar values, no holdings.
     expect(payload).not.toMatch(/\$|NVDA|TSLA|SPY|QQQ|ticker|holdings|portfolio_id/i);
   });
+  it("HIDES the no-signup risk check when the flag is off (default)", () => {
+    vi.stubEnv("NEXT_PUBLIC_PUBLIC_RISK_CHECK", "");
+    render(<DemoRiskCheckPage />);
+    expect(
+      screen.queryByRole("heading", { name: /check your own portfolio/i }),
+    ).not.toBeInTheDocument();
+    vi.unstubAllEnvs();
+  });
+
+  it("SHOWS the no-signup risk check only when the flag is on", () => {
+    vi.stubEnv("NEXT_PUBLIC_PUBLIC_RISK_CHECK", "true");
+    render(<DemoRiskCheckPage />);
+    expect(
+      screen.getByRole("heading", { name: /check your own portfolio/i }),
+    ).toBeInTheDocument();
+    vi.unstubAllEnvs();
+  });
 });

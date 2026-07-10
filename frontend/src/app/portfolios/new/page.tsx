@@ -23,6 +23,9 @@ import {
   PortfolioForm,
   valuesToCreateInput,
 } from "@/components/portfolio-form";
+import { clearAnonHoldings, loadAnonHoldings } from "@/lib/public-risk";
+
+type FormInitial = typeof BLANK;
 
 const BLANK = {
   name: "",
@@ -41,6 +44,19 @@ export default function NewPortfolioPage() {
   const { user, loading: authLoading, configured } = useAuth();
   const mutation = useCreatePortfolio();
   const [serverError, setServerError] = useState<string | null>(null);
+  // Handoff from the anonymous risk check: prefill (post-mount, SSR-safe) —
+  // nothing is written to the database until the user reviews and saves.
+  const [anonPrefill, setAnonPrefill] = useState<FormInitial | null>(null);
+  useEffect(() => {
+    const anon = loadAnonHoldings();
+    if (anon.length > 0) {
+      setAnonPrefill({
+        ...BLANK,
+        rows: anon.map((r) => ({ ticker: r.ticker, shares: r.shares, avg_cost: "" })),
+        is_default: true,
+      });
+    }
+  }, []);
 
   useEffect(() => {
     if (!configured) return;
@@ -78,8 +94,15 @@ export default function NewPortfolioPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {anonPrefill && (
+            <p className="mb-3 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+              Prefilled from your no-signup risk check — review and press Create to
+              save it (nothing is stored until you do).
+            </p>
+          )}
           <PortfolioForm
-            initial={BLANK}
+            key={anonPrefill ? "anon-prefill" : "blank"}
+            initial={anonPrefill ?? BLANK}
             submitLabel="Create portfolio"
             busy={mutation.isPending}
             errorMessage={serverError}
@@ -92,6 +115,7 @@ export default function NewPortfolioPage() {
                 track("portfolio_created", {
                   holdings: Object.keys(created.holdings).length,
                 });
+                clearAnonHoldings(); // the handoff is complete
                 router.replace("/portfolios");
               } catch (err) {
                 setServerError(
