@@ -38,27 +38,31 @@ test.describe("real auth smoke (live Supabase + backend)", () => {
     page,
   }) => {
     await login(page);
-    // The signed-in account menu surfaces the user's email.
+    // The /portfolios page body greets the signed-in user by email
+    // ("Signed in as …") — a signed-in-only render. (NOT the account menu:
+    // PR #140 deliberately removed the email from the top bar.)
     await expect(page.getByText(EMAIL).first()).toBeVisible();
   });
 
   test("a signed-in data page loads through the real backend", async ({ page }) => {
+    // Cold auto-scores can take a while (live market-data fetch server-side).
+    test.setTimeout(90_000);
     await login(page);
 
-    // /score is a protected data page: signed-in it auto-scores the saved
-    // portfolio via the real backend (/risk/score_from_active). Reaching it as
-    // the signed-in user (account email present, not redirected to /login)
-    // proves the real JWT → backend chain on a data route.
+    // /score signed-in auto-scores the saved portfolio via the real backend
+    // (/risk/score_from_active) — the rendered 0–1000 score IS the proof of
+    // the real JWT → backend chain on a data route. The e2e bot keeps a small
+    // seeded portfolio, so this must always render.
+    //
+    // History: this test previously asserted the account email was visible on
+    // /score. PR #140 (privacy) removed email from the top bar, and /score
+    // renders it nowhere else — the assertion silently went stale and the
+    // nightly burned red for 15 nights. Assert the product-meaningful signal
+    // (a real score through the real backend), not incidental PII display.
     await page.goto("/score");
-    await expect(page.getByText(EMAIL).first()).toBeVisible();
-
-    // If the test user HAS a saved portfolio, a real 0–1000 score renders —
-    // assert it's a real number. Harmless when there's no portfolio: the score
-    // tile is simply absent, so this block is skipped. (Seed the test user a
-    // small portfolio to make this assertion always fire.)
-    const score = page.getByTestId("score-page-overall");
-    if ((await score.count()) > 0) {
-      await expect(score).toHaveText(/^\d{1,4}$/);
-    }
+    await expect(page).toHaveURL(/\/score/);
+    await expect(page.getByTestId("score-page-overall")).toHaveText(/^\d{1,4}$/, {
+      timeout: 45_000,
+    });
   });
 });
