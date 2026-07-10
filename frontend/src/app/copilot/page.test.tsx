@@ -139,7 +139,7 @@ describe("CopilotPage", () => {
       sseFrame("done", {
         agent_name: "Portfolio Analyzer",
         grounded_in: { overall_score: 612, annual_volatility: 0.18 },
-        draft_trades: [],
+        risk_levers: [],
       }),
     ]);
 

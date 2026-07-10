@@ -218,7 +218,8 @@ class AgentResponse(BaseModel):
 
     agent_name: str
     response_markdown: str = Field(..., min_length=1)
-    draft_trades: list[dict[str, Any]] = Field(default_factory=list)
+    # Non-transactional risk-management levers — never buy/sell instructions.
+    risk_levers: list[dict[str, Any]] = Field(default_factory=list)
     tool_trace: list[str] = Field(default_factory=list)
     grounded_in: dict[str, Any] = Field(
         default_factory=dict,
@@ -244,7 +245,7 @@ class AgentResponse(BaseModel):
         return cls(
             agent_name=getattr(result, "agent_name", "agent"),
             response_markdown=getattr(result, "response_markdown", ""),
-            draft_trades=list(getattr(result, "draft_trades", []) or []),
+            risk_levers=list(getattr(result, "risk_levers", []) or []),
             tool_trace=list(getattr(result, "tool_trace", []) or []),
             grounded_in=getattr(result, "grounded_in", {}) or {},
             ai_generated=bool(getattr(result, "llm_used", False)),

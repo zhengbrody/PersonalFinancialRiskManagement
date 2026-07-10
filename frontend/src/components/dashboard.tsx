@@ -372,7 +372,7 @@ function OnboardingGuide() {
     <Card className="border-primary/30">
       <CardHeader>
         <CardTitle>Welcome — let&apos;s get your first score</CardTitle>
-        <CardDescription>Three quick steps to your institutional-grade risk view.</CardDescription>
+        <CardDescription>Three quick steps to a transparent view of your portfolio risk.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {steps.map((s) => (

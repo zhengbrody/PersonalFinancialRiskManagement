@@ -550,7 +550,7 @@ def _gather(intent: str, message: str, tickers: list[str], *, user) -> list[Evid
     positions, score = score_positions
     ev = _score_evidence(score)
     ev += safe("options", lambda: _option_evidence(message, user)) or []
-    ev += safe("desk_view", lambda: _institutional_evidence(score, positions)) or []
+    ev += safe("risk_reference", lambda: _risk_reference_evidence(score, positions)) or []
 
     if intent in ("tax_fee_review", "action_plan"):
         scans = safe("optimizer", lambda: _optimizer_scans(score, positions))
@@ -559,19 +559,19 @@ def _gather(intent: str, message: str, tickers: list[str], *, user) -> list[Evid
     return ev
 
 
-def _institutional_evidence(score, positions) -> list[EvidenceItem]:
-    """Professional-desk comparison rows (the 'Citadel bone'): the user's
-    engine-computed metrics next to static institutional reference points.
-    Both sides are deterministic — the LLM may only restate them."""
-    from libs.ai_agents.portfolio_agents import build_institutional_comparison
+def _risk_reference_evidence(score, positions) -> list[EvidenceItem]:
+    """Risk-reference rows: the user's engine-computed metrics next to static,
+    neutral risk-management reference bands. Both sides are deterministic —
+    the LLM may only restate them; they carry no buy/sell implication."""
+    from libs.ai_agents.portfolio_agents import build_risk_reference_comparison
 
     return [
         EvidenceItem(
-            label=f"Desk view — {row['metric']}",
-            value=f"{row['yours']} vs {row['institutional_reference']} ({row['assessment']})",
+            label=f"Risk reference — {row['metric']}",
+            value=f"{row['yours']} vs {row['reference_band']} ({row['assessment']})",
             source="reference",
         )
-        for row in build_institutional_comparison(score, positions)
+        for row in build_risk_reference_comparison(score, positions)
     ]
 
 
@@ -590,21 +590,29 @@ def _load_score_positions(user):
 
 
 def _optimizer_scans(score, positions) -> dict[str, str]:
-    """Fee + tax-loss scan summaries from the resident optimizer agent."""
+    """Fee / unrealized-loss / risk-lever summaries from the resident
+    optimizer agent — risk-management observations, never trade instructions."""
     from libs.ai_agents.portfolio_agents import StrategyOptimizerAgent
 
     prep = StrategyOptimizerAgent().prepare(score, positions)
     out: dict[str, str] = {}
     tr = prep.get("tool_results", {}) or {}
-    fees = tr.get("hidden_fees") or tr.get("fees")
-    tax = tr.get("tax_loss_harvest") or tr.get("tax_loss")
-    if isinstance(fees, dict) and fees.get("summary"):
-        out["Hidden-fee scan"] = str(fees["summary"])
-    if isinstance(tax, dict) and tax.get("summary"):
-        out["Tax-loss scan"] = str(tax["summary"])
-    draft = prep.get("draft_trades") or []
-    if draft:
-        out["Suggested trades"] = f"{len(draft)} non-binding draft trade(s) identified"
+    fees = tr.get("hidden_fees") or []
+    if fees:
+        total = sum(float(row.get("annual_fee_usd", 0.0)) for row in fees)
+        out["Hidden-fee scan"] = (
+            f"{len(fees)} fund holding(s) carry an estimated expense drag of ${total:,.0f}/yr"
+        )
+    losses = tr.get("unrealized_losses") or []
+    if losses:
+        out["Unrealized-loss review"] = (
+            f"{len(losses)} position(s) carry unrealized losses beyond the threshold — "
+            "realizing a loss is a tax decision (wash-sale rules apply); "
+            "review with a tax professional"
+        )
+    levers = prep.get("risk_levers") or []
+    if levers:
+        out["Risk levers"] = "; ".join(lv["headline"] for lv in levers[:4])
     return out
 
 
@@ -617,7 +625,13 @@ _SYSTEM = (
     "prices, ratios, or figures; ATTRIBUTE figures to their source in prose (e.g. "
     "'per FMP', 'per the MindMarket engine', 'per FRED'); if a source is missing or "
     "the evidence is thin, SAY SO plainly rather than implying confidence you don't "
-    "have. Answer in EXACTLY these markdown sections, each a bold header:\n"
+    "have. BOUNDARY — risk analytics, not investment advice: never tell the user "
+    "to buy or sell a specific security, never name a security to add or swap in, "
+    "and never give a dollar amount to trade; frame Next Actions as risk-management "
+    "levers (e.g. reduce single-name concentration, review leverage, adjust the "
+    "liquidity buffer, compare downside under a lower-beta allocation) evaluated "
+    "in the platform's What-if lab / Scenarios / Risk Report. "
+    "Answer in EXACTLY these markdown sections, each a bold header:\n"
     "**Conclusion** — 1-2 direct sentences answering the question.\n"
     "**Evidence** — bullet the specific numbers you used, each tagged with its source.\n"
     "**Risks** — what could go wrong / caveats.\n"

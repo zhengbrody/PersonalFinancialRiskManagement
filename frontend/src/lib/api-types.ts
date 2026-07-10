@@ -723,7 +723,7 @@ export interface paths {
          * @description Same as /chat but **streams** the answer over Server-Sent Events so
          *     the UI renders text as it's generated instead of waiting for the whole
          *     turn. Events: ``status`` (phase), ``delta`` ({text}), ``done``
-         *     ({agent_name, grounded_in, draft_trades}), ``error`` ({code, message}).
+         *     ({agent_name, grounded_in, risk_levers}), ``error`` ({code, message}).
          *
          *     Auth is enforced up-front (a 401 here is a normal HTTP error, not an SSE
          *     frame). Everything after the stream starts is reported via SSE events —

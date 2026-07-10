@@ -44,7 +44,7 @@ type ChatMessage = {
   text: string;
   agentName?: string;
   grounded?: Record<string, unknown>;
-  trades?: unknown[];
+  levers?: unknown[];
   aiGenerated?: boolean;
 };
 
@@ -70,7 +70,7 @@ const FOLLOW_UP_QUESTIONS = [
   "How would a -20% market drop hit me?",
   "Am I being paid for the risk I'm taking?",
   "What would diversify my portfolio the most?",
-  "Any hidden fees or tax-loss opportunities?",
+  "Any hidden fees or unrealized losses to review?",
 ];
 
 // Chinese counterparts (same order/intent) — used when the LAST user
@@ -80,7 +80,7 @@ const FOLLOW_UP_QUESTIONS_ZH = [
   "市场下跌 20% 会对我有多大影响？",
   "我承担的风险有得到相应回报吗？",
   "怎样才能让我的组合更分散？",
-  "有隐藏费用或税损收割机会吗？",
+  "有隐藏费用或需要关注的未实现亏损吗？",
 ];
 
 export type CopilotConversationVariant = "page" | "floating";
@@ -154,7 +154,7 @@ export function CopilotConversation({
   function setAssistantMeta(meta: {
     agent_name?: string;
     grounded_in?: Record<string, unknown>;
-    draft_trades?: unknown[];
+    risk_levers?: unknown[];
     ai_generated?: boolean;
   }) {
     setMessages((prev) => {
@@ -165,7 +165,7 @@ export function CopilotConversation({
           ...last,
           agentName: meta.agent_name,
           grounded: meta.grounded_in,
-          trades: meta.draft_trades,
+          levers: meta.risk_levers,
           aiGenerated: meta.ai_generated,
         };
       }
@@ -382,8 +382,8 @@ function AssistantBubble({ message }: { message: ChatMessage }) {
         )}
         <Markdown>{message.text}</Markdown>
 
-        {message.trades && message.trades.length > 0 && (
-          <DraftTrades trades={message.trades} />
+        {message.levers && message.levers.length > 0 && (
+          <RiskLevers levers={message.levers} />
         )}
 
         {message.grounded && Object.keys(message.grounded).length > 0 && (
@@ -452,21 +452,20 @@ function NumbersBehindThis({
   );
 }
 
-function DraftTrades({ trades }: { trades: unknown[] }) {
+function RiskLevers({ levers }: { levers: unknown[] }) {
   return (
     <div className="rounded-md border border-border bg-muted/30 p-3">
       <p className="mb-2 text-xs font-medium text-foreground">
-        Suggested adjustments
+        Risk levers to evaluate
       </p>
       <ul className="space-y-1 text-xs text-muted-foreground">
-        {trades.map((t, i) => (
-          <li key={i} className="font-mono">
-            {describeTrade(t)}
-          </li>
+        {levers.map((l, i) => (
+          <li key={i}>{describeLever(l)}</li>
         ))}
       </ul>
       <p className="mt-2 text-[10px] text-muted-foreground">
-        Ideas to consider — not financial advice, and nothing is executed.
+        Risk-management levers, not trade instructions — MindMarket does not
+        recommend buying or selling any specific security.
       </p>
     </div>
   );
@@ -714,19 +713,14 @@ function titleCase(key: string): string {
   return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function describeTrade(trade: unknown): string {
-  if (trade && typeof trade === "object") {
-    const t = trade as Record<string, unknown>;
-    const action = typeof t.action === "string" ? t.action : undefined;
-    const ticker =
-      typeof t.ticker === "string"
-        ? t.ticker
-        : typeof t.symbol === "string"
-          ? t.symbol
-          : undefined;
-    if (action || ticker) {
-      return [action?.toUpperCase(), ticker].filter(Boolean).join(" ");
+function describeLever(lever: unknown): string {
+  if (lever && typeof lever === "object") {
+    const l = lever as Record<string, unknown>;
+    const headline = typeof l.headline === "string" ? l.headline : undefined;
+    const current = typeof l.current === "string" ? l.current : undefined;
+    if (headline) {
+      return current ? `${headline} — ${current}` : headline;
     }
   }
-  return JSON.stringify(trade);
+  return JSON.stringify(lever);
 }

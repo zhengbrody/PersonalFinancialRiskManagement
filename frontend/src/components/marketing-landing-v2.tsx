@@ -3,7 +3,7 @@
 /**
  * MindMarket — animated marketing landing (V2).
  *
- * A premium ("Citadel × Robinhood") anonymous marketing view. Market-synced:
+ * A premium, editorial anonymous marketing view. Market-synced:
  * the --mm-* palette (via the C tokens) flips light/dark with the app theme, so
  * it's light during the trading day and dark overnight. Zero new deps — motion
  * is CSS transitions + IntersectionObserver + rAF (shared with the other
@@ -143,7 +143,7 @@ function Hero() {
           </Reveal>
           <Reveal delay={0.16}>
             <p style={{ maxWidth: "30em", fontSize: "clamp(16px,1.5vw,19px)", lineHeight: 1.6, color: C.slate, margin: "0 0 32px" }}>
-              Paste your holdings — or import from your broker — and get a hedge-fund-grade risk X-ray in seconds: a 0–1000 Health Score, real VaR, stress tests, and concentration, explained in plain English. Free, no signup to try.
+              Paste your holdings — or import from your broker — and get a transparent risk X-ray in seconds: a 0–1000 Health Score, real VaR, stress tests, and concentration, explained in plain English. Free, no signup to try.
             </p>
           </Reveal>
           <Reveal delay={0.24}>
@@ -330,8 +330,8 @@ function BarRow({ t, pct, value, red, animate }: { t: string; pct: number; value
 /* pillars ------------------------------------------------------------------ */
 function Pillars() {
   const cards: { ic: IconName; h: string; p: string; m: string }[] = [
-    { ic: "score-gauge", h: "Portfolio Health Score", p: "One 0–1000 number for how risk-appropriate your portfolio really is — across three institutional dimensions you can act on.", m: "Risk Match · Risk-Adj. Return · Downside" },
-    { ic: "volatility", h: "Institutional risk metrics", p: "Monte-Carlo VaR & CVaR, six-factor betas, component VaR, stress tests and drawdown — the math the pros use, on your account.", m: "VaR 95 / 99 · factor betas · stress" },
+    { ic: "score-gauge", h: "Portfolio Health Score", p: "One 0–1000 number for how risk-appropriate your portfolio really is — across three dimensions you can act on.", m: "Risk Match · Risk-Adj. Return · Downside" },
+    { ic: "volatility", h: "Institutional-style risk metrics", p: "Monte-Carlo VaR & CVaR, six-factor betas, component VaR, stress tests and drawdown — deterministic, explainable risk math on your own account.", m: "VaR 95 / 99 · factor betas · stress" },
     { ic: "trend-up", h: "Live market context", p: "Real Fed Funds, CPI, and the US Treasury curve, streamed live — so you score against the regime that actually exists today.", m: "FRED · US Treasury · hourly" },
   ];
   return (

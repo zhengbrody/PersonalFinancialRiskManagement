@@ -1,6 +1,6 @@
 """
 risk_engine.py
-Institutional-grade risk engine v2.1
+Deterministic portfolio risk engine v2.1
 ──────────────────────────────────────────────────────────
 Added: macro sensitivity (Macro Beta) · liquidity risk (Days to Liquidate)
 Retained: EWMA dynamic covariance · dynamic risk-free rate · multi-factor Beta
@@ -85,7 +85,7 @@ class RiskReport:
 #  Risk engine
 # ══════════════════════════════════════════════════════════════
 class RiskEngine:
-    """Institutional-grade risk-computation engine."""
+    """Deterministic portfolio risk-computation engine."""
 
     TRADING_DAYS = 252
     EWMA_LAMBDA = 0.94

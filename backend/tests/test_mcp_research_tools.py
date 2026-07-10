@@ -136,11 +136,82 @@ def test_generate_action_cards(monkeypatch):
     class _Agent:
         def prepare(self, score, positions):
             return {
-                "tool_results": {"hidden_fees": {"summary": "You pay $42/yr in fees"}},
-                "draft_trades": [],
+                "tool_results": {
+                    "hidden_fees": [
+                        {
+                            "ticker": "SPY",
+                            "annual_fee_usd": 42.0,
+                            "note": "Estimated annual fund fee: $42.",
+                        }
+                    ],
+                    "unrealized_losses": [{"ticker": "QQQ", "loss_usd": 900.0, "loss_pct": 0.12}],
+                },
+                "risk_levers": [
+                    {
+                        "lever": "review_leverage",
+                        "risk_dimension": "leverage",
+                        "headline": "Review margin leverage",
+                        "current": "gross exposure is 1.40x net equity",
+                        "reference": "an unlevered book is 1.00x",
+                        "evaluate": "stress a -20% move in Scenarios",
+                    }
+                ],
             }
 
     monkeypatch.setattr("libs.ai_agents.portfolio_agents.StrategyOptimizerAgent", lambda: _Agent())
     out = _run(tools.generate_action_cards({"holdings": [{"ticker": "SPY", "market_value": 1}]}))
-    assert out["action_cards"][0]["kind"] == "hidden_fees"
-    assert "fees" in out["action_cards"][0]["summary"]
+    kinds = [c["kind"] for c in out["action_cards"]]
+    assert kinds == ["fee_drag", "unrealized_losses", "risk_lever"]
+    # Compliance: no BUY/SELL/ticker-amount trade combos anywhere in the payload.
+    import json as _json
+    import re as _re
+
+    payload = _json.dumps(out)
+    assert not _re.search(r"\b(BUY|SELL)\b", payload)
+    assert "draft_trades" not in out
+    assert "not trade instructions" in out["note"]
+
+
+def test_generate_action_cards_real_path_no_mocked_agent(monkeypatch):
+    """End-to-end through the REAL StrategyOptimizerAgent: guards the
+    AssetPositionInput → .to_position() seam (review-caught: the old code
+    AttributeError'd on every real invocation and only the mocked-agent test
+    passed) and re-asserts the no-trade-instruction boundary on real output."""
+    import json
+    import re
+
+    import numpy as np
+    import pandas as pd
+
+    import backend.mcp_server.tools as tools
+    from backend.app.services import market_data
+
+    idx = pd.bdate_range(end="2026-06-30", periods=300)
+    rng = np.random.default_rng(3)
+    frame = pd.DataFrame(
+        {
+            "QQQ": 100 * np.exp(np.cumsum(rng.normal(0.0005, 0.02, 300))),
+            "SPY": 100 * np.exp(np.cumsum(rng.normal(0.0004, 0.01, 300))),
+        },
+        index=idx,
+    )
+    monkeypatch.setattr(market_data, "get_price_history", lambda tickers, days=365: frame)
+
+    out = _run(
+        tools.generate_action_cards(
+            {
+                "holdings": [
+                    # concentrated AND at an unrealized loss → levers + tax card
+                    {"ticker": "QQQ", "market_value": 60_000, "cost_basis": 70_000},
+                    {"ticker": "SPY", "market_value": 20_000, "cost_basis": 19_000},
+                ],
+                "risk_preference": 1,
+            }
+        )
+    )
+    kinds = {c["kind"] for c in out["action_cards"]}
+    assert "risk_lever" in kinds
+    assert "unrealized_losses" in kinds
+    payload = json.dumps(out)
+    assert not re.search(r"\b(BUY|SELL)\b", payload)
+    assert "TAX_LOSS_SWAP" not in payload and '"replacement"' not in payload

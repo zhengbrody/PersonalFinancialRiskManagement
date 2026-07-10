@@ -332,9 +332,11 @@ _VERDICT_SYSTEM = (
     "FactPack of vetted numbers for ONE stock. RULES: (1) Use ONLY numbers that "
     "appear in the FactPack — never invent prices, ratios, or targets. (2) You "
     "judge, rank, and explain; the math is already done. (3) Be concise and "
-    "specific, citing the FactPack's own figures.\n"
+    "specific, citing the FactPack's own figures. (4) The rating describes how "
+    "the stock SCREENS on the supplied data — it is NOT a buy/sell "
+    "recommendation; never advise buying or selling.\n"
     "Return JSON ONLY with this exact schema: {rating: one of "
-    '"Strong Buy"|"Buy"|"Hold"|"Sell"|"Strong Sell", conviction: '
+    '"Strong"|"Favorable"|"Mixed"|"Weak"|"Very Weak", conviction: '
     '"low"|"medium"|"high", summary: string (2-3 sentences), dimensions: '
     "[{name: one of valuation|growth|quality|momentum|risk, score: 0-100 int, "
     "note: short string}], catalysts: [string], risks: [string], "
@@ -370,16 +372,21 @@ def _dimension_scores(fp: R.FactPack) -> list[R.DimensionScore]:
     ]
 
 
+# Non-transactional data-screen vocabulary — how the stock SCREENS on the
+# data, deliberately NOT buy/sell/hold (compliance boundary).
+_RATINGS = ("Strong", "Favorable", "Mixed", "Weak", "Very Weak")
+
+
 def _rating_from(score: float) -> str:
     if score >= 72:
-        return "Strong Buy"
+        return "Strong"
     if score >= 60:
-        return "Buy"
+        return "Favorable"
     if score >= 45:
-        return "Hold"
+        return "Mixed"
     if score >= 33:
-        return "Sell"
-    return "Strong Sell"
+        return "Weak"
+    return "Very Weak"
 
 
 def _deterministic_verdict(fp: R.FactPack) -> R.ResearchVerdict:
@@ -390,7 +397,7 @@ def _deterministic_verdict(fp: R.FactPack) -> R.ResearchVerdict:
         rating=_rating_from(avg),
         conviction="medium" if fp.data_quality.coverage > 0.5 else "low",
         summary=(
-            f"{name} screens as a {_rating_from(avg).lower()} on the data. "
+            f"{name} screens as {_rating_from(avg).lower()} on the data. "
             + (f"Key positives: {fp.drivers[0].lower()}. " if fp.drivers else "")
             + (f"Watch: {fp.risk_flags[0].lower()}." if fp.risk_flags else "")
         ).strip(),
@@ -438,6 +445,11 @@ def build_verdict(fp: R.FactPack, llm_callable: Optional[Callable[..., str]] = N
             {**d.model_dump(), "note": llm_notes.get(d.name.lower()) or d.note}
             for d in floor.dimensions
         ]
+        # Vocabulary clamp: the rating must stay in the non-transactional
+        # closed set — an off-vocabulary LLM rating (e.g. "Buy") is replaced
+        # by the deterministic floor's.
+        if parsed.get("rating") not in _RATINGS:
+            parsed["rating"] = floor.rating
         parsed["data_only"] = False
         return R.ResearchVerdict.model_validate(parsed)
     except Exception:  # noqa: BLE001 - any LLM/parse failure → deterministic floor

@@ -26,7 +26,7 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
 export const metadata: Metadata = {
   title: "Product — Health Score, Risk Report, Stock Research & Copilot",
   description:
-    "MindMarket turns your holdings into a 0–1000 Health Score, an institutional-grade Risk Report, source-backed Stock Research, and an AI Copilot grounded in deterministic risk math.",
+    "MindMarket turns your holdings into a 0–1000 Health Score, a Risk Report built on institutional-style risk metrics — VaR, CVaR, stress tests, factor exposure — source-backed Stock Research, and an AI Copilot grounded in deterministic, explainable risk math.",
   alternates: { canonical: "/product" },
   openGraph: {
     type: "website",
@@ -34,8 +34,8 @@ export const metadata: Metadata = {
     description:
       "Health Score, Risk Report, Stock Research, and an AI Copilot grounded in deterministic risk math — for individual investors.",
     url: `${SITE_URL}/product`,
-    siteName: "MindMarket",
-    images: ["/og.jpg?v=2"],
+    siteName: "mindmarket.app",
+    images: ["/og.jpg?v=3"],
   },
   twitter: { card: "summary_large_image" },
 };
@@ -51,7 +51,7 @@ const PILLARS: { icon: IconName; name: string; tag: string; body: string; href: 
   {
     icon: "shield",
     name: "Risk Report",
-    tag: "Institutional, readable",
+    tag: "Deterministic, readable",
     body: "VaR/CVaR, factor exposures, component VaR, a stress-scenario explorer (−10/−20/−30%), per-holding stress losses, concentration, liquidity, and an options/margin cockpit — every figure with its source and freshness.",
     href: "/learn/var-cvar-explained",
   },

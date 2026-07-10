@@ -180,7 +180,7 @@ class ResearchVerdict(BaseModel):
     """The LLM's ranked judgment over the FactPack. The model phrases + ranks;
     every number it cites already lives in the FactPack."""
 
-    rating: str  # "Strong Buy" | "Buy" | "Hold" | "Sell" | "Strong Sell"
+    rating: str  # data screen: "Strong"|"Favorable"|"Mixed"|"Weak"|"Very Weak" (never buy/sell)
     conviction: str = "medium"  # low | medium | high
     summary: str
     dimensions: list[DimensionScore] = Field(default_factory=list)

@@ -40,8 +40,8 @@ export function buildLevers(score: ScoreResponse): Lever[] {
     levers.push({
       key: "concentration",
       sev: topName > 0.45 ? 3 : topName > 0.35 ? 2 : 1,
-      title: `Trim ${c.top_holding_ticker} below 25%`,
-      detail: `${c.top_holding_ticker} is ${pct0(topName)} of your book — a shock to one name swings the whole portfolio. Trimming it eases concentration and downside.`,
+      title: "Reduce single-name concentration",
+      detail: `${c.top_holding_ticker} is ${pct0(topName)} of your book — a shock to one name swings the whole portfolio. Compare downside in the What-if lab with that position scaled down.`,
       q: `How can I reduce my concentration in ${c.top_holding_ticker}?`,
     });
   }

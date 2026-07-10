@@ -1667,7 +1667,7 @@ def report_from_active_endpoint(
 # ── scenario simulator + efficient frontier ───────────────────────────
 # Both reuse RiskEngine (same wiring as report_from_active). The efficient
 # frontier shows "are you paid for your risk?"; the scenario sweep shows
-# downside/upside under a broad market move — the Citadel-bone, defensive
+# downside/upside under a broad market move — the defensive
 # "what could go wrong" view for a novice.
 
 _SCENARIO_SHOCKS = [-0.30, -0.20, -0.10, -0.05, 0.0, 0.05, 0.10, 0.20, 0.30]

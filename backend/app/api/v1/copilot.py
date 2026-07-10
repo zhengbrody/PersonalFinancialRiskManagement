@@ -232,7 +232,7 @@ def copilot_chat_stream_endpoint(
     """Same as /chat but **streams** the answer over Server-Sent Events so
     the UI renders text as it's generated instead of waiting for the whole
     turn. Events: ``status`` (phase), ``delta`` ({text}), ``done``
-    ({agent_name, grounded_in, draft_trades}), ``error`` ({code, message}).
+    ({agent_name, grounded_in, risk_levers}), ``error`` ({code, message}).
 
     Auth is enforced up-front (a 401 here is a normal HTTP error, not an SSE
     frame). Everything after the stream starts is reported via SSE events —
@@ -279,7 +279,7 @@ def copilot_chat_stream_endpoint(
             plan = None
 
         agent_name = plan["agent_name"] if plan else "Portfolio Copilot"
-        draft_trades = plan["draft_trades"] if plan else []
+        risk_levers = plan["risk_levers"] if plan else []
 
         streamer = get_answer_streamer()
 
@@ -292,7 +292,7 @@ def copilot_chat_stream_endpoint(
                 {
                     "agent_name": resp.agent_name,
                     "grounded_in": grounded,
-                    "draft_trades": draft_trades,
+                    "risk_levers": risk_levers,
                 },
             )
             # Template path is cheap, but still meter it for an honest ledger.
@@ -328,7 +328,7 @@ def copilot_chat_stream_endpoint(
             {
                 "agent_name": agent_name,
                 "grounded_in": grounded,
-                "draft_trades": draft_trades,
+                "risk_levers": risk_levers,
                 # produced=False means the deterministic fallback wrote the
                 # answer — the UI labels the bubble accordingly.
                 "ai_generated": produced,

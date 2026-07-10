@@ -94,7 +94,7 @@ def patched_seams(fixture: dict):
         put(cr, "_load_score", no_portfolio)
 
     packs = fx.get("factpacks") or {}
-    put(cr, "_institutional_evidence", lambda score, positions: [])
+    put(cr, "_risk_reference_evidence", lambda score, positions: [])
     put(cr, "_option_evidence", lambda message, user: [])
     put(cr, "_optimizer_scans", lambda score, positions: dict(fx.get("scans") or {}))
     put(rf, "build_fact_pack", lambda tk: _factpack_obj(tk, packs[tk]))

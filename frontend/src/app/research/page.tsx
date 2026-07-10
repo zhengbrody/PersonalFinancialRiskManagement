@@ -3,7 +3,7 @@
 /**
  * Ticker Research 2.0 — single-name FactPack cockpit.
  *
- * Two-stage, Robinhood-skin / Citadel-bone:
+ * Two-stage — plain-English surface over a rigorous data engine:
  *   1. Search a ticker → the deterministic FACT PACK paints instantly
  *      (header + valuation/quality/growth/analyst cards + peers + news +
  *      pre-written drivers/risk-flags). Authed, no credit.
@@ -1323,9 +1323,19 @@ function humanizeWarning(w: string): string {
 
 function ratingTone(rating: string): { badge: string } {
   const r = rating.toUpperCase().replace(/\s+/g, "_");
-  if (r === "STRONG_BUY" || r === "BUY")
+  // Verdict vocabulary (non-transactional data screen: Strong … Very Weak);
+  // the BUY/SELL keys remain only for the third-party ANALYST-consensus card
+  // (factual reporting of Wall Street ratings, not the platform's verdict).
+  if (r === "STRONG" || r === "FAVORABLE" || r === "STRONG_BUY" || r === "BUY")
     return { badge: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" };
-  if (r === "STRONG_SELL" || r === "SELL" || r === "REDUCE" || r === "AVOID")
+  if (
+    r === "WEAK" ||
+    r === "VERY_WEAK" ||
+    r === "STRONG_SELL" ||
+    r === "SELL" ||
+    r === "REDUCE" ||
+    r === "AVOID"
+  )
     return { badge: "bg-red-500/15 text-red-600 dark:text-red-400" };
   return { badge: "bg-amber-500/15 text-amber-600 dark:text-amber-400" };
 }

@@ -166,7 +166,7 @@ def test_route_message_router_exception_chinese_message(monkeypatch):
 
 def test_route_message_optimizer_keyword_routing():
     """Keyword 'tax' should route to optimizer (which returns
-    draft_trades / fee scan content, distinct from analyzer)."""
+    risk levers / fee scan content, distinct from analyzer)."""
     portfolio = _sample_input()
     returns = _sample_returns()
     score = score_portfolio_from_input(portfolio, returns)

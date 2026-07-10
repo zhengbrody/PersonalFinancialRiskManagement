@@ -98,7 +98,7 @@ describe("FollowUpChips", () => {
     // Max 3 suggestions → the 5th question stays hidden.
     expect(
       screen.queryByRole("button", {
-        name: "Any hidden fees or tax-loss opportunities?",
+        name: "Any hidden fees or unrealized losses to review?",
       }),
     ).not.toBeInTheDocument();
   });

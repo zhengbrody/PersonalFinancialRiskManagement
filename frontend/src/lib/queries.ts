@@ -1391,7 +1391,7 @@ const verdictDimensionSchema = z.looseObject({
   note: fstr,
 });
 export const researchVerdictSchema = z.looseObject({
-  rating: z.string(), // Strong Buy | Buy | Hold | Sell | Strong Sell
+  rating: z.string(), // data screen: Strong | Favorable | Mixed | Weak | Very Weak (never buy/sell)
   conviction: z.string(), // low | medium | high
   summary: z.string(),
   dimensions: z.array(verdictDimensionSchema),

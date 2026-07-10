@@ -23,8 +23,8 @@ export const metadata: Metadata = {
     description:
       "Free, example-led guides to portfolio risk for individual investors: VaR/CVaR, factor exposure, stress testing, margin, options, and stock research.",
     url: `${SITE_URL}/learn`,
-    siteName: "MindMarket",
-    images: ["/og.jpg?v=2"],
+    siteName: "mindmarket.app",
+    images: ["/og.jpg?v=3"],
   },
   twitter: { card: "summary_large_image" },
 };

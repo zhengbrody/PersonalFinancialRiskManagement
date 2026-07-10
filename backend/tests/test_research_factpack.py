@@ -296,7 +296,7 @@ def test_verdict_deterministic_without_llm(fmp_full):
     fp_obj = rf.build_fact_pack("AAPL")
     v = rf.build_verdict(fp_obj, llm_callable=None)
     assert v.data_only is True
-    assert v.rating in {"Strong Buy", "Buy", "Hold", "Sell", "Strong Sell"}
+    assert v.rating in {"Strong", "Favorable", "Mixed", "Weak", "Very Weak"}
     assert len(v.dimensions) == 5
     assert {d.name for d in v.dimensions} == {"valuation", "growth", "quality", "momentum", "risk"}
 
@@ -307,13 +307,13 @@ def test_verdict_uses_llm_json(fmp_full):
     def fake_llm(prompt, system, max_tokens, temperature):
         assert "FactPack" in prompt and "ONLY" in system
         return (
-            '{"rating":"Buy","conviction":"high","summary":"Solid.",'
+            '{"rating":"Favorable","conviction":"high","summary":"Solid.",'
             '"dimensions":[],"catalysts":["x"],"risks":["y"],'
             '"what_would_change_my_mind":["z"]}'
         )
 
     v = rf.build_verdict(fp_obj, llm_callable=fake_llm)
-    assert v.rating == "Buy" and v.conviction == "high" and v.data_only is False
+    assert v.rating == "Favorable" and v.conviction == "high" and v.data_only is False
     assert v.catalysts == ["x"]
     # empty dimensions from the model are backfilled with the deterministic floor
     assert len(v.dimensions) == 5
@@ -333,7 +333,7 @@ def test_verdict_llm_cannot_invent_dimension_scores(fmp_full):
 
     def fake_llm(prompt, system, max_tokens, temperature):
         return (
-            '{"rating":"Strong Buy","conviction":"high","summary":"To the moon.",'
+            '{"rating":"Strong Buy","conviction":"high","summary":"To the moon.",'  # off-vocabulary → clamped
             '"dimensions":[{"name":"valuation","score":99,"note":"cheap vs peers"},'
             '{"name":"growth","score":1,"note":""},'
             '{"name":"made_up_dimension","score":100,"note":"??"}],'
@@ -342,6 +342,10 @@ def test_verdict_llm_cannot_invent_dimension_scores(fmp_full):
 
     v = rf.build_verdict(fp_obj, llm_callable=fake_llm)
     assert v.data_only is False
+    # Vocabulary clamp: the off-vocabulary "Strong Buy" is replaced by the
+    # deterministic floor's non-transactional rating.
+    assert v.rating == floor.rating
+    assert v.rating in {"Strong", "Favorable", "Mixed", "Weak", "Very Weak"}
     # Scores: exactly the floor's, in the floor's dimension set — the planted
     # 99/1 and the invented dimension never reach the response.
     assert {d.name: d.score for d in v.dimensions} == {d.name: d.score for d in floor.dimensions}
