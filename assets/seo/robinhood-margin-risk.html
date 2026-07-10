@@ -9,12 +9,19 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <title>Robinhood Margin Risk Analysis | MindMarket AI</title>
   <meta name="description" content="Understand Robinhood-style buying power, cash, margin total, margin used, net equity, leverage, and stress loss with MindMarket AI portfolio analytics.">
-  <meta property="og:site_name" content="MindMarket AI">
+  <meta property="og:site_name" content="mindmarket.app">
   <meta property="og:title" content="Robinhood Margin Risk Analysis">
   <meta property="og:description" content="Separate cash from margin buying power and analyze leveraged portfolio risk.">
-  <meta property="og:image" content="https://mindmarket.app/og.jpg?v=2">
+  <meta property="og:image" content="https://mindmarket.app/og.jpg?v=3">
   <meta name="twitter:card" content="summary_large_image">
-  <style>:root{--mm-bg:#f5f7fa;--mm-text:#0b0e11;--mm-dim:#4d5763;--mm-teal:#0b7285;}html.dark{--mm-bg:#0b0e11;--mm-text:#f8fafc;--mm-dim:#aab4c2;--mm-teal:#39a3b5;}
+  <style>
+    /* Self-hosted Instrument Serif (was Google Fonts — removed for CSP
+       tightness + privacy: no font request leaves the origin). */
+    @font-face { font-family:'Instrument Serif'; font-style:normal; font-weight:400;
+      font-display:swap; src:url('/fonts/instrument-serif-regular.woff2') format('woff2'); }
+    @font-face { font-family:'Instrument Serif'; font-style:italic; font-weight:400;
+      font-display:swap; src:url('/fonts/instrument-serif-italic.woff2') format('woff2'); }
+    :root{--mm-bg:#f5f7fa;--mm-text:#0b0e11;--mm-dim:#4d5763;--mm-teal:#0b7285;}html.dark{--mm-bg:#0b0e11;--mm-text:#f8fafc;--mm-dim:#aab4c2;--mm-teal:#39a3b5;}
     body { margin:0; background:var(--mm-bg); color:var(--mm-text); font-family:Inter,Arial,sans-serif; line-height:1.65; }
     main { max-width:920px; margin:0 auto; padding:72px 24px; }
     a { color:var(--mm-teal); }
@@ -28,9 +35,6 @@
     .mm-brand { display:inline-flex; align-items:center; gap:10px; text-decoration:none; color:var(--mm-text); font-weight:600; font-size:16px; letter-spacing:-.02em; margin:0 0 44px; }
     .mm-brand svg { flex:none; }
   </style>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <script>(function(){try{var p=new Intl.DateTimeFormat("en-US",{timeZone:"America/New_York",hour:"2-digit",minute:"2-digit",hour12:false}).formatToParts(new Date());var g=function(t){var f=p.find(function(x){return x.type===t});return f?f.value:"0"};var h=parseInt(g("hour"),10)%24,m=parseInt(g("minute"),10),mins=h*60+m,day=mins>=240&&mins<1200;var e=document.documentElement;e.classList.toggle("dark",!day);e.style.colorScheme=day?"light":"dark";}catch(_){document.documentElement.classList.add("dark");}})();</script>
 </head>
 <body>
