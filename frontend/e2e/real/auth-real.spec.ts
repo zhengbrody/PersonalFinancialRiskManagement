@@ -44,15 +44,14 @@ test.describe("real auth smoke (live Supabase + backend)", () => {
     await expect(page.getByText(EMAIL).first()).toBeVisible();
   });
 
-  test("a signed-in data page loads through the real backend", async ({ page }) => {
-    // Cold auto-scores can take a while (live market-data fetch server-side).
-    test.setTimeout(90_000);
+  test("a signed-in data page loads through the real backend", async ({ page, baseURL }) => {
+    // Login + (maybe) an authed write + a cold server-side market-data fetch.
+    test.setTimeout(120_000);
     await login(page);
 
     // /score signed-in auto-scores the saved portfolio via the real backend
     // (/risk/score_from_active) — the rendered 0–1000 score IS the proof of
-    // the real JWT → backend chain on a data route. The e2e bot keeps a small
-    // seeded portfolio, so this must always render.
+    // the real JWT → backend chain on a data route.
     //
     // History: this test previously asserted the account email was visible on
     // /score. PR #140 (privacy) removed email from the top bar, and /score
@@ -61,8 +60,46 @@ test.describe("real auth smoke (live Supabase + backend)", () => {
     // (a real score through the real backend), not incidental PII display.
     await page.goto("/score");
     await expect(page).toHaveURL(/\/score/);
-    await expect(page.getByTestId("score-page-overall")).toHaveText(/^\d{1,4}$/, {
-      timeout: 45_000,
-    });
+
+    // SELF-SEEDING: the bot keeps a 1-share SPY portfolio as its fixture.
+    // Signed-in /score shows exactly one of two states: the score tile, or
+    // the "Set up your portfolio" empty state (itself proof of an authed
+    // backend round-trip that returned zero rows). On the empty state,
+    // create the fixture through the REAL backend with the REAL session
+    // token — an authed WRITE is an even stronger smoke — then reload.
+    const emptyState = page.getByText("Set up your portfolio");
+    const scoreTile = page.getByTestId("score-page-overall");
+    await expect(emptyState.or(scoreTile).first()).toBeVisible({ timeout: 30_000 });
+
+    if (await emptyState.isVisible()) {
+      const token = await page.evaluate(() => {
+        for (let i = 0; i < localStorage.length; i += 1) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith("sb-") && key.endsWith("-auth-token")) {
+            try {
+              const parsed = JSON.parse(localStorage.getItem(key) ?? "{}");
+              return parsed.access_token ?? parsed.currentSession?.access_token ?? null;
+            } catch {
+              return null;
+            }
+          }
+        }
+        return null;
+      });
+      expect(token, "Supabase access token must be in localStorage").toBeTruthy();
+
+      const created = await page.request.post(`${baseURL}/api/v1/portfolios`, {
+        headers: { Authorization: `Bearer ${token}` },
+        data: {
+          name: "E2E smoke fixture",
+          holdings: { SPY: { shares: 1 } },
+          is_default: true,
+        },
+      });
+      expect(created.ok(), `portfolio create failed: ${created.status()}`).toBeTruthy();
+      await page.reload();
+    }
+
+    await expect(scoreTile).toHaveText(/^\d{1,4}$/, { timeout: 60_000 });
   });
 });
