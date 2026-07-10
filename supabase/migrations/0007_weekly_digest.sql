@@ -5,8 +5,9 @@
 -- "not_ready" and the /settings toggle hides — same degrade-silently
 -- contract as 0004's portfolio_snapshots.
 --
--- Semantics: NO digest_prefs row = enabled (default opt-in for signed-up
--- users who have at least one snapshot); enabled=false = opted out (set via
+-- Semantics (updated 2026-07, enforced in code — no SQL change): NO
+-- digest_prefs row = NOT subscribed. The digest is EXPLICIT OPT-IN
+-- (enabled=true row, set from Settings); enabled=false = opted out (set via
 -- the authed /settings toggle or the signed unsubscribe link in the email).
 
 create table if not exists public.digest_prefs (

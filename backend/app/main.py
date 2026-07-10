@@ -20,6 +20,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.v1 import (
+    account,
     billing,
     copilot,
     data,
@@ -165,6 +166,7 @@ def create_app() -> FastAPI:
     # Routers. Each router carries its own ``prefix`` and ``tags`` so
     # this file stays a directory of imports.
     app.include_router(health.router)
+    app.include_router(account.router)
     app.include_router(risk.router)
     app.include_router(portfolios.router)
     app.include_router(market.router)

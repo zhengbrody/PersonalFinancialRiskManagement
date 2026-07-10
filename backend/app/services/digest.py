@@ -51,19 +51,24 @@ def _table_missing(exc: Exception) -> bool:
 
 
 def list_recipients() -> list[dict[str, Any]]:
-    """profiles rows (user_id, email) minus opt-outs. Raises only when the
-    0007 tables are absent (caller reports not_ready)."""
+    """EXPLICIT OPT-INS only: users with a digest_prefs row where
+    enabled=true, joined to their profile email. Consent semantics (Privacy
+    Policy): no row = NOT subscribed — new users never receive the digest
+    unless they turn it on in Settings. Raises only when the 0007 tables are
+    absent (caller reports not_ready)."""
     admin = _admin()
-    optout: set[str] = set()
+    optin: set[str] = set()
     rows = admin.table("digest_prefs").select("user_id,enabled").execute().data or []
     for r in rows:
-        if r.get("enabled") is False:
-            optout.add(str(r.get("user_id")))
+        if r.get("enabled") is True:
+            optin.add(str(r.get("user_id")))
+    if not optin:
+        return []
     profiles = admin.table("profiles").select("user_id,email").order("user_id").execute().data or []
     out = []
     for p in profiles:
         uid, email = str(p.get("user_id") or ""), str(p.get("email") or "")
-        if uid and "@" in email and uid not in optout:
+        if uid and "@" in email and uid in optin:
             out.append({"user_id": uid, "email": email})
     return out
 

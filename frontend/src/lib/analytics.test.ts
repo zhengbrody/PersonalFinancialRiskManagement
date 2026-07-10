@@ -50,3 +50,19 @@ describe("redactProps (defense-in-depth)", () => {
     expect(redactProps({})).toEqual({});
   });
 });
+
+describe("identify privacy (Privacy Policy: UUID only, no email)", () => {
+  it("redactProps strips email and every deny-list person property", () => {
+    const out = redactProps({
+      email: "user@example.com",
+      user_email: "user@example.com",
+      ticker: "NVDA",
+      portfolio_id: "p1",
+      prompt: "should I sell?",
+      amount_usd: 5000,
+      plan: "free", // safe funnel prop survives
+    });
+    expect(out).toEqual({ plan: "free" });
+    expect(JSON.stringify(out)).not.toContain("example.com");
+  });
+});

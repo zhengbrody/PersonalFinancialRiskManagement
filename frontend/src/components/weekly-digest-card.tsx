@@ -22,16 +22,17 @@ export function WeeklyDigestCard() {
   const setPref = useSetDigestPref();
 
   if (pref.isError) return null;
-  const enabled = pref.data?.enabled ?? true;
+  const enabled = pref.data?.enabled ?? false; // opt-in: off unless explicitly enabled
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Weekly risk digest</CardTitle>
         <CardDescription>
-          One email every Monday morning: your Health Score changes, volatility,
-          concentration, and market state — all from the deterministic numbers of your
-          own most recent score, educational content, unsubscribe anytime.
+          Optional — off by default. Opt in to get one email every Monday morning:
+          your Health Score changes, volatility, concentration, and market state — all
+          from the deterministic numbers of your own most recent score. Educational
+          content; unsubscribe anytime with one click.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap items-center justify-between gap-3">

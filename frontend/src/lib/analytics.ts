@@ -86,7 +86,11 @@ export function track(event: string, props?: Record<string, unknown>): void {
 export function identifyUser(id: string, props?: Record<string, unknown>): void {
   if (!started) return;
   try {
-    posthog.identify(id, props);
+    // Same defense-in-depth as track(): person properties go through the
+    // deny-list scrub, so email / tickers / amounts can never be attached to
+    // the PostHog identity even by a careless future call site. The id
+    // itself must be the opaque Supabase UUID.
+    posthog.identify(id, redactProps(props));
   } catch {
     /* ignore */
   }

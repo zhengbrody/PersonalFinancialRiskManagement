@@ -17,6 +17,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { exportPortfolio } from "@/lib/portfolio-export";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -208,6 +209,24 @@ function CardActions({ portfolio }: { portfolio: PortfolioRow }) {
         onClick={() => router.push(`/portfolios/${portfolio.id}/edit`)}
       >
         Edit
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        onClick={() => exportPortfolio(portfolio, "csv")}
+        aria-label={`Export ${portfolio.name} as CSV`}
+      >
+        Export CSV
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        onClick={() => exportPortfolio(portfolio, "json")}
+        aria-label={`Export ${portfolio.name} as JSON`}
+      >
+        Export JSON
       </Button>
       <Button
         type="button"

@@ -352,6 +352,29 @@ export function useDeletePortfolio() {
   });
 }
 
+// ── account ──────────────────────────────────────────────────────
+
+export const accountDeleteSchema = z.looseObject({
+  deleted: z.boolean(),
+  subscription_canceled: z.boolean(),
+});
+
+/** DELETE /api/v1/account — deletes the CALLER's account (id from the JWT).
+ *  Requires the exact confirmation phrase; the server fails closed if a live
+ *  Stripe subscription cannot be canceled first. */
+export function useDeleteAccount() {
+  const { accessToken } = useAuth();
+  return useMutation<z.infer<typeof accountDeleteSchema>, Error, string>({
+    mutationFn: (confirmation) =>
+      apiFetch("/api/v1/account", {
+        method: "DELETE",
+        body: { confirmation },
+        authToken: accessToken ?? undefined,
+        schema: accountDeleteSchema,
+      }),
+  });
+}
+
 // ── billing ──────────────────────────────────────────────────────
 
 export const subscriptionRowSchema = z.looseObject({
