@@ -47,11 +47,46 @@
 	@www host www.{$SITE_HOST}
 	redir @www https://{$SITE_HOST}{uri} permanent
 
+	# ── Security response headers ─────────────────────────────────
+	# Stage 1: the CSP ships REPORT-ONLY — it observes (violations go to the
+	# frontend Sentry project via report-uri) and blocks nothing, so a missed
+	# origin can't break production. Enforce (rename to Content-Security-Policy)
+	# only after the report stream runs quiet. Design notes:
+	#   * script/style 'unsafe-inline': Next.js ships inline hydration/theme
+	#     scripts and JSON-LD without nonces; a nonce scheme would defeat
+	#     static caching — accepted trade-off, revisit post-report.
+	#   * connect-src: Supabase (auth/REST), PostHog (events + remote config),
+	#     Sentry ingest, and 'self' (covers the /api/v1/copilot SSE stream —
+	#     same-origin EventSource/fetch, unaffected by these headers).
+	#   * form-action includes accounts.google.com for the Supabase Google
+	#     OAuth redirect; COOP is same-origin-allow-popups so any OAuth popup
+	#     flow keeps its opener (full-page redirects are unaffected either way).
+	#   * X-Frame-Options DENY + frame-ancestors 'none': nothing embeds us.
+	#   * Fonts are self-hosted (/fonts/*, below) — font-src stays 'self'.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()"
+		Cross-Origin-Opener-Policy "same-origin-allow-popups"
+		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://byfpmmfduteajblqpuuw.supabase.co wss://byfpmmfduteajblqpuuw.supabase.co https://us.i.posthog.com https://us-assets.i.posthog.com https://o4511493492178944.ingest.us.sentry.io; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://accounts.google.com; object-src 'none'; report-uri https://o4511493492178944.ingest.us.sentry.io/api/4511494053560320/security/?sentry_key=c6ee4dd05a13fb3da4669a5a4db7ba08"
+		-Server
+	}
+
 	# ── Brand + SEO static assets (unchanged from Caddyfile) ──────
 	@brand_assets path /favicon.ico /favicon.png /favicon.svg /favicon-192.png /favicon-512.png /apple-touch-icon.png /site.webmanifest
 	handle @brand_assets {
 		root * /srv/brand
 		header Cache-Control "public, max-age=86400"
+		file_server
+	}
+
+	# Self-hosted fonts (assets/brand/fonts — replaced Google Fonts on the
+	# static SEO pages so no font request leaves the origin).
+	handle /fonts/* {
+		root * /srv/brand
+		header Cache-Control "public, max-age=604800"
 		file_server
 	}
 

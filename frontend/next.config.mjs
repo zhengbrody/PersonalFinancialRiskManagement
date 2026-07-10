@@ -14,6 +14,10 @@ const nextConfig = {
   // standalone for that build. Production is unaffected (env unset → standalone).
   output: process.env.E2E_BUILD ? undefined : "standalone",
 
+  // Don't advertise the framework in an X-Powered-By header (security
+  // hygiene — pairs with the Caddyfile security-header block).
+  poweredByHeader: false,
+
   // Required on Next 14 so `src/instrumentation.ts` (Sentry server init) runs.
   experimental: { instrumentationHook: true },
 };
