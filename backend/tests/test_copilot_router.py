@@ -183,7 +183,7 @@ def test_gather_portfolio_includes_risk_reference(monkeypatch):
     assert all(e.source == "reference" for e in ref)
     sharpe = next(e for e in ref if "Sharpe" in e.label)
     # Both sides deterministic: the user's value and the static reference band.
-    assert "0.67" in sharpe.value and "long-run bar" in sharpe.value
+    assert "0.67" in sharpe.value and "below it" in sharpe.value
 
 
 def test_answer_chinese_question_forces_chinese_reply(monkeypatch):

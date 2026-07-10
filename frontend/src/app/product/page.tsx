@@ -51,7 +51,7 @@ const PILLARS: { icon: IconName; name: string; tag: string; body: string; href: 
   {
     icon: "shield",
     name: "Risk Report",
-    tag: "Institutional, readable",
+    tag: "Deterministic, readable",
     body: "VaR/CVaR, factor exposures, component VaR, a stress-scenario explorer (−10/−20/−30%), per-holding stress losses, concentration, liquidity, and an options/margin cockpit — every figure with its source and freshness.",
     href: "/learn/var-cvar-explained",
   },

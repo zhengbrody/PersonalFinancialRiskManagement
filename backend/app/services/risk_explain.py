@@ -174,8 +174,8 @@ def build_skeleton(payload: RiskExplainInput) -> Skeleton:
                 reason=f"Single-name concentration in {top.ticker}",
                 evidence=f"{top.ticker} contributes {pct} of total portfolio VaR.",
                 next_step=(
-                    f"Review whether trimming {top.ticker} or adding uncorrelated "
-                    "positions better fits your plan."
+                    "Compare downside in the What-if lab with your largest "
+                    "position scaled down, and review overall diversification."
                 ),
             )
         )

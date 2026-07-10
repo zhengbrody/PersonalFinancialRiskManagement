@@ -66,7 +66,6 @@ def build_agent_context(score: PortfolioScore, positions: Iterable[AssetPosition
                     None if p.unrealized_pnl_pct is None else round(float(p.unrealized_pnl_pct), 6)
                 ),
                 "expense_ratio": round(float(p.expense_ratio), 6),
-                "proxy_ticker": p.proxy_ticker,
             }
             for p in active
         ],
@@ -303,7 +302,7 @@ def build_risk_reference_comparison(
         _row(
             "Sharpe ratio",
             round(m.sharpe_ratio, 2),
-            "≥ 1.0 is a common long-run bar for a diversified book",
+            "≥ 1.0 is strong; broad equity indexes have run roughly 0.4-0.6 long-run",
             _assess(m.sharpe_ratio, good_above=1.0),
         )
     if math.isfinite(m.annual_volatility):

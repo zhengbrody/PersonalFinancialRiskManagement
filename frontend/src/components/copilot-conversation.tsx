@@ -70,7 +70,7 @@ const FOLLOW_UP_QUESTIONS = [
   "How would a -20% market drop hit me?",
   "Am I being paid for the risk I'm taking?",
   "What would diversify my portfolio the most?",
-  "Any hidden fees or tax-loss opportunities?",
+  "Any hidden fees or unrealized losses to review?",
 ];
 
 // Chinese counterparts (same order/intent) — used when the LAST user
@@ -80,7 +80,7 @@ const FOLLOW_UP_QUESTIONS_ZH = [
   "市场下跌 20% 会对我有多大影响？",
   "我承担的风险有得到相应回报吗？",
   "怎样才能让我的组合更分散？",
-  "有隐藏费用或税损收割机会吗？",
+  "有隐藏费用或需要关注的未实现亏损吗？",
 ];
 
 export type CopilotConversationVariant = "page" | "floating";

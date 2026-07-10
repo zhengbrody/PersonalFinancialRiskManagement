@@ -25,7 +25,7 @@ const BASE: RiskExplain = {
     {
       reason: "Single-name concentration in NVDA",
       evidence: "NVDA contributes 41% of total portfolio VaR.",
-      next_step: "Review whether trimming fits your plan.",
+      next_step: "Compare downside in the What-if lab with your largest position scaled down.",
       disclaimer: "Educational, not financial advice.",
     },
   ],

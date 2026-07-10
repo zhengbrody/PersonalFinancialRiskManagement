@@ -330,8 +330,8 @@ function BarRow({ t, pct, value, red, animate }: { t: string; pct: number; value
 /* pillars ------------------------------------------------------------------ */
 function Pillars() {
   const cards: { ic: IconName; h: string; p: string; m: string }[] = [
-    { ic: "score-gauge", h: "Portfolio Health Score", p: "One 0–1000 number for how risk-appropriate your portfolio really is — across three institutional dimensions you can act on.", m: "Risk Match · Risk-Adj. Return · Downside" },
-    { ic: "volatility", h: "Institutional risk metrics", p: "Monte-Carlo VaR & CVaR, six-factor betas, component VaR, stress tests and drawdown — the math the pros use, on your account.", m: "VaR 95 / 99 · factor betas · stress" },
+    { ic: "score-gauge", h: "Portfolio Health Score", p: "One 0–1000 number for how risk-appropriate your portfolio really is — across three dimensions you can act on.", m: "Risk Match · Risk-Adj. Return · Downside" },
+    { ic: "volatility", h: "Institutional-style risk metrics", p: "Monte-Carlo VaR & CVaR, six-factor betas, component VaR, stress tests and drawdown — deterministic, explainable risk math on your own account.", m: "VaR 95 / 99 · factor betas · stress" },
     { ic: "trend-up", h: "Live market context", p: "Real Fed Funds, CPI, and the US Treasury curve, streamed live — so you score against the regime that actually exists today.", m: "FRED · US Treasury · hourly" },
   ];
   return (

@@ -428,7 +428,11 @@ async def generate_action_cards(arguments: dict[str, Any]) -> dict[str, Any]:
 
     from libs.ai_agents.portfolio_agents import StrategyOptimizerAgent
 
-    prep = StrategyOptimizerAgent().prepare(score, positions)
+    # _score_from_holdings returns domain AssetPositionInput models; the agent's
+    # scans need math-layer AssetPosition (.unrealized_pnl etc.) — convert, or
+    # every real invocation AttributeErrors (review-caught: the old code only
+    # passed under a mocked agent).
+    prep = StrategyOptimizerAgent().prepare(score, [p.to_position() for p in positions])
     tr = prep.get("tool_results", {}) or {}
     cards = []
     for row in (tr.get("hidden_fees") or [])[:5]:
