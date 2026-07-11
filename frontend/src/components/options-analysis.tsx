@@ -219,7 +219,7 @@ function RiskFlags({ exposure }: { exposure: OptionExposure }) {
           }`}
         >
           <span
-            className={`mt-0.5 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${
+            className={`mt-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
               f.severity === "high"
                 ? "bg-red-500/15 text-red-600 dark:text-red-400"
                 : f.severity === "watch"
@@ -732,7 +732,7 @@ function Stat({
       >
         {value}
       </p>
-      {hint && <p className="text-[9px] text-muted-foreground">{hint}</p>}
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }

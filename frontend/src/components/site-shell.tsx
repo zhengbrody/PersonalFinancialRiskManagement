@@ -21,7 +21,7 @@ import { Badge } from "@/components/ui/badge";
  *   Portfolio ▾   Research ▾   Copilot          [plan] Account ▾
  * Power features sit one click deep; the AI Copilot stays top-level (it's the
  * differentiator). The right-side Account menu folds in plan, billing, the
- * legacy workbench, owner admin, and sign-out.
+ * owner admin, and sign-out.
  */
 
 type NavItem = { href: string; label: string; external?: boolean };
@@ -48,7 +48,6 @@ function accountLinks(isOwner: boolean): NavItem[] {
     ...(isBillingEnabled()
       ? [{ href: "/pricing", label: "Plan & billing" } as NavItem]
       : []),
-    { href: "/legacy/", label: "Advanced workbench", external: true },
     ...(isOwner ? [{ href: "/admin", label: "Admin · usage" } as NavItem] : []),
   ];
 }
@@ -94,7 +93,7 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
             <Logo size={20} />
             MindMarket
             <Badge tone="neutral" uppercase>
-              alpha
+              Beta
             </Badge>
           </Link>
           {/* Desktop nav */}

@@ -127,7 +127,7 @@ describe("NewPortfolioPage", () => {
     expect(headers.Authorization).toBe("Bearer jwt-here");
 
     await waitFor(() =>
-      expect(replaceMock).toHaveBeenCalledWith("/portfolios"),
+      expect(replaceMock).toHaveBeenCalledWith("/score"),
     );
   });
 

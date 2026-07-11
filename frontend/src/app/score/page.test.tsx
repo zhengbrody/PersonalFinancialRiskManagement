@@ -174,10 +174,12 @@ describe("ScorePage", () => {
     renderWithQuery(<ScorePage />);
     await user.click(screen.getByRole("button", { name: /run score/i }));
 
-    expect(await screen.findByText(/request failed/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/something went wrong/i),
+    ).toBeInTheDocument();
+    // The backend message still surfaces; the raw status/code dump was removed.
     expect(
       screen.getByText(/holdings must not be empty/i),
     ).toBeInTheDocument();
-    expect(screen.getByText(/validation_failed/i)).toBeInTheDocument();
   });
 });

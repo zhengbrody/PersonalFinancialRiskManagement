@@ -84,12 +84,10 @@ export default function LoginPage() {
       }
     >
       {!configured ? (
+            // Dev-only: build lacks the NEXT_PUBLIC_SUPABASE_* env vars.
             <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm">
-              Supabase is not configured on this build. Set{" "}
-              <code className="font-mono">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
-              <code className="font-mono">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>{" "}
-              in <code className="font-mono">.env.local</code>, then restart{" "}
-              <code className="font-mono">npm run dev</code>.
+              Sign-in isn&apos;t available on this preview build. Please try again
+              later.
             </div>
           ) : (
             <div className="space-y-5">

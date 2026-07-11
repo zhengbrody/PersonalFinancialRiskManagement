@@ -94,7 +94,7 @@ export function PeersComparison({
         <MetricBars out={out} metric="ev_sales" title="EV/Sales vs peers" />
         <MetricBars out={out} metric="pe" title="P/E vs peers" />
       </div>
-      <p className="text-[11px] leading-relaxed text-muted-foreground">{out.disclaimer}</p>
+      <p className="text-xs leading-relaxed text-muted-foreground">{out.disclaimer}</p>
     </div>
   );
 }

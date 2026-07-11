@@ -98,7 +98,7 @@ export default function QuantPage() {
   }, [user, authLoading, configured, router]);
 
   if (!configured) {
-    return <ConfigureSupabaseNotice />;
+    return <PreviewBuildNotice />;
   }
 
   if (authLoading || !user) {
@@ -464,7 +464,7 @@ function KpiCard({
         <p className={"text-2xl font-semibold tabular-nums " + valueClass}>
           {value == null ? "—" : format(value)}
         </p>
-        <p className="text-[11px] leading-snug text-muted-foreground">{hint}</p>
+        <p className="text-xs leading-snug text-muted-foreground">{hint}</p>
       </CardContent>
     </Card>
   );
@@ -606,21 +606,21 @@ function NoticeCard({
   );
 }
 
-function ConfigureSupabaseNotice() {
+function PreviewBuildNotice() {
   return (
     <Card className="mx-auto max-w-2xl">
       <CardHeader>
-        <CardTitle>Supabase not configured</CardTitle>
+        <CardTitle>Sign in to run a backtest</CardTitle>
         <CardDescription>
-          The backtester needs an authenticated Supabase session.
+          Backtesting runs on your saved portfolio.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
+        {/* Dev-only: this build lacks the NEXT_PUBLIC_SUPABASE_* env vars.
+            Real deployments always set them, so end users never see this. */}
         <p className="text-muted-foreground">
-          Set <code className="font-mono">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
-          <code className="font-mono">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in{" "}
-          <code className="font-mono">.env.local</code>, then restart the dev
-          server.
+          Accounts aren&apos;t available on this preview build. You can still try
+          the public demo below.
         </p>
         <Link href="/score">
           <Button variant="outline">Try the public /score demo</Button>

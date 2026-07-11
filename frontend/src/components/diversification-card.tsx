@@ -101,7 +101,7 @@ export function DiversificationCard({ correlation }: { correlation: Correlation 
 
         <CorrHeatmap tickers={c.tickers} matrix={c.matrix} totalTickers={c.total_tickers} />
 
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Correlations are estimated on the risk engine&apos;s ~2-year daily-return window; the
           diversification ratio on the report&apos;s price window (~1 year) — two honest estimates,
           not one.

@@ -105,7 +105,7 @@ function ThesisCard({ thesis }: { thesis: ThesisOutput }) {
             )}
           </div>
         )}
-        <p className="text-[11px] leading-relaxed text-muted-foreground">{thesis.disclaimer}</p>
+        <p className="text-xs leading-relaxed text-muted-foreground">{thesis.disclaimer}</p>
       </CardContent>
     </Card>
   );

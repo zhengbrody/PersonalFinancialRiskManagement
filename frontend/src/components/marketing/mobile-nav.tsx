@@ -8,7 +8,7 @@
  * route change and locks body scroll while open.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { C } from "./theme";
@@ -17,6 +17,8 @@ import { NAV_LINKS } from "./nav-links";
 export function MobileNav({ signedIn }: { signedIn: boolean }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   // Close on navigation.
   useEffect(() => {
@@ -33,9 +35,49 @@ export function MobileNav({ signedIn }: { signedIn: boolean }) {
     };
   }, [open]);
 
+  // Modal a11y: focus into the dialog on open, trap Tab within it, close on
+  // Escape, and restore focus to the trigger on close.
+  useEffect(() => {
+    if (!open) return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const trigger = triggerRef.current; // restore focus here on close
+    const focusables = () =>
+      Array.from(
+        dialog.querySelectorAll<HTMLElement>("a[href], button:not([disabled])"),
+      );
+    focusables()[0]?.focus();
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setOpen(false);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      trigger?.focus();
+    };
+  }, [open]);
+
   return (
     <>
       <button
+        ref={triggerRef}
         type="button"
         className="mm-mobile-nav"
         aria-label={open ? "Close menu" : "Open menu"}
@@ -59,8 +101,10 @@ export function MobileNav({ signedIn }: { signedIn: boolean }) {
 
       {open && (
         <div
+          ref={dialogRef}
           role="dialog"
           aria-modal="true"
+          aria-label="Site menu"
           style={{
             position: "fixed",
             inset: 0,

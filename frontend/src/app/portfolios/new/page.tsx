@@ -76,13 +76,14 @@ export default function NewPortfolioPage() {
     <div className="mx-auto max-w-2xl space-y-6">
       <header className="space-y-1">
         <p className="text-xs font-medium uppercase tracking-widest text-primary">
-          POST /api/v1/portfolios
+          Add your holdings
         </p>
         <h1 className="text-3xl font-semibold tracking-tight">
           New portfolio
         </h1>
         <p className="text-sm text-muted-foreground">
-          Rows with empty ticker or zero shares are dropped on save.
+          Add your tickers and shares, or import a broker CSV — you&apos;ll get a
+          Health Score the moment you save.
         </p>
       </header>
 
@@ -103,10 +104,14 @@ export default function NewPortfolioPage() {
           <PortfolioForm
             key={anonPrefill ? "anon-prefill" : "blank"}
             initial={anonPrefill ?? BLANK}
+            emphasizeCsv={!anonPrefill}
             submitLabel="Create portfolio"
             busy={mutation.isPending}
             errorMessage={serverError}
-            onCancel={() => router.push("/portfolios")}
+            // Home, not /portfolios: a zero-portfolio user (the guided-creation
+            // case) would be auto-redirected from the empty list straight back
+            // here, so Cancel must land somewhere that doesn't bounce.
+            onCancel={() => router.push("/")}
             onSubmit={async (values) => {
               setServerError(null);
               try {
@@ -116,7 +121,7 @@ export default function NewPortfolioPage() {
                   holdings: Object.keys(created.holdings).length,
                 });
                 clearAnonHoldings(); // the handoff is complete
-                router.replace("/portfolios");
+                router.replace("/score"); // straight to the Health Score
               } catch (err) {
                 setServerError(
                   err instanceof ApiError

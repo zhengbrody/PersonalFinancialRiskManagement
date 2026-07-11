@@ -8,13 +8,39 @@
  */
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { track } from "@/lib/analytics";
 import { C } from "./theme";
 
 export function StickyMobileCTA() {
   const { user, configured } = useAuth();
-  if (configured && user) return null; // signed-in users don't need a signup bar
+  const signedIn = Boolean(configured && user);
+  // A bar that duplicates a CTA already on screen is noise — reveal it only once
+  // the hero's primary CTA (marked `data-hero-cta`) has scrolled out of view.
+  // Default hidden so SSR and hydration agree; a scroll threshold is the fallback
+  // when the marker or IntersectionObserver is unavailable.
+  const [pastHero, setPastHero] = useState(false);
+
+  useEffect(() => {
+    if (signedIn) return;
+    const target = document.querySelector("[data-hero-cta]");
+    if (target && "IntersectionObserver" in window) {
+      const io = new IntersectionObserver(
+        ([entry]) => setPastHero(!entry.isIntersecting),
+      );
+      io.observe(target);
+      return () => io.disconnect();
+    }
+    const onScroll = () =>
+      setPastHero(window.scrollY > window.innerHeight * 0.6);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [signedIn]);
+
+  if (signedIn) return null; // signed-in users don't need a signup bar
+  if (!pastHero) return null; // still looking at the first CTA
 
   return (
     <div

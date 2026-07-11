@@ -191,7 +191,7 @@ export function ValuationDcf({
       {/* The reported basis the assumptions derive from — shown even when the
           projection is invalid so the data is always inspectable. */}
       <HistoricalBasis out={out} />
-      <p className="text-[11px] leading-relaxed text-muted-foreground">{out.disclaimer}</p>
+      <p className="text-xs leading-relaxed text-muted-foreground">{out.disclaimer}</p>
     </div>
   );
 }
@@ -251,7 +251,7 @@ function AssumptionEditor({
     <label className="space-y-1 text-sm">
       <span className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted-foreground">
         {label}
-        <span className={`rounded px-1 py-px text-[9px] font-medium ${SRC_TONE[src.source_type] ?? ""}`}>
+        <span className={`rounded px-1 py-px text-[10px] font-medium ${SRC_TONE[src.source_type] ?? ""}`}>
           {src.source_type.replace("_", " ")}
         </span>
       </span>
@@ -386,7 +386,7 @@ const num = (v: number | null | undefined, d = 0) =>
 
 function SourceBadge({ source }: { source: string }) {
   return (
-    <span className={`rounded px-1 py-px text-[9px] font-medium ${SRC_TONE[source] ?? ""}`}>
+    <span className={`rounded px-1 py-px text-[10px] font-medium ${SRC_TONE[source] ?? ""}`}>
       {source.replace("_", " ")}
     </span>
   );

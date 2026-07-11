@@ -41,7 +41,7 @@ export function CorrHeatmap({
         <div
           role="table"
           aria-label="Pairwise correlation of holdings"
-          className="grid w-max gap-px font-mono text-[9px] tabular-nums"
+          className="grid w-max gap-px font-mono text-[10px] tabular-nums"
           style={{ gridTemplateColumns: `2.6rem repeat(${n}, 2.4rem)` }}
         >
           <div />

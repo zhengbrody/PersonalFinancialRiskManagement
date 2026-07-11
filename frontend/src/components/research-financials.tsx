@@ -76,7 +76,7 @@ export function ResearchFinancials({
       <TrendSummary fp={fp} />
       <QuarterTable fp={fp} />
       <Provenance fp={fp} />
-      <p className="text-[11px] leading-relaxed text-muted-foreground">{fp.disclaimer}</p>
+      <p className="text-xs leading-relaxed text-muted-foreground">{fp.disclaimer}</p>
     </div>
   );
 }

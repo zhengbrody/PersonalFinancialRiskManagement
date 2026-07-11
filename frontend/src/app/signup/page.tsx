@@ -21,7 +21,7 @@ import { useAuth } from "@/lib/auth-context";
 import { AuthShell } from "@/components/marketing/auth-shell";
 import { C } from "@/components/marketing/theme";
 
-const POST_SIGNUP_REDIRECT = "/portfolios";
+const POST_SIGNUP_REDIRECT = "/portfolios/new"; // new users go straight to guided creation
 
 export default function SignupPage() {
   const router = useRouter();
@@ -94,11 +94,10 @@ export default function SignupPage() {
       }
     >
       {!configured ? (
+            // Dev-only: build lacks the NEXT_PUBLIC_SUPABASE_* env vars.
             <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm">
-              Supabase is not configured on this build. Set{" "}
-              <code className="font-mono">NEXT_PUBLIC_SUPABASE_URL</code> +{" "}
-              <code className="font-mono">NEXT_PUBLIC_SUPABASE_ANON_KEY</code>{" "}
-              and rebuild.
+              Sign-up isn&apos;t available on this preview build. Please try again
+              later.
             </div>
           ) : confirmationSent ? (
             <div className="rounded-md border border-primary/30 bg-primary/10 p-4 text-sm">
@@ -166,9 +165,9 @@ export default function SignupPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   At least 8 characters. Password-manager generated passwords
-                  are supported when the Supabase policy allows them.
+                  are supported.
                 </p>
               </div>
               {error && (
@@ -194,8 +193,8 @@ function formatSignupError(err: unknown): string {
   const message = err instanceof Error ? err.message : "Sign-up failed.";
   if (/password should contain|password.*character of each/i.test(message)) {
     return (
-      "This password was rejected by the current Supabase password policy. " +
-      "Use Google sign-up, or try a password with at least 8 characters while we relax the policy."
+      "That password was rejected. " +
+      "Use Google sign-up, or try a password with at least 8 characters."
     );
   }
   return message;

@@ -49,8 +49,16 @@ export default function PortfoliosPage() {
     }
   }, [user, authLoading, configured, router]);
 
+  // No portfolio yet → go straight to guided creation (skip the empty-list
+  // click). EmptyState below is only a brief fallback during the redirect.
+  const isEmpty =
+    portfoliosQuery.data && portfoliosQuery.data.portfolios.length === 0;
+  useEffect(() => {
+    if (isEmpty) router.replace("/portfolios/new");
+  }, [isEmpty, router]);
+
   if (!configured) {
-    return <ConfigureSupabaseNotice />;
+    return <PreviewBuildNotice />;
   }
 
   if (authLoading || !user) {
@@ -62,15 +70,13 @@ export default function PortfoliosPage() {
       <header className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <p className="text-xs font-medium uppercase tracking-widest text-primary">
-            GET /api/v1/portfolios/me
+            Portfolios
           </p>
           <h1 className="text-3xl font-semibold tracking-tight">
             Your portfolios
           </h1>
           <p className="text-sm text-muted-foreground">
-            Signed in as{" "}
-            <span className="font-mono">{user.email ?? user.id}</span>. Rows
-            here are filtered by Supabase Row-Level Security.
+            Your data is private to your account.
           </p>
         </div>
         <Link href="/portfolios/new">
@@ -113,8 +119,10 @@ function PortfolioCard({ portfolio }: { portfolio: PortfolioRow }) {
         <div className="flex items-start justify-between gap-2">
           <div>
             <CardTitle>{portfolio.name}</CardTitle>
-            <CardDescription className="font-mono text-xs">
-              {portfolio.id}
+            <CardDescription className="text-xs">
+              {tickers.length === 0
+                ? "No holdings yet"
+                : `${tickers.length} holding${tickers.length === 1 ? "" : "s"}`}
             </CardDescription>
           </div>
           {portfolio.is_default && (
@@ -137,9 +145,8 @@ function PortfolioCard({ portfolio }: { portfolio: PortfolioRow }) {
           <Stat label="Cash" value={fmtUSD(portfolio.cash_balance)} />
           <Stat label="Margin" value={fmtUSD(portfolio.margin_loan)} />
         </div>
-        {/* Only the default portfolio is scoreable from the API today —
-            the backend resolves the active row from RLS. Non-default
-            cards show no button to avoid a wrong-portfolio result. */}
+        {/* Only the default portfolio is scored inline; non-default cards
+            show no score button to avoid a wrong-portfolio result. */}
         {portfolio.is_default && tickers.length > 0 && <ScoreSection />}
         <CardActions portfolio={portfolio} />
       </CardContent>
@@ -313,7 +320,7 @@ function ScoreResult({ result }: { result: ScoreResponse }) {
         ))}
       </div>
       {result.metrics.data_quality_notes.length > 0 && (
-        <ul className="list-disc space-y-0.5 pl-4 text-[11px] text-muted-foreground">
+        <ul className="list-disc space-y-0.5 pl-4 text-xs text-muted-foreground">
           {result.metrics.data_quality_notes.map((n, i) => (
             <li key={i}>{n}</li>
           ))}
@@ -359,11 +366,6 @@ function ScoreErrorPanel({ error }: { error: Error }) {
     <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs">
       <p className="font-medium text-destructive">{headline}</p>
       <p className="mt-1 text-muted-foreground">{body}</p>
-      {isApi && (
-        <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-          {error.status} · {code}
-        </p>
-      )}
     </div>
   );
 }
@@ -385,8 +387,8 @@ function EmptyState() {
       <CardHeader>
         <CardTitle>No portfolios yet</CardTitle>
         <CardDescription>
-          Create your first portfolio here. It will be stored in Supabase
-          and scored by the same backend risk engine used by the API.
+          Add your holdings to get a Health Score and a full risk report —
+          calculated from adjusted market prices, private to your account.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -398,21 +400,21 @@ function EmptyState() {
   );
 }
 
-function ConfigureSupabaseNotice() {
+function PreviewBuildNotice() {
   return (
     <Card className="mx-auto max-w-2xl">
       <CardHeader>
-        <CardTitle>Supabase not configured</CardTitle>
+        <CardTitle>Sign-in isn&apos;t available on this build</CardTitle>
         <CardDescription>
-          The portfolios page needs an authenticated Supabase session.
+          This preview build isn&apos;t configured for accounts yet.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
-        <p>
-          Set <code className="font-mono">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
-          <code className="font-mono">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in{" "}
-          <code className="font-mono">.env.local</code>, then restart the dev
-          server.
+        {/* Dev-only: this build lacks the NEXT_PUBLIC_SUPABASE_* env vars.
+            Real deployments always set them, so end users never see this. */}
+        <p className="text-muted-foreground">
+          Accounts aren&apos;t available on this preview build. You can still try
+          the public demo below.
         </p>
         <Link href="/score">
           <Button variant="outline">Try the public /score demo</Button>

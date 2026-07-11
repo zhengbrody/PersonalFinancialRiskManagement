@@ -62,7 +62,7 @@ export function TickerNews({
 function NewsRow({ item }: { item: UnifiedNewsItem }) {
   const body = (
     <div className="flex items-start gap-2">
-      <span className="mt-0.5 rounded border border-border bg-muted/50 px-1 py-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
+      <span className="mt-0.5 rounded border border-border bg-muted/50 px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
         {TYPE_LABEL[item.type] ?? item.type}
       </span>
       <div className="min-w-0 flex-1">

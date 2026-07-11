@@ -1260,8 +1260,8 @@ function ConfigureNotice() {
   return (
     <Card className="mx-auto max-w-2xl">
       <CardHeader>
-        <CardTitle>Supabase not configured</CardTitle>
-        <CardDescription>Research needs an authenticated session.</CardDescription>
+        <CardTitle>Sign in to research a stock</CardTitle>
+        <CardDescription>Sign in to save research to your account.</CardDescription>
       </CardHeader>
       <CardContent className="text-sm">
         <Link href="/score">
