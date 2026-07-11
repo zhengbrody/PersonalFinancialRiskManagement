@@ -124,7 +124,9 @@ def test_committed_openapi_matches_live_contract(spec):
     committed = json.loads(COMMITTED_OPENAPI.read_text())
     live_map = _contract_map(spec)
     committed_map = _contract_map(committed)
-    changed = sorted(k for k in live_map.keys() & committed_map.keys() if live_map[k] != committed_map[k])
+    changed = sorted(
+        k for k in live_map.keys() & committed_map.keys() if live_map[k] != committed_map[k]
+    )
     assert live_map == committed_map, (
         "openapi.json is stale — run 'python scripts/export_openapi.py' and "
         "'cd frontend && npm run gen:api', then commit. "
