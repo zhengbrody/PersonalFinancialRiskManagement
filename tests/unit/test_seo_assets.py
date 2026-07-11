@@ -1,75 +1,56 @@
+"""SEO migration invariants — the static assets/seo pages are now Next.js routes.
+
+A single SEO content source: the old static HTML + robots/sitemap are removed,
+Caddy no longer serves them, and every migrated URL has a Next route so nothing
+404s. (Sitemap/robots/canonical CONTENT is asserted in the frontend suite —
+frontend/src/app/seo-routes.test.ts.)
+"""
+
 from pathlib import Path
-from xml.etree import ElementTree
 
 ROOT = Path(__file__).resolve().parents[2]
 SEO_DIR = ROOT / "assets" / "seo"
+APP = ROOT / "frontend" / "src" / "app"
 
-STATIC_ROUTES = {
-    "/about": "about.html",
-    "/demo": "demo.html",
-    "/sample-risk-report": "sample-risk-report.html",
-    "/portfolio-risk-management": "portfolio-risk-management.html",
-    "/ai-portfolio-analysis": "ai-portfolio-analysis.html",
-    "/portfolio-var-stress-testing": "portfolio-var-stress-testing.html",
-    "/personal-portfolio-risk-analysis": "personal-portfolio-risk-analysis.html",
-    "/margin-risk-calculator": "margin-risk-calculator.html",
-    "/portfolio-stress-test": "portfolio-stress-test.html",
-    "/stock-portfolio-concentration-risk": "stock-portfolio-concentration-risk.html",
-    "/robinhood-margin-risk": "robinhood-margin-risk.html",
+# Former static SEO pages → their Next route segment.
+MIGRATED_ROUTES = {
+    "/about": "about",
+    "/sample-risk-report": "sample-risk-report",
+    "/portfolio-risk-management": "portfolio-risk-management",
+    "/ai-portfolio-analysis": "ai-portfolio-analysis",
+    "/portfolio-var-stress-testing": "portfolio-var-stress-testing",
+    "/personal-portfolio-risk-analysis": "personal-portfolio-risk-analysis",
+    "/margin-risk-calculator": "margin-risk-calculator",
+    "/portfolio-stress-test": "portfolio-stress-test",
+    "/stock-portfolio-concentration-risk": "stock-portfolio-concentration-risk",
+    "/robinhood-margin-risk": "robinhood-margin-risk",
 }
 
-NEXT_PUBLIC_ROUTES = {"/score", "/markets", "/pricing"}
+_OLD_FILES = (
+    [f"{seg}.html" for seg in MIGRATED_ROUTES.values()]
+    + ["demo.html", "robots.txt", "sitemap.xml"]
+)
 
 
-def _sitemap_paths() -> set[str]:
-    tree = ElementTree.parse(SEO_DIR / "sitemap.xml")
-    ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
-    paths = set()
-    for loc in tree.findall(".//sm:loc", ns):
-        text = loc.text or ""
-        assert text.startswith("https://mindmarket.app")
-        path = text.removeprefix("https://mindmarket.app")
-        paths.add(path or "/")
-    return paths
+def test_static_seo_files_removed():
+    """The old static pages + static robots/sitemap are gone (single Next source)."""
+    for f in _OLD_FILES:
+        assert not (SEO_DIR / f).exists(), f"static SEO file {f} should be migrated to Next.js"
 
 
-def test_sitemap_contains_growth_routes():
-    paths = _sitemap_paths()
-
-    assert "/" in paths
-    for route in NEXT_PUBLIC_ROUTES:
-        assert route in paths
-    for route in STATIC_ROUTES:
-        assert route in paths
-
-
-def test_static_routes_have_files_and_caddy_handles():
+def test_caddy_no_longer_serves_static_seo():
     caddyfile = (ROOT / "Caddyfile").read_text(encoding="utf-8")
-
-    for route, filename in STATIC_ROUTES.items():
-        assert (SEO_DIR / filename).exists()
-        assert f"handle {route}" in caddyfile
-        assert f"rewrite * /{filename}" in caddyfile
-
-
-def test_seo_pages_have_canonical_description_and_cta():
-    for route, filename in STATIC_ROUTES.items():
-        html = (SEO_DIR / filename).read_text(encoding="utf-8")
-
-        assert f'<link rel="canonical" href="https://mindmarket.app{route}">' in html
-        assert '<meta name="description" content="' in html
-        assert "https://mindmarket.app/" in html
-        lowered = html.lower()
-        assert "investment" in lowered
-        assert "advice" in lowered
+    assert "root * /srv/seo" not in caddyfile, "Caddy still serves a static /srv/seo page"
+    for route in list(MIGRATED_ROUTES) + ["/demo", "/robots.txt", "/sitemap.xml"]:
+        assert f"handle {route} {{" not in caddyfile, f"stale Caddy handle for {route}"
+    # The final catch-all to the Next frontend must remain.
+    assert "reverse_proxy frontend:3000" in caddyfile
 
 
-def test_robots_points_to_sitemap():
-    robots = (SEO_DIR / "robots.txt").read_text(encoding="utf-8")
-
-    assert "User-agent: *" in robots
-    assert "Allow: /" in robots
-    assert "Disallow: /portfolios" in robots
-    assert "Disallow: /login" in robots
-    assert "Disallow: /research" in robots
-    assert "Sitemap: https://mindmarket.app/sitemap.xml" in robots
+def test_migrated_urls_have_next_routes():
+    """Every migrated URL now resolves to a Next route — nothing is orphaned."""
+    for route, seg in MIGRATED_ROUTES.items():
+        assert (APP / seg / "page.tsx").exists(), f"missing Next page for {route}"
+    # /demo is a permanent 301 route handler (→ /demo-risk-check), not a page.
+    assert (APP / "demo" / "route.ts").exists(), "missing /demo 301 route handler"
+    assert (APP / "demo-risk-check").exists(), "301 target /demo-risk-check missing"
