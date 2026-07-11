@@ -144,32 +144,14 @@ def test_committed_openapi_matches_live_contract(spec):
     )
 
 
-def _schema_fields(spec: dict) -> dict[str, list[str]]:
-    """Every component schema → its sorted property NAMES.
-
-    Property names are the pydantic field names (defined in the model source),
-    so they're stable across pydantic 2.x patches — unlike the property *value*
-    schemas (type/format representation), which the byte-exact contract.yml gate
-    owns. This projection catches the field-level drift the coarse
-    endpoint→envelope map misses (a model gaining/losing/renaming a field
-    without a regenerate)."""
-    schemas = spec.get("components", {}).get("schemas", {})
-    return {name: sorted((s.get("properties") or {}).keys()) for name, s in schemas.items()}
-
-
-def test_committed_openapi_fields_match_live(spec):
-    """Field-level staleness guard (version-stable, property NAMES only): a model
-    that adds/removes/renames a field without ``python scripts/export_openapi.py``
-    + ``npm run gen:api`` fails here, in the existing backend-tests job."""
-    committed = json.loads(COMMITTED_OPENAPI.read_text())
-    live_fields = _schema_fields(spec)
-    committed_fields = _schema_fields(committed)
-    drifted = sorted(
-        name
-        for name in live_fields.keys() | committed_fields.keys()
-        if live_fields.get(name) != committed_fields.get(name)
-    )
-    assert not drifted, (
-        "openapi.json is field-level stale — run 'python scripts/export_openapi.py' "
-        f"and 'cd frontend && npm run gen:api', then commit. drifted schemas={drifted}"
-    )
+# NOTE: field-level drift (a model gaining/losing/renaming a field) is
+# deliberately NOT gated here. A comparison of committed-vs-live component
+# schemas is NOT version-stable: FastAPI/pydantic change the schema
+# DECOMPOSITION across versions (input/output model splits like
+# `RiskReportOut-Input`, collision-disambiguation names like
+# `backend__app__schemas__regime_summary__RegimeVixOut`), so the committed
+# openapi.json (local toolchain) and the live app under CI's pinned runtime
+# (fastapi <0.120) legitimately differ at the schema-set level — only the
+# endpoint→envelope-model refs above are version-stable. Field-level byte-exact
+# freshness is the staged `.github/workflows/contract.yml` gate's job (it pins
+# the same codegen toolchain that produced the committed artifacts).
