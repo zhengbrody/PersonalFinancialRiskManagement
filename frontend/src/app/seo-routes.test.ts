@@ -1,16 +1,50 @@
 import { describe, expect, it } from "vitest";
 import robots from "./robots";
 import sitemap from "./sitemap";
+import { SEO_PAGES } from "@/lib/seo-content";
+import { seoMetadata } from "@/components/marketing/seo-landing";
 
 describe("SEO routes", () => {
+  const urls = sitemap().map((entry) => entry.url);
+
   it("exposes public marketing routes in the sitemap", () => {
-    const urls = sitemap().map((entry) => entry.url);
     expect(urls).toContain("https://mindmarket.app/");
     expect(urls).toContain("https://mindmarket.app/score");
     expect(urls).toContain("https://mindmarket.app/markets");
     expect(urls).toContain("https://mindmarket.app/pricing");
     expect(urls).toContain("https://mindmarket.app/risk-today");
     expect(urls).toContain("https://mindmarket.app/methodology/regime-model");
+    expect(urls).toContain("https://mindmarket.app/about");
+  });
+
+  it("includes every migrated SEO landing page (canonical URLs preserved)", () => {
+    for (const p of SEO_PAGES) {
+      expect(urls).toContain(`https://mindmarket.app${p.path}`);
+    }
+  });
+
+  it("keeps the canonical demo and drops the retired /demo (301) — no duplicate demo", () => {
+    expect(urls).toContain("https://mindmarket.app/demo-risk-check");
+    expect(urls).not.toContain("https://mindmarket.app/demo");
+  });
+
+  it("uses fixed lastmod dates, not build-time now", () => {
+    // Every entry has a fixed YYYY-MM-DD string (no entry stamped to today's build).
+    for (const e of sitemap()) {
+      expect(typeof e.lastModified === "string").toBe(true);
+      expect(String(e.lastModified)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+  });
+
+  it("each SEO page has a title, description, and self-referential canonical", () => {
+    for (const p of SEO_PAGES) {
+      const m = seoMetadata(p.path);
+      expect(m.title).toBe(p.title);
+      expect(m.description).toBe(p.description);
+      expect((m.alternates as { canonical?: string })?.canonical).toBe(p.path);
+      // OG siteName must be "MindMarket" (not "mindmarket.app").
+      expect((m.openGraph as { siteName?: string })?.siteName).toBe("MindMarket");
+    }
   });
 
   it("allows public routes and blocks private/account routes", () => {

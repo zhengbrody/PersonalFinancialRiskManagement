@@ -1,0 +1,2 @@
+# Kept so the Caddy bind-mount source (compose: ./assets/seo -> /srv/seo)
+# still exists after the SEO pages migrated to Next.js. Intentionally empty.

@@ -67,6 +67,18 @@ const FULL_BLEED_ROUTES = new Set([
   "/login",
   "/signup",
   "/legal",
+  // Migrated SEO landing pages (formerly Caddy-served assets/seo/*.html) — they
+  // wear MarketingShell themselves, so keep the app header off.
+  "/about",
+  "/portfolio-risk-management",
+  "/ai-portfolio-analysis",
+  "/portfolio-var-stress-testing",
+  "/personal-portfolio-risk-analysis",
+  "/margin-risk-calculator",
+  "/portfolio-stress-test",
+  "/stock-portfolio-concentration-risk",
+  "/robinhood-margin-risk",
+  "/sample-risk-report",
 ]);
 const ANON_FULL_BLEED_ROUTES = new Set(["/", "/markets"]);
 
