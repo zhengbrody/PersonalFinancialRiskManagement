@@ -26,10 +26,11 @@ MIGRATED_ROUTES = {
     "/robinhood-margin-risk": "robinhood-margin-risk",
 }
 
-_OLD_FILES = (
-    [f"{seg}.html" for seg in MIGRATED_ROUTES.values()]
-    + ["demo.html", "robots.txt", "sitemap.xml"]
-)
+_OLD_FILES = [f"{seg}.html" for seg in MIGRATED_ROUTES.values()] + [
+    "demo.html",
+    "robots.txt",
+    "sitemap.xml",
+]
 
 
 def test_static_seo_files_removed():
