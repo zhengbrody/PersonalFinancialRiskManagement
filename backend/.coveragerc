@@ -1,0 +1,19 @@
+# Backend-only coverage config. The root pyproject `[tool.coverage.run]` omits
+# `backend/*` (the root Streamlit-era suite never exercises it), so the backend
+# gets its OWN measurement here, run from the backend-tests CI job:
+#
+#   pytest backend/tests -o "addopts=" \
+#     --cov=backend/app --cov-config=backend/.coveragerc \
+#     --cov-report=term-missing --cov-fail-under=<baseline>
+[run]
+source = backend/app
+omit =
+    backend/app/mcp_server/*
+    */__init__.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.
+    raise NotImplementedError
+    if TYPE_CHECKING:

@@ -8,6 +8,8 @@ black>=24.3.0
 ruff>=0.3.0
 mypy>=1.9.0
 pre-commit>=3.6.0
+# Dependency vulnerability scanning (advisory CI job + scripts/ci_checks.sh).
+pip-audit>=2.7.0
 
 # Type stubs
 types-requests

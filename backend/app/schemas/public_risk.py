@@ -42,7 +42,7 @@ class PublicRiskCheckIn(BaseModel):
     holdings: list[PublicHolding] = Field(min_length=1, max_length=MAX_HOLDINGS)
 
     @model_validator(mode="after")
-    def _no_duplicate_tickers(self):
+    def _no_duplicate_tickers(self) -> "PublicRiskCheckIn":
         tickers = [h.ticker for h in self.holdings]
         if len(set(tickers)) != len(tickers):
             raise ValueError("duplicate tickers — merge the share counts first")
