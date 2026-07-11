@@ -159,4 +159,32 @@ describe("ScoreChangeReport", () => {
     expect(screen.queryByText("-60")).not.toBeInTheDocument();
     expect(screen.queryByText("+60")).not.toBeInTheDocument();
   });
+
+  it("a legacy (pre-versioning) prior snapshot does NOT falsely claim the methodology changed", () => {
+    mockUse.mockReturnValue({
+      isLoading: false,
+      data: {
+        window: "previous",
+        available: true,
+        current_score: 500,
+        previous_score: 560,
+        score_delta: null,
+        component_deltas: [],
+        input_changes: [],
+        top_drivers: [],
+        data_quality_changes: [],
+        holdings_changes: { added: [], removed: [], reweighted: [] },
+        summary: "Your earlier score predates methodology versioning …",
+        comparable: false,
+        previous_score_version: "legacy",
+        current_score_version: "mindmarket-score-v1.0.0",
+      },
+    });
+    render(<ScoreChangeReport score={score()} />);
+    // Honest copy for unknown provenance — NOT "Methodology changed".
+    expect(screen.getAllByText(/predates methodology versioning/i).length).toBeGreaterThan(0);
+    expect(
+      screen.queryByText(/Methodology changed; score delta is not directly comparable/i),
+    ).not.toBeInTheDocument();
+  });
 });

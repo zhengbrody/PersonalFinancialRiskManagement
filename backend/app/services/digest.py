@@ -24,7 +24,7 @@ from typing import Any, Optional
 
 import requests
 
-from libs.mindmarket_core.score_version import is_comparable
+from libs.mindmarket_core.score_version import LEGACY_SCORE_VERSION, is_comparable
 
 from ..core.config import get_settings
 from . import metrics as _metrics
@@ -278,13 +278,24 @@ def build_digest(
         else ""
     )
 
-    methodology_note = (
-        '<p style="margin:14px 0;padding:10px 14px;background:#FFF6E5;border:1px solid #F0D9A8;'
-        'border-radius:8px;color:#7A5B12;font-size:14px;">We updated how the Health Score is '
-        "calculated, so this week&#39;s score isn&#39;t directly comparable to your last one.</p>"
-        if methodology_changed
-        else ""
-    )
+    # A pre-versioning ("legacy") prior snapshot has UNKNOWN provenance — don't
+    # claim the calculation changed (it may not have). Only a genuine
+    # version-to-version change says "we updated how it's calculated".
+    if methodology_changed:
+        prev_is_unknown = not prev_version or prev_version == LEGACY_SCORE_VERSION
+        note_text = (
+            "Your earlier score predates our methodology versioning, so this week&#39;s score "
+            "can&#39;t be directly compared to it yet."
+            if prev_is_unknown
+            else "We updated how the Health Score is calculated, so this week&#39;s score "
+            "isn&#39;t directly comparable to your last one."
+        )
+        methodology_note = (
+            '<p style="margin:14px 0;padding:10px 14px;background:#FFF6E5;border:1px solid #F0D9A8;'
+            f'border-radius:8px;color:#7A5B12;font-size:14px;">{note_text}</p>'
+        )
+    else:
+        methodology_note = ""
 
     html_body = f"""
 <div style="max-width:560px;margin:0 auto;padding:28px 20px;background:{_PAPER};

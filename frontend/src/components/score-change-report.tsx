@@ -143,12 +143,19 @@ export function ScoreChangeReport({ score }: { score: ScoreResponse }) {
 
             {report.comparable === false && (
               <div className="rounded-md border border-amber-300/60 bg-amber-50 p-2.5 text-sm dark:border-amber-500/30 dark:bg-amber-950/30">
+                {/* A pre-versioning ("legacy") prior snapshot has UNKNOWN
+                    provenance — don't claim the calculation changed (it may not
+                    have). Only a genuine version-to-version change gets the
+                    "methodology changed" wording. */}
                 <p className="font-medium">
-                  Methodology changed; score delta is not directly comparable.
+                  {report.previous_score_version &&
+                  report.previous_score_version !== "legacy"
+                    ? "Methodology changed; score delta is not directly comparable."
+                    : "Not directly comparable to your earlier score (it predates methodology versioning)."}
                 </p>
                 {(report.previous_score_version || report.current_score_version) && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {report.previous_score_version ?? "unknown"} →{" "}
+                    {report.previous_score_version ?? "unversioned"} →{" "}
                     {report.current_score_version ?? "current"} ·{" "}
                     <Link
                       href="/methodology/health-score"

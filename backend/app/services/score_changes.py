@@ -13,7 +13,11 @@ from __future__ import annotations
 import math
 from typing import Any, Optional
 
-from libs.mindmarket_core.score_version import SCORE_VERSION, is_comparable
+from libs.mindmarket_core.score_version import (
+    LEGACY_SCORE_VERSION,
+    SCORE_VERSION,
+    is_comparable,
+)
 
 from ..schemas.score_changes import (
     ComponentDelta,
@@ -132,13 +136,29 @@ def _summarize(
     return base
 
 
+def _is_unknown_version(v: Any) -> bool:
+    """A missing / legacy version means the earlier snapshot predates version
+    stamping — its methodology is UNVERIFIABLE, not provably different."""
+    s = str(v or "").strip()
+    return not s or s == LEGACY_SCORE_VERSION
+
+
 def _methodology_changed_summary(prev_version: Any, as_of: Optional[str]) -> str:
-    """Deterministic notice when the two snapshots use different methodologies."""
-    when = f" (snapshot from {str(as_of)[:10]})" if as_of else ""
-    prev = str(prev_version or "unknown")
+    """Deterministic notice when the two snapshots aren't directly comparable.
+
+    Distinguishes an UNKNOWN prior methodology (a pre-versioning 'legacy'
+    snapshot — we must NOT claim the calculation changed, because it may not
+    have) from a genuine version change (two different known versions)."""
+    when = f" (from {str(as_of)[:10]})" if as_of else ""
+    if _is_unknown_version(prev_version):
+        return (
+            f"Your earlier score{when} predates methodology versioning, so we can't verify it "
+            "used the current rules — the two aren't directly comparable. Once you have two "
+            "scores under the same version, the trend will decompose normally."
+        )
     return (
         f"Methodology changed since your earlier score{when}: it was computed under "
-        f"{prev}, this one under {SCORE_VERSION}. The score change is not directly "
+        f"{prev_version}, this one under {SCORE_VERSION}. The score change isn't directly "
         "comparable — it doesn't isolate a market or holdings move."
     )
 

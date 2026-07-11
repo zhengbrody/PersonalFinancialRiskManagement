@@ -183,14 +183,19 @@ def test_cross_version_comparison_is_blocked():
     assert rep.top_drivers == []
     assert rep.previous_score_version == "mindmarket-score-v0.9.0"
     assert rep.current_score_version == SCORE_VERSION
-    assert "not directly comparable" in rep.summary.lower()
+    # A genuine version-to-version change DOES say the methodology changed.
+    assert "methodology changed" in rep.summary.lower()
     # It still shows the two raw scores (just not framed as a comparable move).
     assert rep.current_score == 500
     assert rep.previous_score == 560
 
 
-def test_legacy_or_untagged_snapshot_is_not_comparable():
+def test_legacy_or_untagged_snapshot_is_not_comparable_without_claiming_a_change():
+    # A pre-versioning snapshot has UNKNOWN provenance — we must NOT claim the
+    # methodology changed (it may not have; v1.0.0 is documented as no-math-change).
     for version in ("legacy", None):
         rep = score_changes.build_change_report(_req(500, _DIMS), _prev(560, _DIMS_WORSE, version))
         assert rep.comparable is False, version
         assert rep.score_delta is None, version
+        assert "predates" in rep.summary.lower(), version
+        assert "methodology changed" not in rep.summary.lower(), version
