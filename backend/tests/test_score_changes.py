@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from backend.app.schemas.score_changes import ScoreChangeRequest
 from backend.app.services.score_changes import build_change_report
+from libs.mindmarket_core.score_version import SCORE_VERSION
 
 
 def _req(**kw):
@@ -46,9 +47,11 @@ def _snap(**rm):
         beta_to_benchmark=0.9,
         net_equity=100_000.0,
     )
+    version = rm.pop("score_version", SCORE_VERSION)
     risk_metrics.update(rm)
     return {
         "created_at": "2026-06-13T00:00:00+00:00",
+        "score_version": version,
         "risk_metrics": risk_metrics,
         "data_quality": {"confidence": "high", "dropped_tickers": []},
         "top_positions": [{"ticker": "AAA", "weight": 0.5}, {"ticker": "BBB", "weight": 0.5}],

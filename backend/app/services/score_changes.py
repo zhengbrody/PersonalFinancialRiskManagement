@@ -13,6 +13,12 @@ from __future__ import annotations
 import math
 from typing import Any, Optional
 
+from libs.mindmarket_core.score_version import (
+    LEGACY_SCORE_VERSION,
+    SCORE_VERSION,
+    is_comparable,
+)
+
 from ..schemas.score_changes import (
     ComponentDelta,
     DataQualityChange,
@@ -130,6 +136,33 @@ def _summarize(
     return base
 
 
+def _is_unknown_version(v: Any) -> bool:
+    """A missing / legacy version means the earlier snapshot predates version
+    stamping — its methodology is UNVERIFIABLE, not provably different."""
+    s = str(v or "").strip()
+    return not s or s == LEGACY_SCORE_VERSION
+
+
+def _methodology_changed_summary(prev_version: Any, as_of: Optional[str]) -> str:
+    """Deterministic notice when the two snapshots aren't directly comparable.
+
+    Distinguishes an UNKNOWN prior methodology (a pre-versioning 'legacy'
+    snapshot — we must NOT claim the calculation changed, because it may not
+    have) from a genuine version change (two different known versions)."""
+    when = f" (from {str(as_of)[:10]})" if as_of else ""
+    if _is_unknown_version(prev_version):
+        return (
+            f"Your earlier score{when} predates methodology versioning, so we can't verify it "
+            "used the current rules — the two aren't directly comparable. Once you have two "
+            "scores under the same version, the trend will decompose normally."
+        )
+    return (
+        f"Methodology changed since your earlier score{when}: it was computed under "
+        f"{prev_version}, this one under {SCORE_VERSION}. The score change isn't directly "
+        "comparable — it doesn't isolate a market or holdings move."
+    )
+
+
 def build_change_report(
     req: ScoreChangeRequest, prev_snapshot: Optional[dict]
 ) -> ScoreChangeReport:
@@ -144,12 +177,33 @@ def build_change_report(
             window=window,
             available=False,
             current_score=cur_overall,
+            current_score_version=SCORE_VERSION,
             summary="No earlier snapshot in this window yet — scores accrue over time.",
         )
 
     prev_overall = int(prev_overall)
-    score_delta = cur_overall - prev_overall
     as_of = (prev_snapshot or {}).get("created_at")
+
+    # ── Methodology-version gate ──
+    # If the prior snapshot was produced by a DIFFERENT methodology version, the
+    # move is not a market/holdings change — it's (partly) a rules change. Refuse
+    # to express a comparable delta or decompose it; surface a clear notice.
+    prev_version = (prev_snapshot or {}).get("score_version")
+    if not is_comparable(prev_version, SCORE_VERSION):
+        return ScoreChangeReport(
+            window=window,
+            available=True,
+            as_of_previous=as_of,
+            current_score=cur_overall,
+            previous_score=prev_overall,
+            score_delta=None,  # not a directly comparable delta
+            current_score_version=SCORE_VERSION,
+            previous_score_version=str(prev_version) if prev_version else None,
+            comparable=False,
+            summary=_methodology_changed_summary(prev_version, as_of),
+        )
+
+    score_delta = cur_overall - prev_overall
 
     # ── Component deltas (exact decomposition of the score move) ──
     prev_dims = prev_rm.get("dimensions") or {}
@@ -268,4 +322,7 @@ def build_change_report(
         data_quality_changes=dq_changes,
         holdings_changes=holdings,
         summary=_summarize(score_delta, as_of, drivers, dq_changes),
+        current_score_version=SCORE_VERSION,
+        previous_score_version=str(prev_version) if prev_version else None,
+        comparable=True,
     )

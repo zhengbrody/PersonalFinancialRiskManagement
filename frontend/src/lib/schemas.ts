@@ -179,5 +179,8 @@ export const scoreResponseSchema = z.looseObject({
   base_overall: z.number().nullish(),
   drivers: z.array(scoreDriverSchema).nullish(),
   reason_codes: z.array(reasonCodeSchema).nullish(),
+  // Methodology version that produced this score (auditable; links the number
+  // to the rules on /methodology/health-score).
+  score_version: z.string().nullish(),
 });
 export type ScoreResponse = z.infer<typeof scoreResponseSchema>;

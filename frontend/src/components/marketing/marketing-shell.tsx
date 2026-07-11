@@ -145,6 +145,7 @@ function MarketingFooter({ minimal }: { minimal: boolean }) {
   const links: [string, string][] = [
     ["Product", "/product"],
     ["Learn", "/learn"],
+    ["Methodology", "/methodology/health-score"],
     ["Resources", "/resources"],
     ["Markets", "/markets"],
     ["Risk Today", "/risk-today"],

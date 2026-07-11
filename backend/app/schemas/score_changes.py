@@ -88,3 +88,10 @@ class ScoreChangeReport(BaseModel):
     data_quality_changes: list[DataQualityChange] = Field(default_factory=list)
     holdings_changes: HoldingsChange = Field(default_factory=HoldingsChange)
     summary: str = ""  # deterministic one-liner (no LLM)
+    # Methodology provenance. When the prior snapshot's version differs from the
+    # current one, `comparable` is False: the delta must NOT be presented as a
+    # market/holdings move (the decomposition lists are emptied and score_delta
+    # is None), and the UI shows a "methodology changed" notice instead.
+    current_score_version: Optional[str] = None
+    previous_score_version: Optional[str] = None
+    comparable: bool = True

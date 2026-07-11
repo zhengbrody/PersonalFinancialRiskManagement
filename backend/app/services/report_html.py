@@ -14,6 +14,8 @@ from __future__ import annotations
 import html as _html
 from typing import Any, Optional
 
+from libs.mindmarket_core.score_version import SCORE_VERSION
+
 _DISCLAIMER = (
     "Educational analysis, not investment advice. Figures are computed from "
     "market data; the AI narrative only explains those numbers and never invents "
@@ -209,7 +211,8 @@ def _document(*, title: str, subtitle: str, as_of: str, kind: str, body: str) ->
         f'<div class="brand">MindMarket · {esc(kind)} report</div>'
         f'<h1>{esc(title)}</h1><p class="subtitle">{esc(subtitle)}</p>{asof_html}'
         f"{body}"
-        f'<footer class="disclaimer">{esc(_DISCLAIMER)}</footer>'
+        f'<footer class="disclaimer">Methodology version {esc(SCORE_VERSION)}. '
+        f"{esc(_DISCLAIMER)}</footer>"
         "</main></body></html>"
     )
 

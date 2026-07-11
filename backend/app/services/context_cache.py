@@ -26,11 +26,15 @@ from __future__ import annotations
 import dataclasses
 from typing import Any, Callable
 
+from libs.mindmarket_core.score_version import SCORE_VERSION
+
 from .cache import CacheResult, get_cache
 from .cache_keys import make_key, market_data_hash, portfolio_hash, stable_hash
 
-# Bump to invalidate every cached entry when the computation / shape changes.
-RISK_ENGINE_VERSION = "v1"
+# The risk-score cache-invalidation token IS the methodology version — one
+# constant, never maintained separately (see score_version.py). A methodology
+# bump therefore invalidates every stale cached score automatically.
+RISK_ENGINE_VERSION = SCORE_VERSION
 COPILOT_CONTEXT_VERSION = "v1"
 
 _RISK_SCORE_TTL = 10 * 60
