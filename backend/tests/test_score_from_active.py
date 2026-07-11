@@ -12,6 +12,7 @@ suite stays hermetic + fast."""
 
 from __future__ import annotations
 
+import warnings
 from types import SimpleNamespace
 
 import numpy as np
@@ -413,11 +414,9 @@ def test_drops_zero_share_holdings_silently(
     assert resp.json()["error"]["code"] == "no_priced_holdings"
 
 
-def test_option_holding_penalizes_score_and_surfaces_impact(
-    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_capital, monkeypatch
-):
-    """An uncovered short call deterministically deducts from the score and the
-    `options` impact block is surfaced (base − penalty + breakdown)."""
+def _arm_short_call_option_book(monkeypatch, fake_active_portfolio, fake_price_history):
+    """Arm a book with an uncovered short AAPL call + a SPY equity leg (the
+    fixture setup shared by the option-penalty tests)."""
     import backend.app.services.options_analytics as oa
 
     monkeypatch.setattr(
@@ -467,6 +466,14 @@ def test_option_holding_penalizes_score_and_surfaces_impact(
     )
     fake_price_history.set(_make_history(["SPY", "AAPL"]))
 
+
+def test_option_holding_penalizes_score_and_surfaces_impact(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_capital, monkeypatch
+):
+    """An uncovered short call deterministically deducts from the score and the
+    `options` impact block is surfaced (base − penalty + breakdown)."""
+    _arm_short_call_option_book(monkeypatch, fake_active_portfolio, fake_price_history)
+
     resp = test_client.post(
         "/api/v1/risk/score_from_active",
         json={},
@@ -495,6 +502,34 @@ def test_no_options_no_impact_block(
     )
     assert resp.status_code == 200
     assert resp.json()["data"]["options"] is None  # equity-only → no options block
+
+
+def test_option_score_path_emits_no_pydantic_serialization_warning(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_capital, monkeypatch
+):
+    """Contract guard: the option-penalty path must NOT emit
+    `PydanticSerializationUnexpectedValue`. The `options` block is validated into
+    `OptionScoreImpactOut` before it enters `ScoreResponse` (model_copy does not
+    validate), so the envelope serializer sees a typed value, not a raw dict.
+    Runs the warning-emitting filter as an error so a regression fails CI."""
+    _arm_short_call_option_book(monkeypatch, fake_active_portfolio, fake_price_history)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        resp = test_client.post(
+            "/api/v1/risk/score_from_active",
+            json={},
+            headers={"Authorization": f"Bearer {mint_token()}"},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["options"] is not None  # the path under guard ran
+    offenders = [
+        str(w.message)
+        for w in caught
+        if "PydanticSerializationUnexpectedValue" in str(w.message)
+        or "Pydantic serializer warnings" in str(w.message)
+    ]
+    assert not offenders, f"unexpected Pydantic serialization warning(s): {offenders}"
 
 
 def test_score_surfaces_concentration_of_the_equity_book(

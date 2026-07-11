@@ -53,6 +53,7 @@ from ...schemas.risk import (
     HistoricalScenarioRow,
     HistoricalScenariosOut,
     LiquidityRow,
+    OptionScoreImpactOut,
     PortfolioMetricsOut,
     PriceProvenanceOut,
     ReasonCodeOut,
@@ -687,7 +688,18 @@ def score_from_active_endpoint(
     if impact is not None:
         option_penalty = int(impact["penalty"])
         adjusted = max(0, int(response.overall_score) - option_penalty)
-        response = response.model_copy(update={"overall_score": adjusted, "options": impact})
+        # Validate the raw impact dict into the typed schema BEFORE it enters
+        # ScoreResponse. model_copy(update=...) does NOT validate, so a bare dict
+        # here would round-trip as an untyped value and trip Pydantic's
+        # serialization warning (PydanticSerializationUnexpectedValue) when the
+        # envelope layer dumps the model. Validating produces a byte-identical
+        # wire payload (fields + penalty_breakdown rows match the schema).
+        response = response.model_copy(
+            update={
+                "overall_score": adjusted,
+                "options": OptionScoreImpactOut.model_validate(impact),
+            }
+        )
 
     # Record a daily snapshot (deduped, fail-soft) AFTER the final score is known,
     # so day-over-day deltas + the "what changed" engine compare against the score
