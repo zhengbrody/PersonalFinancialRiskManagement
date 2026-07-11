@@ -16,12 +16,13 @@
  * what you see here is what the signed-in product renders.
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { ScoreGauge, scoreBand } from "@/components/score-gauge";
 import { HorizontalBarChart, type BarDatum } from "@/components/ui/bar-chart";
 import { Kpi } from "@/components/ui/kpi";
 import { track } from "@/lib/analytics";
+import { ANALYTICS_EVENTS } from "@/lib/analytics-events";
 import { buildShareUrl } from "@/lib/share-card";
 
 const NOTIONAL = 100_000; // sample book size, $
@@ -194,8 +195,17 @@ export function SampleCockpit() {
     color: "hsl(var(--primary))",
   }));
 
+  // Fire demo_interacted once on the first meaningful interaction (funnel step).
+  const interacted = useRef(false);
+  function markInteracted() {
+    if (interacted.current) return;
+    interacted.current = true;
+    track(ANALYTICS_EVENTS.demo_interacted);
+  }
+
   function selectVariant(next: DemoBook["id"]) {
     if (next === variant) return;
+    markInteracted();
     setVariant(next);
     // Safe: only the variant label, never any portfolio/$ data (fixed demo books).
     track("demo_stress_toggled", { variant: next });
@@ -338,6 +348,7 @@ export function SampleCockpit() {
                 key={sh}
                 type="button"
                 onClick={() => {
+                  markInteracted();
                   setShock(sh);
                   // Safe: only the shock % + which demo book, no real holdings/$.
                   track("scenario_shock_selected", { shock_pct: sh / 100, source: `demo_${book.id}` });

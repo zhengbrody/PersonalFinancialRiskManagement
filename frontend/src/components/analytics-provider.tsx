@@ -12,8 +12,11 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import {
   capturePageview,
+  captureFirstTouchUtm,
+  getFirstTouchUtm,
   identifyUser,
   initAnalytics,
+  maybeTrackReturn,
   resetAnalytics,
 } from "@/lib/analytics";
 
@@ -22,6 +25,10 @@ function PageviewTracker() {
   const search = useSearchParams();
   useEffect(() => {
     if (!pathname) return;
+    // Save first-touch UTM (allowlisted keys only) BEFORE the query is dropped —
+    // used to attribute a later signup. The querystring itself is stripped by
+    // capturePageview, so no query key reaches PostHog.
+    if (search) captureFirstTouchUtm(search);
     const qs = search?.toString();
     capturePageview(
       window.location.origin + pathname + (qs ? `?${qs}` : ""),
@@ -36,6 +43,7 @@ export function AnalyticsProvider() {
 
   useEffect(() => {
     initAnalytics();
+    maybeTrackReturn(); // fires returned_7d once for a ≥7-day-away visitor
   }, []);
 
   useEffect(() => {
@@ -43,8 +51,9 @@ export function AnalyticsProvider() {
     if (uid && identified.current !== uid) {
       identified.current = uid;
       // Privacy: identify with the Supabase UUID ONLY — email (or any other
-      // person property) never leaves the browser for PostHog.
-      identifyUser(uid);
+      // person property) never leaves the browser. First-touch UTM (allowlisted
+      // keys only) is attached for campaign attribution.
+      identifyUser(uid, getFirstTouchUtm());
     } else if (!uid && identified.current) {
       identified.current = null;
       resetAnalytics(); // sign-out → unlink the anonymous session

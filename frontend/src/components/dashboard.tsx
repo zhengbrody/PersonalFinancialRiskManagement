@@ -39,6 +39,7 @@ const MiniSparkline = dynamic(
   { ssr: false },
 );
 import { track } from "@/lib/analytics";
+import { ANALYTICS_EVENTS } from "@/lib/analytics-events";
 import { isNoPortfolioError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -76,6 +77,15 @@ export function Dashboard() {
     if (score.data && trackedScore.current !== score.data.overall_score) {
       trackedScore.current = score.data.overall_score;
       track("score_viewed", { overall_score: Math.round(score.data.overall_score) });
+      // Activation milestone: fire first_score_completed once per browser.
+      try {
+        if (!window.localStorage.getItem("mm_first_score")) {
+          window.localStorage.setItem("mm_first_score", "1");
+          track(ANALYTICS_EVENTS.first_score_completed);
+        }
+      } catch {
+        /* storage unavailable */
+      }
     }
   }, [score.data]);
 
@@ -349,6 +359,9 @@ function ScoreError({ error }: { error: Error }) {
 }
 
 function OnboardingGuide() {
+  useEffect(() => {
+    track(ANALYTICS_EVENTS.onboarding_started);
+  }, []);
   const steps = [
     {
       n: 1,

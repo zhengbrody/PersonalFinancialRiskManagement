@@ -16,7 +16,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { track } from "@/lib/analytics";
+import { getFirstTouchUtm, track } from "@/lib/analytics";
+import { ANALYTICS_EVENTS } from "@/lib/analytics-events";
 import { useAuth } from "@/lib/auth-context";
 import { AuthShell } from "@/components/marketing/auth-shell";
 import { C } from "@/components/marketing/theme";
@@ -51,15 +52,22 @@ export default function SignupPage() {
     if (!configured) return;
     setError(null);
     setSubmitting(true);
+    track(ANALYTICS_EVENTS.signup_started, { method: "email" });
     try {
       const { needsConfirmation } = await signUp(email, password);
-      track("signed_up", { needs_confirmation: needsConfirmation });
+      track(ANALYTICS_EVENTS.signup_completed, {
+        method: "email",
+        needs_confirmation: needsConfirmation,
+        ...getFirstTouchUtm(),
+      });
       if (needsConfirmation) {
         setConfirmationSent(true);
         return;
       }
       router.replace(POST_SIGNUP_REDIRECT);
     } catch (err) {
+      // Record only the error CATEGORY — never the message (may echo input).
+      track(ANALYTICS_EVENTS.signup_failed, { method: "email", error_category: signupErrorCategory(err) });
       setError(formatSignupError(err));
     } finally {
       setSubmitting(false);
@@ -70,10 +78,12 @@ export default function SignupPage() {
     if (!configured) return;
     setError(null);
     setOauthSubmitting(true);
+    track(ANALYTICS_EVENTS.signup_started, { method: "google" });
     try {
-      track("signup_oauth_started", { provider: "google" });
+      track(ANALYTICS_EVENTS.signup_oauth_started, { provider: "google" });
       await signInWithGoogle();
     } catch (err) {
+      track(ANALYTICS_EVENTS.signup_failed, { method: "google", error_category: "oauth" });
       setError(err instanceof Error ? err.message : "Google sign-up failed.");
       setOauthSubmitting(false);
     }
@@ -198,4 +208,16 @@ function formatSignupError(err: unknown): string {
     );
   }
   return message;
+}
+
+/** Coarse error CATEGORY for analytics — never the raw message (may echo the
+ * email/password). */
+function signupErrorCategory(err: unknown): string {
+  const m = (err instanceof Error ? err.message : "").toLowerCase();
+  if (/already registered|already exists|user already/.test(m)) return "already_registered";
+  if (/password/.test(m)) return "weak_password";
+  if (/email|valid/.test(m)) return "invalid_email";
+  if (/rate|too many/.test(m)) return "rate_limited";
+  if (/network|fetch|timeout/.test(m)) return "network";
+  return "unknown";
 }

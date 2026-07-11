@@ -15,6 +15,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { track } from "@/lib/analytics";
+import { ANALYTICS_EVENTS } from "@/lib/analytics-events";
 import { useDigestPref, useSetDigestPref } from "@/lib/queries";
 
 export function WeeklyDigestCard() {
@@ -46,7 +48,11 @@ export function WeeklyDigestCard() {
           variant={enabled ? "outline" : "default"}
           size="sm"
           disabled={pref.isLoading || setPref.isPending}
-          onClick={() => setPref.mutate(!enabled)}
+          onClick={() => {
+            const next = !enabled;
+            if (next) track(ANALYTICS_EVENTS.digest_opted_in);
+            setPref.mutate(next);
+          }}
         >
           {setPref.isPending ? "Saving…" : enabled ? "Turn off digest" : "Turn on digest"}
         </Button>

@@ -10,13 +10,14 @@
  * provenance). No AI, no recommendations. "Import a broker CSV" reads a FILE
  * the user exported — nothing connects to a brokerage.
  *
- * Analytics: step events with holdings_count only — never tickers/shares.
+ * Analytics: step events with a coarse holdings_band only — never tickers/shares/exact counts.
  */
 
 import { useRef, useState } from "react";
 import Link from "next/link";
 
 import { track } from "@/lib/analytics";
+import { holdingsBand } from "@/lib/analytics-events";
 import { parseHoldingsCsv } from "@/lib/parse-holdings-csv";
 import {
   MAX_PUBLIC_HOLDINGS,
@@ -82,7 +83,7 @@ export function PublicRiskCheck() {
         ? `Imported the first ${MAX_PUBLIC_HOLDINGS} holdings (public check limit).`
         : `Imported ${mapped.length} holding(s).`,
     );
-    track("public_check_csv_imported", { holdings_count: mapped.length });
+    track("public_check_csv_imported", { holdings_band: holdingsBand(mapped.length) });
   }
 
   async function run() {
@@ -106,7 +107,7 @@ export function PublicRiskCheck() {
       // The signup handoff: browser-only storage, confirmed by the user on
       // /portfolios/new before anything is written to the database.
       saveAnonHoldings(filled);
-      track("public_check_completed", { holdings_count: holdings.length });
+      track("public_check_completed", { holdings_band: holdingsBand(holdings.length) });
     } catch (e) {
       setError((e as Error)?.message ?? "Risk check failed — try again shortly.");
     } finally {
@@ -280,7 +281,7 @@ function ResultPanel({
         <Link
           href="/signup"
           className="mt-2 inline-block rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-          onClick={() => track("public_check_signup_cta", { holdings_count: holdingsCount })}
+          onClick={() => track("public_check_signup_cta", { holdings_band: holdingsBand(holdingsCount) })}
         >
           Create a free account
         </Link>

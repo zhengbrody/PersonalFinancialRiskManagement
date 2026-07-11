@@ -4,6 +4,7 @@
 // active in PRODUCTION so dev/test never pollute the project. All helpers are
 // safe no-ops when disabled / before init.
 import posthog from "posthog-js";
+import { ANALYTICS_EVENTS, readUtm, type AnalyticsEvent, type Utm } from "./analytics-events";
 
 export const POSTHOG_KEY =
   process.env.NEXT_PUBLIC_POSTHOG_KEY ||
@@ -67,6 +68,12 @@ const _DENY_KEY_SUBSTRINGS = [
   "cost",
 ];
 
+// Explicitly-safe keys that bypass the deny-list. `holdings_band` is a coarse
+// band ("1-5"/"6-10"/"11+"), NOT a count or a name — but it contains the
+// substring "holding", so without this exception the deny-list would silently
+// drop it (the bug this allowlist fixes). Keep this set tiny + reviewed.
+const _ALLOW_KEYS = new Set(["holdings_band"]);
+
 export function redactProps(
   props?: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
@@ -74,6 +81,10 @@ export function redactProps(
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(props)) {
     const k = key.toLowerCase();
+    if (_ALLOW_KEYS.has(k)) {
+      out[key] = value;
+      continue;
+    }
     if (_DENY_KEY_SUBSTRINGS.some((d) => k.includes(d))) continue; // drop sensitive
     out[key] = value;
   }
@@ -118,12 +129,60 @@ export function maskDynamicPathSegments(path: string): string {
   return path.replace(_UUID_SEGMENT, ":id");
 }
 
-export function track(event: string, props?: Record<string, unknown>): void {
+export function track(event: AnalyticsEvent, props?: Record<string, unknown>): void {
   if (!started) return;
   try {
     posthog.capture(event, redactProps(props));
   } catch {
     /* ignore */
+  }
+}
+
+// ── first-touch UTM attribution (session-safe storage) ──────────────────────
+// Save the FIRST visit's allowlisted UTM to sessionStorage so a later signup can
+// be attributed to the campaign that brought the user in. Only the four UTM keys
+// are ever stored — never `code`, tokens, tickers, or any other query param.
+const _FIRST_UTM_KEY = "mm_first_utm";
+
+export function captureFirstTouchUtm(params: URLSearchParams): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (window.sessionStorage.getItem(_FIRST_UTM_KEY)) return; // first-touch only
+    const utm = readUtm(params);
+    if (Object.keys(utm).length === 0) return;
+    window.sessionStorage.setItem(_FIRST_UTM_KEY, JSON.stringify(utm));
+  } catch {
+    /* storage unavailable — attribution is best-effort */
+  }
+}
+
+export function getFirstTouchUtm(): Utm {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.sessionStorage.getItem(_FIRST_UTM_KEY);
+    return raw ? (JSON.parse(raw) as Utm) : {};
+  } catch {
+    return {};
+  }
+}
+
+// ── returning-user signal ───────────────────────────────────────────────────
+// Fires `returned_7d` once when a known visitor comes back after ≥7 days. Only a
+// timestamp is stored locally (no PII); the event carries a coarse away-bucket.
+const _LAST_SEEN_KEY = "mm_last_seen";
+const _DAY_MS = 24 * 60 * 60 * 1000;
+
+export function maybeTrackReturn(now: number = Date.now()): void {
+  if (typeof window === "undefined") return;
+  try {
+    const prev = Number(window.localStorage.getItem(_LAST_SEEN_KEY) || 0);
+    window.localStorage.setItem(_LAST_SEEN_KEY, String(now));
+    if (prev && now - prev >= 7 * _DAY_MS) {
+      const days = (now - prev) / _DAY_MS;
+      track(ANALYTICS_EVENTS.returned_7d, { away_bucket: days >= 30 ? "30d+" : "7-30d" });
+    }
+  } catch {
+    /* storage unavailable */
   }
 }
 

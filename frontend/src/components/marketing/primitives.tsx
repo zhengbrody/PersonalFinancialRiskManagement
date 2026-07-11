@@ -16,11 +16,13 @@ export function CTA({
   variant = "primary",
   href = "#",
   lg,
+  onClick,
 }: {
   children: ReactNode;
   variant?: "primary" | "ghost";
   href?: string;
   lg?: boolean;
+  onClick?: () => void;
 }) {
   const base: CSSProperties = {
     display: "inline-flex",
@@ -45,13 +47,13 @@ export function CTA({
   const style = { ...base, ...v };
   if (href.startsWith("/")) {
     return (
-      <Link href={href} style={style}>
+      <Link href={href} style={style} onClick={onClick}>
         {children}
       </Link>
     );
   }
   return (
-    <a href={href} style={style}>
+    <a href={href} style={style} onClick={onClick}>
       {children}
     </a>
   );
