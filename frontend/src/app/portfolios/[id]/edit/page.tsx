@@ -87,14 +87,12 @@ export default function EditPortfolioPage() {
     <div className="mx-auto max-w-2xl space-y-6">
       <header className="space-y-1">
         <p className="text-xs font-medium uppercase tracking-widest text-primary">
-          PATCH /api/v1/portfolios/{portfolio.id}
+          Edit portfolio
         </p>
         <h1 className="text-3xl font-semibold tracking-tight">
           Edit portfolio
         </h1>
-        <p className="font-mono text-xs text-muted-foreground">
-          {portfolio.id}
-        </p>
+        <p className="text-sm text-muted-foreground">{portfolio.name}</p>
       </header>
 
       <Card>

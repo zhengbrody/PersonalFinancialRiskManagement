@@ -190,7 +190,7 @@ function EvidenceChip({ item }: { item: CopilotEvidence }) {
       <span className="text-muted-foreground">{item.label}:</span>
       <span className="font-medium">{item.value}</span>
       <span
-        className={`rounded px-1 py-0.5 text-[9px] font-semibold uppercase ${sourceClass(item.source)}`}
+        className={`rounded px-1 py-0.5 text-[10px] font-semibold uppercase ${sourceClass(item.source)}`}
       >
         {item.source}
       </span>

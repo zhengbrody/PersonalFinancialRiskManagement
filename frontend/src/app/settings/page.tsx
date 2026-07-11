@@ -79,7 +79,7 @@ function SettingsPageInner() {
     <div className="mx-auto max-w-3xl space-y-6">
       <header className="space-y-1">
         <p className="text-xs font-medium uppercase tracking-widest text-primary">
-          GET /api/v1/billing/me
+          Account
         </p>
         <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
         <p className="text-sm text-muted-foreground">
@@ -113,8 +113,7 @@ function SettingsPageInner() {
         <CardHeader>
           <CardTitle>Current plan</CardTitle>
           <CardDescription>
-            Plan and quota are synced via the Stripe webhook into the
-            Supabase profiles table.
+            Your plan and usage this month.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

@@ -147,7 +147,7 @@ function Hero() {
             </p>
           </Reveal>
           <Reveal delay={0.24}>
-            <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+            <div data-hero-cta style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
               <CTA href="/demo-risk-check" lg>Try a free risk check</CTA>
               <CTA href="/signup" variant="ghost" lg>Score my portfolio</CTA>
             </div>

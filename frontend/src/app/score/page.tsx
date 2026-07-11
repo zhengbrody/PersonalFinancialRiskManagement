@@ -386,30 +386,17 @@ function ErrorPanel({ error }: { error: ApiError }) {
     <Card className="border-destructive/50">
       <CardHeader>
         <CardTitle className="text-destructive">
-          {error.code === "network_error" ? "Backend unreachable" : "Request failed"}
+          {error.code === "network_error"
+            ? "We couldn't reach the scoring service"
+            : "Something went wrong"}
         </CardTitle>
-        <CardDescription>
-          <span className="font-mono text-xs">
-            {error.status || "—"} · {error.code}
-          </span>
-        </CardDescription>
       </CardHeader>
       <CardContent>
-        <p className="text-sm">{error.message}</p>
-        {error.code === "network_error" && (
-          <p className="mt-3 text-xs text-muted-foreground">
-            Start the backend with{" "}
-            <code className="font-mono">
-              uvicorn backend.app.main:app --reload --port 8000
-            </code>{" "}
-            from the repo root.
-          </p>
-        )}
-        {Object.keys(error.details).length > 0 && (
-          <pre className="mt-3 max-h-64 overflow-auto rounded bg-muted/40 p-3 text-xs text-muted-foreground">
-            {JSON.stringify(error.details, null, 2)}
-          </pre>
-        )}
+        <p className="text-sm text-muted-foreground">
+          {error.code === "network_error"
+            ? "Check your connection and try again in a moment."
+            : error.message}
+        </p>
       </CardContent>
     </Card>
   );

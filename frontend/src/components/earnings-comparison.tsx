@@ -52,7 +52,7 @@ export function EarningsComparison({
       <QuarterTable e={e} />
       <Transcript e={e} />
       {e.missing_data.length > 0 && <Missing e={e} />}
-      <p className="text-[11px] leading-relaxed text-muted-foreground">{e.disclaimer}</p>
+      <p className="text-xs leading-relaxed text-muted-foreground">{e.disclaimer}</p>
     </div>
   );
 }

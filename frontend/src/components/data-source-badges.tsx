@@ -82,7 +82,7 @@ export function DataSourcesPanel({
           <div key={i} className="flex flex-wrap items-baseline gap-x-2 text-[11px]">
             <span className="font-mono text-muted-foreground">{s.field}</span>
             <span
-              className={`rounded border px-1 py-0.5 text-[9px] font-medium ${roleTone(s.role)}`}
+              className={`rounded border px-1 py-0.5 text-[10px] font-medium ${roleTone(s.role)}`}
             >
               {s.label ?? s.provider}
             </span>

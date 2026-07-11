@@ -41,7 +41,9 @@ describe("SignupPage", () => {
       signOut: vi.fn(),
     });
     render(<SignupPage />);
-    expect(screen.getByText(/supabase is not configured/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/sign-up isn.t available on this preview build/i),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /create account/i }),
     ).not.toBeInTheDocument();
@@ -98,7 +100,7 @@ describe("SignupPage", () => {
     await user.type(screen.getByLabelText(/password/i), "longpassword");
     await user.click(screen.getByRole("button", { name: /create account/i }));
 
-    expect(replaceMock).toHaveBeenCalledWith("/portfolios");
+    expect(replaceMock).toHaveBeenCalledWith("/portfolios/new");
   });
 
   it("surfaces the error when signUp rejects", async () => {
@@ -151,7 +153,7 @@ describe("SignupPage", () => {
     await user.click(screen.getByRole("button", { name: /create account/i }));
 
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent(/rejected by the current supabase password policy/i);
+    expect(alert).toHaveTextContent(/that password was rejected/i);
     expect(alert).toHaveTextContent(/use google sign-up/i);
   });
 

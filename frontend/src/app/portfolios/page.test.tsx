@@ -278,11 +278,11 @@ describe("PortfoliosPage", () => {
     const btn = await screen.findByRole("button", { name: /^score$/i });
     await user.click(btn);
 
-    // Specific copy for the structured error code, not the raw message.
+    // Consumer copy for the structured error code (the raw status·code line was
+    // removed for the consumer-facing product).
     expect(
       await screen.findByText(/no active portfolio/i),
     ).toBeInTheDocument();
-    expect(screen.getByText(/no_active_portfolio/i)).toBeInTheDocument();
   });
 
   it("renders the error panel when the envelope returns an error", async () => {

@@ -18,7 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { track } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { useCreatePortfolio } from "@/lib/queries";
+import { useCreatePortfolio, useMyPortfolios } from "@/lib/queries";
 import {
   PortfolioForm,
   valuesToCreateInput,
@@ -43,6 +43,13 @@ export default function NewPortfolioPage() {
   const router = useRouter();
   const { user, loading: authLoading, configured } = useAuth();
   const mutation = useCreatePortfolio();
+  // Reliable portfolio state (not browser history) decides where Cancel goes:
+  // an existing user returns to their list; a zero-portfolio onboarding user
+  // has no list to return to (the empty list would just bounce them back here),
+  // so they go home — the dashboard's onboarding guide, which never redirects.
+  const portfoliosQuery = useMyPortfolios();
+  const hasExistingPortfolios =
+    (portfoliosQuery.data?.portfolios.length ?? 0) > 0;
   const [serverError, setServerError] = useState<string | null>(null);
   // Handoff from the anonymous risk check: prefill (post-mount, SSR-safe) —
   // nothing is written to the database until the user reviews and saves.
@@ -76,13 +83,14 @@ export default function NewPortfolioPage() {
     <div className="mx-auto max-w-2xl space-y-6">
       <header className="space-y-1">
         <p className="text-xs font-medium uppercase tracking-widest text-primary">
-          POST /api/v1/portfolios
+          Add your holdings
         </p>
         <h1 className="text-3xl font-semibold tracking-tight">
           New portfolio
         </h1>
         <p className="text-sm text-muted-foreground">
-          Rows with empty ticker or zero shares are dropped on save.
+          Add your tickers and shares, or import a broker CSV — you&apos;ll get a
+          Health Score the moment you save.
         </p>
       </header>
 
@@ -103,20 +111,35 @@ export default function NewPortfolioPage() {
           <PortfolioForm
             key={anonPrefill ? "anon-prefill" : "blank"}
             initial={anonPrefill ?? BLANK}
+            emphasizeCsv={!anonPrefill}
             submitLabel="Create portfolio"
             busy={mutation.isPending}
             errorMessage={serverError}
-            onCancel={() => router.push("/portfolios")}
+            onCancel={() =>
+              router.push(hasExistingPortfolios ? "/portfolios" : "/")
+            }
             onSubmit={async (values) => {
               setServerError(null);
               try {
                 const created = valuesToCreateInput(values);
-                await mutation.mutateAsync(created);
+                const row = await mutation.mutateAsync(created);
                 track("portfolio_created", {
                   holdings: Object.keys(created.holdings).length,
                 });
                 clearAnonHoldings(); // the handoff is complete
-                router.replace("/portfolios");
+                // Navigate from the AUTHORITATIVE create response, never the
+                // submitted form. The backend auto-promotes a user's FIRST
+                // portfolio to default, so a first/only book (and any book the
+                // user explicitly marks default) comes back is_default:true and
+                // IS the active book → show its Health Score. An existing user's
+                // additional NON-default book must NOT land on /score, which
+                // scores their *old* default; send them to the list where the
+                // new portfolio is visible. We never flip an existing default.
+                if (row.is_default) {
+                  router.replace("/score");
+                } else {
+                  router.replace("/portfolios");
+                }
               } catch (err) {
                 setServerError(
                   err instanceof ApiError

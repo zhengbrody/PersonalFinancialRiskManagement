@@ -44,7 +44,7 @@ export default function CopilotPage() {
   }, [user, authLoading, configured, router]);
 
   if (!configured) {
-    return <ConfigureSupabaseNotice />;
+    return <PreviewBuildNotice />;
   }
 
   if (authLoading || !user) {
@@ -89,21 +89,21 @@ function CopilotAskWithPrefill() {
   return <CopilotAsk initialQuestion={q} />;
 }
 
-function ConfigureSupabaseNotice() {
+function PreviewBuildNotice() {
   return (
     <Card className="mx-auto max-w-2xl">
       <CardHeader>
-        <CardTitle>Supabase not configured</CardTitle>
+        <CardTitle>Sign in to use the Copilot</CardTitle>
         <CardDescription>
-          The Copilot needs an authenticated Supabase session.
+          The Copilot answers questions about your own portfolio.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
+        {/* Dev-only: this build lacks the NEXT_PUBLIC_SUPABASE_* env vars.
+            Real deployments always set them, so end users never see this. */}
         <p className="text-muted-foreground">
-          Set <code className="font-mono">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
-          <code className="font-mono">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> in{" "}
-          <code className="font-mono">.env.local</code>, then restart the dev
-          server.
+          Accounts aren&apos;t available on this preview build. You can still try
+          the public demo below.
         </p>
         <Link href="/score">
           <Button variant="outline">Try the public /score demo</Button>

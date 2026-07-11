@@ -110,7 +110,7 @@ function PricingPageInner() {
     <div className="mx-auto max-w-5xl space-y-8">
       <header className="space-y-2 text-center">
         <p className="text-xs font-medium uppercase tracking-widest text-primary">
-          GET /api/v1/billing/me
+          Pricing
         </p>
         <h1 className="text-4xl font-semibold tracking-tight">
           Simple pricing

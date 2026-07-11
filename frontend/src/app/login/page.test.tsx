@@ -41,7 +41,9 @@ describe("LoginPage", () => {
     });
 
     render(<LoginPage />);
-    expect(screen.getByText(/supabase is not configured/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/sign-in isn.t available on this preview build/i),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /sign in/i }),
     ).not.toBeInTheDocument();

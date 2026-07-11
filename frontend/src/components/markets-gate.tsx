@@ -55,20 +55,6 @@ function MarketsView() {
       <PortfolioSentiment />
       <MarketNews />
       <MacroSnapshot />
-
-      {/* Reddit FOMO monitor still lives in the legacy workbench (needs a paid Apify key). */}
-      <section className="rounded-lg border border-border bg-muted/30 p-5">
-        <h2 className="text-sm font-semibold">Looking for more?</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          The Reddit FOMO monitor lives in the advanced workbench.
-        </p>
-        <a
-          href="/legacy/3_Markets"
-          className="mt-3 inline-block rounded-md border border-primary/50 bg-primary/10 px-3 py-1.5 text-sm text-primary hover:bg-primary/20"
-        >
-          Open advanced Markets workbench →
-        </a>
-      </section>
     </div>
   );
 }

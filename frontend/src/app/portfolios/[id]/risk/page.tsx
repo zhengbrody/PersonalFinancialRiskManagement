@@ -92,12 +92,11 @@ export default function PortfolioRiskPage() {
       <header className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <p className="text-xs font-medium uppercase tracking-widest text-primary">
-            POST /api/v1/risk/report_from_active
+            Risk report
           </p>
           <h1 className="text-3xl font-semibold tracking-tight">Risk report</h1>
           <p className="text-sm text-muted-foreground">
-            <span className="font-medium">{portfolio.name}</span>{" "}
-            <span className="font-mono text-xs">{portfolio.id}</span>
+            <span className="font-medium">{portfolio.name}</span>
           </p>
         </div>
         <Button

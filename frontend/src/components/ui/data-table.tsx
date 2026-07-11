@@ -116,7 +116,7 @@ export function DataTable<T>({
                   >
                     {c.header}
                     {sortable && (
-                      <span className="ml-1 text-[9px] opacity-60">
+                      <span className="ml-1 text-[10px] opacity-60">
                         {activeSort ? (dir === "asc" ? "▲" : "▼") : "↕"}
                       </span>
                     )}
