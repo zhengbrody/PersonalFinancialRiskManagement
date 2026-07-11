@@ -1,0 +1,74 @@
+# FastAPI → OpenAPI → TypeScript contract-drift gate.
+#
+# Regenerates the committed `openapi.json` (from the FastAPI app) and
+# `frontend/src/lib/api-types.ts` (from that json, offline), then fails if
+# either differs from what's committed — i.e. someone changed the backend
+# contract without running `scripts/export_openapi.py` + `npm run gen:api`.
+#
+# The codegen toolchain (fastapi/pydantic/pydantic-core/starlette,
+# openapi-typescript) is PINNED so the schema is byte-deterministic and this
+# gate is decoupled from the runtime dep ceilings — this job only GENERATES the
+# contract, it doesn't ship it. Keep these pins == the versions that produced
+# the committed artifacts (currently the maintainer's local toolchain). Bump
+# both together when regenerating.
+#
+# NOTE: pushing this file needs a token with the `workflow` scope
+# (`gh auth refresh -h github.com -s workflow`). Until then it lives locally
+# (see `.git/info/exclude`); the version-stable structural guard in
+# `backend/tests/test_openapi_contract.py` already runs in the backend-tests job.
+
+name: contract
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  openapi-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install app deps + pinned codegen toolchain
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r backend/requirements-backend.txt
+          # Deterministic codegen toolchain (override the runtime ceilings for
+          # generation only). Must match the versions that produced the
+          # committed openapi.json / api-types.ts.
+          pip install \
+            "fastapi==0.128.5" \
+            "pydantic==2.12.5" \
+            "pydantic-core==2.41.5" \
+            "starlette==0.52.1"
+
+      - name: Regenerate openapi.json
+        run: python scripts/export_openapi.py
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Regenerate api-types.ts (offline, from committed openapi.json)
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run gen:api
+
+      - name: Fail on contract drift
+        run: |
+          if ! git diff --exit-code openapi.json frontend/src/lib/api-types.ts; then
+            echo "::error::OpenAPI contract drift. Run 'python scripts/export_openapi.py' then 'cd frontend && npm run gen:api' and commit the result."
+            exit 1
+          fi
+          echo "OpenAPI contract is in sync."

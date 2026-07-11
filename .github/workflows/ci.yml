@@ -76,14 +76,72 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install -r backend/requirements-backend.txt
-        pip install pytest
+        pip install pytest pytest-cov mypy
 
-    - name: Run backend tests
-      # `-o "addopts="` wipes the inherited Streamlit `--cov=. --cov-fail-under=60`
-      # so this job stays self-contained: no pytest-cov dep, no false
-      # coverage gate against unrelated code. Backend coverage gets its
-      # own measurement separately when we wire it up.
-      run: pytest backend/tests -q -o "addopts="
+    - name: Run backend tests + coverage gate
+      # `-o "addopts="` wipes the inherited Streamlit `--cov=. --cov-fail-under=60`;
+      # the backend gets its OWN coverage config (backend/.coveragerc — the root
+      # pyproject omits backend/*). Baseline 87.3% → floor 85% (docs/ci-hardening.md).
+      run: |
+        pytest backend/tests -q -o "addopts=" \
+          --cov=backend/app --cov-config=backend/.coveragerc \
+          --cov-report=term-missing:skip-covered --cov-fail-under=85
+
+    - name: Type check — backend trust boundary (blocking)
+      # schemas + core are strict-clean (disallow_untyped_defs); this job installs
+      # the app deps so mypy sees real pydantic types. services/api stay advisory.
+      run: mypy --config-file backend/mypy.ini backend/app/schemas backend/app/core
+
+  # ── Copilot grounding eval — offline deterministic-template mode (no LLM
+  # key). Advisory for now (mypy precedent): backend-tests already hard-gates
+  # the same 30-case run via test_ai_eval_grounding.py; this job surfaces the
+  # faithfulness report as its own visible check.
+  copilot-eval:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: pip
+
+    - name: Install backend dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r backend/requirements-backend.txt
+
+    - name: Grounding eval (offline template mode)
+      run: python evals/run_grounding_eval.py --threshold 0.98
+
+  # ── Dependency vulnerability scan (advisory). Non-blocking until the known
+  # starlette findings are resolved via a fastapi/starlette ceiling bump
+  # (docs/ci-hardening.md); then flip continue-on-error off.
+  dep-scan:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install pip-audit
+      run: pip install pip-audit
+
+    - name: Audit backend runtime deps
+      run: pip-audit -r requirements.txt -r backend/requirements-backend.txt
+
+    - name: Audit frontend deps
+      working-directory: frontend
+      run: npm audit --omit=dev || true
 
   # ── Next.js frontend (frontend/) — lint + typecheck (via build) +
   # vitest suite. Mirrors `npm run lint && npm run build && npm test`.
