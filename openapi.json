@@ -368,6 +368,186 @@
         "title": "BacktestRequest",
         "type": "object"
       },
+      "BacktestResponse": {
+        "description": "The success payload placed inside the ``data`` envelope key.",
+        "properties": {
+          "benchmark": {
+            "title": "Benchmark",
+            "type": "string"
+          },
+          "benchmark_total_return": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Benchmark Total Return"
+          },
+          "drawdown_series": {
+            "items": {
+              "$ref": "#/components/schemas/CurvePoint"
+            },
+            "title": "Drawdown Series",
+            "type": "array"
+          },
+          "end_date": {
+            "title": "End Date",
+            "type": "string"
+          },
+          "equity_curve": {
+            "items": {
+              "$ref": "#/components/schemas/CurvePoint"
+            },
+            "title": "Equity Curve",
+            "type": "array"
+          },
+          "start_date": {
+            "title": "Start Date",
+            "type": "string"
+          },
+          "stats": {
+            "$ref": "#/components/schemas/BacktestStats"
+          },
+          "strategy": {
+            "enum": [
+              "static",
+              "equal_weight",
+              "momentum"
+            ],
+            "title": "Strategy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "strategy",
+          "start_date",
+          "end_date",
+          "benchmark",
+          "stats"
+        ],
+        "title": "BacktestResponse",
+        "type": "object"
+      },
+      "BacktestStats": {
+        "description": "Scalar performance metrics. Every field is nullable: a non-finite\nengine output (NaN/Inf) is serialised as ``null`` rather than crashing\nthe JSON renderer.",
+        "properties": {
+          "alpha": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alpha"
+          },
+          "annual_return": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annual Return"
+          },
+          "annual_volatility": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annual Volatility"
+          },
+          "beta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beta"
+          },
+          "calmar_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calmar Ratio"
+          },
+          "max_drawdown": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Drawdown"
+          },
+          "sharpe_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sharpe Ratio"
+          },
+          "sortino_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sortino Ratio"
+          },
+          "total_return": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Return"
+          },
+          "win_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Win Rate"
+          }
+        },
+        "title": "BacktestStats",
+        "type": "object"
+      },
       "BenchmarkRow": {
         "properties": {
           "annual_return": {
@@ -660,6 +840,79 @@
           "n"
         ],
         "title": "CalibrationBinOut",
+        "type": "object"
+      },
+      "ChangeRow": {
+        "properties": {
+          "change_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Pct"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "prev_shares": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev Shares"
+          },
+          "prev_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prev Value"
+          },
+          "shares": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shares"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "ticker"
+        ],
+        "title": "ChangeRow",
         "type": "object"
       },
       "ChatRequest": {
@@ -1005,6 +1258,54 @@
         "title": "ConcentrationOut",
         "type": "object"
       },
+      "CopilotAnswer": {
+        "properties": {
+          "answer_markdown": {
+            "title": "Answer Markdown",
+            "type": "string"
+          },
+          "data_only": {
+            "default": false,
+            "title": "Data Only",
+            "type": "boolean"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceItem"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "intent": {
+            "title": "Intent",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "tickers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tickers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "intent",
+          "answer_markdown"
+        ],
+        "title": "CopilotAnswer",
+        "type": "object"
+      },
       "CopilotAskRequest": {
         "properties": {
           "message": {
@@ -1244,6 +1545,25 @@
           }
         },
         "title": "CoverageTestOut",
+        "type": "object"
+      },
+      "CurvePoint": {
+        "description": "One point on a time series (equity curve / drawdown). ``date`` is an\nISO ``YYYY-MM-DD`` string; ``value`` is a finite float.",
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "date",
+          "value"
+        ],
+        "title": "CurvePoint",
         "type": "object"
       },
       "DCFOverrides": {
@@ -1808,6 +2128,39 @@
         "title": "Envelope[AttributionResponse]",
         "type": "object"
       },
+      "Envelope_BacktestResponse_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BacktestResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[BacktestResponse]",
+        "type": "object"
+      },
       "Envelope_BenchmarksOut_": {
         "additionalProperties": true,
         "properties": {
@@ -1940,6 +2293,39 @@
         "title": "Envelope[CheckoutSessionResponse]",
         "type": "object"
       },
+      "Envelope_CopilotAnswer_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CopilotAnswer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[CopilotAnswer]",
+        "type": "object"
+      },
       "Envelope_EfficientFrontierOut_": {
         "additionalProperties": true,
         "properties": {
@@ -2004,6 +2390,39 @@
           "meta"
         ],
         "title": "Envelope[HistoricalScenariosOut]",
+        "type": "object"
+      },
+      "Envelope_InstitutionDetailOut_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InstitutionDetailOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[InstitutionDetailOut]",
         "type": "object"
       },
       "Envelope_MLHealthOut_": {
@@ -2202,6 +2621,39 @@
           "meta"
         ],
         "title": "Envelope[OptionAnalyzeResponse]",
+        "type": "object"
+      },
+      "Envelope_OptionExplainOutput_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OptionExplainOutput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[OptionExplainOutput]",
         "type": "object"
       },
       "Envelope_PortalSessionResponse_": {
@@ -2831,6 +3283,39 @@
         "title": "Envelope[TickerNewsResponse]",
         "type": "object"
       },
+      "Envelope_TopInstitutionsOut_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TopInstitutionsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[TopInstitutionsOut]",
+        "type": "object"
+      },
       "Envelope_VarBacktestOut_": {
         "additionalProperties": true,
         "properties": {
@@ -2955,6 +3440,30 @@
           "message"
         ],
         "title": "ErrorOut",
+        "type": "object"
+      },
+      "EvidenceItem": {
+        "description": "One vetted fact the answer is allowed to use.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value",
+          "source"
+        ],
+        "title": "EvidenceItem",
         "type": "object"
       },
       "ExpiryBucketOut": {
@@ -3959,6 +4468,57 @@
         "title": "HoldingIn",
         "type": "object"
       },
+      "HoldingRow": {
+        "properties": {
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "pct_of_portfolio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pct Of Portfolio"
+          },
+          "shares": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shares"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "ticker"
+        ],
+        "title": "HoldingRow",
+        "type": "object"
+      },
       "HoldingValue": {
         "additionalProperties": true,
         "description": "One ticker's persisted record on a portfolio row.",
@@ -4236,6 +4796,119 @@
           }
         },
         "title": "InsiderBlock",
+        "type": "object"
+      },
+      "InstitutionChanges": {
+        "properties": {
+          "decreased": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeRow"
+            },
+            "title": "Decreased",
+            "type": "array"
+          },
+          "exited": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeRow"
+            },
+            "title": "Exited",
+            "type": "array"
+          },
+          "increased": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeRow"
+            },
+            "title": "Increased",
+            "type": "array"
+          },
+          "latest_filing_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Filing Date"
+          },
+          "new_positions": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeRow"
+            },
+            "title": "New Positions",
+            "type": "array"
+          },
+          "previous_filing_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Filing Date"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "title": "Summary",
+            "type": "object"
+          }
+        },
+        "title": "InstitutionChanges",
+        "type": "object"
+      },
+      "InstitutionDetailOut": {
+        "properties": {
+          "changes": {
+            "$ref": "#/components/schemas/InstitutionChanges"
+          },
+          "cik": {
+            "title": "Cik",
+            "type": "string"
+          },
+          "holdings": {
+            "items": {
+              "$ref": "#/components/schemas/HoldingRow"
+            },
+            "title": "Holdings",
+            "type": "array"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "cik"
+        ],
+        "title": "InstitutionDetailOut",
+        "type": "object"
+      },
+      "InstitutionRow": {
+        "properties": {
+          "cik": {
+            "title": "Cik",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "cik"
+        ],
+        "title": "InstitutionRow",
         "type": "object"
       },
       "LiquidityRow": {
@@ -5649,6 +6322,29 @@
         "title": "OptionContractIn",
         "type": "object"
       },
+      "OptionExplainAction": {
+        "properties": {
+          "next_step": {
+            "title": "Next Step",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "reason",
+          "next_step"
+        ],
+        "title": "OptionExplainAction",
+        "type": "object"
+      },
       "OptionExplainInput": {
         "additionalProperties": false,
         "properties": {
@@ -5660,6 +6356,50 @@
           "exposure"
         ],
         "title": "OptionExplainInput",
+        "type": "object"
+      },
+      "OptionExplainOutput": {
+        "properties": {
+          "ai_generated": {
+            "default": false,
+            "title": "Ai Generated",
+            "type": "boolean"
+          },
+          "caveats": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Caveats",
+            "type": "array"
+          },
+          "headline": {
+            "title": "Headline",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "suggested_actions": {
+            "items": {
+              "$ref": "#/components/schemas/OptionExplainAction"
+            },
+            "title": "Suggested Actions",
+            "type": "array"
+          },
+          "summary_bullets": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Summary Bullets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "severity",
+          "headline"
+        ],
+        "title": "OptionExplainOutput",
         "type": "object"
       },
       "OptionExposureOut": {
@@ -10488,6 +11228,19 @@
         "title": "TickerReportInput",
         "type": "object"
       },
+      "TopInstitutionsOut": {
+        "properties": {
+          "institutions": {
+            "items": {
+              "$ref": "#/components/schemas/InstitutionRow"
+            },
+            "title": "Institutions",
+            "type": "array"
+          }
+        },
+        "title": "TopInstitutionsOut",
+        "type": "object"
+      },
       "UnderlyingExposureOut": {
         "additionalProperties": true,
         "properties": {
@@ -11458,7 +12211,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_dict_"
+                  "$ref": "#/components/schemas/Envelope_CopilotAnswer_"
                 }
               }
             },
@@ -11864,7 +12617,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_SmartMoneyOut_"
+                  "$ref": "#/components/schemas/Envelope_TopInstitutionsOut_"
                 }
               }
             },
@@ -11896,7 +12649,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_SmartMoneyOut_"
+                  "$ref": "#/components/schemas/Envelope_InstitutionDetailOut_"
                 }
               }
             },
@@ -12285,7 +13038,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_dict_"
+                  "$ref": "#/components/schemas/Envelope_OptionExplainOutput_"
                 }
               }
             },
@@ -12528,7 +13281,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Envelope_dict_"
+                  "$ref": "#/components/schemas/Envelope_BacktestResponse_"
                 }
               }
             },

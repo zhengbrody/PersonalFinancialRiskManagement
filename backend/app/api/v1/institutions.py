@@ -51,7 +51,7 @@ def smart_money(request: Request, user: AuthedUser = Depends(require_user)):
 
 
 @router.get(
-    "/top", summary="Top ~30 institutional 13F filers", response_model=Envelope[SmartMoneyOut]
+    "/top", summary="Top ~30 institutional 13F filers", response_model=Envelope[TopInstitutionsOut]
 )
 def top(request: Request, user: AuthedUser = Depends(require_user)):
     started = time.perf_counter()
@@ -63,7 +63,9 @@ def top(request: Request, user: AuthedUser = Depends(require_user)):
 
 
 @router.get(
-    "/{cik}", summary="A fund's top holdings + QoQ changes", response_model=Envelope[SmartMoneyOut]
+    "/{cik}",
+    summary="A fund's top holdings + QoQ changes",
+    response_model=Envelope[InstitutionDetailOut],
 )
 def detail(cik: str, request: Request, user: AuthedUser = Depends(require_user)):
     started = time.perf_counter()

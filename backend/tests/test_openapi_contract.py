@@ -44,6 +44,14 @@ CORE_CONTRACT = {
     ("get", "/api/v1/market/prices"): "PricesResponse",
     ("get", "/api/v1/ml/regime"): "MLRegimeOut",
     ("post", "/api/v1/public/risk_check"): "PublicRiskCheckOut",
+    # These three routers each expose sibling endpoints with DIFFERENT payloads;
+    # pin them so a bulk annotation can't reuse the wrong model (a real review
+    # find). institutions/{top,cik} return their own models, not SmartMoneyOut.
+    ("get", "/api/v1/institutions/top"): "TopInstitutionsOut",
+    ("get", "/api/v1/institutions/{cik}"): "InstitutionDetailOut",
+    ("post", "/api/v1/quant/backtest"): "BacktestResponse",
+    ("post", "/api/v1/options/explain"): "OptionExplainOutput",
+    ("post", "/api/v1/copilot/ask"): "CopilotAnswer",
 }
 
 # JSON endpoints that legitimately have no typed 200 body (streaming / bodyless).
@@ -133,4 +141,35 @@ def test_committed_openapi_matches_live_contract(spec):
         f"only-in-live={sorted(set(live_map) - set(committed_map))} "
         f"only-in-committed={sorted(set(committed_map) - set(live_map))} "
         f"changed={changed}"
+    )
+
+
+def _schema_fields(spec: dict) -> dict[str, list[str]]:
+    """Every component schema → its sorted property NAMES.
+
+    Property names are the pydantic field names (defined in the model source),
+    so they're stable across pydantic 2.x patches — unlike the property *value*
+    schemas (type/format representation), which the byte-exact contract.yml gate
+    owns. This projection catches the field-level drift the coarse
+    endpoint→envelope map misses (a model gaining/losing/renaming a field
+    without a regenerate)."""
+    schemas = spec.get("components", {}).get("schemas", {})
+    return {name: sorted((s.get("properties") or {}).keys()) for name, s in schemas.items()}
+
+
+def test_committed_openapi_fields_match_live(spec):
+    """Field-level staleness guard (version-stable, property NAMES only): a model
+    that adds/removes/renames a field without ``python scripts/export_openapi.py``
+    + ``npm run gen:api`` fails here, in the existing backend-tests job."""
+    committed = json.loads(COMMITTED_OPENAPI.read_text())
+    live_fields = _schema_fields(spec)
+    committed_fields = _schema_fields(committed)
+    drifted = sorted(
+        name
+        for name in live_fields.keys() | committed_fields.keys()
+        if live_fields.get(name) != committed_fields.get(name)
+    )
+    assert not drifted, (
+        "openapi.json is field-level stale — run 'python scripts/export_openapi.py' "
+        f"and 'cd frontend && npm run gen:api', then commit. drifted schemas={drifted}"
     )

@@ -23,7 +23,7 @@ from fastapi.responses import StreamingResponse
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import APIError, ok, too_many_requests
 from ...schemas.copilot import ChatRequest, ChatResponse
-from ...schemas.copilot2 import CopilotAskRequest
+from ...schemas.copilot2 import CopilotAnswer, CopilotAskRequest
 from ...schemas.envelope import Envelope
 from ...services import copilot_context
 from ...services.llm_client import get_answer_streamer, get_llm_callable
@@ -143,7 +143,7 @@ def copilot_chat_endpoint(
 @router.post(
     "/ask",
     summary="Copilot 2.0 — intent-routed, evidence-grounded answer",
-    response_model=Envelope[dict],
+    response_model=Envelope[CopilotAnswer],
 )
 def copilot_ask_endpoint(
     body: CopilotAskRequest,

@@ -1602,6 +1602,58 @@ export interface components {
              */
             years?: number;
         };
+        /**
+         * BacktestResponse
+         * @description The success payload placed inside the ``data`` envelope key.
+         */
+        BacktestResponse: {
+            /** Benchmark */
+            benchmark: string;
+            /** Benchmark Total Return */
+            benchmark_total_return?: number | null;
+            /** Drawdown Series */
+            drawdown_series?: components["schemas"]["CurvePoint"][];
+            /** End Date */
+            end_date: string;
+            /** Equity Curve */
+            equity_curve?: components["schemas"]["CurvePoint"][];
+            /** Start Date */
+            start_date: string;
+            stats: components["schemas"]["BacktestStats"];
+            /**
+             * Strategy
+             * @enum {string}
+             */
+            strategy: "static" | "equal_weight" | "momentum";
+        };
+        /**
+         * BacktestStats
+         * @description Scalar performance metrics. Every field is nullable: a non-finite
+         *     engine output (NaN/Inf) is serialised as ``null`` rather than crashing
+         *     the JSON renderer.
+         */
+        BacktestStats: {
+            /** Alpha */
+            alpha?: number | null;
+            /** Annual Return */
+            annual_return?: number | null;
+            /** Annual Volatility */
+            annual_volatility?: number | null;
+            /** Beta */
+            beta?: number | null;
+            /** Calmar Ratio */
+            calmar_ratio?: number | null;
+            /** Max Drawdown */
+            max_drawdown?: number | null;
+            /** Sharpe Ratio */
+            sharpe_ratio?: number | null;
+            /** Sortino Ratio */
+            sortino_ratio?: number | null;
+            /** Total Return */
+            total_return?: number | null;
+            /** Win Rate */
+            win_rate?: number | null;
+        };
         /** BenchmarkRow */
         BenchmarkRow: {
             /** Annual Return */
@@ -1692,6 +1744,26 @@ export interface components {
             n: number;
             /** Observed Frequency */
             observed_frequency?: number | null;
+        };
+        /** ChangeRow */
+        ChangeRow: {
+            /** Change Pct */
+            change_pct?: number | null;
+            /**
+             * Name
+             * @default
+             */
+            name?: string;
+            /** Prev Shares */
+            prev_shares?: number | null;
+            /** Prev Value */
+            prev_value?: number | null;
+            /** Shares */
+            shares?: number | null;
+            /** Ticker */
+            ticker: string;
+            /** Value */
+            value?: number | null;
         };
         /**
          * ChatRequest
@@ -1829,6 +1901,24 @@ export interface components {
             /** Top Sector Weight */
             top_sector_weight?: number | null;
         };
+        /** CopilotAnswer */
+        CopilotAnswer: {
+            /** Answer Markdown */
+            answer_markdown: string;
+            /**
+             * Data Only
+             * @default false
+             */
+            data_only?: boolean;
+            /** Evidence */
+            evidence?: components["schemas"]["EvidenceItem"][];
+            /** Intent */
+            intent: string;
+            /** Model */
+            model?: string | null;
+            /** Tickers */
+            tickers?: string[];
+        };
         /** CopilotAskRequest */
         CopilotAskRequest: {
             /** Message */
@@ -1912,6 +2002,17 @@ export interface components {
             p_uc?: number | null;
             /** Passed */
             passed?: boolean | null;
+        };
+        /**
+         * CurvePoint
+         * @description One point on a time series (equity curve / drawdown). ``date`` is an
+         *     ISO ``YYYY-MM-DD`` string; ``value`` is a finite float.
+         */
+        CurvePoint: {
+            /** Date */
+            date: string;
+            /** Value */
+            value: number;
         };
         /**
          * DCFOverrides
@@ -2067,6 +2168,14 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** Envelope[BacktestResponse] */
+        Envelope_BacktestResponse_: {
+            data?: components["schemas"]["BacktestResponse"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
         /** Envelope[BenchmarksOut] */
         Envelope_BenchmarksOut_: {
             data?: components["schemas"]["BenchmarksOut"] | null;
@@ -2099,6 +2208,14 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** Envelope[CopilotAnswer] */
+        Envelope_CopilotAnswer_: {
+            data?: components["schemas"]["CopilotAnswer"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
         /** Envelope[EfficientFrontierOut] */
         Envelope_EfficientFrontierOut_: {
             data?: components["schemas"]["EfficientFrontierOut"] | null;
@@ -2110,6 +2227,14 @@ export interface components {
         /** Envelope[HistoricalScenariosOut] */
         Envelope_HistoricalScenariosOut_: {
             data?: components["schemas"]["HistoricalScenariosOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[InstitutionDetailOut] */
+        Envelope_InstitutionDetailOut_: {
+            data?: components["schemas"]["InstitutionDetailOut"] | null;
             error?: components["schemas"]["ErrorOut"] | null;
             meta: components["schemas"]["MetaOut"];
         } & {
@@ -2158,6 +2283,14 @@ export interface components {
         /** Envelope[OptionAnalyzeResponse] */
         Envelope_OptionAnalyzeResponse_: {
             data?: components["schemas"]["OptionAnalyzeResponse-Output"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[OptionExplainOutput] */
+        Envelope_OptionExplainOutput_: {
+            data?: components["schemas"]["OptionExplainOutput"] | null;
             error?: components["schemas"]["ErrorOut"] | null;
             meta: components["schemas"]["MetaOut"];
         } & {
@@ -2315,6 +2448,14 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** Envelope[TopInstitutionsOut] */
+        Envelope_TopInstitutionsOut_: {
+            data?: components["schemas"]["TopInstitutionsOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
         /** Envelope[VarBacktestOut] */
         Envelope_VarBacktestOut_: {
             data?: components["schemas"]["VarBacktestOut"] | null;
@@ -2358,6 +2499,18 @@ export interface components {
             };
             /** Message */
             message: string;
+        };
+        /**
+         * EvidenceItem
+         * @description One vetted fact the answer is allowed to use.
+         */
+        EvidenceItem: {
+            /** Label */
+            label: string;
+            /** Source */
+            source: string;
+            /** Value */
+            value: string;
         };
         /** ExpiryBucketOut */
         ExpiryBucketOut: {
@@ -2694,6 +2847,22 @@ export interface components {
             /** Ticker */
             ticker: string;
         };
+        /** HoldingRow */
+        HoldingRow: {
+            /**
+             * Name
+             * @default
+             */
+            name?: string;
+            /** Pct Of Portfolio */
+            pct_of_portfolio?: number | null;
+            /** Shares */
+            shares?: number | null;
+            /** Ticker */
+            ticker: string;
+            /** Value */
+            value?: number | null;
+        };
         /**
          * HoldingValue
          * @description One ticker's persisted record on a portfolio row.
@@ -2781,6 +2950,42 @@ export interface components {
             sells_90d?: number;
             /** Signal */
             signal?: string | null;
+        };
+        /** InstitutionChanges */
+        InstitutionChanges: {
+            /** Decreased */
+            decreased?: components["schemas"]["ChangeRow"][];
+            /** Exited */
+            exited?: components["schemas"]["ChangeRow"][];
+            /** Increased */
+            increased?: components["schemas"]["ChangeRow"][];
+            /** Latest Filing Date */
+            latest_filing_date?: string | null;
+            /** New Positions */
+            new_positions?: components["schemas"]["ChangeRow"][];
+            /** Previous Filing Date */
+            previous_filing_date?: string | null;
+            /** Summary */
+            summary?: {
+                [key: string]: unknown;
+            };
+        };
+        /** InstitutionDetailOut */
+        InstitutionDetailOut: {
+            changes?: components["schemas"]["InstitutionChanges"];
+            /** Cik */
+            cik: string;
+            /** Holdings */
+            holdings?: components["schemas"]["HoldingRow"][];
+            /** Name */
+            name?: string | null;
+        };
+        /** InstitutionRow */
+        InstitutionRow: {
+            /** Cik */
+            cik: string;
+            /** Name */
+            name: string;
         };
         /** LiquidityRow */
         LiquidityRow: {
@@ -3193,9 +3398,36 @@ export interface components {
             /** Underlying */
             underlying: string;
         };
+        /** OptionExplainAction */
+        OptionExplainAction: {
+            /** Next Step */
+            next_step: string;
+            /** Reason */
+            reason: string;
+            /** Title */
+            title: string;
+        };
         /** OptionExplainInput */
         OptionExplainInput: {
             exposure: components["schemas"]["OptionExposureOut"];
+        };
+        /** OptionExplainOutput */
+        OptionExplainOutput: {
+            /**
+             * Ai Generated
+             * @default false
+             */
+            ai_generated?: boolean;
+            /** Caveats */
+            caveats?: string[];
+            /** Headline */
+            headline: string;
+            /** Severity */
+            severity: string;
+            /** Suggested Actions */
+            suggested_actions?: components["schemas"]["OptionExplainAction"][];
+            /** Summary Bullets */
+            summary_bullets?: string[];
         };
         /** OptionExposureOut */
         OptionExposureOut: {
@@ -4883,6 +5115,11 @@ export interface components {
             fact_pack: components["schemas"]["FactPack"];
             verdict?: components["schemas"]["ResearchVerdict"] | null;
         };
+        /** TopInstitutionsOut */
+        TopInstitutionsOut: {
+            /** Institutions */
+            institutions?: components["schemas"]["InstitutionRow"][];
+        };
         /** UnderlyingExposureOut */
         UnderlyingExposureOut: {
             /** Contracts */
@@ -5345,7 +5582,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_dict_"];
+                    "application/json": components["schemas"]["Envelope_CopilotAnswer_"];
                 };
             };
             /** @description Validation Error */
@@ -5679,7 +5916,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_SmartMoneyOut_"];
+                    "application/json": components["schemas"]["Envelope_TopInstitutionsOut_"];
                 };
             };
         };
@@ -5701,7 +5938,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_SmartMoneyOut_"];
+                    "application/json": components["schemas"]["Envelope_InstitutionDetailOut_"];
                 };
             };
             /** @description Validation Error */
@@ -6013,7 +6250,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_dict_"];
+                    "application/json": components["schemas"]["Envelope_OptionExplainOutput_"];
                 };
             };
             /** @description Validation Error */
@@ -6205,7 +6442,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Envelope_dict_"];
+                    "application/json": components["schemas"]["Envelope_BacktestResponse_"];
                 };
             };
             /** @description Validation Error */

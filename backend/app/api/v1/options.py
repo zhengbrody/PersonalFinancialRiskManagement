@@ -20,6 +20,7 @@ from ...schemas.options import (
     OptionAnalyzeRequest,
     OptionAnalyzeResponse,
     OptionExplainInput,
+    OptionExplainOutput,
 )
 from ...services import (
     options_analytics,
@@ -68,7 +69,7 @@ def analyze_options_endpoint(
 @router.post(
     "/explain",
     summary="Plain-language explanation of the option book's risk (deterministic skeleton → LLM)",
-    response_model=Envelope[dict],
+    response_model=Envelope[OptionExplainOutput],
 )
 def option_explain_endpoint(
     body: OptionExplainInput,
