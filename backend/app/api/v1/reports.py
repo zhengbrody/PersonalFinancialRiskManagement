@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, Request
 
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import ok
+from ...schemas.envelope import Envelope
 from ...schemas.reports import (
     OptionsReportInput,
     PortfolioReportInput,
@@ -33,7 +34,9 @@ def _hash(body) -> str:
 
 
 @router.post(
-    "/portfolio/html", summary="Portfolio risk report as self-contained HTML", response_model=None
+    "/portfolio/html",
+    summary="Portfolio risk report as self-contained HTML",
+    response_model=Envelope[ReportResponse],
 )
 def portfolio_report_endpoint(
     body: PortfolioReportInput,
@@ -52,7 +55,9 @@ def portfolio_report_endpoint(
 
 
 @router.post(
-    "/ticker/html", summary="Ticker research report as self-contained HTML", response_model=None
+    "/ticker/html",
+    summary="Ticker research report as self-contained HTML",
+    response_model=Envelope[ReportResponse],
 )
 def ticker_report_endpoint(
     body: TickerReportInput,
@@ -71,7 +76,9 @@ def ticker_report_endpoint(
 
 
 @router.post(
-    "/options/html", summary="Options strategy report as self-contained HTML", response_model=None
+    "/options/html",
+    summary="Options strategy report as self-contained HTML",
+    response_model=Envelope[ReportResponse],
 )
 def options_report_endpoint(
     body: OptionsReportInput,

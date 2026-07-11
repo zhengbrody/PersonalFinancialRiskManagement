@@ -38,12 +38,15 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from fastapi import Depends, Request
 
 from .config import Settings, get_settings
 from .responses import forbidden, service_unavailable, unauthorized
+
+if TYPE_CHECKING:
+    from jwt import PyJWKClient
 
 _logger = logging.getLogger(__name__)
 
@@ -106,7 +109,7 @@ def _jwks_url(settings: Settings) -> str:
 
 
 @lru_cache(maxsize=8)
-def _jwk_client(jwks_url: str):
+def _jwk_client(jwks_url: str) -> "PyJWKClient":
     """Cached PyJWT JWKS client. The client itself caches fetched keys.
 
     ``timeout`` bounds the underlying ``urllib`` fetch so a slow/down

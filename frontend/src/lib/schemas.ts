@@ -3,13 +3,15 @@
  *
  * **Request types** are sourced from the OpenAPI-generated
  * `api-types.ts` so the contract can never drift. Re-run
- * `npm run gen:api` (backend must be reachable) to refresh.
+ * `npm run gen:api` (reads the committed `openapi.json` offline) to refresh.
  *
- * **Response types** are hand-mirrored below because the Phase-1 risk
- * router uses `response_model=None` (it returns a manually-wrapped
- * envelope, not a typed Pydantic model). When the backend declares
- * `response_model=ScoreResponse` in a later pass, this hand mirror
- * disappears and we re-export from `api-types.ts` like the requests.
+ * **Response types** are now ALSO typed in OpenAPI — backend routes declare
+ * `response_model=Envelope[X]`, so `components["schemas"][...]` describes the
+ * real payloads. The zod schemas below stay as the RUNTIME guard at the
+ * network boundary (`apiFetch({ schema })`), with the TS type via `z.infer`.
+ * `contract.ts` pins the hand-written zod shapes to the generated contract at
+ * compile time, and the CI regen-diff gate fails on undocumented backend drift.
+ * Schemas migrate onto the generated `Api*` types incrementally.
  */
 
 import { z } from "zod";

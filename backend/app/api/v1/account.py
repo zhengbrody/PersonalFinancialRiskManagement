@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import bad_request, ok, server_error, unprocessable
+from ...schemas.envelope import Envelope
 from ...services import account_delete
 
 router = APIRouter(prefix="/api/v1/account", tags=["account"])
@@ -32,7 +33,7 @@ class AccountDeleteOut(BaseModel):
     subscription_canceled: bool
 
 
-@router.delete("")
+@router.delete("", response_model=Envelope[AccountDeleteOut])
 def delete_account(
     body: AccountDeleteIn,
     request: Request,

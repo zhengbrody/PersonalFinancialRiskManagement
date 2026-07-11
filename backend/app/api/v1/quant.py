@@ -19,7 +19,8 @@ from fastapi import APIRouter, Depends, Request
 
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import ok
-from ...schemas.quant import AttributionResponse, BacktestRequest
+from ...schemas.envelope import Envelope
+from ...schemas.quant import AttributionResponse, BacktestRequest, BacktestResponse
 from ...services import quant_attribution, quant_backtest
 
 router = APIRouter(prefix="/api/v1/quant", tags=["quant"])
@@ -28,7 +29,7 @@ router = APIRouter(prefix="/api/v1/quant", tags=["quant"])
 @router.post(
     "/backtest",
     summary="Backtest the authed user's active portfolio",
-    response_model=None,  # we wrap the response in the envelope ourselves
+    response_model=Envelope[BacktestResponse],  # we wrap the response in the envelope ourselves
 )
 def backtest_active_endpoint(
     body: BacktestRequest,
@@ -55,7 +56,7 @@ def backtest_active_endpoint(
 @router.post(
     "/attribution",
     summary="Performance attribution (Brinson + factor) for the active portfolio",
-    response_model=None,
+    response_model=Envelope[AttributionResponse],
 )
 def attribution_active_endpoint(
     request: Request,

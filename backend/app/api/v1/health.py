@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Request, Response
 
 from ...core.config import Settings, get_settings
 from ...core.responses import ok
+from ...schemas.envelope import Envelope
 
 router = APIRouter(prefix="/api/v1", tags=["health"])
 
@@ -28,7 +29,7 @@ def health_head() -> Response:
     return Response(status_code=200)
 
 
-@router.get("/health", summary="Liveness + import sanity")
+@router.get("/health", summary="Liveness + import sanity", response_model=Envelope[dict])
 def health(request: Request, settings: Settings = Depends(get_settings)):
     """Return a coarse health snapshot.
 

@@ -29,6 +29,7 @@ from fastapi import APIRouter, Depends, Request
 
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import APIError, ok, server_error
+from ...schemas.envelope import Envelope
 from ...schemas.portfolios import (
     PortfolioCreateRequest,
     PortfolioOut,
@@ -57,7 +58,11 @@ def _import_libs():
 # ── GET /me — list ─────────────────────────────────────────────────
 
 
-@router.get("/me", summary="Return the authed user's portfolios")
+@router.get(
+    "/me",
+    summary="Return the authed user's portfolios",
+    response_model=Envelope[PortfoliosMeResponse],
+)
 def list_my_portfolios(
     request: Request,
     user: AuthedUser = Depends(require_user),
@@ -90,7 +95,7 @@ def list_my_portfolios(
 @router.post(
     "",
     summary="Create a new portfolio owned by the caller",
-    response_model=None,
+    response_model=Envelope[PortfolioOut],
 )
 def create_portfolio_endpoint(
     body: PortfolioCreateRequest,
@@ -136,7 +141,7 @@ def create_portfolio_endpoint(
 @router.patch(
     "/{portfolio_id}",
     summary="Update one or more fields on a portfolio",
-    response_model=None,
+    response_model=Envelope[PortfolioOut],
 )
 def update_portfolio_endpoint(
     portfolio_id: str,
@@ -193,7 +198,7 @@ def update_portfolio_endpoint(
 @router.delete(
     "/{portfolio_id}",
     summary="Delete one portfolio owned by the caller",
-    response_model=None,
+    response_model=Envelope[dict],
 )
 def delete_portfolio_endpoint(
     portfolio_id: str,

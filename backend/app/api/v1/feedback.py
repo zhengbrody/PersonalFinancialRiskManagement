@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import ok
+from ...schemas.envelope import Envelope
 
 router = APIRouter(prefix="/api/v1/feedback", tags=["feedback"])
 
@@ -28,7 +29,7 @@ class FeedbackIn(BaseModel):
     context: str = Field(default="", max_length=200)
 
 
-@router.post("", summary="Submit beta feedback", response_model=None)
+@router.post("", summary="Submit beta feedback", response_model=Envelope[dict])
 def submit_feedback(
     body: FeedbackIn,
     request: Request,

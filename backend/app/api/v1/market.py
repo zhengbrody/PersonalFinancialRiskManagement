@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, Query, Request
 
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import ok, server_error, too_many_requests, unprocessable
+from ...schemas.envelope import Envelope
 from ...schemas.market import (
     PriceProvenance,
     PriceRow,
@@ -64,7 +65,9 @@ def _record_sentiment_cost(user_id: str, sentiments: list) -> None:
         _logger.warning("market.sentiment.cost_record_failed")
 
 
-@router.get("/prices", summary="Latest adjusted close per ticker")
+@router.get(
+    "/prices", summary="Latest adjusted close per ticker", response_model=Envelope[PricesResponse]
+)
 def get_prices(
     request: Request,
     tickers: str = Query(
@@ -130,7 +133,9 @@ def get_prices(
 
 
 @router.post(
-    "/sentiment", summary="AI sentiment per holding (authed, credits)", response_model=None
+    "/sentiment",
+    summary="AI sentiment per holding (authed, credits)",
+    response_model=Envelope[SentimentResponse],
 )
 def portfolio_sentiment(request: Request, user: AuthedUser = Depends(require_user)):
     """Per-holding AI sentiment over recent headlines for the caller's ACTIVE

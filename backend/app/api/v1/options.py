@@ -15,10 +15,12 @@ from fastapi import APIRouter, Depends, Request
 
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import ok
+from ...schemas.envelope import Envelope
 from ...schemas.options import (
     OptionAnalyzeRequest,
     OptionAnalyzeResponse,
     OptionExplainInput,
+    OptionExplainOutput,
 )
 from ...services import (
     options_analytics,
@@ -34,7 +36,9 @@ router = APIRouter(prefix="/api/v1/options", tags=["options"])
 @router.post(
     "/analyze",
     summary="Black-Scholes Greeks / IV / payoff for a set of option contracts",
-    response_model=None,  # we wrap the response in the envelope ourselves
+    response_model=Envelope[
+        OptionAnalyzeResponse
+    ],  # we wrap the response in the envelope ourselves
 )
 def analyze_options_endpoint(
     body: OptionAnalyzeRequest,
@@ -65,7 +69,7 @@ def analyze_options_endpoint(
 @router.post(
     "/explain",
     summary="Plain-language explanation of the option book's risk (deterministic skeleton → LLM)",
-    response_model=None,
+    response_model=Envelope[OptionExplainOutput],
 )
 def option_explain_endpoint(
     body: OptionExplainInput,

@@ -37,6 +37,7 @@ from libs.mindmarket_core.score_version import SCORE_VERSION
 
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import APIError, ok, server_error, unprocessable
+from ...schemas.envelope import Envelope
 from ...schemas.risk import (
     BenchmarkRow,
     BenchmarksOut,
@@ -53,6 +54,7 @@ from ...schemas.risk import (
     HistoricalScenarioRow,
     HistoricalScenariosOut,
     LiquidityRow,
+    OptionScoreImpactOut,
     PortfolioMetricsOut,
     PriceProvenanceOut,
     ReasonCodeOut,
@@ -71,8 +73,8 @@ from ...schemas.risk import (
     VarBacktestOut,
 )
 from ...schemas.risk_alerts import RiskAlertsInput, RiskAlertsOutput
-from ...schemas.risk_explain import RiskExplainInput
-from ...schemas.score_changes import ScoreChangeRequest
+from ...schemas.risk_explain import RiskExplainInput, RiskExplainOutput
+from ...schemas.score_changes import ScoreChangeReport, ScoreChangeRequest
 
 router = APIRouter(prefix="/api/v1/risk", tags=["risk"])
 
@@ -256,7 +258,7 @@ def _build_returns_frame(
 @router.post(
     "/score",
     summary="Score an explicit portfolio without touching Supabase",
-    response_model=None,  # we wrap the response ourselves
+    response_model=Envelope[ScoreResponse],  # we wrap the response ourselves
 )
 def score_portfolio_endpoint(body: ScoreRequest, request: Request):
     """Compute deterministic 0-1000 score + 3 dimension scores + the
@@ -456,7 +458,7 @@ def _current_price_map(tickers: list[str], market_data) -> dict[str, float]:
 @router.post(
     "/score_from_active",
     summary="Score the authed user's active portfolio using real market data",
-    response_model=None,
+    response_model=Envelope[ScoreResponse],
 )
 def score_from_active_endpoint(
     body: ScoreFromActiveRequest,
@@ -687,7 +689,18 @@ def score_from_active_endpoint(
     if impact is not None:
         option_penalty = int(impact["penalty"])
         adjusted = max(0, int(response.overall_score) - option_penalty)
-        response = response.model_copy(update={"overall_score": adjusted, "options": impact})
+        # Validate the raw impact dict into the typed schema BEFORE it enters
+        # ScoreResponse. model_copy(update=...) does NOT validate, so a bare dict
+        # here would round-trip as an untyped value and trip Pydantic's
+        # serialization warning (PydanticSerializationUnexpectedValue) when the
+        # envelope layer dumps the model. Validating produces a byte-identical
+        # wire payload (fields + penalty_breakdown rows match the schema).
+        response = response.model_copy(
+            update={
+                "overall_score": adjusted,
+                "options": OptionScoreImpactOut.model_validate(impact),
+            }
+        )
 
     # Record a daily snapshot (deduped, fail-soft) AFTER the final score is known,
     # so day-over-day deltas + the "what changed" engine compare against the score
@@ -722,6 +735,7 @@ def score_from_active_endpoint(
 @router.get(
     "/last_snapshot",
     summary="The prior-day portfolio snapshot, for the 'what changed' delta",
+    response_model=Envelope[dict],
 )
 def last_snapshot_endpoint(request: Request, user: AuthedUser = Depends(require_user)):
     """Return the most recent snapshot older than ~a day (the baseline the
@@ -753,6 +767,7 @@ def last_snapshot_endpoint(request: Request, user: AuthedUser = Depends(require_
 @router.get(
     "/snapshot_history",
     summary="Recent portfolio snapshots (score/vol/VaR over time) for trend lines",
+    response_model=Envelope[dict],
 )
 def snapshot_history_endpoint(request: Request, user: AuthedUser = Depends(require_user)):
     """Recent snapshots oldest→newest so the score/risk pages can draw trend
@@ -767,6 +782,7 @@ def snapshot_history_endpoint(request: Request, user: AuthedUser = Depends(requi
 @router.post(
     "/score_changes",
     summary="Deterministic 'what changed?' — current score vs the user's own prior snapshot",
+    response_model=Envelope[ScoreChangeReport],
 )
 def score_changes_endpoint(
     body: ScoreChangeRequest,
@@ -1537,7 +1553,7 @@ def _serialize_report(
 @router.post(
     "/report_from_active",
     summary="Full risk report for the authed user's active portfolio",
-    response_model=None,
+    response_model=Envelope[RiskReportOut],
 )
 def report_from_active_endpoint(
     body: ReportFromActiveRequest,
@@ -1759,7 +1775,7 @@ def _build_active_engine(user: AuthedUser, body: ReportFromActiveRequest):
 @router.post(
     "/efficient_frontier",
     summary="Efficient frontier + the active portfolio's risk/return point",
-    response_model=None,
+    response_model=Envelope[EfficientFrontierOut],
 )
 def efficient_frontier_endpoint(
     body: ReportFromActiveRequest,
@@ -1813,7 +1829,7 @@ def efficient_frontier_endpoint(
 @router.post(
     "/scenarios",
     summary="Project portfolio P&L across a −30%…+30% market move sweep",
-    response_model=None,
+    response_model=Envelope[ScenariosOut],
 )
 def scenarios_endpoint(
     body: ReportFromActiveRequest,
@@ -1942,7 +1958,7 @@ def _record_explain_cost(user_id: str, body: RiskExplainInput, out) -> None:
 @router.post(
     "/explain",
     summary="Structured AI risk diagnosis over already-computed metrics",
-    response_model=None,
+    response_model=Envelope[RiskExplainOutput],
 )
 def explain_endpoint(
     body: RiskExplainInput,
@@ -1980,7 +1996,7 @@ def explain_endpoint(
 @router.post(
     "/alerts",
     summary="Deterministic top risk alerts (no LLM, no credit) for proactive cards",
-    response_model=None,
+    response_model=Envelope[RiskAlertsOutput],
 )
 def risk_alerts_endpoint(
     body: RiskAlertsInput,
@@ -2009,7 +2025,9 @@ def risk_alerts_endpoint(
 
 
 @router.get(
-    "/benchmarks", summary="Reference annualized stats: S&P 500 + 60/40", response_model=None
+    "/benchmarks",
+    summary="Reference annualized stats: S&P 500 + 60/40",
+    response_model=Envelope[BenchmarksOut],
 )
 def benchmarks_endpoint(
     request: Request,
@@ -2030,7 +2048,7 @@ def benchmarks_endpoint(
 @router.post(
     "/historical_scenarios",
     summary="Replay real market crises on the active portfolio",
-    response_model=None,
+    response_model=Envelope[HistoricalScenariosOut],
 )
 def historical_scenarios_endpoint(
     request: Request,
@@ -2052,7 +2070,7 @@ def historical_scenarios_endpoint(
 @router.post(
     "/var_backtest",
     summary="Backtest the portfolio's 1-day VaR vs realised breaches",
-    response_model=None,
+    response_model=Envelope[VarBacktestOut],
 )
 def var_backtest_endpoint(
     request: Request,

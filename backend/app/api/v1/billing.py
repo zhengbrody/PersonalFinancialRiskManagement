@@ -37,6 +37,7 @@ from ...schemas.billing import (
     PortalSessionResponse,
     SubscriptionOut,
 )
+from ...schemas.envelope import Envelope
 
 router = APIRouter(prefix="/api/v1/billing", tags=["billing"])
 
@@ -98,7 +99,11 @@ def _map_stripe_error(exc: Exception) -> APIError:
 # ── GET /me — plan + subscription snapshot ─────────────────────────
 
 
-@router.get("/me", summary="Plan + subscription snapshot for the caller")
+@router.get(
+    "/me",
+    summary="Plan + subscription snapshot for the caller",
+    response_model=Envelope[BillingMeResponse],
+)
 def billing_me(request: Request, user: AuthedUser = Depends(require_user)):
     """Return the authed user's current plan, their Stripe
     subscription row (if any), and the plan catalogue for rendering
@@ -155,7 +160,11 @@ def billing_me(request: Request, user: AuthedUser = Depends(require_user)):
 # ── GET /admin/usage — owner-only cost/usage dashboard ─────────────
 
 
-@router.get("/admin/usage", summary="Owner-only: aggregate token/cost/credit usage")
+@router.get(
+    "/admin/usage",
+    summary="Owner-only: aggregate token/cost/credit usage",
+    response_model=Envelope[dict],
+)
 def billing_admin_usage(request: Request, user: AuthedUser = Depends(require_owner)):
     """Month-to-date usage aggregates (tokens / $ / credits, per kind + per
     user) for the owner dashboard. 403 for everyone else."""
@@ -175,7 +184,11 @@ def billing_admin_usage(request: Request, user: AuthedUser = Depends(require_own
 # ── GET /admin/metrics — owner-only LIVE in-process API activity ───
 
 
-@router.get("/admin/metrics", summary="Owner-only: live in-process API call metrics")
+@router.get(
+    "/admin/metrics",
+    summary="Owner-only: live in-process API call metrics",
+    response_model=Envelope[dict],
+)
 def billing_admin_metrics(request: Request, user: AuthedUser = Depends(require_owner)):
     """Real-time, in-process counters for the owner live-activity view: per-route
     HTTP volume/latency/errors + per external-provider (yfinance/FMP/Massive/
@@ -193,7 +206,11 @@ def billing_admin_metrics(request: Request, user: AuthedUser = Depends(require_o
 # ── GET /admin/balances — owner-only LLM provider balances ─────────
 
 
-@router.get("/admin/balances", summary="Owner-only: LLM provider remaining balance / top-up")
+@router.get(
+    "/admin/balances",
+    summary="Owner-only: LLM provider remaining balance / top-up",
+    response_model=Envelope[dict],
+)
 def billing_admin_balances(request: Request, user: AuthedUser = Depends(require_owner)):
     """Remaining LLM credit per provider for the owner "API balance" card:
     DeepSeek live balance (its real `/user/balance` API) + a Claude ESTIMATE
@@ -209,6 +226,7 @@ def billing_admin_balances(request: Request, user: AuthedUser = Depends(require_
 @router.post(
     "/admin/anthropic-topup",
     summary="Owner-only: set the current Claude balance (after a top-up)",
+    response_model=Envelope[dict],
 )
 def billing_admin_set_anthropic_topup(
     body: AnthropicTopupRequest,
@@ -233,7 +251,11 @@ def billing_admin_set_anthropic_topup(
 # ── GET /admin/status — owner-only integration diagnostics ─────────
 
 
-@router.get("/admin/status", summary="Owner-only: integration config + live checks")
+@router.get(
+    "/admin/status",
+    summary="Owner-only: integration config + live checks",
+    response_model=Envelope[dict],
+)
 def billing_admin_status(
     request: Request,
     live: bool = False,
@@ -256,7 +278,7 @@ def billing_admin_status(
 @router.post(
     "/checkout_session",
     summary="Create a Stripe Checkout session for a paid plan",
-    response_model=None,
+    response_model=Envelope[CheckoutSessionResponse],
 )
 def create_checkout_session_endpoint(
     body: CheckoutSessionRequest,
@@ -324,7 +346,7 @@ def create_checkout_session_endpoint(
 @router.post(
     "/portal_session",
     summary="Create a Stripe Customer Portal session",
-    response_model=None,
+    response_model=Envelope[PortalSessionResponse],
 )
 def create_portal_session_endpoint(
     body: PortalSessionRequest,

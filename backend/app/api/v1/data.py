@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, Request
 
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import forbidden, ok
+from ...schemas.envelope import Envelope
 
 router = APIRouter(prefix="/api/v1/data", tags=["data"])
 
@@ -51,7 +52,7 @@ def _status(configured: bool, m: dict) -> str:
 @router.get(
     "/health",
     summary="Per-provider data-source health (owner): configured · role · live outcomes",
-    response_model=None,
+    response_model=Envelope[dict],
 )
 def data_health(request: Request, user: AuthedUser = Depends(require_user)):
     from libs.admin.status import is_owner_email

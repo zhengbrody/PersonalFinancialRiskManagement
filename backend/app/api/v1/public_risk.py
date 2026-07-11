@@ -37,6 +37,7 @@ from ...core.responses import (
     too_many_requests,
     unprocessable,
 )
+from ...schemas.envelope import Envelope
 from ...schemas.public_risk import PublicRiskCheckIn, PublicRiskCheckOut
 from ...services import public_risk_check
 from ...services.rate_limit import TokenBucket, client_ip
@@ -81,7 +82,7 @@ async def _read_capped_body(request: Request) -> bytes:
     return b"".join(chunks)
 
 
-@router.post("/risk_check")
+@router.post("/risk_check", response_model=Envelope[PublicRiskCheckOut])
 async def risk_check(request: Request):
     started = time.perf_counter()
     settings = get_settings()

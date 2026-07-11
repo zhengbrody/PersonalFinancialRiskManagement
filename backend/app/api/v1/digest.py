@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from ...core.config import get_settings
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import ok
+from ...schemas.envelope import Envelope
 from ...services import digest as digest_service
 
 router = APIRouter(prefix="/api/v1/digest", tags=["digest"])
@@ -48,7 +49,7 @@ def require_cron_token(x_digest_token: str = Header(default="")) -> None:
         raise HTTPException(status_code=401, detail="bad digest token")
 
 
-@router.post("/run")
+@router.post("/run", response_model=Envelope[dict])
 def run_digest(request: Request, _: None = Depends(require_cron_token)):
     started = time.perf_counter()
     # Terminal states report synchronously; a real batch runs in a daemon
@@ -115,7 +116,7 @@ def unsubscribe_apply(token: str = ""):
     )
 
 
-@router.get("/pref")
+@router.get("/pref", response_model=Envelope[dict])
 def get_pref(request: Request, user: AuthedUser = Depends(require_user)):
     started = time.perf_counter()
     # Consent default: no digest_prefs row = NOT subscribed (explicit opt-in).
@@ -144,7 +145,7 @@ def get_pref(request: Request, user: AuthedUser = Depends(require_user)):
     return ok({"enabled": enabled}, request=request, started_at=started)
 
 
-@router.post("/pref")
+@router.post("/pref", response_model=Envelope[dict])
 def set_pref(body: DigestPrefIn, request: Request, user: AuthedUser = Depends(require_user)):
     started = time.perf_counter()
     try:
