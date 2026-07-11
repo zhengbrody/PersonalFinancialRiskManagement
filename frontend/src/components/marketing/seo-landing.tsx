@@ -11,27 +11,13 @@ import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { C, display } from "@/components/marketing/theme";
 import { CTA, Disclaimer } from "@/components/marketing/primitives";
 import { SEO_BY_PATH, type SeoPage, type SeoSection } from "@/lib/seo-content";
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
+import { pageMetadata } from "@/lib/site";
 
 /** Build Next metadata for a migrated SEO page from its content entry. */
 export function seoMetadata(path: string): Metadata {
   const p = SEO_BY_PATH[path];
   if (!p) return {};
-  return {
-    title: p.title,
-    description: p.description,
-    alternates: { canonical: p.path },
-    openGraph: {
-      type: "article",
-      title: p.title,
-      description: p.description,
-      url: `${SITE_URL}${p.path}`,
-      siteName: "MindMarket",
-      images: ["/og.jpg?v=3"],
-    },
-    twitter: { card: "summary_large_image" },
-  };
+  return pageMetadata({ title: p.title, description: p.description, path: p.path });
 }
 
 function boldLabel(item: string) {
