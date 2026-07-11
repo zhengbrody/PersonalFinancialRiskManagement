@@ -6,30 +6,19 @@
  * system). Organization JSON-LD for entity SEO.
  */
 
-import type { Metadata } from "next";
 import Link from "next/link";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { C, display } from "@/components/marketing/theme";
 import { CTA, Disclaimer } from "@/components/marketing/primitives";
+import { SITE_URL, pageMetadata } from "@/lib/site";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
-
-export const metadata: Metadata = {
+export const metadata = pageMetadata({
   title: "About MindMarket — Portfolio Risk Analytics for Investors",
   description:
     "Why MindMarket exists, how the risk analytics work, its limitations, where the data comes from, how your data is kept private, and who operates it.",
-  alternates: { canonical: "/about" },
-  openGraph: {
-    type: "website",
-    title: "About MindMarket",
-    description:
-      "Why MindMarket exists, how the risk analytics work, its limitations, data provenance, privacy, and operator contact.",
-    url: `${SITE_URL}/about`,
-    siteName: "MindMarket",
-    images: ["/og.jpg?v=3"],
-  },
-  twitter: { card: "summary_large_image" },
-};
+  path: "/about",
+  ogType: "website",
+});
 
 const organizationLd = {
   "@context": "https://schema.org",

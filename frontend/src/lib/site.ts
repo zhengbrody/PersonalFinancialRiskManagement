@@ -1,0 +1,32 @@
+import type { Metadata } from "next";
+
+/** The public site origin — single source (was re-declared in many files). */
+export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
+
+/**
+ * Shared metadata builder for public marketing/content pages: canonical +
+ * OpenGraph (siteName "MindMarket", the versioned OG card) + Twitter card, from
+ * one place so the OG-image version and siteName can't drift across pages.
+ */
+export function pageMetadata(opts: {
+  title: string;
+  description: string;
+  path: string;
+  ogType?: "website" | "article";
+}): Metadata {
+  const { title, description, path, ogType = "article" } = opts;
+  return {
+    title,
+    description,
+    alternates: { canonical: path },
+    openGraph: {
+      type: ogType,
+      title,
+      description,
+      url: `${SITE_URL}${path}`,
+      siteName: "MindMarket",
+      images: ["/og.jpg?v=3"],
+    },
+    twitter: { card: "summary_large_image" },
+  };
+}

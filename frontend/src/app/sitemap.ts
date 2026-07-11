@@ -9,8 +9,7 @@ import type { MetadataRoute } from "next";
 import { SEO_PAGES } from "@/lib/seo-content";
 import { LEARN_SLUGS } from "@/lib/learn-content";
 import { LEGAL_DOCS } from "@/lib/legal-content";
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
+import { SITE_URL } from "@/lib/site";
 
 type Freq = MetadataRoute.Sitemap[number]["changeFrequency"];
 
@@ -38,39 +37,26 @@ const LEARN_NEWER = new Set([
 ]);
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const rows: MetadataRoute.Sitemap = [];
-
-  for (const r of NEXT_ROUTES) {
-    rows.push({
+  // NEXT_ROUTES and SEO_PAGES carry the same 4 sitemap fields, so one pass covers
+  // both; learn/legal have their own per-source frequency/priority.
+  return [
+    ...[...NEXT_ROUTES, ...SEO_PAGES].map((r) => ({
       url: `${SITE_URL}${r.path}`,
       lastModified: r.lastmod,
       changeFrequency: r.changeFrequency,
       priority: r.priority,
-    });
-  }
-  for (const p of SEO_PAGES) {
-    rows.push({
-      url: `${SITE_URL}${p.path}`,
-      lastModified: p.lastmod,
-      changeFrequency: p.changeFrequency,
-      priority: p.priority,
-    });
-  }
-  for (const slug of LEARN_SLUGS) {
-    rows.push({
+    })),
+    ...LEARN_SLUGS.map((slug) => ({
       url: `${SITE_URL}/learn/${slug}`,
       lastModified: LEARN_NEWER.has(slug) ? "2026-06-24" : "2026-06-17",
-      changeFrequency: "monthly",
+      changeFrequency: "monthly" as const,
       priority: 0.85,
-    });
-  }
-  for (const d of LEGAL_DOCS) {
-    rows.push({
+    })),
+    ...LEGAL_DOCS.map((d) => ({
       url: `${SITE_URL}/legal/${d.slug}`,
       lastModified: "2026-06-24",
-      changeFrequency: "yearly",
+      changeFrequency: "yearly" as const,
       priority: 0.3,
-    });
-  }
-  return rows;
+    })),
+  ];
 }
