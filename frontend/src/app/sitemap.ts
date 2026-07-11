@@ -18,6 +18,7 @@ const PUBLIC_ROUTES: Array<{
   { path: "/score", changeFrequency: "weekly", priority: 0.85 },
   { path: "/product", changeFrequency: "monthly", priority: 0.9 },
   { path: "/methodology/health-score", changeFrequency: "monthly", priority: 0.75 },
+  { path: "/methodology/regime-model", changeFrequency: "monthly", priority: 0.7 },
   { path: "/learn", changeFrequency: "weekly", priority: 0.9 },
   { path: "/markets", changeFrequency: "daily", priority: 0.8 },
   { path: "/risk-today", changeFrequency: "daily", priority: 0.85 },

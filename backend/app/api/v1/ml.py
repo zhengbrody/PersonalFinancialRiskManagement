@@ -17,8 +17,10 @@ from fastapi import APIRouter, Request
 
 from ...core.responses import ok
 from ...schemas.ml import MLHealthOut, MLRegimeOut
+from ...schemas.model_card import ModelCardOut
 from ...services import ml_health as ml_health_service
 from ...services import ml_regime as ml_regime_service
+from ...services import model_card as model_card_service
 
 _log = logging.getLogger(__name__)
 
@@ -40,3 +42,14 @@ def ml_health(request: Request):
     started = time.perf_counter()
     snapshot = ml_health_service.get_ml_health()
     return ok(MLHealthOut(**snapshot).model_dump(), request=request, started_at=started)
+
+
+@router.get("/model_card", summary="Public model card — honest metrics from committed artifacts")
+def ml_model_card(request: Request):
+    """The classifier's model card, read straight from the committed ML
+    artifacts (never hand-typed) — provenance, class definitions, features, and
+    the honest validation metrics (4-class accuracy vs persistence, elevated-risk
+    ROC-AUC, Brier, calibration). Public, deterministic, fail-soft."""
+    started = time.perf_counter()
+    card = model_card_service.get_model_card()
+    return ok(ModelCardOut(**card).model_dump(), request=request, started_at=started)
