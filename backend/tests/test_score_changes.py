@@ -7,10 +7,9 @@ unavailable snapshot degrades gracefully — all offline (no LLM, no DB)."""
 
 from __future__ import annotations
 
-from libs.mindmarket_core.score_version import SCORE_VERSION
-
 from backend.app.schemas.score_changes import ScoreChangeRequest
 from backend.app.services.score_changes import build_change_report
+from libs.mindmarket_core.score_version import SCORE_VERSION
 
 
 def _req(**kw):

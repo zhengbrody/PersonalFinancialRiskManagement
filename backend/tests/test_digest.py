@@ -11,9 +11,8 @@ from __future__ import annotations
 
 import pytest
 
-from libs.mindmarket_core.score_version import SCORE_VERSION
-
 from backend.app.services import digest as dg
+from libs.mindmarket_core.score_version import SCORE_VERSION
 
 # ── in-memory fake supabase admin ─────────────────────────────────────
 
