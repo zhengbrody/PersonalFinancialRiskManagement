@@ -14,6 +14,7 @@ import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { track } from "@/lib/analytics";
+import { holdingsBand } from "@/lib/analytics-events";
 import { parseHoldingsCsv } from "@/lib/parse-holdings-csv";
 import { useMarketPrices } from "@/lib/queries";
 import type {
@@ -213,7 +214,7 @@ export function PortfolioForm({
       }
       setValues((prev) => ({ ...prev, rows }));
       setCsvNote({ ok: true, text: `Imported ${rows.length} holdings — review, then save.` });
-      track("csv_imported", { count: rows.length });
+      track("csv_imported", { holdings_band: holdingsBand(rows.length) });
     } catch {
       setCsvNote({ ok: false, text: "Could not read that file. Is it a .csv?" });
     } finally {

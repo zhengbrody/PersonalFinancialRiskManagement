@@ -40,7 +40,7 @@ describe("PostHog wire boundary (Privacy Policy)", () => {
   it("track scrubs email + every deny-list key before transmission", async () => {
     const a = await import("./analytics");
     a.initAnalytics();
-    a.track("signed_up", {
+    a.track("signup_completed", {
       email: "user@example.com",
       user_email: "user@example.com",
       prompt: "should I sell NVDA?",
@@ -48,7 +48,7 @@ describe("PostHog wire boundary (Privacy Policy)", () => {
       balance: 12000,
       source: "landing", // safe funnel prop survives
     });
-    expect(capture).toHaveBeenCalledWith("signed_up", { source: "landing" });
+    expect(capture).toHaveBeenCalledWith("signup_completed", { source: "landing" });
   });
 
   it("nothing sensitive appears in ANY payload that would hit the wire", async () => {

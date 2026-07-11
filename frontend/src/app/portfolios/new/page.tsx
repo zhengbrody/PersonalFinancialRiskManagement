@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { track } from "@/lib/analytics";
+import { holdingsBand } from "@/lib/analytics-events";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useCreatePortfolio, useMyPortfolios } from "@/lib/queries";
@@ -124,7 +125,9 @@ export default function NewPortfolioPage() {
                 const created = valuesToCreateInput(values);
                 const row = await mutation.mutateAsync(created);
                 track("portfolio_created", {
-                  holdings: Object.keys(created.holdings).length,
+                  // Coarse band, not the exact count (a `holdings` key would be
+                  // dropped by the deny-list) — see analytics-funnel.md.
+                  holdings_band: holdingsBand(Object.keys(created.holdings).length),
                 });
                 clearAnonHoldings(); // the handoff is complete
                 // Navigate from the AUTHORITATIVE create response, never the

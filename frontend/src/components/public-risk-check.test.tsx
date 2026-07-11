@@ -87,10 +87,10 @@ describe("PublicRiskCheck", () => {
       screen.getByText(/save this portfolio and unlock the full risk desk/i),
     ).toBeInTheDocument();
 
-    // Analytics: steps + holdings_count ONLY — never tickers/shares.
+    // Analytics: steps + a coarse holdings_band ONLY — never tickers/shares.
     const payloads = JSON.stringify(track.mock.calls);
     expect(track).toHaveBeenCalledWith("public_check_started");
-    expect(track).toHaveBeenCalledWith("public_check_completed", { holdings_count: 1 });
+    expect(track).toHaveBeenCalledWith("public_check_completed", { holdings_band: "1-5" });
     expect(payloads).not.toContain("AAPL");
     expect(payloads).not.toContain("10");
   });
@@ -123,7 +123,7 @@ describe("PublicRiskCheck", () => {
     await waitFor(() =>
       expect(screen.getByText(/imported the first 10 holdings/i)).toBeInTheDocument(),
     );
-    expect(track).toHaveBeenCalledWith("public_check_csv_imported", { holdings_count: 10 });
+    expect(track).toHaveBeenCalledWith("public_check_csv_imported", { holdings_band: "6-10" });
     // avg cost column is deliberately dropped — the check never collects it.
     expect((screen.getByLabelText("Ticker 1") as HTMLInputElement).value).toBe("T1");
   });
