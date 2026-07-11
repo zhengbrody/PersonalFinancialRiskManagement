@@ -33,6 +33,8 @@ import numpy as np
 import pandas as pd
 from fastapi import APIRouter, Depends, Request
 
+from libs.mindmarket_core.score_version import SCORE_VERSION
+
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import APIError, ok, server_error, unprocessable
 from ...schemas.risk import (
@@ -183,6 +185,7 @@ def _serialize_score(score) -> ScoreResponse:
         },
         drivers=[ScoreDriverOut(**dr) for dr in (getattr(score, "drivers", ()) or ())],
         reason_codes=[ReasonCodeOut(**rc) for rc in (getattr(score, "reason_codes", ()) or ())],
+        score_version=SCORE_VERSION,
     )
 
 

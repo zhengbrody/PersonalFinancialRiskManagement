@@ -124,4 +124,39 @@ describe("ScoreChangeReport", () => {
     render(<ScoreChangeReport score={score()} />);
     expect(screen.getByText(/No earlier snapshot yet/i)).toBeInTheDocument();
   });
+
+  it("blocks a cross-version comparison: shows the methodology notice, hides the delta", () => {
+    mockUse.mockReturnValue({
+      isLoading: false,
+      data: {
+        window: "previous",
+        available: true,
+        as_of_previous: "2026-06-13T00:00:00Z",
+        current_score: 500,
+        previous_score: 560,
+        score_delta: null, // backend refuses a comparable delta
+        component_deltas: [],
+        input_changes: [],
+        top_drivers: [],
+        data_quality_changes: [],
+        holdings_changes: { added: [], removed: [], reweighted: [] },
+        summary: "Methodology changed since your earlier score …",
+        comparable: false,
+        previous_score_version: "mindmarket-score-v0.9.0",
+        current_score_version: "mindmarket-score-v1.0.0",
+      },
+    });
+    render(<ScoreChangeReport score={score()} />);
+    // The required notice is present…
+    expect(
+      screen.getByText(/Methodology changed; score delta is not directly comparable/i),
+    ).toBeInTheDocument();
+    // …the two raw scores still show (current 500, previous 560)…
+    expect(screen.getByText("500")).toBeInTheDocument();
+    expect(screen.getByText(/560/)).toBeInTheDocument();
+    // …with the version transition, but NO delta chip.
+    expect(screen.getByText(/v0\.9\.0/)).toBeInTheDocument();
+    expect(screen.queryByText("-60")).not.toBeInTheDocument();
+    expect(screen.queryByText("+60")).not.toBeInTheDocument();
+  });
 });

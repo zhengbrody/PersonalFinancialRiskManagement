@@ -54,4 +54,16 @@ describe("DataProvenance price-source line", () => {
     expect(screen.getByText(/Computed from market history/)).toBeInTheDocument();
     expect(screen.queryByText(/Price source:/)).not.toBeInTheDocument();
   });
+
+  it("shows the methodology version + a link when scoreVersion is passed", () => {
+    render(<DataProvenance scoreVersion="mindmarket-score-v1.0.0" />);
+    expect(screen.getByText(/Methodology mindmarket-score-v1\.0\.0/)).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: /how the score is calculated/i });
+    expect(link).toHaveAttribute("href", "/methodology/health-score");
+  });
+
+  it("omits the methodology line when scoreVersion is absent", () => {
+    render(<DataProvenance source="x" />);
+    expect(screen.queryByText(/Methodology/)).not.toBeInTheDocument();
+  });
 });

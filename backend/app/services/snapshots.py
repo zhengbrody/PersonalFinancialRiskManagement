@@ -17,6 +17,8 @@ import math
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
+from libs.mindmarket_core.score_version import SCORE_VERSION
+
 _log = logging.getLogger(__name__)
 
 # Record at most one snapshot per this window so deltas mean "what moved since
@@ -156,6 +158,9 @@ def record_snapshot(
         sb.table("portfolio_snapshots").insert(
             {
                 "source": source,
+                # The methodology version that produced this score — stamped so a
+                # later trend comparison can refuse to diff across versions.
+                "score_version": SCORE_VERSION,
                 "net_equity": round(net_equity, 2),
                 "total_long": round(gross, 2),
                 "cash_balance": round(cash, 2),
@@ -214,7 +219,7 @@ def get_snapshot_at_window(access_token: Optional[str], window: str = "previous"
         resp = (
             sb.table("portfolio_snapshots")
             .select(
-                "created_at,risk_metrics,data_quality,top_positions,"
+                "created_at,score_version,risk_metrics,data_quality,top_positions,"
                 "net_equity,leverage,contributed_capital"
             )
             .lt("created_at", _iso_hours_ago(hours))

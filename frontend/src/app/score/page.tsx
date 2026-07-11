@@ -620,6 +620,7 @@ function MetricsCard({ result }: { result: ScoreResponse }) {
           observations={result.metrics.observations}
           coverage={result.metrics.data_coverage}
           priceProvenance={result.price_provenance}
+          scoreVersion={result.score_version}
         />
       </CardContent>
     </Card>

@@ -2184,6 +2184,12 @@ export const scoreChangeReportSchema = z.looseObject({
     reweighted: z.array(z.looseObject({})),
   }),
   summary: z.string(),
+  // Methodology provenance. When `comparable` is false the prior snapshot used a
+  // DIFFERENT scoring version — the delta must NOT be shown as a market/holdings
+  // move (backend nulls score_delta + the decomposition); the UI shows a notice.
+  current_score_version: z.string().nullish(),
+  previous_score_version: z.string().nullish(),
+  comparable: z.boolean().nullish(),
 });
 export type ScoreChangeReport = z.infer<typeof scoreChangeReportSchema>;
 

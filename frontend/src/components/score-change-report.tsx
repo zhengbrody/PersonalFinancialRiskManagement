@@ -119,7 +119,9 @@ export function ScoreChangeReport({ score }: { score: ScoreResponse }) {
 
         {!q.isLoading && report && report.available && (
           <>
-            {/* headline: score delta + deterministic summary */}
+            {/* headline: score delta + deterministic summary. When the prior
+                snapshot used a different methodology version the delta is NOT a
+                comparable move — suppress it and show a notice instead. */}
             <div className="flex items-baseline gap-3">
               <span className="text-sm text-muted-foreground">
                 {report.previous_score} →
@@ -127,15 +129,38 @@ export function ScoreChangeReport({ score }: { score: ScoreResponse }) {
               <span className="font-mono text-3xl font-semibold tabular-nums">
                 {report.current_score}
               </span>
-              <span
-                className={`font-mono text-lg font-semibold ${deltaTone(
-                  report.score_delta ?? 0,
-                )}`}
-              >
-                {(report.score_delta ?? 0) >= 0 ? "+" : ""}
-                {report.score_delta}
-              </span>
+              {report.comparable !== false && (
+                <span
+                  className={`font-mono text-lg font-semibold ${deltaTone(
+                    report.score_delta ?? 0,
+                  )}`}
+                >
+                  {(report.score_delta ?? 0) >= 0 ? "+" : ""}
+                  {report.score_delta}
+                </span>
+              )}
             </div>
+
+            {report.comparable === false && (
+              <div className="rounded-md border border-amber-300/60 bg-amber-50 p-2.5 text-sm dark:border-amber-500/30 dark:bg-amber-950/30">
+                <p className="font-medium">
+                  Methodology changed; score delta is not directly comparable.
+                </p>
+                {(report.previous_score_version || report.current_score_version) && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {report.previous_score_version ?? "unknown"} →{" "}
+                    {report.current_score_version ?? "current"} ·{" "}
+                    <Link
+                      href="/methodology/health-score"
+                      className="text-primary hover:underline"
+                    >
+                      how the score is calculated
+                    </Link>
+                  </p>
+                )}
+              </div>
+            )}
+
             <p className="text-sm leading-relaxed">{report.summary}</p>
 
             {/* top drivers — the exact per-dimension decomposition of the move */}

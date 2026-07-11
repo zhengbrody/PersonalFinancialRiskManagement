@@ -24,6 +24,8 @@ from typing import Any, Optional
 
 import requests
 
+from libs.mindmarket_core.score_version import is_comparable
+
 from ..core.config import get_settings
 from . import metrics as _metrics
 
@@ -100,7 +102,7 @@ def latest_snapshots(user_id: str, limit: int = 2) -> list[dict[str, Any]]:
     rows = (
         _admin()
         .table("portfolio_snapshots")
-        .select("created_at,net_equity,risk_metrics")
+        .select("created_at,net_equity,risk_metrics,score_version")
         .eq("user_id", user_id)
         .order("created_at", desc=True)
         .limit(limit)
@@ -218,8 +220,15 @@ def build_digest(
 
     score = rm.get("overall_score")
     prev_score = prev_rm.get("overall_score")
+    # Only express a delta when both snapshots used the SAME methodology version.
+    # A cross-version move isn't a market/holdings change, so we suppress it.
+    latest_version = latest.get("score_version")
+    prev_version = (prev or {}).get("score_version")
+    methodology_changed = prev is not None and not is_comparable(prev_version, latest_version)
     score_delta = (
-        float(score) - float(prev_score) if score is not None and prev_score is not None else None
+        float(score) - float(prev_score)
+        if score is not None and prev_score is not None and not methodology_changed
+        else None
     )
     vol = rm.get("annual_volatility")
     net = latest.get("net_equity") if latest.get("net_equity") is not None else rm.get("net_equity")
@@ -269,6 +278,14 @@ def build_digest(
         else ""
     )
 
+    methodology_note = (
+        '<p style="margin:14px 0;padding:10px 14px;background:#FFF6E5;border:1px solid #F0D9A8;'
+        'border-radius:8px;color:#7A5B12;font-size:14px;">We updated how the Health Score is '
+        "calculated, so this week&#39;s score isn&#39;t directly comparable to your last one.</p>"
+        if methodology_changed
+        else ""
+    )
+
     html_body = f"""
 <div style="max-width:560px;margin:0 auto;padding:28px 20px;background:{_PAPER};
      font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;color:{_INK};">
@@ -277,6 +294,7 @@ def build_digest(
   <h1 style="margin:10px 0 2px;font-size:22px;">Your portfolio, this week at a glance</h1>
   <p style="margin:0 0 16px;color:{_SLATE};font-size:13px;">As of your latest score on {_html.escape(as_of)} · every figure is deterministically computed, no AI-generated numbers</p>
   {stale_note}
+  {methodology_note}
   <table role="presentation" cellspacing="6" cellpadding="0" style="border-collapse:separate;width:100%;">
     <tr>
       {_stat_cell("Health Score", score_txt, _delta_chip(score_delta))}
@@ -300,6 +318,7 @@ def build_digest(
   </table>
   <p style="margin:22px 0 0;border-top:1px solid #E3E8EE;padding-top:12px;color:{_SLATE};font-size:11px;">
     Educational analysis, not investment advice. The numbers come from your own most recent saved score snapshot.<br>
+    Methodology {_html.escape(str(latest_version or "—"))} · <a href="{site}/methodology/health-score" style="color:{_SLATE};">how the score is calculated</a><br>
     Don't want these? <a href="{unsub}" style="color:{_SLATE};">Unsubscribe in one click</a>
   </p>
 </div>"""

@@ -13,6 +13,8 @@ from __future__ import annotations
 import math
 from typing import Any, Optional
 
+from libs.mindmarket_core.score_version import SCORE_VERSION, is_comparable
+
 from ..schemas.score_changes import (
     ComponentDelta,
     DataQualityChange,
@@ -130,6 +132,17 @@ def _summarize(
     return base
 
 
+def _methodology_changed_summary(prev_version: Any, as_of: Optional[str]) -> str:
+    """Deterministic notice when the two snapshots use different methodologies."""
+    when = f" (snapshot from {str(as_of)[:10]})" if as_of else ""
+    prev = str(prev_version or "unknown")
+    return (
+        f"Methodology changed since your earlier score{when}: it was computed under "
+        f"{prev}, this one under {SCORE_VERSION}. The score change is not directly "
+        "comparable — it doesn't isolate a market or holdings move."
+    )
+
+
 def build_change_report(
     req: ScoreChangeRequest, prev_snapshot: Optional[dict]
 ) -> ScoreChangeReport:
@@ -144,12 +157,33 @@ def build_change_report(
             window=window,
             available=False,
             current_score=cur_overall,
+            current_score_version=SCORE_VERSION,
             summary="No earlier snapshot in this window yet — scores accrue over time.",
         )
 
     prev_overall = int(prev_overall)
-    score_delta = cur_overall - prev_overall
     as_of = (prev_snapshot or {}).get("created_at")
+
+    # ── Methodology-version gate ──
+    # If the prior snapshot was produced by a DIFFERENT methodology version, the
+    # move is not a market/holdings change — it's (partly) a rules change. Refuse
+    # to express a comparable delta or decompose it; surface a clear notice.
+    prev_version = (prev_snapshot or {}).get("score_version")
+    if not is_comparable(prev_version, SCORE_VERSION):
+        return ScoreChangeReport(
+            window=window,
+            available=True,
+            as_of_previous=as_of,
+            current_score=cur_overall,
+            previous_score=prev_overall,
+            score_delta=None,  # not a directly comparable delta
+            current_score_version=SCORE_VERSION,
+            previous_score_version=str(prev_version) if prev_version else None,
+            comparable=False,
+            summary=_methodology_changed_summary(prev_version, as_of),
+        )
+
+    score_delta = cur_overall - prev_overall
 
     # ── Component deltas (exact decomposition of the score move) ──
     prev_dims = prev_rm.get("dimensions") or {}
@@ -268,4 +302,7 @@ def build_change_report(
         data_quality_changes=dq_changes,
         holdings_changes=holdings,
         summary=_summarize(score_delta, as_of, drivers, dq_changes),
+        current_score_version=SCORE_VERSION,
+        previous_score_version=str(prev_version) if prev_version else None,
+        comparable=True,
     )

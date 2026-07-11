@@ -6,6 +6,7 @@
  * signal: it tells the user the number was computed from real data, not guessed.
  */
 
+import Link from "next/link";
 import type { PriceProvenance } from "@/lib/schemas";
 
 function displaySource(source?: string | null): string {
@@ -27,6 +28,7 @@ export function DataProvenance({
   observations,
   coverage,
   priceProvenance,
+  scoreVersion,
   className,
 }: {
   asOf?: string | null;
@@ -34,6 +36,9 @@ export function DataProvenance({
   observations?: number | null;
   coverage?: number | null;
   priceProvenance?: PriceProvenance | null;
+  // The methodology version that produced the number — links to the auditable
+  // /methodology/health-score page.
+  scoreVersion?: string | null;
   className?: string;
 }) {
   const parts: string[] = [];
@@ -84,13 +89,26 @@ export function DataProvenance({
     }
   }
 
-  if (parts.length === 0 && priceSourceParts.length === 0 && missing.length === 0) {
+  if (
+    parts.length === 0 &&
+    priceSourceParts.length === 0 &&
+    missing.length === 0 &&
+    !scoreVersion
+  ) {
     return null;
   }
 
   return (
     <div className={`text-[11px] text-muted-foreground space-y-0.5 ${className ?? ""}`}>
       {parts.length > 0 && <p>{parts.join(" · ")}</p>}
+      {scoreVersion && (
+        <p>
+          Methodology {scoreVersion} ·{" "}
+          <Link href="/methodology/health-score" className="underline hover:text-foreground">
+            how the score is calculated
+          </Link>
+        </p>
+      )}
       {priceSourceParts.length > 0 && (
         <p>
           {priceSourceParts.map((p, i) => (

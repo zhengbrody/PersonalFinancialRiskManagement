@@ -79,7 +79,8 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
     isAnonFullBleed ||
     FULL_BLEED_ROUTES.has(pathname) ||
     pathname.startsWith("/learn/") ||
-    pathname.startsWith("/legal/")
+    pathname.startsWith("/legal/") ||
+    pathname.startsWith("/methodology/")
   ) {
     return <>{children}</>;
   }

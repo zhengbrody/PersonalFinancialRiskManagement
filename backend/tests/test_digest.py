@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import pytest
 
+from libs.mindmarket_core.score_version import SCORE_VERSION
+
 from backend.app.services import digest as dg
 
 # ── in-memory fake supabase admin ─────────────────────────────────────
@@ -111,11 +113,18 @@ def digest_env(monkeypatch, jwt_secret):
     reset_settings_cache()
 
 
-def _snap(created: str, score: float, vol: float = 0.18, net: float = 50_000.0):
+def _snap(
+    created: str,
+    score: float,
+    vol: float = 0.18,
+    net: float = 50_000.0,
+    score_version: str = SCORE_VERSION,
+):
     return {
         "user_id": "u1",
         "created_at": created,
         "net_equity": net,
+        "score_version": score_version,
         "risk_metrics": {
             "overall_score": score,
             "annual_volatility": vol,

@@ -471,6 +471,10 @@ class ScoreResponse(BaseModel):
     base_overall: Optional[int] = None
     drivers: list[ScoreDriverOut] = Field(default_factory=list)
     reason_codes: list[ReasonCodeOut] = Field(default_factory=list)
+    # The methodology version that produced this score (single source:
+    # libs/mindmarket_core/score_version.py). Auditable + used to gate
+    # cross-version trend comparison.
+    score_version: Optional[str] = None
 
 
 # ── /api/v1/risk/benchmarks (public reference context) ──────────────
