@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, Request
 
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import ok
+from ...schemas.envelope import Envelope
 from ...schemas.institutions import (
     InstitutionDetailOut,
     SmartMoneyOut,
@@ -29,7 +30,9 @@ router = APIRouter(prefix="/api/v1/institutions", tags=["institutions"])
 
 
 @router.get(
-    "/smart_money", summary="Institutional conviction for your holdings", response_model=None
+    "/smart_money",
+    summary="Institutional conviction for your holdings",
+    response_model=Envelope[SmartMoneyOut],
 )
 def smart_money(request: Request, user: AuthedUser = Depends(require_user)):
     started = time.perf_counter()
@@ -47,7 +50,9 @@ def smart_money(request: Request, user: AuthedUser = Depends(require_user)):
     return ok(out.model_dump(), request=request, started_at=started)
 
 
-@router.get("/top", summary="Top ~30 institutional 13F filers", response_model=None)
+@router.get(
+    "/top", summary="Top ~30 institutional 13F filers", response_model=Envelope[SmartMoneyOut]
+)
 def top(request: Request, user: AuthedUser = Depends(require_user)):
     started = time.perf_counter()
     from ...services import institutions as svc
@@ -57,7 +62,9 @@ def top(request: Request, user: AuthedUser = Depends(require_user)):
     return ok(out.model_dump(), request=request, started_at=started)
 
 
-@router.get("/{cik}", summary="A fund's top holdings + QoQ changes", response_model=None)
+@router.get(
+    "/{cik}", summary="A fund's top holdings + QoQ changes", response_model=Envelope[SmartMoneyOut]
+)
 def detail(cik: str, request: Request, user: AuthedUser = Depends(require_user)):
     started = time.perf_counter()
     from ...services import institutions as svc

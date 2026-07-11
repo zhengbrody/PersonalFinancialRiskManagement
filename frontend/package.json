@@ -15,7 +15,8 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:real": "playwright test -c playwright.real.config.ts",
     "e2e:install": "playwright install --with-deps chromium",
-    "gen:api": "openapi-typescript http://localhost:8000/openapi.json --default-non-nullable false -o src/lib/api-types.ts"
+    "gen:api": "openapi-typescript ../openapi.json --default-non-nullable false -o src/lib/api-types.ts",
+    "gen:api:live": "openapi-typescript http://localhost:8000/openapi.json --default-non-nullable false -o src/lib/api-types.ts"
   },
   "dependencies": {
     "@sentry/nextjs": "^8.55.2",

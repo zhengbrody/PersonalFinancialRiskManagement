@@ -24,6 +24,7 @@ from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import APIError, ok, too_many_requests
 from ...schemas.copilot import ChatRequest, ChatResponse
 from ...schemas.copilot2 import CopilotAskRequest
+from ...schemas.envelope import Envelope
 from ...services import copilot_context
 from ...services.llm_client import get_answer_streamer, get_llm_callable
 
@@ -84,7 +85,7 @@ def _record_chat_cost(user_id: str, answer_text: str) -> None:
 @router.post(
     "/chat",
     summary="Chat with the AI Portfolio Copilot about the active portfolio",
-    response_model=None,  # we wrap the response in the envelope ourselves
+    response_model=Envelope[ChatResponse],  # we wrap the response in the envelope ourselves
 )
 def copilot_chat_endpoint(
     body: ChatRequest,
@@ -142,7 +143,7 @@ def copilot_chat_endpoint(
 @router.post(
     "/ask",
     summary="Copilot 2.0 — intent-routed, evidence-grounded answer",
-    response_model=None,
+    response_model=Envelope[dict],
 )
 def copilot_ask_endpoint(
     body: CopilotAskRequest,

@@ -14,6 +14,7 @@ import time
 from fastapi import APIRouter, Query, Request
 
 from ...core.responses import ok, server_error, unprocessable
+from ...schemas.envelope import Envelope
 from ...schemas.macro import (
     MoverRowOut,
     MoversResponse,
@@ -39,7 +40,11 @@ router = APIRouter(prefix="/api/v1/macro", tags=["macro"])
 _logger = logging.getLogger(__name__)
 
 
-@router.get("/series", summary="Last N days of one or more FRED series")
+@router.get(
+    "/series",
+    summary="Last N days of one or more FRED series",
+    response_model=Envelope[SeriesBatchResponse],
+)
 def get_series(
     request: Request,
     series: str = Query(
@@ -100,7 +105,11 @@ def get_series(
     return ok(payload.model_dump(), request=request, started_at=started)
 
 
-@router.get("/yield_curve", summary="Latest US Treasury daily yield curve")
+@router.get(
+    "/yield_curve",
+    summary="Latest US Treasury daily yield curve",
+    response_model=Envelope[YieldCurveResponse],
+)
 def get_yield_curve(request: Request):
     """Return today's (or the most recent published) Treasury curve."""
     started = time.perf_counter()
@@ -118,7 +127,11 @@ def get_yield_curve(request: Request):
     return ok(payload.model_dump(), request=request, started_at=started)
 
 
-@router.get("/regime", summary="Market-regime snapshot: VIX, Fear & Greed, yield curve")
+@router.get(
+    "/regime",
+    summary="Market-regime snapshot: VIX, Fear & Greed, yield curve",
+    response_model=Envelope[RegimeResponse],
+)
 def get_regime(request: Request):
     """Return the current market regime. Public.
 
@@ -142,7 +155,11 @@ def get_regime(request: Request):
     return ok(payload.model_dump(), request=request, started_at=started)
 
 
-@router.get("/regime_detail", summary="Market-wide regime (bull/bear/transition) + history")
+@router.get(
+    "/regime_detail",
+    summary="Market-wide regime (bull/bear/transition) + history",
+    response_model=Envelope[RegimeDetailResponse],
+)
 def get_regime_detail_endpoint(request: Request):
     """Return the composite market regime (bull / bear / transition) with a
     confidence, the sub-signals, and a ~1y history. Public. Fails soft to an
@@ -161,7 +178,11 @@ def get_regime_detail_endpoint(request: Request):
     return ok(payload.model_dump(), request=request, started_at=started)
 
 
-@router.get("/movers", summary="Sector performance + today's top gainers/losers")
+@router.get(
+    "/movers",
+    summary="Sector performance + today's top gainers/losers",
+    response_model=Envelope[MoversResponse],
+)
 def get_movers_endpoint(request: Request):
     """Sector ETF performance + S&P-500 top gainers/losers/unusual-volume.
     Public, free (yfinance). Fail-soft: any leg may be empty if its upstream is
@@ -196,7 +217,11 @@ def get_movers_endpoint(request: Request):
     return ok(payload.model_dump(), request=request, started_at=started)
 
 
-@router.get("/news", summary="Latest source-labeled macro market news")
+@router.get(
+    "/news",
+    summary="Latest source-labeled macro market news",
+    response_model=Envelope[NewsResponse],
+)
 def get_news_endpoint(request: Request):
     """Aggregated macro headlines. Public, free, fail-soft to an empty list."""
     started = time.perf_counter()

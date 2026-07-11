@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, Path, Query, Request
 
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import forbidden, ok, too_many_requests, unprocessable
+from ...schemas.envelope import Envelope
 from ...schemas.news import TickerNewsResponse
 from ...schemas.research import FactPack, VerdictRequest
 from ...schemas.valuation import DCFRequest
@@ -43,7 +44,7 @@ _VERDICT_MODEL = "claude-sonnet-4-6"
 @router.get(
     "/fact_pack/{ticker}",
     summary="Compact, source-attributed FactPack for a ticker (no credit)",
-    response_model=None,
+    response_model=Envelope[dict],
 )
 def fact_pack(
     request: Request,
@@ -65,7 +66,7 @@ def fact_pack(
 @router.get(
     "/{ticker}/fact-pack",
     summary="Institutional research FactPack: financials + deterministic trends (no credit)",
-    response_model=None,
+    response_model=Envelope[dict],
 )
 def research_fact_pack(
     request: Request,
@@ -92,7 +93,7 @@ def research_fact_pack(
 @router.get(
     "/{ticker}/diagnostics",
     summary="Research data-coverage diagnostics for a ticker (owner): why is it blank?",
-    response_model=None,
+    response_model=Envelope[dict],
 )
 def research_diagnostics(
     request: Request,
@@ -164,7 +165,7 @@ def research_diagnostics(
 @router.get(
     "/{ticker}/bundle",
     summary="Consolidated research bundle — one fetch for the whole page (no credit)",
-    response_model=None,
+    response_model=Envelope[dict],
 )
 def research_bundle(
     request: Request,
@@ -219,7 +220,7 @@ def research_bundle(
 @router.post(
     "/{ticker}/dcf",
     summary="Deterministic DCF valuation (accepts user overrides; no credit)",
-    response_model=None,
+    response_model=Envelope[dict],
 )
 def dcf_valuation(
     body: DCFRequest,
@@ -244,7 +245,7 @@ def dcf_valuation(
 @router.get(
     "/{ticker}/peers",
     summary="Deterministic peer comparison with percentiles (no credit)",
-    response_model=None,
+    response_model=Envelope[dict],
 )
 def peer_comparison(
     request: Request,
@@ -268,7 +269,7 @@ def peer_comparison(
 @router.get(
     "/{ticker}/earnings",
     summary="Deterministic earnings comparison + transcript metadata (no credit)",
-    response_model=None,
+    response_model=Envelope[dict],
 )
 def earnings_comparison(
     request: Request,
@@ -290,7 +291,7 @@ def earnings_comparison(
 @router.get(
     "/{ticker}/report",
     summary="Institutional analyst HTML report — all sections, deterministic (no credit)",
-    response_model=None,
+    response_model=Envelope[dict],
 )
 def analyst_report(
     request: Request,
@@ -313,7 +314,7 @@ def analyst_report(
 @router.post(
     "/{ticker}/thesis",
     summary="AI-grounded bull/bear/monitor thesis over deterministic evidence (credit-gated)",
-    response_model=None,
+    response_model=Envelope[dict],
 )
 def research_thesis(
     request: Request,
@@ -382,7 +383,7 @@ def _record_thesis_cost(user_id: str, thesis, started: float, *, input_hash_valu
 @router.get(
     "/news/{ticker}",
     summary="Unified, source-labeled news for a ticker (FMP news + press releases + SEC), no credit",
-    response_model=None,
+    response_model=Envelope[TickerNewsResponse],
 )
 def ticker_news(
     request: Request,
@@ -401,7 +402,7 @@ def ticker_news(
 @router.post(
     "/verdict",
     summary="LLM verdict over a FactPack (credit-gated)",
-    response_model=None,
+    response_model=Envelope[dict],
 )
 def verdict(
     body: VerdictRequest,

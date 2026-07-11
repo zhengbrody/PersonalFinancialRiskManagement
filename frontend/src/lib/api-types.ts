@@ -4,313 +4,7 @@
  */
 
 export interface paths {
-    "/api/v1/health": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Liveness + import sanity
-         * @description Return a coarse health snapshot.
-         *
-         *     Imports the load-bearing internal modules so a broken deploy
-         *     (missing dep, broken import path, syntax error in a transitive)
-         *     surfaces at ``/health`` instead of at the first real call.
-         *     The imports are intentionally re-done per call rather than at
-         *     module load — that way a hot patch + reload doesn't need a
-         *     process restart to be visible here.
-         */
-        get: operations["health_api_v1_health_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/risk/score": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Score an explicit portfolio without touching Supabase
-         * @description Compute deterministic 0-1000 score + 3 dimension scores + the
-         *     raw risk metrics for the supplied holdings.
-         *
-         *     Deliberately stateless: no Supabase reads, no LLM calls, no
-         *     cookie / JWT requirement. Same Pydantic + engine path used by
-         *     the Streamlit Copilot page; the math is shared.
-         */
-        post: operations["score_portfolio_endpoint_api_v1_risk_score_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/risk/score_from_active": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Score the authed user's active portfolio using real market data
-         * @description Compute the deterministic 0..1000 score for the caller's active
-         *     portfolio, using real adjusted-close prices pulled (and cached)
-         *     via the backend market-data service.
-         *
-         *     Resolution order for "active portfolio":
-         *       1. The default portfolio flagged in Supabase (``is_default=true``).
-         *       2. The most-recent portfolio if no default is set.
-         *       3. Empty → 422 ``no_active_portfolio``.
-         *
-         *     Why not also let the caller pass a ``portfolio_id``? Phase 4 keeps
-         *     the contract minimal — the UI shows one card per portfolio with a
-         *     "Set as default" toggle. When a richer UI lands, we add an
-         *     explicit ``portfolio_id`` field.
-         */
-        post: operations["score_from_active_endpoint_api_v1_risk_score_from_active_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/risk/last_snapshot": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * The prior-day portfolio snapshot, for the 'what changed' delta
-         * @description Return the most recent snapshot older than ~a day (the baseline the
-         *     dashboard diffs today's score against), or null when there isn't one.
-         */
-        get: operations["last_snapshot_endpoint_api_v1_risk_last_snapshot_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/risk/snapshot_history": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Recent portfolio snapshots (score/vol/VaR over time) for trend lines
-         * @description Recent snapshots oldest→newest so the score/risk pages can draw trend
-         *     sparklines. Fail-soft to an empty list.
-         */
-        get: operations["snapshot_history_endpoint_api_v1_risk_snapshot_history_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/risk/report_from_active": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Full risk report for the authed user's active portfolio
-         * @description Build the full ``RiskReport`` (VaR/CVaR, factor betas, stress
-         *     test, component VaR, liquidity) using real adjusted-close prices
-         *     via the same cached service ``/risk/score_from_active`` uses.
-         *
-         *     Heavier than /score_from_active (Monte Carlo + factor regressions
-         *     against SPY/QQQ/GLD/TLT/IWM/VTV — fetches their history too). The
-         *     file-cached market_data layer absorbs the cold-cache latency.
-         */
-        post: operations["report_from_active_endpoint_api_v1_risk_report_from_active_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/risk/efficient_frontier": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Efficient frontier + the active portfolio's risk/return point */
-        post: operations["efficient_frontier_endpoint_api_v1_risk_efficient_frontier_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/risk/scenarios": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Project portfolio P&L across a −30%…+30% market move sweep */
-        post: operations["scenarios_endpoint_api_v1_risk_scenarios_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/risk/explain": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Structured AI risk diagnosis over already-computed metrics */
-        post: operations["explain_endpoint_api_v1_risk_explain_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/risk/benchmarks": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Reference annualized stats: S&P 500 + 60/40 */
-        get: operations["benchmarks_endpoint_api_v1_risk_benchmarks_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/risk/historical_scenarios": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Replay real market crises on the active portfolio
-         * @description What the caller's ACTUAL holdings would have done through COVID / 2022 /
-         *     2018Q4 / GFC — realised return, drawdown, S&P 500 over the same window, and
-         *     recovery time. Deterministic, no credits.
-         */
-        post: operations["historical_scenarios_endpoint_api_v1_risk_historical_scenarios_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/risk/var_backtest": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Backtest the portfolio's 1-day VaR vs realised breaches
-         * @description Gaussian 1-day VaR vs how often the realised daily loss actually breached
-         *     it over the trailing window, plus the empirical return distribution.
-         *     Deterministic, no credits.
-         */
-        post: operations["var_backtest_endpoint_api_v1_risk_var_backtest_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/portfolios/me": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Return the authed user's portfolios
-         * @description Authed-only. Returns the JWT holder's RLS-filtered portfolios.
-         */
-        get: operations["list_my_portfolios_api_v1_portfolios_me_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/portfolios": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create a new portfolio owned by the caller
-         * @description Insert a new row. Supabase RLS pins `user_id` to the caller via
-         *     the `DEFAULT auth.uid()` clause on the column — we never send it
-         *     explicitly, so a buggy client can't impersonate.
-         */
-        post: operations["create_portfolio_endpoint_api_v1_portfolios_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/portfolios/{portfolio_id}": {
+    "/api/v1/account": {
         parameters: {
             query?: never;
             header?: never;
@@ -320,45 +14,14 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /**
-         * Delete one portfolio owned by the caller
-         * @description Hard delete. RLS prevents touching rows the caller doesn't own.
-         */
-        delete: operations["delete_portfolio_endpoint_api_v1_portfolios__portfolio_id__delete"];
-        options?: never;
-        head?: never;
-        /**
-         * Update one or more fields on a portfolio
-         * @description Patch fields. Only fields explicitly set in the request body are
-         *     applied; omitted fields keep their existing DB values.
-         */
-        patch: operations["update_portfolio_endpoint_api_v1_portfolios__portfolio_id__patch"];
-        trace?: never;
-    };
-    "/api/v1/market/prices": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Latest adjusted close per ticker
-         * @description Return the most recent adjusted close + bar date per ticker.
-         *
-         *     Tickers yfinance can't price (delisted, typo) are silently
-         *     omitted from `prices`; compare against `requested` to find them.
-         */
-        get: operations["get_prices_api_v1_market_prices_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
+        /** Delete Account */
+        delete: operations["delete_account_api_v1_account_delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/market/sentiment": {
+    "/api/v1/billing/admin/anthropic-topup": {
         parameters: {
             query?: never;
             header?: never;
@@ -368,20 +31,20 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * AI sentiment per holding (authed, credits)
-         * @description Per-holding AI sentiment over recent headlines for the caller's ACTIVE
-         *     portfolio. Credit-gated (it's an LLM call per ticker); fail-open on a
-         *     metering blip; degrades to neutral/data-only without an LLM key, so it never
-         *     500s. Cached per ticker-set in the service.
+         * Owner-only: set the current Claude balance (after a top-up)
+         * @description Record the owner's current Claude balance from the dashboard — no env edit
+         *     or restart. Anthropic exposes no balance API, so this snapshot is what we
+         *     count Claude spend down from (re-set it after each top-up). Returns the
+         *     refreshed balances. 403 for non-owners.
          */
-        post: operations["portfolio_sentiment_api_v1_market_sentiment_post"];
+        post: operations["billing_admin_set_anthropic_topup_api_v1_billing_admin_anthropic_topup_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/macro/series": {
+    "/api/v1/billing/admin/balances": {
         parameters: {
             query?: never;
             header?: never;
@@ -389,163 +52,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Last N days of one or more FRED series
-         * @description Return latest-value + trailing window for each allow-listed series.
+         * Owner-only: LLM provider remaining balance / top-up
+         * @description Remaining LLM credit per provider for the owner "API balance" card:
+         *     DeepSeek live balance (its real `/user/balance` API) + a Claude ESTIMATE
+         *     (owner-set top-up − tracked Claude spend, since Anthropic exposes no
+         *     balance API). Server-cached, so safe to poll. 403 for non-owners.
          */
-        get: operations["get_series_api_v1_macro_series_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/macro/yield_curve": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Latest US Treasury daily yield curve
-         * @description Return today's (or the most recent published) Treasury curve.
-         */
-        get: operations["get_yield_curve_api_v1_macro_yield_curve_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/macro/regime": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Market-regime snapshot: VIX, Fear & Greed, yield curve
-         * @description Return the current market regime. Public.
-         *
-         *     Each leg (VIX / Fear & Greed / yield-curve status) is fetched
-         *     independently and nulls itself on upstream failure — the panel
-         *     renders partially rather than 500-ing on one dead source. Hence no
-         *     error branch here: a well-formed (possibly partially-null) snapshot
-         *     is always a 200.
-         */
-        get: operations["get_regime_api_v1_macro_regime_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/macro/regime_detail": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Market-wide regime (bull/bear/transition) + history
-         * @description Return the composite market regime (bull / bear / transition) with a
-         *     confidence, the sub-signals, and a ~1y history. Public. Fails soft to an
-         *     empty snapshot — always a 200, never blocks the /markets page.
-         */
-        get: operations["get_regime_detail_endpoint_api_v1_macro_regime_detail_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/macro/movers": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Sector performance + today's top gainers/losers
-         * @description Sector ETF performance + S&P-500 top gainers/losers/unusual-volume.
-         *     Public, free (yfinance). Fail-soft: any leg may be empty if its upstream is
-         *     down — always a 200, never blocks the /markets page.
-         */
-        get: operations["get_movers_endpoint_api_v1_macro_movers_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/macro/news": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Latest source-labeled macro market news
-         * @description Aggregated macro headlines. Public, free, fail-soft to an empty list.
-         */
-        get: operations["get_news_endpoint_api_v1_macro_news_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/billing/me": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Plan + subscription snapshot for the caller
-         * @description Return the authed user's current plan, their Stripe
-         *     subscription row (if any), and the plan catalogue for rendering
-         *     the pricing table without a second round-trip.
-         */
-        get: operations["billing_me_api_v1_billing_me_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/billing/admin/usage": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Owner-only: aggregate token/cost/credit usage
-         * @description Month-to-date usage aggregates (tokens / $ / credits, per kind + per
-         *     user) for the owner dashboard. 403 for everyone else.
-         */
-        get: operations["billing_admin_usage_api_v1_billing_admin_usage_get"];
+        get: operations["billing_admin_balances_api_v1_billing_admin_balances_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -601,6 +114,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/billing/admin/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Owner-only: aggregate token/cost/credit usage
+         * @description Month-to-date usage aggregates (tokens / $ / credits, per kind + per
+         *     user) for the owner dashboard. 403 for everyone else.
+         */
+        get: operations["billing_admin_usage_api_v1_billing_admin_usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/billing/checkout_session": {
         parameters: {
             query?: never;
@@ -621,6 +155,28 @@ export interface paths {
          *     auth user when the subscription is created.
          */
         post: operations["create_checkout_session_endpoint_api_v1_billing_checkout_session_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/billing/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Plan + subscription snapshot for the caller
+         * @description Return the authed user's current plan, their Stripe
+         *     subscription row (if any), and the plan catalogue for rendering
+         *     the pricing table without a second round-trip.
+         */
+        get: operations["billing_me_api_v1_billing_me_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -648,33 +204,6 @@ export interface paths {
          *     redirect them to /pricing instead.
          */
         post: operations["create_portal_session_endpoint_api_v1_billing_portal_session_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/copilot/chat": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Chat with the AI Portfolio Copilot about the active portfolio
-         * @description Answer a chat turn about the caller's active portfolio.
-         *
-         *     Flow:
-         *       1. Resolve positions + score (422 codes on empty/unpriceable data).
-         *       2. Gate on the user's monthly chat quota (429 when exhausted;
-         *          fail-OPEN on a Supabase blip — availability over strict metering).
-         *       3. Dispatch to the orchestrator with the LLM callable (or ``None``
-         *          → deterministic templates).
-         */
-        post: operations["copilot_chat_endpoint_api_v1_copilot_chat_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -709,6 +238,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/copilot/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Chat with the AI Portfolio Copilot about the active portfolio
+         * @description Answer a chat turn about the caller's active portfolio.
+         *
+         *     Flow:
+         *       1. Resolve positions + score (422 codes on empty/unpriceable data).
+         *       2. Gate on the user's monthly chat quota (429 when exhausted;
+         *          fail-OPEN on a Supabase blip — availability over strict metering).
+         *       3. Dispatch to the orchestrator with the LLM callable (or ``None``
+         *          → deterministic templates).
+         */
+        post: operations["copilot_chat_endpoint_api_v1_copilot_chat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/copilot/chat/stream": {
         parameters: {
             query?: never;
@@ -737,59 +293,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/quant/backtest": {
+    "/api/v1/data/health": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
-        /**
-         * Backtest the authed user's active portfolio
-         * @description Run the requested strategy over the active portfolio and return the
-         *     equity curve, drawdown series, scalar stats, and benchmark total
-         *     return. See ``services.quant_backtest`` for the math + error codes.
-         */
-        post: operations["backtest_active_endpoint_api_v1_quant_backtest_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/quant/attribution": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Performance attribution (Brinson + factor) for the active portfolio
-         * @description Brinson sector decomposition + multi-factor regression + tracking-error
-         *     / information-ratio / hit-ratio for the caller's active portfolio vs SPY.
-         *     Deterministic (no LLM, no credits).
-         */
-        post: operations["attribution_active_endpoint_api_v1_quant_attribution_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/research/fact_pack/{ticker}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Compact, source-attributed FactPack for a ticker (no credit) */
-        get: operations["fact_pack_api_v1_research_fact_pack__ticker__get"];
+        /** Per-provider data-source health (owner): configured · role · live outcomes */
+        get: operations["data_health_api_v1_data_health_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -798,7 +310,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/research/verdict": {
+    "/api/v1/digest/pref": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Pref */
+        get: operations["get_pref_api_v1_digest_pref_get"];
+        put?: never;
+        /** Set Pref */
+        post: operations["set_pref_api_v1_digest_pref_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/digest/run": {
         parameters: {
             query?: never;
             header?: never;
@@ -807,8 +337,75 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** LLM verdict over a FactPack (credit-gated) */
-        post: operations["verdict_api_v1_research_verdict_post"];
+        /** Run Digest */
+        post: operations["run_digest_api_v1_digest_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/digest/unsubscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Unsubscribe Confirm
+         * @description Confirmation page ONLY — no side effect on GET. Corporate mail
+         *     link-scanners prefetch every href; a side-effecting GET would silently
+         *     opt users out. The button (and RFC 8058 one-click providers) POST.
+         */
+        get: operations["unsubscribe_confirm_api_v1_digest_unsubscribe_get"];
+        put?: never;
+        /** Unsubscribe Apply */
+        post: operations["unsubscribe_apply_api_v1_digest_unsubscribe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit beta feedback */
+        post: operations["submit_feedback_api_v1_feedback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Liveness + import sanity
+         * @description Return a coarse health snapshot.
+         *
+         *     Imports the load-bearing internal modules so a broken deploy
+         *     (missing dep, broken import path, syntax error in a transitive)
+         *     surfaces at ``/health`` instead of at the first real call.
+         *     The imports are intentionally re-done per call rather than at
+         *     module load — that way a hot patch + reload doesn't need a
+         *     process restart to be visible here.
+         */
+        get: operations["health_api_v1_health_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -866,7 +463,160 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/feedback": {
+    "/api/v1/macro/movers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sector performance + today's top gainers/losers
+         * @description Sector ETF performance + S&P-500 top gainers/losers/unusual-volume.
+         *     Public, free (yfinance). Fail-soft: any leg may be empty if its upstream is
+         *     down — always a 200, never blocks the /markets page.
+         */
+        get: operations["get_movers_endpoint_api_v1_macro_movers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/macro/news": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Latest source-labeled macro market news
+         * @description Aggregated macro headlines. Public, free, fail-soft to an empty list.
+         */
+        get: operations["get_news_endpoint_api_v1_macro_news_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/macro/regime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Market-regime snapshot: VIX, Fear & Greed, yield curve
+         * @description Return the current market regime. Public.
+         *
+         *     Each leg (VIX / Fear & Greed / yield-curve status) is fetched
+         *     independently and nulls itself on upstream failure — the panel
+         *     renders partially rather than 500-ing on one dead source. Hence no
+         *     error branch here: a well-formed (possibly partially-null) snapshot
+         *     is always a 200.
+         */
+        get: operations["get_regime_api_v1_macro_regime_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/macro/regime_detail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Market-wide regime (bull/bear/transition) + history
+         * @description Return the composite market regime (bull / bear / transition) with a
+         *     confidence, the sub-signals, and a ~1y history. Public. Fails soft to an
+         *     empty snapshot — always a 200, never blocks the /markets page.
+         */
+        get: operations["get_regime_detail_endpoint_api_v1_macro_regime_detail_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/macro/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Last N days of one or more FRED series
+         * @description Return latest-value + trailing window for each allow-listed series.
+         */
+        get: operations["get_series_api_v1_macro_series_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/macro/yield_curve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Latest US Treasury daily yield curve
+         * @description Return today's (or the most recent published) Treasury curve.
+         */
+        get: operations["get_yield_curve_api_v1_macro_yield_curve_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/market/prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Latest adjusted close per ticker
+         * @description Return the most recent adjusted close + bar date per ticker.
+         *
+         *     Tickers yfinance can't price (delisted, typo) are silently
+         *     omitted from `prices`; compare against `requested` to find them.
+         */
+        get: operations["get_prices_api_v1_market_prices_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/market/sentiment": {
         parameters: {
             query?: never;
             header?: never;
@@ -875,8 +625,847 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Submit beta feedback */
-        post: operations["submit_feedback_api_v1_feedback_post"];
+        /**
+         * AI sentiment per holding (authed, credits)
+         * @description Per-holding AI sentiment over recent headlines for the caller's ACTIVE
+         *     portfolio. Credit-gated (it's an LLM call per ticker); fail-open on a
+         *     metering blip; degrades to neutral/data-only without an LLM key, so it never
+         *     500s. Cached per ticker-set in the service.
+         */
+        post: operations["portfolio_sentiment_api_v1_market_sentiment_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ml/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Model + drift health (PSI/KS vs training reference)
+         * @description Read-only: artifact identity, sklearn skew, and per-feature/prediction
+         *     drift vs the training reference. Computed on demand off the cached serving
+         *     frame — a daily GH cron curls this; nothing schedules on the box.
+         */
+        get: operations["ml_health_api_v1_ml_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ml/model_card": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public model card — honest metrics from committed artifacts
+         * @description The classifier's model card, read straight from the committed ML
+         *     artifacts (never hand-typed) — provenance, class definitions, features, and
+         *     the honest validation metrics (4-class accuracy vs persistence, elevated-risk
+         *     ROC-AUC, Brier, calibration). Public, deterministic, fail-soft.
+         */
+        get: operations["ml_model_card_api_v1_ml_model_card_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ml/regime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Trained market-regime risk-state (model, fail-soft) */
+        get: operations["ml_regime_api_v1_ml_regime_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/options/analyze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Black-Scholes Greeks / IV / payoff for a set of option contracts
+         * @description Return per-contract analytics + a portfolio Greeks roll-up. Auth-gated
+         *     (so anonymous scraping can't hammer yfinance), but no credit cost — every
+         *     number is deterministic math over market data.
+         */
+        post: operations["analyze_options_endpoint_api_v1_options_analyze_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/options/explain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Plain-language explanation of the option book's risk (deterministic skeleton → LLM)
+         * @description Explain the option exposure: a deterministic skeleton (severity, primary
+         *     driver, educational inspection actions) the LLM may only rephrase — it never
+         *     invents numbers or changes severity/actions. FREE (no credit gate); cost is
+         *     logged. Cached by input hash so identical exposure skips the LLM.
+         */
+        post: operations["option_explain_endpoint_api_v1_options_explain_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a new portfolio owned by the caller
+         * @description Insert a new row. Supabase RLS pins `user_id` to the caller via
+         *     the `DEFAULT auth.uid()` clause on the column — we never send it
+         *     explicitly, so a buggy client can't impersonate.
+         */
+        post: operations["create_portfolio_endpoint_api_v1_portfolios_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolios/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return the authed user's portfolios
+         * @description Authed-only. Returns the JWT holder's RLS-filtered portfolios.
+         */
+        get: operations["list_my_portfolios_api_v1_portfolios_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/portfolios/{portfolio_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete one portfolio owned by the caller
+         * @description Hard delete. RLS prevents touching rows the caller doesn't own.
+         */
+        delete: operations["delete_portfolio_endpoint_api_v1_portfolios__portfolio_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update one or more fields on a portfolio
+         * @description Patch fields. Only fields explicitly set in the request body are
+         *     applied; omitted fields keep their existing DB values.
+         */
+        patch: operations["update_portfolio_endpoint_api_v1_portfolios__portfolio_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/public/risk_check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Risk Check */
+        post: operations["risk_check_api_v1_public_risk_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/quant/attribution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Performance attribution (Brinson + factor) for the active portfolio
+         * @description Brinson sector decomposition + multi-factor regression + tracking-error
+         *     / information-ratio / hit-ratio for the caller's active portfolio vs SPY.
+         *     Deterministic (no LLM, no credits).
+         */
+        post: operations["attribution_active_endpoint_api_v1_quant_attribution_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/quant/backtest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Backtest the authed user's active portfolio
+         * @description Run the requested strategy over the active portfolio and return the
+         *     equity curve, drawdown series, scalar stats, and benchmark total
+         *     return. See ``services.quant_backtest`` for the math + error codes.
+         */
+        post: operations["backtest_active_endpoint_api_v1_quant_backtest_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/regime/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Composed market risk-state readout + social post_text */
+        get: operations["regime_summary_api_v1_regime_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/options/html": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Options strategy report as self-contained HTML */
+        post: operations["options_report_endpoint_api_v1_reports_options_html_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/portfolio/html": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Portfolio risk report as self-contained HTML */
+        post: operations["portfolio_report_endpoint_api_v1_reports_portfolio_html_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/reports/ticker/html": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ticker research report as self-contained HTML */
+        post: operations["ticker_report_endpoint_api_v1_reports_ticker_html_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/research/fact_pack/{ticker}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Compact, source-attributed FactPack for a ticker (no credit) */
+        get: operations["fact_pack_api_v1_research_fact_pack__ticker__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/research/news/{ticker}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Unified, source-labeled news for a ticker (FMP news + press releases + SEC), no credit
+         * @description Combine FMP stock news + press releases (primary) with a SEC filings link,
+         *     deduped + classified + source-labeled. Fail-soft — never 500s, always returns
+         *     at least the SEC entry.
+         */
+        get: operations["ticker_news_api_v1_research_news__ticker__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/research/verdict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** LLM verdict over a FactPack (credit-gated) */
+        post: operations["verdict_api_v1_research_verdict_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/research/{ticker}/bundle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Consolidated research bundle — one fetch for the whole page (no credit)
+         * @description Everything the consolidated research page needs, assembled in ONE request
+         *     so a ticker search fans out to the providers ONCE (the engines share the
+         *     in-process FMP cache within the call) instead of one fan-out per tab: compact
+         *     FactPack + institutional financials + DCF + peers + earnings + a deterministic
+         *     thesis + news. Each block is fail-soft (a failing engine becomes ``null``,
+         *     never a 500). All numbers are deterministic — no credit, no LLM here; the AI
+         *     summary is a separate on-demand upgrade (``POST /research/{ticker}/thesis``).
+         */
+        get: operations["research_bundle_api_v1_research__ticker__bundle_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/research/{ticker}/dcf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deterministic DCF valuation (accepts user overrides; no credit)
+         * @description Deterministic DCF — assumptions derived from reported financials (each
+         *     labeled with its source_type) + optional user overrides. Returns the full
+         *     DCFValuationOutput; an invalid setup (e.g. terminal growth ≥ WACC, or
+         *     insufficient data) comes back with `valid=false` + warnings rather than a
+         *     bogus number. No LLM, no credit, fail-soft.
+         */
+        post: operations["dcf_valuation_api_v1_research__ticker__dcf_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/research/{ticker}/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Research data-coverage diagnostics for a ticker (owner): why is it blank?
+         * @description Owner-only. Explains WHY a ticker's research is thin: which provider served
+         *     the financial statements, how many annual/quarterly rows came back, per-block
+         *     coverage, the FMP key's PRESENCE (a boolean — never the value), and the
+         *     missing datasets + provider warnings. For debugging blank research pages.
+         *     Never prints any secret.
+         */
+        get: operations["research_diagnostics_api_v1_research__ticker__diagnostics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/research/{ticker}/earnings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Deterministic earnings comparison + transcript metadata (no credit)
+         * @description Recent quarters: revenue/EPS vs prior-quarter / prior-year, beat/miss vs
+         *     estimate ONLY when estimate data exists, plus transcript metadata. Missing
+         *     estimates/transcript are explicit. No LLM, no credit, fail-soft.
+         */
+        get: operations["earnings_comparison_api_v1_research__ticker__earnings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/research/{ticker}/fact-pack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Institutional research FactPack: financials + deterministic trends (no credit)
+         * @description Phase 1 institutional FactPack: company snapshot + up to 8 quarters & 5
+         *     fiscal years of financials + a deterministic trend summary (margins, YoY/QoQ,
+         *     TTM, acceleration flags), with explicit provenance, missing-data, and a
+         *     confidence score. Every number is computed in backend code — no LLM. Builds
+         *     fail-soft (partial pack on provider failure), so this raises only on an
+         *     unexpected internal error.
+         */
+        get: operations["research_fact_pack_api_v1_research__ticker__fact_pack_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/research/{ticker}/peers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Deterministic peer comparison with percentiles (no credit)
+         * @description Deterministic peer set (FMP peers → sector/industry → curated → user) with
+         *     per-metric peer median + the subject's percentile rank, missing-data flags,
+         *     and provenance. No LLM, no credit, fail-soft.
+         */
+        get: operations["peer_comparison_api_v1_research__ticker__peers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/research/{ticker}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Institutional analyst HTML report — all sections, deterministic (no credit)
+         * @description Self-contained, PDF-ready HTML research report assembled server-side from
+         *     the deterministic engines (snapshot, exec summary, financials, DCF + scenario,
+         *     peers, earnings, risks, monitoring, provenance appendix, disclaimer). No
+         *     recomputation in the frontend, no LLM number. Fail-soft per section.
+         */
+        get: operations["analyst_report_api_v1_research__ticker__report_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/research/{ticker}/thesis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * AI-grounded bull/bear/monitor thesis over deterministic evidence (credit-gated)
+         * @description Bull/bear debate + what-to-monitor + management questions, written by the
+         *     LLM over the deterministic FactPack/DCF/earnings evidence ONLY (no invented
+         *     numbers — validated + flagged; no buy/sell/hold). No LLM key / failure →
+         *     deterministic fallback. Credit-gated; cache hit is free.
+         */
+        post: operations["research_thesis_api_v1_research__ticker__thesis_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deterministic top risk alerts (no LLM, no credit) for proactive cards
+         * @description Build the top 1-N deterministic risk alerts from numbers the client
+         *     already fetched (score and/or report). Pure Python — never invents a figure,
+         *     never calls the LLM, never costs a credit. The frontend renders 1-2 of these
+         *     as proactive 'Ask Copilot' cards.
+         */
+        post: operations["risk_alerts_endpoint_api_v1_risk_alerts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/benchmarks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Reference annualized stats: S&P 500 + 60/40 */
+        get: operations["benchmarks_endpoint_api_v1_risk_benchmarks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/efficient_frontier": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Efficient frontier + the active portfolio's risk/return point */
+        post: operations["efficient_frontier_endpoint_api_v1_risk_efficient_frontier_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/explain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Structured AI risk diagnosis over already-computed metrics */
+        post: operations["explain_endpoint_api_v1_risk_explain_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/historical_scenarios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replay real market crises on the active portfolio
+         * @description What the caller's ACTUAL holdings would have done through COVID / 2022 /
+         *     2018Q4 / GFC — realised return, drawdown, S&P 500 over the same window, and
+         *     recovery time. Deterministic, no credits.
+         */
+        post: operations["historical_scenarios_endpoint_api_v1_risk_historical_scenarios_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/last_snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The prior-day portfolio snapshot, for the 'what changed' delta
+         * @description Return the most recent snapshot older than ~a day (the baseline the
+         *     dashboard diffs today's score against), or null when there isn't one.
+         */
+        get: operations["last_snapshot_endpoint_api_v1_risk_last_snapshot_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/report_from_active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Full risk report for the authed user's active portfolio
+         * @description Build the full ``RiskReport`` (VaR/CVaR, factor betas, stress
+         *     test, component VaR, liquidity) using real adjusted-close prices
+         *     via the same cached service ``/risk/score_from_active`` uses.
+         *
+         *     Heavier than /score_from_active (Monte Carlo + factor regressions
+         *     against SPY/QQQ/GLD/TLT/IWM/VTV — fetches their history too). The
+         *     file-cached market_data layer absorbs the cold-cache latency.
+         */
+        post: operations["report_from_active_endpoint_api_v1_risk_report_from_active_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/scenarios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Project portfolio P&L across a −30%…+30% market move sweep */
+        post: operations["scenarios_endpoint_api_v1_risk_scenarios_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/score": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Score an explicit portfolio without touching Supabase
+         * @description Compute deterministic 0-1000 score + 3 dimension scores + the
+         *     raw risk metrics for the supplied holdings.
+         *
+         *     Deliberately stateless: no Supabase reads, no LLM calls, no
+         *     cookie / JWT requirement. Same Pydantic + engine path used by
+         *     the Streamlit Copilot page; the math is shared.
+         */
+        post: operations["score_portfolio_endpoint_api_v1_risk_score_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/score_changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deterministic 'what changed?' — current score vs the user's own prior snapshot
+         * @description Decompose how the Health Score moved vs the user's OWN prior state
+         *     (previous-day / 7d / 30d): per-dimension component deltas (an exact
+         *     decomposition of the score move), input-metric changes, ranked drivers, data-
+         *     quality changes, and a holdings diff. The client passes the CURRENT score it
+         *     already holds — zero recompute; the backend fetches the prior snapshot. All
+         *     deterministic (no LLM). Fail-soft: an unavailable snapshot → available=false.
+         */
+        post: operations["score_changes_endpoint_api_v1_risk_score_changes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/score_from_active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Score the authed user's active portfolio using real market data
+         * @description Compute the deterministic 0..1000 score for the caller's active
+         *     portfolio, using real adjusted-close prices pulled (and cached)
+         *     via the backend market-data service.
+         *
+         *     Resolution order for "active portfolio":
+         *       1. The default portfolio flagged in Supabase (``is_default=true``).
+         *       2. The most-recent portfolio if no default is set.
+         *       3. Empty → 422 ``no_active_portfolio``.
+         *
+         *     Why not also let the caller pass a ``portfolio_id``? Phase 4 keeps
+         *     the contract minimal — the UI shows one card per portfolio with a
+         *     "Set as default" toggle. When a richer UI lands, we add an
+         *     explicit ``portfolio_id`` field.
+         */
+        post: operations["score_from_active_endpoint_api_v1_risk_score_from_active_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/snapshot_history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recent portfolio snapshots (score/vol/VaR over time) for trend lines
+         * @description Recent snapshots oldest→newest so the score/risk pages can draw trend
+         *     sparklines. Fail-soft to an empty list.
+         */
+        get: operations["snapshot_history_endpoint_api_v1_risk_snapshot_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/var_backtest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Backtest the portfolio's 1-day VaR vs realised breaches
+         * @description Gaussian 1-day VaR vs how often the realised daily loss actually breached
+         *     it over the trailing window, plus the empirical return distribution.
+         *     Deterministic, no credits.
+         */
+        post: operations["var_backtest_endpoint_api_v1_risk_var_backtest_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -887,20 +1476,88 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccountDeleteIn */
+        AccountDeleteIn: {
+            /** Confirmation */
+            confirmation: string;
+        };
+        /** AccountDeleteOut */
+        AccountDeleteOut: {
+            /** Deleted */
+            deleted: boolean;
+            /** Subscription Canceled */
+            subscription_canceled: boolean;
+        };
+        /** AlertComponentVar */
+        AlertComponentVar: {
+            /** Pct */
+            pct: number;
+            /** Ticker */
+            ticker: string;
+        };
+        /** AlertConcentration */
+        AlertConcentration: {
+            /** Top5 Weight */
+            top5_weight?: number | null;
+            /** Top Holding Ticker */
+            top_holding_ticker?: string | null;
+            /** Top Holding Weight */
+            top_holding_weight?: number | null;
+            /** Top Sector */
+            top_sector?: string | null;
+            /** Top Sector Weight */
+            top_sector_weight?: number | null;
+        };
+        /** AlertStressLoss */
+        AlertStressLoss: {
+            /** Loss Pct */
+            loss_pct: number;
+            /** Ticker */
+            ticker: string;
+        };
         /** AnalystBlock */
         AnalystBlock: {
-            /** Rating */
-            rating?: string | null;
+            /** Implied Upside Pct */
+            implied_upside_pct?: number | null;
             /** Num Analysts */
             num_analysts?: number | null;
-            /** Target Low */
-            target_low?: number | null;
+            /** Rating */
+            rating?: string | null;
             /** Target Consensus */
             target_consensus?: number | null;
             /** Target High */
             target_high?: number | null;
-            /** Implied Upside Pct */
-            implied_upside_pct?: number | null;
+            /** Target Low */
+            target_low?: number | null;
+        };
+        /**
+         * AnthropicTopupRequest
+         * @description Body for ``POST /api/v1/billing/admin/anthropic-topup`` — the owner's
+         *     current Claude balance after a top-up (since Anthropic has no balance API).
+         */
+        AnthropicTopupRequest: {
+            /** Balance */
+            balance: number;
+        };
+        /**
+         * AttributionResponse
+         * @description The success payload for ``POST /api/v1/quant/attribution``.
+         */
+        AttributionResponse: {
+            /** Active Return Annual */
+            active_return_annual?: number | null;
+            /** As Of */
+            as_of?: string | null;
+            brinson?: components["schemas"]["BrinsonOut"] | null;
+            factor?: components["schemas"]["FactorOut"] | null;
+            /** Hit Ratio */
+            hit_ratio?: number | null;
+            /** Information Ratio */
+            information_ratio?: number | null;
+            /** Observations */
+            observations?: number | null;
+            /** Tracking Error */
+            tracking_error?: number | null;
         };
         /**
          * BacktestRequest
@@ -913,23 +1570,6 @@ export interface components {
          */
         BacktestRequest: {
             /**
-             * Strategy
-             * @default static
-             * @enum {string}
-             */
-            strategy?: "static" | "equal_weight" | "momentum";
-            /**
-             * Years
-             * @default 3
-             */
-            years?: number;
-            /**
-             * Rebalance Freq
-             * @default M
-             * @enum {string}
-             */
-            rebalance_freq?: "D" | "W" | "M" | "Q";
-            /**
              * Benchmark
              * @default SPY
              */
@@ -940,10 +1580,118 @@ export interface components {
              */
             lookback?: number;
             /**
+             * Rebalance Freq
+             * @default M
+             * @enum {string}
+             */
+            rebalance_freq?: "D" | "W" | "M" | "Q";
+            /**
+             * Strategy
+             * @default static
+             * @enum {string}
+             */
+            strategy?: "static" | "equal_weight" | "momentum";
+            /**
              * Top N
              * @default 5
              */
             top_n?: number;
+            /**
+             * Years
+             * @default 3
+             */
+            years?: number;
+        };
+        /** BenchmarkRow */
+        BenchmarkRow: {
+            /** Annual Return */
+            annual_return?: number | null;
+            /** Annual Volatility */
+            annual_volatility?: number | null;
+            /** Max Drawdown */
+            max_drawdown?: number | null;
+            /** Name */
+            name: string;
+            /** Sharpe Ratio */
+            sharpe_ratio?: number | null;
+        };
+        /** BenchmarksOut */
+        BenchmarksOut: {
+            /** As Of */
+            as_of?: string | null;
+            /** Benchmarks */
+            benchmarks?: components["schemas"]["BenchmarkRow"][];
+        };
+        /** BestDiversifier */
+        BestDiversifier: {
+            /** Avg Rho */
+            avg_rho: number;
+            /** Ticker */
+            ticker: string;
+        };
+        /**
+         * BillingMeResponse
+         * @description Payload for ``GET /api/v1/billing/me``.
+         */
+        BillingMeResponse: {
+            /** Credits */
+            credits?: {
+                [key: string]: unknown;
+            } | null;
+            /** Email */
+            email?: string | null;
+            /** Plan */
+            plan: string;
+            /** Plans */
+            plans?: components["schemas"]["PlanCard"][];
+            subscription?: components["schemas"]["SubscriptionOut"] | null;
+            /** User Id */
+            user_id: string;
+        };
+        /** BrinsonOut */
+        BrinsonOut: {
+            /** Allocation Effect */
+            allocation_effect?: number | null;
+            /** Interaction Effect */
+            interaction_effect?: number | null;
+            /** Sector Detail */
+            sector_detail?: components["schemas"]["SectorEffectRow"][];
+            /** Selection Effect */
+            selection_effect?: number | null;
+            /** Total Active Return */
+            total_active_return?: number | null;
+        };
+        /**
+         * CacheProvenance
+         * @description Whether a payload was served from cache and its freshness window. Lets the
+         *     UI show a "cached · as of … · stale" badge and trust the recency.
+         */
+        CacheProvenance: {
+            /**
+             * Cache Hit
+             * @default false
+             */
+            cache_hit?: boolean;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Fetched At */
+            fetched_at?: string | null;
+            /**
+             * Stale
+             * @default false
+             */
+            stale?: boolean;
+        };
+        /** CalibrationBinOut */
+        CalibrationBinOut: {
+            /** Bin */
+            bin: string;
+            /** Mean Predicted */
+            mean_predicted?: number | null;
+            /** N */
+            n: number;
+            /** Observed Frequency */
+            observed_frequency?: number | null;
         };
         /**
          * ChatRequest
@@ -956,10 +1704,40 @@ export interface components {
             message: string;
         };
         /**
+         * ChatResponse
+         * @description JSON view of ``domain.models.AgentResponse``.
+         *
+         *     ``grounded_in`` carries the engine's exact metrics so a consumer can
+         *     verify the markdown reply matches the deterministic numbers.
+         */
+        ChatResponse: {
+            /** Agent Name */
+            agent_name: string;
+            /**
+             * Ai Generated
+             * @default false
+             */
+            ai_generated?: boolean;
+            /** Grounded In */
+            grounded_in?: {
+                [key: string]: unknown;
+            };
+            /** Response Markdown */
+            response_markdown: string;
+            /** Risk Levers */
+            risk_levers?: {
+                [key: string]: unknown;
+            }[];
+            /** Tool Trace */
+            tool_trace?: string[];
+        };
+        /**
          * CheckoutSessionRequest
          * @description Body for ``POST /api/v1/billing/checkout_session``.
          */
         CheckoutSessionRequest: {
+            /** Cancel Path */
+            cancel_path?: string | null;
             /**
              * Plan
              * @enum {string}
@@ -967,13 +1745,226 @@ export interface components {
             plan: "basic" | "pro";
             /** Success Path */
             success_path?: string | null;
-            /** Cancel Path */
-            cancel_path?: string | null;
+        };
+        /** CheckoutSessionResponse */
+        CheckoutSessionResponse: {
+            /** Checkout Url */
+            checkout_url: string;
+            /** Session Id */
+            session_id: string;
+        };
+        /** ClassDefinitionOut */
+        ClassDefinitionOut: {
+            /** Definition */
+            definition: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+        };
+        /** ComponentDelta */
+        ComponentDelta: {
+            /** Current */
+            current?: number | null;
+            /** Delta */
+            delta?: number | null;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Points Contribution */
+            points_contribution?: number | null;
+            /** Previous */
+            previous?: number | null;
+        };
+        /**
+         * ComponentReturnRow
+         * @description Per-holding contribution to annualized portfolio return
+         *     (weight × annualized mean daily return) — the return-side mirror of
+         *     component VaR, so the report can show 'who pays you' next to 'who
+         *     risks you'.
+         */
+        ComponentReturnRow: {
+            /** Contribution */
+            contribution: number;
+            /** Ticker */
+            ticker: string;
+        };
+        /**
+         * ComponentVarRow
+         * @description One ticker's share of total portfolio VaR.
+         */
+        ComponentVarRow: {
+            /** Pct */
+            pct: number;
+            /** Ticker */
+            ticker: string;
+        };
+        /**
+         * ConcentrationOut
+         * @description Deterministic concentration diagnostics over the invested book
+         *     (cash excluded). HHI = sum of squared weights; effective_holdings =
+         *     1/HHI is 'how many equally-weighted positions this behaves like'.
+         *     Sectors come from the deterministic resolver (holding override →
+         *     canonical SECTOR_MAP → asset-type default → Unclassified) — no
+         *     network calls.
+         */
+        "ConcentrationOut-Input": {
+            /** Effective Holdings */
+            effective_holdings?: number | null;
+            /** Hhi */
+            hhi?: number | null;
+            /** Num Holdings */
+            num_holdings: number;
+            /** Sectors */
+            sectors?: components["schemas"]["SectorWeightOut"][];
+            /** Top5 Weight */
+            top5_weight?: number | null;
+            /** Top Holding Ticker */
+            top_holding_ticker?: string | null;
+            /** Top Holding Weight */
+            top_holding_weight?: number | null;
+            /** Top Sector */
+            top_sector?: string | null;
+            /** Top Sector Weight */
+            top_sector_weight?: number | null;
         };
         /** CopilotAskRequest */
         CopilotAskRequest: {
             /** Message */
             message: string;
+        };
+        /** CorrTopPair */
+        CorrTopPair: {
+            /** A */
+            a: string;
+            /** B */
+            b: string;
+            /** Rho */
+            rho: number;
+        };
+        /**
+         * CorrelationOut
+         * @description Pairwise correlation of holdings' daily returns (the engine's plain
+         *     Pearson ``corr_matrix``, estimated on the engine DataProvider's ~2-year
+         *     window) plus deterministic diversification insights. Insights are
+         *     computed over the FULL matrix; ``tickers``/``matrix`` are capped at the
+         *     top 30 by portfolio weight (``truncated`` flags the cut).
+         *     ``diversification_ratio`` = Σŵᵢσᵢ / σₚ — computed on the ENDPOINT's
+         *     price window (``history_days``, default ~1y), a different window than
+         *     the matrix; numerator and denominator share one frame and ddof, so
+         *     DR ≥ 1 holds by construction regardless. The UI labels both windows.
+         */
+        CorrelationOut: {
+            /** Avg Pairwise */
+            avg_pairwise?: number | null;
+            best_diversifier?: components["schemas"]["BestDiversifier"] | null;
+            /** Diversification Ratio */
+            diversification_ratio?: number | null;
+            /** Matrix */
+            matrix: (number | null)[][];
+            /** Tickers */
+            tickers: string[];
+            top_pair?: components["schemas"]["CorrTopPair"] | null;
+            /**
+             * Total Tickers
+             * @default 0
+             */
+            total_tickers?: number;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated?: boolean;
+        };
+        /**
+         * CoverageTestOut
+         * @description Kupiec POF + Christoffersen independence + joint conditional-coverage
+         *     verdict for one confidence level. ``passed`` = joint p ≥ 0.05 (the VaR
+         *     model is NOT rejected at the conventional test size).
+         */
+        CoverageTestOut: {
+            /** Alpha */
+            alpha?: number | null;
+            /**
+             * Breaches
+             * @default 0
+             */
+            breaches?: number;
+            /** Expected */
+            expected?: number | null;
+            /** Lr Cc */
+            lr_cc?: number | null;
+            /** Lr Ind */
+            lr_ind?: number | null;
+            /** Lr Uc */
+            lr_uc?: number | null;
+            /**
+             * N
+             * @default 0
+             */
+            n?: number;
+            /** P Cc */
+            p_cc?: number | null;
+            /** P Ind */
+            p_ind?: number | null;
+            /** P Uc */
+            p_uc?: number | null;
+            /** Passed */
+            passed?: boolean | null;
+        };
+        /**
+         * DCFOverrides
+         * @description Optional user overrides. Any field set replaces the derived assumption and
+         *     is re-labeled source_type='user_override'.
+         */
+        DCFOverrides: {
+            /** Base Revenue */
+            base_revenue?: number | null;
+            /** Beta */
+            beta?: number | null;
+            /** Capex Pct Revenue */
+            capex_pct_revenue?: number | null;
+            /** Cost Of Debt */
+            cost_of_debt?: number | null;
+            /** Da Pct Revenue */
+            da_pct_revenue?: number | null;
+            /** Diluted Shares */
+            diluted_shares?: number | null;
+            /** Equity Value */
+            equity_value?: number | null;
+            /** Market Risk Premium */
+            market_risk_premium?: number | null;
+            /** Minority Interest */
+            minority_interest?: number | null;
+            /** Net Debt */
+            net_debt?: number | null;
+            /** Nwc Pct Revenue */
+            nwc_pct_revenue?: number | null;
+            /** Operating Margin */
+            operating_margin?: number | null;
+            /** Projection Years */
+            projection_years?: number | null;
+            /** Revenue Growth */
+            revenue_growth?: number[] | null;
+            /** Risk Free Rate */
+            risk_free_rate?: number | null;
+            /** Short Term Investments */
+            short_term_investments?: number | null;
+            /** Tax Rate */
+            tax_rate?: number | null;
+            /** Terminal Growth */
+            terminal_growth?: number | null;
+            /** Terminal Operating Margin */
+            terminal_operating_margin?: number | null;
+            /** Total Debt */
+            total_debt?: number | null;
+            /** Wacc */
+            wacc?: number | null;
+        };
+        /** DCFRequest */
+        DCFRequest: {
+            overrides?: components["schemas"]["DCFOverrides"] | null;
         };
         /** DataQuality */
         DataQuality: {
@@ -987,12 +1978,408 @@ export interface components {
             /** Warnings */
             warnings?: string[];
         };
+        /** DataQualityChange */
+        DataQualityChange: {
+            /** Current */
+            current?: string | null;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Note
+             * @default
+             */
+            note?: string;
+            /** Previous */
+            previous?: string | null;
+        };
+        /** DigestPrefIn */
+        DigestPrefIn: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /** DimensionScore */
+        DimensionScore: {
+            /** Name */
+            name: string;
+            /**
+             * Note
+             * @default
+             */
+            note?: string;
+            /** Score */
+            score: number;
+        };
+        /** DimensionScoreOut */
+        DimensionScoreOut: {
+            /** Detail */
+            detail: string;
+            /** Name */
+            name: string;
+            /** Score */
+            score: number;
+            /** Status */
+            status: string;
+        };
+        /** DriverChange */
+        DriverChange: {
+            /**
+             * Detail
+             * @default
+             */
+            detail?: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Points */
+            points: number;
+        };
+        /**
+         * EfficientFrontierOut
+         * @description Payload for ``POST /api/v1/risk/efficient_frontier``.
+         */
+        EfficientFrontierOut: {
+            /** As Of */
+            as_of?: string | null;
+            current: components["schemas"]["FrontierPoint"];
+            /** Frontier */
+            frontier?: components["schemas"]["FrontierPoint"][];
+            /** Observations */
+            observations?: number | null;
+            /** Risk Free Rate */
+            risk_free_rate: number;
+        };
+        /** Envelope[AccountDeleteOut] */
+        Envelope_AccountDeleteOut_: {
+            data?: components["schemas"]["AccountDeleteOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[AttributionResponse] */
+        Envelope_AttributionResponse_: {
+            data?: components["schemas"]["AttributionResponse"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[BenchmarksOut] */
+        Envelope_BenchmarksOut_: {
+            data?: components["schemas"]["BenchmarksOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[BillingMeResponse] */
+        Envelope_BillingMeResponse_: {
+            data?: components["schemas"]["BillingMeResponse"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[ChatResponse] */
+        Envelope_ChatResponse_: {
+            data?: components["schemas"]["ChatResponse"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[CheckoutSessionResponse] */
+        Envelope_CheckoutSessionResponse_: {
+            data?: components["schemas"]["CheckoutSessionResponse"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[EfficientFrontierOut] */
+        Envelope_EfficientFrontierOut_: {
+            data?: components["schemas"]["EfficientFrontierOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[HistoricalScenariosOut] */
+        Envelope_HistoricalScenariosOut_: {
+            data?: components["schemas"]["HistoricalScenariosOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[MLHealthOut] */
+        Envelope_MLHealthOut_: {
+            data?: components["schemas"]["MLHealthOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[MLRegimeOut] */
+        Envelope_MLRegimeOut_: {
+            data?: components["schemas"]["MLRegimeOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[ModelCardOut] */
+        Envelope_ModelCardOut_: {
+            data?: components["schemas"]["ModelCardOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[MoversResponse] */
+        Envelope_MoversResponse_: {
+            data?: components["schemas"]["MoversResponse"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[NewsResponse] */
+        Envelope_NewsResponse_: {
+            data?: components["schemas"]["NewsResponse"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[OptionAnalyzeResponse] */
+        Envelope_OptionAnalyzeResponse_: {
+            data?: components["schemas"]["OptionAnalyzeResponse-Output"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[PortalSessionResponse] */
+        Envelope_PortalSessionResponse_: {
+            data?: components["schemas"]["PortalSessionResponse"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[PortfolioOut] */
+        Envelope_PortfolioOut_: {
+            data?: components["schemas"]["PortfolioOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[PortfoliosMeResponse] */
+        Envelope_PortfoliosMeResponse_: {
+            data?: components["schemas"]["PortfoliosMeResponse"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[PricesResponse] */
+        Envelope_PricesResponse_: {
+            data?: components["schemas"]["PricesResponse"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[PublicRiskCheckOut] */
+        Envelope_PublicRiskCheckOut_: {
+            data?: components["schemas"]["PublicRiskCheckOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[RegimeDetailResponse] */
+        Envelope_RegimeDetailResponse_: {
+            data?: components["schemas"]["RegimeDetailResponse"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[RegimeResponse] */
+        Envelope_RegimeResponse_: {
+            data?: components["schemas"]["RegimeResponse"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[RegimeSummaryOut] */
+        Envelope_RegimeSummaryOut_: {
+            data?: components["schemas"]["RegimeSummaryOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[ReportResponse] */
+        Envelope_ReportResponse_: {
+            data?: components["schemas"]["ReportResponse"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[RiskAlertsOutput] */
+        Envelope_RiskAlertsOutput_: {
+            data?: components["schemas"]["RiskAlertsOutput"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[RiskExplainOutput] */
+        Envelope_RiskExplainOutput_: {
+            data?: components["schemas"]["RiskExplainOutput"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[RiskReportOut] */
+        Envelope_RiskReportOut_: {
+            data?: components["schemas"]["RiskReportOut-Output"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[ScenariosOut] */
+        Envelope_ScenariosOut_: {
+            data?: components["schemas"]["ScenariosOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[ScoreChangeReport] */
+        Envelope_ScoreChangeReport_: {
+            data?: components["schemas"]["ScoreChangeReport"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[ScoreResponse] */
+        Envelope_ScoreResponse_: {
+            data?: components["schemas"]["ScoreResponse"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[SentimentResponse] */
+        Envelope_SentimentResponse_: {
+            data?: components["schemas"]["SentimentResponse"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[SeriesBatchResponse] */
+        Envelope_SeriesBatchResponse_: {
+            data?: components["schemas"]["SeriesBatchResponse"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[SmartMoneyOut] */
+        Envelope_SmartMoneyOut_: {
+            data?: components["schemas"]["SmartMoneyOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[TickerNewsResponse] */
+        Envelope_TickerNewsResponse_: {
+            data?: components["schemas"]["TickerNewsResponse"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[VarBacktestOut] */
+        Envelope_VarBacktestOut_: {
+            data?: components["schemas"]["VarBacktestOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[YieldCurveResponse] */
+        Envelope_YieldCurveResponse_: {
+            data?: components["schemas"]["YieldCurveResponse"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[dict] */
+        Envelope_dict_: {
+            /** Data */
+            data?: {
+                [key: string]: unknown;
+            } | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * ErrorOut
+         * @description The ``error`` block of a failed envelope (``APIError.to_payload``).
+         */
+        ErrorOut: {
+            /**
+             * Code
+             * @description Machine-switchable code, e.g. 'unauthorized'.
+             */
+            code: string;
+            /** Details */
+            details?: {
+                [key: string]: unknown;
+            };
+            /** Message */
+            message: string;
+        };
+        /** ExpiryBucketOut */
+        ExpiryBucketOut: {
+            /** Contracts */
+            contracts: number;
+            /** Days To Expiry */
+            days_to_expiry: number;
+            /** Expiry */
+            expiry: string;
+            /** Net Delta */
+            net_delta: number;
+            /** Net Notional */
+            net_notional: number;
+        } & {
+            [key: string]: unknown;
+        };
         /** ExplainContributor */
         ExplainContributor: {
-            /** Ticker */
-            ticker: string;
             /** Pct */
             pct: number;
+            /** Ticker */
+            ticker: string;
         };
         /** ExplainDimension */
         ExplainDimension: {
@@ -1011,10 +2398,10 @@ export interface components {
         };
         /** ExplainLiquidity */
         ExplainLiquidity: {
-            /** Ticker */
-            ticker: string;
             /** Days To Liquidate */
             days_to_liquidate?: number | null;
+            /** Ticker */
+            ticker: string;
         };
         /** ExplainMetrics */
         ExplainMetrics: {
@@ -1022,29 +2409,29 @@ export interface components {
             annual_return?: number | null;
             /** Annual Volatility */
             annual_volatility?: number | null;
-            /** Sharpe Ratio */
-            sharpe_ratio?: number | null;
-            /** Max Drawdown */
-            max_drawdown?: number | null;
-            /** Var 95 Daily */
-            var_95_daily?: number | null;
-            /** Cvar 95 Daily */
-            cvar_95_daily?: number | null;
             /** Beta To Benchmark */
             beta_to_benchmark?: number | null;
-            /** Total Value */
-            total_value?: number | null;
             /** Cash Weight */
             cash_weight?: number | null;
+            /** Cvar 95 Daily */
+            cvar_95_daily?: number | null;
+            /** Max Drawdown */
+            max_drawdown?: number | null;
+            /** Sharpe Ratio */
+            sharpe_ratio?: number | null;
+            /** Total Value */
+            total_value?: number | null;
+            /** Var 95 Daily */
+            var_95_daily?: number | null;
         };
         /** ExplainSnapshotDelta */
         ExplainSnapshotDelta: {
             /** As Of */
             as_of?: string | null;
-            /** Prev Overall Score */
-            prev_overall_score?: number | null;
             /** Prev Annual Volatility */
             prev_annual_volatility?: number | null;
+            /** Prev Overall Score */
+            prev_overall_score?: number | null;
             /** Prev Sharpe Ratio */
             prev_sharpe_ratio?: number | null;
         };
@@ -1053,71 +2440,215 @@ export interface components {
          * @description The compact, source-attributed fact sheet for one ticker.
          */
         FactPack: {
-            /** Ticker */
-            ticker: string;
-            /** Name */
-            name?: string | null;
-            /** Sector */
-            sector?: string | null;
-            /** Industry */
-            industry?: string | null;
+            analyst?: components["schemas"]["AnalystBlock"];
+            /** As Of */
+            as_of?: string | null;
+            /** Beta */
+            beta?: number | null;
+            cache?: components["schemas"]["CacheProvenance"] | null;
             /**
              * Currency
              * @default USD
              */
             currency?: string;
-            /** As Of */
-            as_of?: string | null;
-            /** Price */
-            price?: number | null;
-            /** Market Cap */
-            market_cap?: number | null;
-            /** Beta */
-            beta?: number | null;
-            valuation?: components["schemas"]["ValuationBlock"];
-            quality?: components["schemas"]["QualityBlock"];
-            growth?: components["schemas"]["GrowthBlock"];
-            analyst?: components["schemas"]["AnalystBlock"];
-            /** Peers */
-            peers?: components["schemas"]["PeerCompareRow"][];
-            /** News */
-            news?: components["schemas"]["NewsHeadline"][];
+            data_quality?: components["schemas"]["DataQuality"];
             /** Drivers */
             drivers?: string[];
+            growth?: components["schemas"]["GrowthBlock"];
+            /** Industry */
+            industry?: string | null;
+            insider?: components["schemas"]["InsiderBlock"];
+            /** Market Cap */
+            market_cap?: number | null;
+            momentum?: components["schemas"]["MomentumBlock"];
+            /** Name */
+            name?: string | null;
+            /** News */
+            news?: components["schemas"]["NewsHeadline"][];
+            ownership?: components["schemas"]["OwnershipBlock"];
+            /** Peers */
+            peers?: components["schemas"]["PeerCompareRow"][];
+            /** Price */
+            price?: number | null;
+            quality?: components["schemas"]["QualityBlock"];
             /** Risk Flags */
             risk_flags?: string[];
-            data_quality?: components["schemas"]["DataQuality"];
+            /** Sector */
+            sector?: string | null;
+            /** Ticker */
+            ticker: string;
+            valuation?: components["schemas"]["ValuationBlock"];
+        };
+        /**
+         * FactorBetaRow
+         * @description One row of the factor-attribution table.
+         */
+        FactorBetaRow: {
+            /** Beta */
+            beta?: number | null;
+            /** Factor */
+            factor: string;
+            /** P Value */
+            p_value?: number | null;
+            /** R Squared */
+            r_squared?: number | null;
+            /** T Stat */
+            t_stat?: number | null;
+        };
+        /** FactorOut */
+        FactorOut: {
+            /** Alpha */
+            alpha?: number | null;
+            /** Factor Betas */
+            factor_betas?: {
+                [key: string]: number | null;
+            };
+            /** Factor Contributions */
+            factor_contributions?: {
+                [key: string]: number | null;
+            };
+            /** R Squared */
+            r_squared?: number | null;
+            /** Residual Return */
+            residual_return?: number | null;
+        };
+        /**
+         * FeatureDriftOut
+         * @description One feature's drift verdict. ``psi`` is judged against the feature's OWN
+         *     calibrated null (psi_p90/psi_p99 = percentiles of historical same-length
+         *     window PSIs baked into the reference). ``ks_stat`` is descriptive only —
+         *     no p-value is published because live windows are autocorrelated and an
+         *     i.i.d. p would be invalid.
+         */
+        FeatureDriftOut: {
+            /**
+             * Calibrated
+             * @default false
+             */
+            calibrated?: boolean;
+            /** Ks Stat */
+            ks_stat?: number | null;
+            /**
+             * N
+             * @default 0
+             */
+            n?: number;
+            /** Oob Frac */
+            oob_frac?: number | null;
+            /** Psi */
+            psi?: number | null;
+            /** Psi P90 */
+            psi_p90?: number | null;
+            /** Psi P99 */
+            psi_p99?: number | null;
+            /**
+             * Status
+             * @default insufficient
+             */
+            status?: string;
+        };
+        /** FeatureDriver */
+        FeatureDriver: {
+            /** Feature */
+            feature: string;
+            /** Importance */
+            importance?: number | null;
+            /** Label */
+            label: string;
+            /** Value */
+            value: number;
+            /** Vs Normal */
+            vs_normal: string;
         };
         /** FeedbackIn */
         FeedbackIn: {
-            /** Message */
-            message: string;
             /**
              * Context
              * @default
              */
             context?: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * FrontierPoint
+         * @description One point on the risk/return plane (annualized).
+         */
+        FrontierPoint: {
+            /** Ret */
+            ret: number;
+            /** Vol */
+            vol: number;
+        };
+        /** GreeksOut */
+        GreeksOut: {
+            /** Delta */
+            delta: number;
+            /** Gamma */
+            gamma: number;
+            /** Rho */
+            rho: number;
+            /** Theta */
+            theta: number;
+            /** Vega */
+            vega: number;
         };
         /** GrowthBlock */
         GrowthBlock: {
-            /** Revenue Cagr */
-            revenue_cagr?: number | null;
-            /** Eps Cagr */
-            eps_cagr?: number | null;
-            /** Revenue Growth Yoy */
-            revenue_growth_yoy?: number | null;
             /** Earnings Growth Yoy */
             earnings_growth_yoy?: number | null;
+            /** Eps Cagr */
+            eps_cagr?: number | null;
+            /** Fcf Cagr */
+            fcf_cagr?: number | null;
             /**
              * Periods
              * @default 0
              */
             periods?: number;
+            /** Revenue Cagr */
+            revenue_cagr?: number | null;
+            /** Revenue Growth Yoy */
+            revenue_growth_yoy?: number | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HistogramBin */
+        HistogramBin: {
+            /**
+             * Count
+             * @default 0
+             */
+            count?: number;
+            /** X */
+            x?: number | null;
+        };
+        /** HistoricalScenarioRow */
+        HistoricalScenarioRow: {
+            /** Coverage */
+            coverage?: number | null;
+            /** End */
+            end: string;
+            /** Label */
+            label: string;
+            /** Market Return */
+            market_return?: number | null;
+            /** Max Drawdown */
+            max_drawdown?: number | null;
+            /** Portfolio Return */
+            portfolio_return?: number | null;
+            /** Recovery Days */
+            recovery_days?: number | null;
+            /** Start */
+            start: string;
+        };
+        /** HistoricalScenariosOut */
+        HistoricalScenariosOut: {
+            /** Scenarios */
+            scenarios?: components["schemas"]["HistoricalScenarioRow"][];
         };
         /**
          * HoldingIn
@@ -1128,62 +2659,374 @@ export interface components {
          *     permissive here lets the engine emit the precise error code.
          */
         HoldingIn: {
-            /** Ticker */
-            ticker: string;
-            /**
-             * Name
-             * @default
-             */
-            name?: string;
             /**
              * Asset Type
              * @default public_security
              * @enum {string}
              */
             asset_type?: "public_security" | "cash" | "crypto" | "real_estate";
-            /** Market Value */
-            market_value: number;
             /** Cost Basis */
             cost_basis?: number | null;
-            /**
-             * Expense Ratio
-             * @default 0
-             */
-            expense_ratio?: number;
-            /**
-             * Source
-             * @default api
-             */
-            source?: string;
-            /** Proxy Ticker */
-            proxy_ticker?: string | null;
             /**
              * Enabled
              * @default true
              */
             enabled?: boolean;
+            /**
+             * Expense Ratio
+             * @default 0
+             */
+            expense_ratio?: number;
+            /** Market Value */
+            market_value: number;
+            /**
+             * Name
+             * @default
+             */
+            name?: string;
+            /** Proxy Ticker */
+            proxy_ticker?: string | null;
+            /**
+             * Source
+             * @default api
+             */
+            source?: string;
+            /** Ticker */
+            ticker: string;
         };
         /**
          * HoldingValue
          * @description One ticker's persisted record on a portfolio row.
          */
         HoldingValue: {
-            /** Shares */
-            shares: number;
-            /** Avg Cost */
-            avg_cost?: number | null;
-            /** Sector */
-            sector?: string | null;
-            /** Asset Type */
-            asset_type?: string | null;
             /** Account */
             account?: string | null;
+            /** Asset Type */
+            asset_type?: string | null;
+            /** Avg Cost */
+            avg_cost?: number | null;
+            /** Contract Multiplier */
+            contract_multiplier?: number | null;
             /** Currency */
             currency?: string | null;
+            /** Expiry */
+            expiry?: string | null;
             /** Margin Eligible */
             margin_eligible?: boolean | null;
+            /** Option Side */
+            option_side?: string | null;
+            /** Option Type */
+            option_type?: string | null;
+            /** Sector */
+            sector?: string | null;
+            /** Shares */
+            shares: number;
+            /** Strike */
+            strike?: number | null;
+            /** Underlying */
+            underlying?: string | null;
         } & {
             [key: string]: unknown;
+        };
+        /** HoldingsChange */
+        HoldingsChange: {
+            /** Added */
+            added?: string[];
+            /** Removed */
+            removed?: string[];
+            /** Reweighted */
+            reweighted?: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** InputChange */
+        InputChange: {
+            /** Current */
+            current?: number | null;
+            /** Delta */
+            delta?: number | null;
+            /**
+             * Direction
+             * @default
+             */
+            direction?: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Previous */
+            previous?: number | null;
+            /**
+             * Unit
+             * @default
+             */
+            unit?: string;
+        };
+        /**
+         * InsiderBlock
+         * @description Form-4 insider activity over the trailing ~90 days (FMP).
+         */
+        InsiderBlock: {
+            /**
+             * Buys 90D
+             * @default 0
+             */
+            buys_90d?: number;
+            /** Net Shares 90D */
+            net_shares_90d?: number | null;
+            /**
+             * Sells 90D
+             * @default 0
+             */
+            sells_90d?: number;
+            /** Signal */
+            signal?: string | null;
+        };
+        /** LiquidityRow */
+        LiquidityRow: {
+            /** Adv 30D */
+            adv_30d?: number | null;
+            /** Days To Liquidate */
+            days_to_liquidate?: number | null;
+            /** Market Value */
+            market_value?: number | null;
+            /** Ticker */
+            ticker: string;
+        };
+        /**
+         * MLHealthOut
+         * @description GET /api/v1/ml/health — model/artifact identity + drift status.
+         *
+         *     ``status``: ok | not_ready | unavailable (service tiers).
+         *     ``overall_status``: healthy | watch | drift — worst feature/prediction
+         *     verdict, each judged against its own calibrated null (live-window PSI vs
+         *     the distribution of historical same-length training windows) — null unless
+         *     status == ok. Read-only context; never advice.
+         */
+        MLHealthOut: {
+            /**
+             * Artifact Loaded
+             * @default false
+             */
+            artifact_loaded?: boolean;
+            /** Data As Of */
+            data_as_of?: string | null;
+            /** Features */
+            features?: {
+                [key: string]: components["schemas"]["FeatureDriftOut"];
+            };
+            /** Last Updated */
+            last_updated?: string | null;
+            /**
+             * Live Window Days
+             * @default 0
+             */
+            live_window_days?: number;
+            /** Model Version */
+            model_version?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Overall Status */
+            overall_status?: string | null;
+            prediction?: components["schemas"]["PredictionDriftOut"] | null;
+            reference?: components["schemas"]["ReferenceSummary"] | null;
+            /** Sklearn Match */
+            sklearn_match?: boolean | null;
+            /** Sklearn Runtime */
+            sklearn_runtime?: string | null;
+            /** Sklearn Trained */
+            sklearn_trained?: string | null;
+            /** Status */
+            status: string;
+            /** Trained At */
+            trained_at?: string | null;
+        };
+        /** MLRegimeOut */
+        MLRegimeOut: {
+            /** Class Probabilities */
+            class_probabilities?: {
+                [key: string]: number;
+            };
+            /** Confidence */
+            confidence?: number | null;
+            /** Current Realized Vol */
+            current_realized_vol?: number | null;
+            /** Data Coverage */
+            data_coverage?: {
+                [key: string]: unknown;
+            };
+            /** Last Updated */
+            last_updated?: string | null;
+            /** Model Version */
+            model_version?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Regime */
+            regime?: string | null;
+            /** Source */
+            source: string;
+            /** Top Drivers */
+            top_drivers?: components["schemas"]["FeatureDriver"][];
+            /** Trained At */
+            trained_at?: string | null;
+            /** Training Window */
+            training_window?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
+         * MetaOut
+         * @description The ``meta`` block every envelope carries (see ``responses._meta``).
+         */
+        MetaOut: {
+            /** Elapsed Ms */
+            elapsed_ms?: number | null;
+            /** Request Id */
+            request_id: string;
+        };
+        /** ModelCardOut */
+        ModelCardOut: {
+            /**
+             * Available
+             * @default true
+             */
+            available?: boolean;
+            /** Brier */
+            brier?: number | null;
+            /** Brier Base Rate */
+            brier_base_rate?: number | null;
+            /** Calibration Bins */
+            calibration_bins?: components["schemas"]["CalibrationBinOut"][];
+            /** Class Definitions */
+            class_definitions?: components["schemas"]["ClassDefinitionOut"][];
+            /** Class Distribution */
+            class_distribution?: {
+                [key: string]: unknown;
+            };
+            /** Classes */
+            classes?: string[];
+            /** Cv Accuracy */
+            cv_accuracy?: number | null;
+            /** Elevated Base Rate */
+            elevated_base_rate?: number | null;
+            /** Elevated Risk Auc */
+            elevated_risk_auc?: number | null;
+            /** Estimator */
+            estimator?: string | null;
+            /**
+             * Excluded Signals
+             * @default
+             */
+            excluded_signals?: string;
+            /** Features */
+            features?: components["schemas"]["ModelFeatureOut"][];
+            /**
+             * Headline
+             * @default
+             */
+            headline?: string;
+            /** Holdout Accuracy */
+            holdout_accuracy?: number | null;
+            /** Holdout Majority Baseline Accuracy */
+            holdout_majority_baseline_accuracy?: number | null;
+            /** Holdout Size */
+            holdout_size?: number | null;
+            /**
+             * Intended Use
+             * @default
+             */
+            intended_use?: string;
+            /** Limitations */
+            limitations?: string[];
+            /** Logistic Baseline Cv Accuracy */
+            logistic_baseline_cv_accuracy?: number | null;
+            /** Majority Baseline Cv Accuracy */
+            majority_baseline_cv_accuracy?: number | null;
+            /** Model Version */
+            model_version?: string | null;
+            /** Not For */
+            not_for?: string[];
+            /** Persistence Baseline Accuracy */
+            persistence_baseline_accuracy?: number | null;
+            /** Sklearn Version */
+            sklearn_version?: string | null;
+            /** Trained At */
+            trained_at?: string | null;
+            /** Training Window */
+            training_window?: {
+                [key: string]: unknown;
+            };
+        };
+        /** ModelFeatureOut */
+        ModelFeatureOut: {
+            /** Importance */
+            importance?: number | null;
+            /** Name */
+            name: string;
+        };
+        /**
+         * MomentumBlock
+         * @description Price-trend technicals — all deterministic, from free yfinance scalars /
+         *     price history. No signal here is advice; it only says where price sits.
+         */
+        MomentumBlock: {
+            /** Fifty Two Week High */
+            fifty_two_week_high?: number | null;
+            /** Fifty Two Week Low */
+            fifty_two_week_low?: number | null;
+            /** Pct From 52W High */
+            pct_from_52w_high?: number | null;
+            /** Pct Off 52W Low */
+            pct_off_52w_low?: number | null;
+            /** Price Vs Sma200 Pct */
+            price_vs_sma200_pct?: number | null;
+            /** Price Vs Sma50 Pct */
+            price_vs_sma50_pct?: number | null;
+            /** Realized Vol 20D */
+            realized_vol_20d?: number | null;
+            /** Realized Vol 60D */
+            realized_vol_60d?: number | null;
+            /** Rsi 14 */
+            rsi_14?: number | null;
+            /** Sma 200 */
+            sma_200?: number | null;
+            /** Sma 50 */
+            sma_50?: number | null;
+            /** Trend */
+            trend?: string | null;
+        };
+        /** MoverRowOut */
+        MoverRowOut: {
+            /** Avg Volume Ratio */
+            avg_volume_ratio?: number | null;
+            /** Change Pct */
+            change_pct?: number | null;
+            /** Close */
+            close?: number | null;
+            /**
+             * Name
+             * @default
+             */
+            name?: string;
+            /** Ticker */
+            ticker: string;
+        };
+        /**
+         * MoversResponse
+         * @description Payload for ``GET /api/v1/macro/movers``. Public, fail-soft — any leg
+         *     may be empty if its upstream is down.
+         */
+        MoversResponse: {
+            /** Scan Date */
+            scan_date?: string | null;
+            /** Sectors */
+            sectors?: components["schemas"]["SectorRowOut"][];
+            /** Top Gainers */
+            top_gainers?: components["schemas"]["MoverRowOut"][];
+            /** Top Losers */
+            top_losers?: components["schemas"]["MoverRowOut"][];
+            /** Unusual Volume */
+            unusual_volume?: components["schemas"]["MoverRowOut"][];
         };
         /**
          * NewsHeadline
@@ -1191,34 +3034,448 @@ export interface components {
          *     forwarded to the LLM (principle: no raw blobs).
          */
         NewsHeadline: {
-            /** Title */
-            title: string;
-            /** Site */
-            site?: string | null;
             /** Published */
             published?: string | null;
+            /** Site */
+            site?: string | null;
+            /** Title */
+            title: string;
             /** Url */
             url?: string | null;
         };
+        /** NewsItemOut */
+        NewsItemOut: {
+            /** Link */
+            link?: string | null;
+            /** Published */
+            published?: string | null;
+            /** Source */
+            source?: string | null;
+            /** Summary */
+            summary?: string | null;
+            /** Title */
+            title: string;
+        };
+        /** NewsResponse */
+        NewsResponse: {
+            /** Items */
+            items?: components["schemas"]["NewsItemOut"][];
+            /** Sources */
+            sources?: components["schemas"]["SourceProvenance"][];
+        };
+        /** OptionAnalyticsOut */
+        OptionAnalyticsOut: {
+            /** Assignment Risk */
+            assignment_risk?: string | null;
+            /** Break Even */
+            break_even?: number | null;
+            /** Contract Multiplier */
+            contract_multiplier: number;
+            /** Contract Symbol */
+            contract_symbol?: string | null;
+            /** Cost Basis */
+            cost_basis?: number | null;
+            /** Days To Expiry */
+            days_to_expiry: number;
+            /** Delta Notional */
+            delta_notional?: number | null;
+            /** Expiry */
+            expiry: string;
+            greeks?: components["schemas"]["GreeksOut"] | null;
+            /** Intrinsic Value */
+            intrinsic_value?: number | null;
+            /** Iv */
+            iv?: number | null;
+            /** Mark */
+            mark?: number | null;
+            /** Market Value */
+            market_value?: number | null;
+            /** Max Gain */
+            max_gain?: number | null;
+            /** Max Loss */
+            max_loss?: number | null;
+            /** Moneyness */
+            moneyness?: string | null;
+            /** Option Type */
+            option_type: string;
+            /** Payoff */
+            payoff?: components["schemas"]["PayoffPointOut"][];
+            /** Quantity */
+            quantity: number;
+            /**
+             * Source
+             * @default market
+             */
+            source?: string;
+            /** Spot */
+            spot?: number | null;
+            /** Strike */
+            strike: number;
+            /** Time Value */
+            time_value?: number | null;
+            /** Underlying */
+            underlying: string;
+            /** Unrealized Pnl */
+            unrealized_pnl?: number | null;
+            /** Warnings */
+            warnings?: string[];
+        } & {
+            [key: string]: unknown;
+        };
+        /** OptionAnalyzeRequest */
+        OptionAnalyzeRequest: {
+            /** Contracts */
+            contracts: components["schemas"]["OptionContractIn"][];
+            /**
+             * Risk Free Rate
+             * @default 0.045
+             */
+            risk_free_rate?: number;
+        };
+        /** OptionAnalyzeResponse */
+        "OptionAnalyzeResponse-Input": {
+            /** As Of */
+            as_of: string;
+            exposure: components["schemas"]["OptionExposureOut"];
+            /** Results */
+            results: components["schemas"]["OptionAnalyticsOut"][];
+            scenarios: components["schemas"]["OptionScenarioGrid"];
+            /** Strategies */
+            strategies?: components["schemas"]["OptionStrategyOut-Input"][];
+            totals: components["schemas"]["OptionTotalsOut"];
+            /** Warnings */
+            warnings?: string[];
+        };
+        /** OptionAnalyzeResponse */
+        "OptionAnalyzeResponse-Output": {
+            /** As Of */
+            as_of: string;
+            exposure: components["schemas"]["OptionExposureOut"];
+            /** Results */
+            results: components["schemas"]["OptionAnalyticsOut"][];
+            scenarios: components["schemas"]["OptionScenarioGrid"];
+            /** Strategies */
+            strategies?: components["schemas"]["OptionStrategyOut-Output"][];
+            totals: components["schemas"]["OptionTotalsOut"];
+            /** Warnings */
+            warnings?: string[];
+        };
+        /**
+         * OptionContractIn
+         * @description One option contract to analyze.
+         */
+        OptionContractIn: {
+            /** Avg Premium */
+            avg_premium?: number | null;
+            /**
+             * Contract Multiplier
+             * @default 100
+             */
+            contract_multiplier?: number;
+            /** Expiry */
+            expiry: string;
+            /** Implied Vol */
+            implied_vol?: number | null;
+            /** Market Price */
+            market_price?: number | null;
+            /**
+             * Option Type
+             * @enum {string}
+             */
+            option_type: "call" | "put";
+            /**
+             * Quantity
+             * @default 1
+             */
+            quantity?: number;
+            /** Strike */
+            strike: number;
+            /** Underlying */
+            underlying: string;
+        };
+        /** OptionExplainInput */
+        OptionExplainInput: {
+            exposure: components["schemas"]["OptionExposureOut"];
+        };
+        /** OptionExposureOut */
+        OptionExposureOut: {
+            /** Contracts */
+            contracts: number;
+            /** Expiry Ladder */
+            expiry_ladder?: components["schemas"]["ExpiryBucketOut"][];
+            /** Flags */
+            flags?: components["schemas"]["OptionFlagOut"][];
+            /** Gross Delta */
+            gross_delta: number;
+            /** Net Delta */
+            net_delta: number;
+            /** Net Gamma */
+            net_gamma: number;
+            /** Net Theta */
+            net_theta: number;
+            /** Net Vega */
+            net_vega: number;
+            /** Option Market Value */
+            option_market_value?: number | null;
+            /** Option Notional */
+            option_notional: number;
+            /** Short Collateral Estimate */
+            short_collateral_estimate: number;
+            /** Short Contracts */
+            short_contracts: number;
+            /** Underlying Exposure */
+            underlying_exposure?: components["schemas"]["UnderlyingExposureOut"][];
+        } & {
+            [key: string]: unknown;
+        };
+        /** OptionFlagOut */
+        OptionFlagOut: {
+            /** Code */
+            code: string;
+            /** Detail */
+            detail: string;
+            /** Severity */
+            severity: string;
+        };
+        /** OptionScenarioGrid */
+        OptionScenarioGrid: {
+            /** As Of */
+            as_of?: string | null;
+            /** Grid */
+            grid: components["schemas"]["ScenarioCellOut"][];
+            /** Horizons */
+            horizons: (number | string)[];
+            /** Iv Shocks */
+            iv_shocks: number[];
+            /** Repriced */
+            repriced: number;
+            /** Skipped */
+            skipped?: {
+                [key: string]: unknown;
+            }[];
+            /** Stress Cell */
+            stress_cell: {
+                [key: string]: number;
+            };
+            /** Top Positions */
+            top_positions: components["schemas"]["ScenarioPositionOut"][];
+            /** Underlying Shocks */
+            underlying_shocks: number[];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * OptionScoreImpactOut
+         * @description How option holdings affect the Health Score — surfaced so the deduction
+         *     is transparent (base_score − penalty, with the per-flag breakdown).
+         */
+        OptionScoreImpactOut: {
+            /** Base Score */
+            base_score: number;
+            /** Contracts */
+            contracts: number;
+            /** Flags */
+            flags?: {
+                [key: string]: unknown;
+            }[];
+            /** Net Delta */
+            net_delta: number;
+            /** Net Gamma */
+            net_gamma: number;
+            /** Net Theta */
+            net_theta: number;
+            /** Net Vega */
+            net_vega: number;
+            /** Option Notional */
+            option_notional: number;
+            /** Penalty */
+            penalty: number;
+            /** Penalty Breakdown */
+            penalty_breakdown?: components["schemas"]["OptionScorePenaltyRow"][];
+            /** Short Collateral Estimate */
+            short_collateral_estimate: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** OptionScorePenaltyRow */
+        OptionScorePenaltyRow: {
+            /** Code */
+            code: string;
+            /** Points */
+            points: number;
+            /** Severity */
+            severity: string;
+        };
+        /**
+         * OptionStrategyOut
+         * @description A recognized multi-leg (or single-leg) strategy with NET, bounded
+         *     economics — the netted view that stops a spread's short leg showing an
+         *     unreal unbounded loss.
+         */
+        "OptionStrategyOut-Input": {
+            /** Break Evens */
+            break_evens?: number[];
+            /** Expiry */
+            expiry: string;
+            /** Leg Count */
+            leg_count: number;
+            /** Legs */
+            legs?: components["schemas"]["OptionAnalyticsOut"][];
+            /** Max Gain */
+            max_gain?: number | null;
+            /** Max Loss */
+            max_loss?: number | null;
+            /** Name */
+            name: string;
+            /** Net Debit */
+            net_debit: number;
+            /** Net Greeks */
+            net_greeks?: {
+                [key: string]: number;
+            };
+            /** Net Pnl */
+            net_pnl?: number | null;
+            /** Payoff */
+            payoff?: components["schemas"]["PayoffPointOut"][];
+            /** Underlying */
+            underlying: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * OptionStrategyOut
+         * @description A recognized multi-leg (or single-leg) strategy with NET, bounded
+         *     economics — the netted view that stops a spread's short leg showing an
+         *     unreal unbounded loss.
+         */
+        "OptionStrategyOut-Output": {
+            /** Break Evens */
+            break_evens?: number[];
+            /** Expiry */
+            expiry: string;
+            /** Leg Count */
+            leg_count: number;
+            /** Legs */
+            legs?: components["schemas"]["OptionAnalyticsOut"][];
+            /** Max Gain */
+            max_gain?: number | null;
+            /** Max Loss */
+            max_loss?: number | null;
+            /** Name */
+            name: string;
+            /** Net Debit */
+            net_debit: number;
+            /** Net Greeks */
+            net_greeks?: {
+                [key: string]: number;
+            };
+            /** Net Pnl */
+            net_pnl?: number | null;
+            /** Payoff */
+            payoff?: components["schemas"]["PayoffPointOut"][];
+            /** Underlying */
+            underlying: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** OptionTotalsOut */
+        OptionTotalsOut: {
+            /**
+             * Contracts
+             * @default 0
+             */
+            contracts?: number;
+            /**
+             * Delta Notional
+             * @default 0
+             */
+            delta_notional?: number;
+            /**
+             * Market Value
+             * @default 0
+             */
+            market_value?: number;
+            /**
+             * Net Delta
+             * @default 0
+             */
+            net_delta?: number;
+            /**
+             * Net Gamma
+             * @default 0
+             */
+            net_gamma?: number;
+            /**
+             * Net Theta
+             * @default 0
+             */
+            net_theta?: number;
+            /**
+             * Net Vega
+             * @default 0
+             */
+            net_vega?: number;
+            /** Unrealized Pnl */
+            unrealized_pnl?: number | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** OptionsReportInput */
+        OptionsReportInput: {
+            analysis: components["schemas"]["OptionAnalyzeResponse-Input"];
+        };
+        /** OwnershipBlock */
+        OwnershipBlock: {
+            /** Institutional Pct */
+            institutional_pct?: number | null;
+        };
+        /** PayoffPointOut */
+        PayoffPointOut: {
+            /** Pnl */
+            pnl: number;
+            /** Price */
+            price: number;
+        };
         /** PeerCompareRow */
         PeerCompareRow: {
-            /** Ticker */
-            ticker: string;
+            /** Market Cap */
+            market_cap?: number | null;
             /**
              * Name
              * @default
              */
             name?: string;
-            /** Market Cap */
-            market_cap?: number | null;
+            /** Net Margin */
+            net_margin?: number | null;
             /** Pe */
             pe?: number | null;
             /** Ps */
             ps?: number | null;
-            /** Net Margin */
-            net_margin?: number | null;
             /** Roe */
             roe?: number | null;
+            /** Ticker */
+            ticker: string;
+        };
+        /**
+         * PlanCard
+         * @description One row of the pricing table the frontend renders.
+         */
+        PlanCard: {
+            /** Label */
+            label: string;
+            /** Monthly Analysis */
+            monthly_analysis: number;
+            /** Monthly Chat */
+            monthly_chat: number;
+            /**
+             * Monthly Credits
+             * @default 0
+             */
+            monthly_credits?: number;
+            /** Plan */
+            plan: string;
+            /** Price Usd Per Month */
+            price_usd_per_month: number;
         };
         /**
          * PortalSessionRequest
@@ -1228,37 +3485,139 @@ export interface components {
             /** Return Path */
             return_path?: string | null;
         };
+        /** PortalSessionResponse */
+        PortalSessionResponse: {
+            /** Portal Url */
+            portal_url: string;
+        };
         /**
          * PortfolioCreateRequest
          * @description Body for ``POST /api/v1/portfolios``.
          */
         PortfolioCreateRequest: {
-            /** Name */
-            name: string;
-            /** Holdings */
-            holdings?: {
-                [key: string]: components["schemas"]["HoldingValue"];
-            };
-            /**
-             * Margin Loan
-             * @default 0
-             */
-            margin_loan?: number;
-            /**
-             * Contributed Capital
-             * @default 0
-             */
-            contributed_capital?: number;
             /**
              * Cash Balance
              * @default 0
              */
             cash_balance?: number;
             /**
+             * Contributed Capital
+             * @default 0
+             */
+            contributed_capital?: number;
+            /** Holdings */
+            holdings?: {
+                [key: string]: components["schemas"]["HoldingValue"];
+            };
+            /**
              * Is Default
              * @default false
              */
             is_default?: boolean;
+            /**
+             * Margin Loan
+             * @default 0
+             */
+            margin_loan?: number;
+            /** Name */
+            name: string;
+        };
+        /** PortfolioMetricsOut */
+        PortfolioMetricsOut: {
+            /** Annual Return */
+            annual_return?: number | null;
+            /** Annual Volatility */
+            annual_volatility?: number | null;
+            /** Beta To Benchmark */
+            beta_to_benchmark?: number | null;
+            /** Cash Balance */
+            cash_balance?: number | null;
+            /** Cash Weight */
+            cash_weight?: number | null;
+            /** Confidence */
+            confidence?: string | null;
+            /** Contributed Capital */
+            contributed_capital?: number | null;
+            /** Current Drawdown */
+            current_drawdown?: number | null;
+            /** Cvar 95 Daily */
+            cvar_95_daily?: number | null;
+            /** Daily Pnl */
+            daily_pnl?: number | null;
+            /** Daily Return */
+            daily_return?: number | null;
+            /** Data Coverage */
+            data_coverage?: number | null;
+            /** Data Quality */
+            data_quality?: number | null;
+            /** Data Quality Notes */
+            data_quality_notes?: string[];
+            /** Dropped Tickers */
+            dropped_tickers?: string[];
+            /** Gross Annual Return */
+            gross_annual_return?: number | null;
+            /** Leverage */
+            leverage?: number | null;
+            /** Margin Cost Annual */
+            margin_cost_annual?: number | null;
+            /** Margin Loan */
+            margin_loan?: number | null;
+            /** Max Drawdown */
+            max_drawdown?: number | null;
+            /** Net Equity */
+            net_equity?: number | null;
+            /** Observations */
+            observations?: number | null;
+            /** Sharpe Ratio */
+            sharpe_ratio?: number | null;
+            /** Total Pnl */
+            total_pnl?: number | null;
+            /** Total Return */
+            total_return?: number | null;
+            /** Total Value */
+            total_value?: number | null;
+            /** Var 95 Daily */
+            var_95_daily?: number | null;
+        };
+        /**
+         * PortfolioOut
+         * @description One row from the ``portfolios`` Supabase table.
+         */
+        PortfolioOut: {
+            /**
+             * Cash Balance
+             * @default 0
+             */
+            cash_balance?: number | null;
+            /**
+             * Contributed Capital
+             * @default 0
+             */
+            contributed_capital?: number | null;
+            /** Created At */
+            created_at?: string | null;
+            /** Holdings */
+            holdings?: {
+                [key: string]: unknown;
+            };
+            /** Id */
+            id: string;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default?: boolean;
+            /**
+             * Margin Loan
+             * @default 0
+             */
+            margin_loan?: number | null;
+            /** Name */
+            name: string;
+            /** Updated At */
+            updated_at?: string | null;
+            /** User Id */
+            user_id?: string | null;
         };
         /**
          * PortfolioPatchRequest
@@ -1269,41 +3628,366 @@ export interface components {
          *     columns.
          */
         PortfolioPatchRequest: {
-            /** Name */
-            name?: string | null;
+            /** Cash Balance */
+            cash_balance?: number | null;
+            /** Contributed Capital */
+            contributed_capital?: number | null;
             /** Holdings */
             holdings?: {
                 [key: string]: components["schemas"]["HoldingValue"];
             } | null;
-            /** Margin Loan */
-            margin_loan?: number | null;
-            /** Contributed Capital */
-            contributed_capital?: number | null;
-            /** Cash Balance */
-            cash_balance?: number | null;
             /** Is Default */
             is_default?: boolean | null;
+            /** Margin Loan */
+            margin_loan?: number | null;
+            /** Name */
+            name?: string | null;
+        };
+        /** PortfolioReportInput */
+        PortfolioReportInput: {
+            diagnosis?: components["schemas"]["RiskExplainOutput"] | null;
+            report: components["schemas"]["RiskReportOut-Input"];
+        };
+        /**
+         * PortfoliosMeResponse
+         * @description Payload for ``GET /api/v1/portfolios/me``.
+         */
+        PortfoliosMeResponse: {
+            /** Email */
+            email?: string | null;
+            /** Portfolios */
+            portfolios: components["schemas"]["PortfolioOut"][];
+            /** User Id */
+            user_id: string;
+        };
+        /** PredictionDriftOut */
+        PredictionDriftOut: {
+            /**
+             * Calibrated
+             * @default false
+             */
+            calibrated?: boolean;
+            /** Live Fractions */
+            live_fractions?: {
+                [key: string]: number;
+            };
+            /**
+             * N
+             * @default 0
+             */
+            n?: number;
+            /** Psi */
+            psi?: number | null;
+            /**
+             * Status
+             * @default healthy
+             */
+            status?: string;
+        };
+        /**
+         * PriceProvenance
+         * @description Where each priced ticker's data came from, plus what stayed missing.
+         */
+        PriceProvenance: {
+            /** By Ticker */
+            by_ticker?: {
+                [key: string]: string;
+            };
+            /**
+             * Fallback
+             * @default yfinance
+             */
+            fallback?: string;
+            /** Massive Fallback Used */
+            massive_fallback_used?: string[];
+            /** Missing */
+            missing?: string[];
+            /**
+             * Primary
+             * @default massive
+             */
+            primary?: string;
+            /** Yfinance Fallback Used */
+            yfinance_fallback_used?: string[];
+        };
+        /**
+         * PriceProvenanceOut
+         * @description Where the portfolio's price history came from + how deep it is. Surfaced
+         *     in the Health Score / Risk Report 'data quality' area.
+         *
+         *     NOTE ``trading_days`` reflects the ENDPOINT price window (``history_days``,
+         *     ~1y default) used for weights/P&L/DR/rolling vol; the engine's beta/factor/
+         *     correlation regressions run on the DataProvider's own ~2-year window.
+         */
+        PriceProvenanceOut: {
+            /** By Ticker */
+            by_ticker?: {
+                [key: string]: string;
+            };
+            /**
+             * Fallback
+             * @default yfinance
+             */
+            fallback?: string;
+            /** Massive Fallback Used */
+            massive_fallback_used?: string[];
+            /** Missing */
+            missing?: string[];
+            /**
+             * Primary
+             * @default massive
+             */
+            primary?: string;
+            /** Trading Days */
+            trading_days?: number | null;
+            /** Yfinance Fallback Used */
+            yfinance_fallback_used?: string[];
+        };
+        /**
+         * PriceRow
+         * @description One ticker's latest observation.
+         */
+        PriceRow: {
+            /**
+             * As Of
+             * @description ISO date (YYYY-MM-DD) of the bar
+             */
+            as_of: string;
+            /** Price */
+            price: number;
+            /**
+             * Source
+             * @description Price provenance: "massive" | "yfinance".
+             * @default massive
+             */
+            source?: string;
+            /** Ticker */
+            ticker: string;
+        };
+        /**
+         * PricesResponse
+         * @description Payload for ``GET /api/v1/market/prices``.
+         */
+        PricesResponse: {
+            /** Prices */
+            prices: components["schemas"]["PriceRow"][];
+            provenance?: components["schemas"]["PriceProvenance"];
+            /**
+             * Requested
+             * @description Tickers the caller asked for, normalised + de-duplicated. Compare against `prices[].ticker` to find symbols yfinance couldn't resolve.
+             */
+            requested: string[];
+        };
+        /** ProvenanceOut */
+        ProvenanceOut: {
+            /** As Of */
+            as_of?: string | null;
+            /** Missing */
+            missing?: string[];
+            /**
+             * Observations
+             * @default 0
+             */
+            observations?: number;
+            /** Priced */
+            priced?: string[];
+            /** Sources */
+            sources?: {
+                [key: string]: string;
+            };
+            /** Window Limited By */
+            window_limited_by?: string | null;
+        };
+        /** PublicRiskCheckOut */
+        PublicRiskCheckOut: {
+            concentration: components["schemas"]["backend__app__schemas__public_risk__ConcentrationOut"];
+            /**
+             * Disclaimer
+             * @default Educational risk analytics over the holdings you entered — computed from public market data, nothing stored, not investment advice.
+             */
+            disclaimer?: string;
+            metrics: components["schemas"]["RiskMetricsOut"];
+            provenance: components["schemas"]["ProvenanceOut"];
+            /** Stress */
+            stress?: components["schemas"]["StressRowOut"][];
         };
         /** QualityBlock */
         QualityBlock: {
-            /** Gross Margin */
-            gross_margin?: number | null;
-            /** Operating Margin */
-            operating_margin?: number | null;
-            /** Net Margin */
-            net_margin?: number | null;
-            /** Roe */
-            roe?: number | null;
-            /** Roa */
-            roa?: number | null;
-            /** Roic */
-            roic?: number | null;
             /** Current Ratio */
             current_ratio?: number | null;
             /** Debt To Equity */
             debt_to_equity?: number | null;
+            /** Gross Margin */
+            gross_margin?: number | null;
             /** Interest Coverage */
             interest_coverage?: number | null;
+            /** Net Margin */
+            net_margin?: number | null;
+            /** Operating Margin */
+            operating_margin?: number | null;
+            /** Roa */
+            roa?: number | null;
+            /** Roe */
+            roe?: number | null;
+            /** Roic */
+            roic?: number | null;
+        };
+        /**
+         * ReasonCodeOut
+         * @description A structured, machine-readable penalty behind the score (the LLM may
+         *     phrase these, never invent). Extra keys (dimension / tickers /
+         *     stabilized_from) ride along per code.
+         */
+        ReasonCodeOut: {
+            /** Code */
+            code: string;
+            /**
+             * Detail
+             * @default
+             */
+            detail?: string;
+            /** Severity */
+            severity: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * ReferenceSummary
+         * @description Identity of the committed drift reference the live window is scored
+         *     against (a 3-field summary, not the full quantile grids).
+         */
+        ReferenceSummary: {
+            /**
+             * Features
+             * @default 0
+             */
+            features?: number;
+            /** Model Version */
+            model_version?: string | null;
+            /** Rows */
+            rows?: number | null;
+        };
+        /** RegimeCurveOut */
+        RegimeCurveOut: {
+            /** Inverted */
+            inverted?: boolean | null;
+            /** Spread 3M 10Y */
+            spread_3m_10y?: number | null;
+            /** Status */
+            status?: string | null;
+        };
+        /**
+         * RegimeDetailResponse
+         * @description Payload for ``GET /api/v1/macro/regime_detail``. Every scalar is
+         *     nullable (fail-soft); ``history`` may be empty.
+         */
+        RegimeDetailResponse: {
+            /** Confidence */
+            confidence?: number | null;
+            /** Current Regime */
+            current_regime?: string | null;
+            /** History */
+            history?: components["schemas"]["RegimeHistoryPointOut"][];
+            /** Regime Since Date */
+            regime_since_date?: string | null;
+            /** Trend Regime */
+            trend_regime?: string | null;
+            /** Vix Regime */
+            vix_regime?: string | null;
+            /** Vol Regime */
+            vol_regime?: string | null;
+        };
+        /** RegimeDriverOut */
+        RegimeDriverOut: {
+            /** Label */
+            label: string;
+            /** Vs Normal */
+            vs_normal: string;
+        };
+        /** RegimeFearGreedOut */
+        RegimeFearGreedOut: {
+            /** Rating */
+            rating?: string | null;
+            /** Score */
+            score?: number | null;
+        };
+        /** RegimeHistoryPointOut */
+        RegimeHistoryPointOut: {
+            /** Date */
+            date: string;
+            /** Regime */
+            regime: string;
+        };
+        /**
+         * RegimeResponse
+         * @description Payload for ``GET /api/v1/macro/regime``.
+         *
+         *     Every leg is independently nullable — a dead upstream nulls only its
+         *     own block, never the whole response.
+         */
+        RegimeResponse: {
+            fear_greed: components["schemas"]["RegimeFearGreedOut"];
+            vix: components["schemas"]["RegimeVixOut"];
+            yield_curve: components["schemas"]["RegimeYieldCurveOut"];
+        };
+        /** RegimeSummaryOut */
+        RegimeSummaryOut: {
+            /** As Of */
+            as_of?: string | null;
+            /** Blurb */
+            blurb?: string | null;
+            /** Caveat */
+            caveat: string;
+            /** Confidence */
+            confidence?: number | null;
+            curve?: components["schemas"]["RegimeCurveOut"];
+            /**
+             * Degraded
+             * @default false
+             */
+            degraded?: boolean;
+            /** Degraded Reason */
+            degraded_reason?: string | null;
+            /** Drivers */
+            drivers?: components["schemas"]["RegimeDriverOut"][];
+            /** Elevated Risk Probability */
+            elevated_risk_probability?: number | null;
+            fear_greed?: components["schemas"]["RegimeFearGreedOut"];
+            /** Headline */
+            headline: string;
+            /** Health Status */
+            health_status?: string | null;
+            /** Label */
+            label?: string | null;
+            /** Model Version */
+            model_version?: string | null;
+            /** Post Text */
+            post_text: string;
+            /** Probability Band */
+            probability_band?: string | null;
+            /** Regime State */
+            regime_state?: string | null;
+            /** Source */
+            source: string;
+            vix?: components["schemas"]["RegimeVixOut"];
+        };
+        /** RegimeVixOut */
+        RegimeVixOut: {
+            /** Change */
+            change?: number | null;
+            /** Current */
+            current?: number | null;
+            /** Level */
+            level?: string | null;
+        };
+        /** RegimeYieldCurveOut */
+        RegimeYieldCurveOut: {
+            /** Inverted */
+            inverted?: boolean | null;
+            /** Spread 3M 10Y */
+            spread_3m_10y?: number | null;
+            /** Status */
+            status?: string | null;
         };
         /**
          * ReportFromActiveRequest
@@ -1317,16 +4001,6 @@ export interface components {
          */
         ReportFromActiveRequest: {
             /**
-             * Risk Preference
-             * @default 3
-             */
-            risk_preference?: number;
-            /**
-             * Risk Free Rate
-             * @default 0.045
-             */
-            risk_free_rate?: number;
-            /**
              * History Days
              * @default 365
              */
@@ -1337,6 +4011,108 @@ export interface components {
              * @default -0.1
              */
             market_shock?: number;
+            /**
+             * Risk Free Rate
+             * @default 0.045
+             */
+            risk_free_rate?: number;
+            /**
+             * Risk Preference
+             * @default 3
+             */
+            risk_preference?: number;
+        };
+        /** ReportResponse */
+        ReportResponse: {
+            /** As Of */
+            as_of: string;
+            /** Html */
+            html: string;
+            /** Input Hash */
+            input_hash: string;
+            /** Kind */
+            kind: string;
+        };
+        /**
+         * ResearchVerdict
+         * @description The LLM's ranked judgment over the FactPack. The model phrases + ranks;
+         *     every number it cites already lives in the FactPack.
+         */
+        ResearchVerdict: {
+            /** Catalysts */
+            catalysts?: string[];
+            /**
+             * Conviction
+             * @default medium
+             */
+            conviction?: string;
+            /**
+             * Data Only
+             * @default false
+             */
+            data_only?: boolean;
+            /** Dimensions */
+            dimensions?: components["schemas"]["DimensionScore"][];
+            /** Rating */
+            rating: string;
+            /** Risks */
+            risks?: string[];
+            /** Summary */
+            summary: string;
+            /** What Would Change My Mind */
+            what_would_change_my_mind?: string[];
+        };
+        /** RiskAlert */
+        RiskAlert: {
+            /** Ask Copilot */
+            ask_copilot: string;
+            /** Detail */
+            detail: string;
+            /** Headline */
+            headline: string;
+            /** Metric */
+            metric: string;
+            /** Severity */
+            severity: string;
+            /** Type */
+            type: string;
+        };
+        /**
+         * RiskAlertsInput
+         * @description Whatever the page already has. /score has the score-level fields; /risk
+         *     additionally has the report-level ones. The builder uses what's present.
+         */
+        RiskAlertsInput: {
+            /** Annual Volatility */
+            annual_volatility?: number | null;
+            /** Beta To Benchmark */
+            beta_to_benchmark?: number | null;
+            /** Component Var Pct */
+            component_var_pct?: components["schemas"]["AlertComponentVar"][];
+            concentration?: components["schemas"]["AlertConcentration"] | null;
+            /** Leverage */
+            leverage?: number | null;
+            /** Margin Cost Annual */
+            margin_cost_annual?: number | null;
+            /** Max Drawdown */
+            max_drawdown?: number | null;
+            /** Option Flags */
+            option_flags?: string[];
+            /** Sharpe Ratio */
+            sharpe_ratio?: number | null;
+            /** Stress Asset Losses */
+            stress_asset_losses?: components["schemas"]["AlertStressLoss"][];
+            /** Stress Loss */
+            stress_loss?: number | null;
+            /** Stress Market Shock */
+            stress_market_shock?: number | null;
+            /** Var 95 Daily */
+            var_95_daily?: number | null;
+        };
+        /** RiskAlertsOutput */
+        RiskAlertsOutput: {
+            /** Alerts */
+            alerts?: components["schemas"]["RiskAlert"][];
         };
         /**
          * RiskExplainInput
@@ -1345,32 +4121,423 @@ export interface components {
          *     side) and the Risk Report page (report side).
          */
         RiskExplainInput: {
+            /** Dimensions */
+            dimensions?: {
+                [key: string]: components["schemas"]["ExplainDimension"];
+            };
+            /** Factor Betas */
+            factor_betas?: {
+                [key: string]: number;
+            };
+            /** Liquidity Outliers */
+            liquidity_outliers?: components["schemas"]["ExplainLiquidity"][];
+            metrics?: components["schemas"]["ExplainMetrics"];
+            /** Overall Score */
+            overall_score?: number | null;
+            snapshot_delta?: components["schemas"]["ExplainSnapshotDelta"] | null;
             /**
              * Source
              * @default score
              * @enum {string}
              */
             source?: "score" | "risk";
-            /** Overall Score */
-            overall_score?: number | null;
-            /** Dimensions */
-            dimensions?: {
-                [key: string]: components["schemas"]["ExplainDimension"];
-            };
-            metrics?: components["schemas"]["ExplainMetrics"];
-            /** Top Component Var */
-            top_component_var?: components["schemas"]["ExplainContributor"][];
-            /** Factor Betas */
-            factor_betas?: {
-                [key: string]: number;
-            };
             /** Stress Loss */
             stress_loss?: number | null;
             /** Stress Market Shock */
             stress_market_shock?: number | null;
-            /** Liquidity Outliers */
-            liquidity_outliers?: components["schemas"]["ExplainLiquidity"][];
-            snapshot_delta?: components["schemas"]["ExplainSnapshotDelta"] | null;
+            /** Top Component Var */
+            top_component_var?: components["schemas"]["ExplainContributor"][];
+        };
+        /** RiskExplainOutput */
+        RiskExplainOutput: {
+            /**
+             * Ai Generated
+             * @default false
+             */
+            ai_generated?: boolean;
+            /** Caveats */
+            caveats?: string[];
+            /** Headline */
+            headline: string;
+            /** Primary Driver */
+            primary_driver: string;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "low" | "moderate" | "elevated" | "high";
+            /** Suggested Actions */
+            suggested_actions?: components["schemas"]["SuggestedAction"][];
+            /** Summary Bullets */
+            summary_bullets?: string[];
+            /** Watch Items */
+            watch_items?: string[];
+        };
+        /** RiskMetricsOut */
+        RiskMetricsOut: {
+            /** Annual Volatility */
+            annual_volatility?: number | null;
+            /** Beta To Market */
+            beta_to_market?: number | null;
+            /** Cvar 95 1D */
+            cvar_95_1d?: number | null;
+            /** Total Value */
+            total_value?: number | null;
+            /** Var 95 1D */
+            var_95_1d?: number | null;
+        };
+        /**
+         * RiskReportOut
+         * @description JSON-safe projection of the engine's ``RiskReport`` dataclass.
+         *
+         *     Large matrices (cov, EWMA corr, MC simulation paths) are intentionally
+         *     NOT shipped over the wire — they'd add tens of MB and the dashboard
+         *     doesn't render them anyway. (The plain corr matrix IS shipped since the
+         *     Risk Desk round, as the capped 2-dp ``correlation`` summary below.)
+         */
+        "RiskReportOut-Input": {
+            /** Annual Return */
+            annual_return?: number | null;
+            /** Annual Volatility */
+            annual_volatility?: number | null;
+            /** Betas */
+            betas?: {
+                [key: string]: number;
+            };
+            /** Cash Balance */
+            cash_balance?: number | null;
+            /** Component Return */
+            component_return?: components["schemas"]["ComponentReturnRow"][];
+            /** Component Var Pct */
+            component_var_pct?: components["schemas"]["ComponentVarRow"][];
+            concentration?: components["schemas"]["ConcentrationOut-Input"] | null;
+            /** Contributed Capital */
+            contributed_capital?: number | null;
+            correlation?: components["schemas"]["CorrelationOut"] | null;
+            /** Cvar 95 */
+            cvar_95?: number | null;
+            /** Daily Pnl */
+            daily_pnl?: number | null;
+            /** Daily Return */
+            daily_return?: number | null;
+            /** Data Quality Notes */
+            data_quality_notes?: string[];
+            /** Drawdown Stats */
+            drawdown_stats?: {
+                [key: string]: unknown;
+            } | null;
+            /** Factor Betas */
+            factor_betas?: components["schemas"]["FactorBetaRow"][];
+            /** Liquidity */
+            liquidity?: components["schemas"]["LiquidityRow"][];
+            /** Macro Betas */
+            macro_betas?: {
+                [key: string]: number;
+            };
+            /** Margin Loan */
+            margin_loan?: number | null;
+            /** Max Drawdown */
+            max_drawdown?: number | null;
+            /** Net Equity */
+            net_equity?: number | null;
+            price_provenance?: components["schemas"]["PriceProvenanceOut"] | null;
+            /** Risk Free Rate */
+            risk_free_rate?: number | null;
+            rolling_volatility?: components["schemas"]["RollingVolatilityOut"] | null;
+            /** Sharpe Ratio */
+            sharpe_ratio?: number | null;
+            /** Stress Asset Losses */
+            stress_asset_losses?: components["schemas"]["StressAssetLoss"][];
+            /** Stress Loss */
+            stress_loss?: number | null;
+            /** Stress Market Shock */
+            stress_market_shock?: number | null;
+            /** Total Pnl */
+            total_pnl?: number | null;
+            /** Total Return */
+            total_return?: number | null;
+            /** Total Value */
+            total_value?: number | null;
+            /** Var 95 */
+            var_95?: number | null;
+            /** Var 99 */
+            var_99?: number | null;
+        };
+        /**
+         * RiskReportOut
+         * @description JSON-safe projection of the engine's ``RiskReport`` dataclass.
+         *
+         *     Large matrices (cov, EWMA corr, MC simulation paths) are intentionally
+         *     NOT shipped over the wire — they'd add tens of MB and the dashboard
+         *     doesn't render them anyway. (The plain corr matrix IS shipped since the
+         *     Risk Desk round, as the capped 2-dp ``correlation`` summary below.)
+         */
+        "RiskReportOut-Output": {
+            /** Annual Return */
+            annual_return?: number | null;
+            /** Annual Volatility */
+            annual_volatility?: number | null;
+            /** Betas */
+            betas?: {
+                [key: string]: number;
+            };
+            /** Cash Balance */
+            cash_balance?: number | null;
+            /** Component Return */
+            component_return?: components["schemas"]["ComponentReturnRow"][];
+            /** Component Var Pct */
+            component_var_pct?: components["schemas"]["ComponentVarRow"][];
+            concentration?: components["schemas"]["backend__app__schemas__risk__ConcentrationOut"] | null;
+            /** Contributed Capital */
+            contributed_capital?: number | null;
+            correlation?: components["schemas"]["CorrelationOut"] | null;
+            /** Cvar 95 */
+            cvar_95?: number | null;
+            /** Daily Pnl */
+            daily_pnl?: number | null;
+            /** Daily Return */
+            daily_return?: number | null;
+            /** Data Quality Notes */
+            data_quality_notes?: string[];
+            /** Drawdown Stats */
+            drawdown_stats?: {
+                [key: string]: unknown;
+            } | null;
+            /** Factor Betas */
+            factor_betas?: components["schemas"]["FactorBetaRow"][];
+            /** Liquidity */
+            liquidity?: components["schemas"]["LiquidityRow"][];
+            /** Macro Betas */
+            macro_betas?: {
+                [key: string]: number;
+            };
+            /** Margin Loan */
+            margin_loan?: number | null;
+            /** Max Drawdown */
+            max_drawdown?: number | null;
+            /** Net Equity */
+            net_equity?: number | null;
+            price_provenance?: components["schemas"]["PriceProvenanceOut"] | null;
+            /** Risk Free Rate */
+            risk_free_rate?: number | null;
+            rolling_volatility?: components["schemas"]["RollingVolatilityOut"] | null;
+            /** Sharpe Ratio */
+            sharpe_ratio?: number | null;
+            /** Stress Asset Losses */
+            stress_asset_losses?: components["schemas"]["StressAssetLoss"][];
+            /** Stress Loss */
+            stress_loss?: number | null;
+            /** Stress Market Shock */
+            stress_market_shock?: number | null;
+            /** Total Pnl */
+            total_pnl?: number | null;
+            /** Total Return */
+            total_return?: number | null;
+            /** Total Value */
+            total_value?: number | null;
+            /** Var 95 */
+            var_95?: number | null;
+            /** Var 99 */
+            var_99?: number | null;
+        };
+        /** RollingVolPoint */
+        RollingVolPoint: {
+            /** Benchmark */
+            benchmark?: number | null;
+            /** Date */
+            date: string;
+            /** Portfolio */
+            portfolio: number;
+        };
+        /**
+         * RollingVolatilityOut
+         * @description 21-day rolling annualized volatility of portfolio daily returns
+         *     (equal-weight window, sample std, ×√252, ×risk_scale so the level
+         *     matches the levered book). NOTE: the headline ``annual_volatility``
+         *     is EWMA-based — a faster-reacting estimator; the UI labels both.
+         *     ``benchmark`` is the same computation on SPY, UNscaled (an index has
+         *     no leverage).
+         */
+        RollingVolatilityOut: {
+            /** Benchmark Ticker */
+            benchmark_ticker?: string | null;
+            /** Current */
+            current?: number | null;
+            /** Median */
+            median?: number | null;
+            /** Series */
+            series?: components["schemas"]["RollingVolPoint"][];
+            /**
+             * State
+             * @default normal
+             * @enum {string}
+             */
+            state?: "calm" | "normal" | "elevated";
+            /**
+             * Window Days
+             * @default 21
+             */
+            window_days?: number;
+        };
+        /** ScenarioCellOut */
+        ScenarioCellOut: {
+            /** Horizon */
+            horizon: number | string;
+            /** Iv Shock */
+            iv_shock: number;
+            /** Total Pnl */
+            total_pnl: number;
+            /** Underlying Shock */
+            underlying_shock: number;
+        };
+        /**
+         * ScenarioPoint
+         * @description Projected portfolio outcome under a broad market move.
+         */
+        ScenarioPoint: {
+            /** Asset Losses */
+            asset_losses?: components["schemas"]["StressAssetLoss"][];
+            /** Pnl Pct */
+            pnl_pct: number;
+            /** Portfolio Value */
+            portfolio_value: number;
+            /** Shock Pct */
+            shock_pct: number;
+        };
+        /** ScenarioPositionOut */
+        ScenarioPositionOut: {
+            /** Expiry */
+            expiry?: string | null;
+            /** Option Type */
+            option_type?: string | null;
+            /** Pnl */
+            pnl: number;
+            /** Quantity */
+            quantity?: number | null;
+            /** Strike */
+            strike?: number | null;
+            /** Underlying */
+            underlying?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * ScenariosOut
+         * @description Payload for ``POST /api/v1/risk/scenarios``.
+         */
+        ScenariosOut: {
+            /** As Of */
+            as_of?: string | null;
+            /** Observations */
+            observations?: number | null;
+            /** Scenarios */
+            scenarios?: components["schemas"]["ScenarioPoint"][];
+            /** Total Value */
+            total_value: number;
+        };
+        /** ScoreChangeReport */
+        ScoreChangeReport: {
+            /** As Of Previous */
+            as_of_previous?: string | null;
+            /** Available */
+            available: boolean;
+            /** Base Score Delta */
+            base_score_delta?: number | null;
+            /**
+             * Comparable
+             * @default true
+             */
+            comparable?: boolean;
+            /** Component Deltas */
+            component_deltas?: components["schemas"]["ComponentDelta"][];
+            /** Current Score */
+            current_score: number;
+            /** Current Score Version */
+            current_score_version?: string | null;
+            /** Data Quality Changes */
+            data_quality_changes?: components["schemas"]["DataQualityChange"][];
+            holdings_changes?: components["schemas"]["HoldingsChange"];
+            /** Input Changes */
+            input_changes?: components["schemas"]["InputChange"][];
+            /** Previous Score */
+            previous_score?: number | null;
+            /** Previous Score Version */
+            previous_score_version?: string | null;
+            /** Score Delta */
+            score_delta?: number | null;
+            /**
+             * Summary
+             * @default
+             */
+            summary?: string;
+            /** Top Drivers */
+            top_drivers?: components["schemas"]["DriverChange"][];
+            /** Window */
+            window: string;
+        };
+        /**
+         * ScoreChangeRequest
+         * @description The current (live) score the client already holds — NO recompute. The
+         *     backend fetches the prior snapshot for `window` and diffs against it.
+         */
+        ScoreChangeRequest: {
+            /** Base Overall */
+            base_overall?: number | null;
+            /** Concentration */
+            concentration?: {
+                [key: string]: number | null;
+            };
+            /** Confidence */
+            confidence?: string | null;
+            /** Data Coverage */
+            data_coverage?: number | null;
+            /** Data Quality */
+            data_quality?: number | null;
+            /** Dimensions */
+            dimensions?: {
+                [key: string]: number;
+            };
+            /** Dropped Tickers */
+            dropped_tickers?: string[];
+            /** Metrics */
+            metrics?: {
+                [key: string]: number | null;
+            };
+            /** Observations */
+            observations?: number | null;
+            /** Overall Score */
+            overall_score: number;
+            /** Top Positions */
+            top_positions?: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * Window
+             * @default previous
+             */
+            window?: string;
+        };
+        /**
+         * ScoreDriverOut
+         * @description One dimension's deterministic contribution to the overall score —
+         *     the points it COSTS vs a perfect 10 (biggest drag first).
+         */
+        ScoreDriverOut: {
+            /**
+             * Detail
+             * @default
+             */
+            detail?: string;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Points Below Max */
+            points_below_max: number;
+            /** Score */
+            score: number;
+            /** Weight */
+            weight: number;
         };
         /**
          * ScoreFromActiveRequest
@@ -1382,21 +4549,21 @@ export interface components {
          */
         ScoreFromActiveRequest: {
             /**
-             * Risk Preference
-             * @default 3
+             * History Days
+             * @description Trailing window of daily history used to build the returns matrix. 365 ≈ 252 trading days, the engine's preferred minimum. Cap at 10 years.
+             * @default 365
              */
-            risk_preference?: number;
+            history_days?: number;
             /**
              * Risk Free Rate
              * @default 0.045
              */
             risk_free_rate?: number;
             /**
-             * History Days
-             * @description Trailing window of daily history used to build the returns matrix. 365 ≈ 252 trading days, the engine's preferred minimum. Cap at 10 years.
-             * @default 365
+             * Risk Preference
+             * @default 3
              */
-            history_days?: number;
+            risk_preference?: number;
         };
         /**
          * ScoreRequest
@@ -1409,34 +4576,233 @@ export interface components {
          *     real returns; the synthetic fallback is documented as a dev aid.
          */
         ScoreRequest: {
+            /** Benchmark Returns */
+            benchmark_returns?: number[] | null;
             /** Holdings */
             holdings: components["schemas"]["HoldingIn"][];
-            /**
-             * Risk Preference
-             * @default 3
-             */
-            risk_preference?: number;
+            /** Returns */
+            returns?: {
+                [key: string]: number[];
+            } | null;
             /**
              * Risk Free Rate
              * @default 0.045
              */
             risk_free_rate?: number;
-            /** Returns */
-            returns?: {
-                [key: string]: number[];
-            } | null;
-            /** Benchmark Returns */
-            benchmark_returns?: number[] | null;
+            /**
+             * Risk Preference
+             * @default 3
+             */
+            risk_preference?: number;
+        };
+        /** ScoreResponse */
+        ScoreResponse: {
+            /** Base Overall */
+            base_overall?: number | null;
+            concentration?: components["schemas"]["backend__app__schemas__risk__ConcentrationOut"] | null;
+            /** Dimensions */
+            dimensions: {
+                [key: string]: components["schemas"]["DimensionScoreOut"];
+            };
+            /** Drivers */
+            drivers?: components["schemas"]["ScoreDriverOut"][];
+            metrics: components["schemas"]["PortfolioMetricsOut"];
+            options?: components["schemas"]["OptionScoreImpactOut"] | null;
+            /** Overall Score */
+            overall_score: number;
+            price_provenance?: components["schemas"]["PriceProvenanceOut"] | null;
+            /** Reason Codes */
+            reason_codes?: components["schemas"]["ReasonCodeOut"][];
+            /** Risk Preference */
+            risk_preference: number;
+            /** Risk Target */
+            risk_target: {
+                [key: string]: unknown;
+            };
+            /** Score Version */
+            score_version?: string | null;
+        };
+        /** SectorEffectRow */
+        SectorEffectRow: {
+            /** Allocation Effect */
+            allocation_effect?: number | null;
+            /** Sector */
+            sector: string;
+            /** Selection Effect */
+            selection_effect?: number | null;
+            /** Total Effect */
+            total_effect?: number | null;
+            /** Weight Diff */
+            weight_diff?: number | null;
+        };
+        /** SectorRowOut */
+        SectorRowOut: {
+            /** Change Pct */
+            change_pct?: number | null;
+            /** Sector */
+            sector: string;
+            /** Ticker */
+            ticker: string;
+            /** Ytd Return */
+            ytd_return?: number | null;
+        };
+        /** SectorWeightOut */
+        SectorWeightOut: {
+            /** Sector */
+            sector: string;
+            /** Weight */
+            weight: number;
+        };
+        /**
+         * SentimentResponse
+         * @description Payload for ``POST /api/v1/market/sentiment``.
+         */
+        SentimentResponse: {
+            /**
+             * Ai Generated
+             * @default false
+             */
+            ai_generated?: boolean;
+            /** Sentiments */
+            sentiments?: components["schemas"]["SentimentRow"][];
+        };
+        /**
+         * SentimentRow
+         * @description One holding's AI sentiment over its recent headlines.
+         */
+        SentimentRow: {
+            /**
+             * Headline Count
+             * @default 0
+             */
+            headline_count?: number;
+            /** Label */
+            label: string;
+            /**
+             * Narrative
+             * @default
+             */
+            narrative?: string;
+            /**
+             * Score
+             * @description 0 bearish · 50 neutral · 100 bullish
+             */
+            score: number;
+            /** Ticker */
+            ticker: string;
+        };
+        /**
+         * SeriesBatchResponse
+         * @description Payload for ``GET /api/v1/macro/series``.
+         */
+        SeriesBatchResponse: {
+            /**
+             * Cache Ttl Seconds
+             * @default 3600
+             */
+            cache_ttl_seconds?: number;
+            /**
+             * Refresh Policy
+             * @default Auto-refreshes after cache expiry; FRED publication cadence controls when new observations appear.
+             */
+            refresh_policy?: string;
+            /** Series */
+            series: components["schemas"]["SeriesResultOut"][];
+            /**
+             * Source
+             * @default FRED
+             */
+            source?: string;
+        };
+        /** SeriesPointOut */
+        SeriesPointOut: {
+            /** Date */
+            date: string;
+            /** Value */
+            value: number;
+        };
+        /** SeriesResultOut */
+        SeriesResultOut: {
+            /** Label */
+            label: string;
+            /** Latest Date */
+            latest_date?: string | null;
+            /** Latest Value */
+            latest_value?: number | null;
+            /** Points */
+            points?: components["schemas"]["SeriesPointOut"][];
+            /** Series Id */
+            series_id: string;
+        };
+        /** SmartMoneyOut */
+        SmartMoneyOut: {
+            /** As Of */
+            as_of?: string | null;
+            /** Signals */
+            signals?: components["schemas"]["SmartMoneySignal"][];
+            /**
+             * Source
+             * @default SEC EDGAR 13F
+             */
+            source?: string;
+        };
+        /** SmartMoneySignal */
+        SmartMoneySignal: {
+            /**
+             * Crowding Score
+             * @default 0
+             */
+            crowding_score?: number;
+            /**
+             * Num Institutions
+             * @default 0
+             */
+            num_institutions?: number;
+            /**
+             * Signal
+             * @default LOW
+             */
+            signal?: string;
+            /** Ticker */
+            ticker: string;
+            /** Top Holders */
+            top_holders?: string[];
+        };
+        /** SourceProvenance */
+        SourceProvenance: {
+            /** As Of */
+            as_of?: string | null;
+            /** Cache Hit */
+            cache_hit?: boolean | null;
+            /** Confidence */
+            confidence?: number | null;
+            /** Endpoint */
+            endpoint?: string | null;
+            /**
+             * Fallback Used
+             * @default false
+             */
+            fallback_used?: boolean;
+            /** Field */
+            field: string;
+            /** Freshness */
+            freshness?: string | null;
+            /** Label */
+            label?: string | null;
+            /** Latency Ms */
+            latency_ms?: number | null;
+            /** Provider */
+            provider: string;
+            /** Role */
+            role?: string | null;
+            /** Warning */
+            warning?: string | null;
         };
         /**
          * SourceRef
          * @description Where one slice of the FactPack came from + how complete it was.
          */
         SourceRef: {
-            /** Field */
-            field: string;
-            /** Source */
-            source: string;
             /** As Of */
             as_of?: string | null;
             /**
@@ -1444,47 +4810,269 @@ export interface components {
              * @default 0
              */
             coverage?: number;
+            /** Field */
+            field: string;
+            /** Source */
+            source: string;
+        };
+        /** StressAssetLoss */
+        StressAssetLoss: {
+            /** Loss Pct */
+            loss_pct: number;
+            /** Ticker */
+            ticker: string;
+        };
+        /** StressRowOut */
+        StressRowOut: {
+            /** Est Portfolio Impact Pct */
+            est_portfolio_impact_pct?: number | null;
+            /** Est Portfolio Impact Usd */
+            est_portfolio_impact_usd?: number | null;
+            /** Market Shock Pct */
+            market_shock_pct: number;
+        };
+        /**
+         * SubscriptionOut
+         * @description Mirror of the ``public.subscriptions`` row for the current user.
+         *
+         *     All fields are optional because users on the implicit free tier
+         *     never had a row created — the frontend renders the table-row-
+         *     missing case as "Free plan, no Stripe history".
+         */
+        SubscriptionOut: {
+            /** Cancel At Period End */
+            cancel_at_period_end?: boolean | null;
+            /** Current Period End */
+            current_period_end?: string | null;
+            /** Current Period Start */
+            current_period_start?: string | null;
+            /** Plan */
+            plan?: string | null;
+            /** Status */
+            status?: string | null;
+            /** Stripe Customer Id */
+            stripe_customer_id?: string | null;
+            /** Stripe Subscription Id */
+            stripe_subscription_id?: string | null;
+        };
+        /** SuggestedAction */
+        SuggestedAction: {
+            /**
+             * Disclaimer
+             * @default Educational, not financial advice.
+             */
+            disclaimer?: string;
+            /** Evidence */
+            evidence: string;
+            /** Next Step */
+            next_step: string;
+            /** Reason */
+            reason: string;
+        };
+        /** TickerNewsResponse */
+        TickerNewsResponse: {
+            /** Items */
+            items?: components["schemas"]["UnifiedNewsItem"][];
+            /** Sources */
+            sources?: components["schemas"]["SourceProvenance"][];
+            /** Warnings */
+            warnings?: string[];
+        };
+        /** TickerReportInput */
+        TickerReportInput: {
+            fact_pack: components["schemas"]["FactPack"];
+            verdict?: components["schemas"]["ResearchVerdict"] | null;
+        };
+        /** UnderlyingExposureOut */
+        UnderlyingExposureOut: {
+            /** Contracts */
+            contracts: number;
+            /** Equity Shares */
+            equity_shares?: number | null;
+            /** Net Delta */
+            net_delta: number;
+            /** Net Notional */
+            net_notional: number;
+            /** Underlying */
+            underlying: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** UnifiedNewsItem */
+        UnifiedNewsItem: {
+            /** Published */
+            published?: string | null;
+            /** Site */
+            site?: string | null;
+            /** Snippet */
+            snippet?: string | null;
+            /** Source */
+            source: string;
+            /** Source Label */
+            source_label: string;
+            /** Title */
+            title: string;
+            /** Type */
+            type: string;
+            /** Url */
+            url?: string | null;
         };
         /** ValidationError */
         ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
             /** Location */
             loc: (string | number)[];
             /** Message */
             msg: string;
             /** Error Type */
             type: string;
-            /** Input */
-            input?: unknown;
-            /** Context */
-            ctx?: Record<string, never>;
         };
         /** ValuationBlock */
         ValuationBlock: {
-            /** Pe */
-            pe?: number | null;
-            /** Forward Pe */
-            forward_pe?: number | null;
-            /** Ps */
-            ps?: number | null;
-            /** Pb */
-            pb?: number | null;
+            /** Band */
+            band?: string | null;
+            /** Dividend Yield */
+            dividend_yield?: number | null;
             /** Ev Ebitda */
             ev_ebitda?: number | null;
             /** Fcf Yield */
             fcf_yield?: number | null;
-            /** Dividend Yield */
-            dividend_yield?: number | null;
-            /** Band */
-            band?: string | null;
+            /** Forward Pe */
+            forward_pe?: number | null;
+            /** Pb */
+            pb?: number | null;
+            /** Pe */
+            pe?: number | null;
             /** Peer Median Pe */
             peer_median_pe?: number | null;
+            /** Ps */
+            ps?: number | null;
+        };
+        /** VarBacktestOut */
+        VarBacktestOut: {
+            /**
+             * Breaches 95
+             * @default 0
+             */
+            breaches_95?: number;
+            /**
+             * Breaches 99
+             * @default 0
+             */
+            breaches_99?: number;
+            coverage_95?: components["schemas"]["CoverageTestOut"] | null;
+            coverage_99?: components["schemas"]["CoverageTestOut"] | null;
+            /** Expected 95 */
+            expected_95?: number | null;
+            /** Expected 99 */
+            expected_99?: number | null;
+            /** Hist Var 95 */
+            hist_var_95?: number | null;
+            /** Hist Var 99 */
+            hist_var_99?: number | null;
+            /** Histogram */
+            histogram?: components["schemas"]["HistogramBin"][];
+            /** Mean Daily */
+            mean_daily?: number | null;
+            /**
+             * N Days
+             * @default 0
+             */
+            n_days?: number;
+            /** Var 95 */
+            var_95?: number | null;
+            /** Var 99 */
+            var_99?: number | null;
+            /** Vol Daily */
+            vol_daily?: number | null;
+            /** Worst Day */
+            worst_day?: number | null;
         };
         /** VerdictRequest */
         VerdictRequest: {
-            /** Ticker */
-            ticker?: string | null;
             /** @description The FactPack already fetched from GET /research/fact_pack/{ticker}. When supplied the verdict REUSES it (no second network fetch). */
             fact_pack?: components["schemas"]["FactPack"] | null;
+            /** Ticker */
+            ticker?: string | null;
+        };
+        /** YieldCurvePointOut */
+        YieldCurvePointOut: {
+            /** Tenor */
+            tenor: string;
+            /** Yield Pct */
+            yield_pct: number;
+        };
+        /**
+         * YieldCurveResponse
+         * @description Payload for ``GET /api/v1/macro/yield_curve``.
+         */
+        YieldCurveResponse: {
+            /** As Of */
+            as_of: string;
+            /**
+             * Cache Ttl Seconds
+             * @default 3600
+             */
+            cache_ttl_seconds?: number;
+            /** Points */
+            points: components["schemas"]["YieldCurvePointOut"][];
+            /**
+             * Refresh Policy
+             * @default Auto-refreshes after cache expiry; Treasury publication cadence controls when the latest curve appears.
+             */
+            refresh_policy?: string;
+            /**
+             * Source
+             * @default US Treasury
+             */
+            source?: string;
+        };
+        /** ConcentrationOut */
+        backend__app__schemas__public_risk__ConcentrationOut: {
+            /** Effective Holdings */
+            effective_holdings?: number | null;
+            /** Hhi */
+            hhi?: number | null;
+            /** Top Ticker */
+            top_ticker?: string | null;
+            /** Top Weight */
+            top_weight?: number | null;
+            /** Weights */
+            weights?: {
+                [key: string]: number;
+            };
+        };
+        /**
+         * ConcentrationOut
+         * @description Deterministic concentration diagnostics over the invested book
+         *     (cash excluded). HHI = sum of squared weights; effective_holdings =
+         *     1/HHI is 'how many equally-weighted positions this behaves like'.
+         *     Sectors come from the deterministic resolver (holding override →
+         *     canonical SECTOR_MAP → asset-type default → Unclassified) — no
+         *     network calls.
+         */
+        backend__app__schemas__risk__ConcentrationOut: {
+            /** Effective Holdings */
+            effective_holdings?: number | null;
+            /** Hhi */
+            hhi?: number | null;
+            /** Num Holdings */
+            num_holdings: number;
+            /** Sectors */
+            sectors?: components["schemas"]["SectorWeightOut"][];
+            /** Top5 Weight */
+            top5_weight?: number | null;
+            /** Top Holding Ticker */
+            top_holding_ticker?: string | null;
+            /** Top Holding Weight */
+            top_holding_weight?: number | null;
+            /** Top Sector */
+            top_sector?: string | null;
+            /** Top Sector Weight */
+            top_sector_weight?: number | null;
         };
     };
     responses: never;
@@ -1495,27 +5083,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    health_api_v1_health_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    score_portfolio_endpoint_api_v1_risk_score_post: {
+    delete_account_api_v1_account_delete: {
         parameters: {
             query?: never;
             header?: never;
@@ -1524,7 +5092,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ScoreRequest"];
+                "application/json": components["schemas"]["AccountDeleteIn"];
             };
         };
         responses: {
@@ -1534,7 +5102,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Envelope_AccountDeleteOut_"];
                 };
             };
             /** @description Validation Error */
@@ -1548,7 +5116,7 @@ export interface operations {
             };
         };
     };
-    score_from_active_endpoint_api_v1_risk_score_from_active_post: {
+    billing_admin_set_anthropic_topup_api_v1_billing_admin_anthropic_topup_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1557,7 +5125,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ScoreFromActiveRequest"];
+                "application/json": components["schemas"]["AnthropicTopupRequest"];
             };
         };
         responses: {
@@ -1567,7 +5135,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Envelope_dict_"];
                 };
             };
             /** @description Validation Error */
@@ -1581,7 +5149,7 @@ export interface operations {
             };
         };
     };
-    last_snapshot_endpoint_api_v1_risk_last_snapshot_get: {
+    billing_admin_balances_api_v1_billing_admin_balances_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -1596,576 +5164,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    snapshot_history_endpoint_api_v1_risk_snapshot_history_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    report_from_active_endpoint_api_v1_risk_report_from_active_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReportFromActiveRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    efficient_frontier_endpoint_api_v1_risk_efficient_frontier_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReportFromActiveRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    scenarios_endpoint_api_v1_risk_scenarios_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReportFromActiveRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    explain_endpoint_api_v1_risk_explain_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RiskExplainInput"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    benchmarks_endpoint_api_v1_risk_benchmarks_get: {
-        parameters: {
-            query?: {
-                days?: number;
-                risk_free?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    historical_scenarios_endpoint_api_v1_risk_historical_scenarios_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    var_backtest_endpoint_api_v1_risk_var_backtest_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    list_my_portfolios_api_v1_portfolios_me_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    create_portfolio_endpoint_api_v1_portfolios_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PortfolioCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_portfolio_endpoint_api_v1_portfolios__portfolio_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                portfolio_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_portfolio_endpoint_api_v1_portfolios__portfolio_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                portfolio_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PortfolioPatchRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_prices_api_v1_market_prices_get: {
-        parameters: {
-            query: {
-                /** @description Comma-separated ticker list. Case-insensitive, deduped server-side. Example: `?tickers=SPY,BND,AAPL`. */
-                tickers: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    portfolio_sentiment_api_v1_market_sentiment_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    get_series_api_v1_macro_series_get: {
-        parameters: {
-            query: {
-                /** @description Comma-separated FRED series IDs. Only allow-listed series are returned — see ``services.macro_data.ALLOWED_FRED_SERIES``. Example: `?series=DFF,CPIAUCSL,UNRATE`. */
-                series: string;
-                /** @description Trailing window in days. Min 30, max 10 years. */
-                days?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_yield_curve_api_v1_macro_yield_curve_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    get_regime_api_v1_macro_regime_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    get_regime_detail_endpoint_api_v1_macro_regime_detail_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    get_movers_endpoint_api_v1_macro_movers_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    get_news_endpoint_api_v1_macro_news_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    billing_me_api_v1_billing_me_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    billing_admin_usage_api_v1_billing_admin_usage_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Envelope_dict_"];
                 };
             };
         };
@@ -2185,7 +5184,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Envelope_dict_"];
                 };
             };
         };
@@ -2207,7 +5206,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Envelope_dict_"];
                 };
             };
             /** @description Validation Error */
@@ -2217,6 +5216,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    billing_admin_usage_api_v1_billing_admin_usage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
                 };
             };
         };
@@ -2240,7 +5259,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Envelope_CheckoutSessionResponse_"];
                 };
             };
             /** @description Validation Error */
@@ -2250,6 +5269,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    billing_me_api_v1_billing_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_BillingMeResponse_"];
                 };
             };
         };
@@ -2273,40 +5312,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    copilot_chat_endpoint_api_v1_copilot_chat_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ChatRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Envelope_PortalSessionResponse_"];
                 };
             };
             /** @description Validation Error */
@@ -2339,7 +5345,40 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    copilot_chat_endpoint_api_v1_copilot_chat_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ChatResponse_"];
                 };
             };
             /** @description Validation Error */
@@ -2386,7 +5425,47 @@ export interface operations {
             };
         };
     };
-    backtest_active_endpoint_api_v1_quant_backtest_post: {
+    data_health_api_v1_data_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+        };
+    };
+    get_pref_api_v1_digest_pref_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+        };
+    };
+    set_pref_api_v1_digest_pref_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2395,7 +5474,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["BacktestRequest"];
+                "application/json": components["schemas"]["DigestPrefIn"];
             };
         };
         responses: {
@@ -2405,7 +5484,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Envelope_dict_"];
                 };
             };
             /** @description Validation Error */
@@ -2419,10 +5498,12 @@ export interface operations {
             };
         };
     };
-    attribution_active_endpoint_api_v1_quant_attribution_post: {
+    run_digest_api_v1_digest_run_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "x-digest-token"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2434,29 +5515,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    fact_pack_api_v1_research_fact_pack__ticker__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ticker: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Envelope_dict_"];
                 };
             };
             /** @description Validation Error */
@@ -2470,18 +5529,16 @@ export interface operations {
             };
         };
     };
-    verdict_api_v1_research_verdict_post: {
+    unsubscribe_confirm_api_v1_digest_unsubscribe_get: {
         parameters: {
-            query?: never;
+            query?: {
+                token?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["VerdictRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -2489,7 +5546,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "text/html": string;
                 };
             };
             /** @description Validation Error */
@@ -2503,9 +5560,11 @@ export interface operations {
             };
         };
     };
-    smart_money_api_v1_institutions_smart_money_get: {
+    unsubscribe_apply_api_v1_digest_unsubscribe_post: {
         parameters: {
-            query?: never;
+            query?: {
+                token?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2518,49 +5577,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    top_api_v1_institutions_top_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    detail_api_v1_institutions__cik__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                cik: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
+                    "text/html": string;
                 };
             };
             /** @description Validation Error */
@@ -2593,7 +5610,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Envelope_dict_"];
                 };
             };
             /** @description Validation Error */
@@ -2603,6 +5620,1446 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    health_api_v1_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+        };
+    };
+    smart_money_api_v1_institutions_smart_money_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SmartMoneyOut_"];
+                };
+            };
+        };
+    };
+    top_api_v1_institutions_top_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SmartMoneyOut_"];
+                };
+            };
+        };
+    };
+    detail_api_v1_institutions__cik__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cik: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SmartMoneyOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_movers_endpoint_api_v1_macro_movers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_MoversResponse_"];
+                };
+            };
+        };
+    };
+    get_news_endpoint_api_v1_macro_news_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_NewsResponse_"];
+                };
+            };
+        };
+    };
+    get_regime_api_v1_macro_regime_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_RegimeResponse_"];
+                };
+            };
+        };
+    };
+    get_regime_detail_endpoint_api_v1_macro_regime_detail_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_RegimeDetailResponse_"];
+                };
+            };
+        };
+    };
+    get_series_api_v1_macro_series_get: {
+        parameters: {
+            query: {
+                /** @description Comma-separated FRED series IDs. Only allow-listed series are returned — see ``services.macro_data.ALLOWED_FRED_SERIES``. Example: `?series=DFF,CPIAUCSL,UNRATE`. */
+                series: string;
+                /** @description Trailing window in days. Min 30, max 10 years. */
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SeriesBatchResponse_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_yield_curve_api_v1_macro_yield_curve_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_YieldCurveResponse_"];
+                };
+            };
+        };
+    };
+    get_prices_api_v1_market_prices_get: {
+        parameters: {
+            query: {
+                /** @description Comma-separated ticker list. Case-insensitive, deduped server-side. Example: `?tickers=SPY,BND,AAPL`. */
+                tickers: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_PricesResponse_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    portfolio_sentiment_api_v1_market_sentiment_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SentimentResponse_"];
+                };
+            };
+        };
+    };
+    ml_health_api_v1_ml_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_MLHealthOut_"];
+                };
+            };
+        };
+    };
+    ml_model_card_api_v1_ml_model_card_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ModelCardOut_"];
+                };
+            };
+        };
+    };
+    ml_regime_api_v1_ml_regime_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_MLRegimeOut_"];
+                };
+            };
+        };
+    };
+    analyze_options_endpoint_api_v1_options_analyze_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OptionAnalyzeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_OptionAnalyzeResponse_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    option_explain_endpoint_api_v1_options_explain_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OptionExplainInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_portfolio_endpoint_api_v1_portfolios_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortfolioCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_PortfolioOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_my_portfolios_api_v1_portfolios_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_PortfoliosMeResponse_"];
+                };
+            };
+        };
+    };
+    delete_portfolio_endpoint_api_v1_portfolios__portfolio_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_portfolio_endpoint_api_v1_portfolios__portfolio_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortfolioPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_PortfolioOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    risk_check_api_v1_public_risk_check_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_PublicRiskCheckOut_"];
+                };
+            };
+        };
+    };
+    attribution_active_endpoint_api_v1_quant_attribution_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AttributionResponse_"];
+                };
+            };
+        };
+    };
+    backtest_active_endpoint_api_v1_quant_backtest_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BacktestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    regime_summary_api_v1_regime_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_RegimeSummaryOut_"];
+                };
+            };
+        };
+    };
+    options_report_endpoint_api_v1_reports_options_html_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OptionsReportInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ReportResponse_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    portfolio_report_endpoint_api_v1_reports_portfolio_html_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortfolioReportInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ReportResponse_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ticker_report_endpoint_api_v1_reports_ticker_html_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TickerReportInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ReportResponse_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fact_pack_api_v1_research_fact_pack__ticker__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ticker_news_api_v1_research_news__ticker__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_TickerNewsResponse_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verdict_api_v1_research_verdict_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerdictRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    research_bundle_api_v1_research__ticker__bundle_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dcf_valuation_api_v1_research__ticker__dcf_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DCFRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    research_diagnostics_api_v1_research__ticker__diagnostics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    earnings_comparison_api_v1_research__ticker__earnings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    research_fact_pack_api_v1_research__ticker__fact_pack_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    peer_comparison_api_v1_research__ticker__peers_get: {
+        parameters: {
+            query?: {
+                /** @description Optional comma-separated user peers */
+                peers?: string | null;
+            };
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analyst_report_api_v1_research__ticker__report_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    research_thesis_api_v1_research__ticker__thesis_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    risk_alerts_endpoint_api_v1_risk_alerts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RiskAlertsInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_RiskAlertsOutput_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    benchmarks_endpoint_api_v1_risk_benchmarks_get: {
+        parameters: {
+            query?: {
+                days?: number;
+                risk_free?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_BenchmarksOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    efficient_frontier_endpoint_api_v1_risk_efficient_frontier_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportFromActiveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_EfficientFrontierOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    explain_endpoint_api_v1_risk_explain_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RiskExplainInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_RiskExplainOutput_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    historical_scenarios_endpoint_api_v1_risk_historical_scenarios_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_HistoricalScenariosOut_"];
+                };
+            };
+        };
+    };
+    last_snapshot_endpoint_api_v1_risk_last_snapshot_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+        };
+    };
+    report_from_active_endpoint_api_v1_risk_report_from_active_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportFromActiveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_RiskReportOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scenarios_endpoint_api_v1_risk_scenarios_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportFromActiveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ScenariosOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    score_portfolio_endpoint_api_v1_risk_score_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScoreRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ScoreResponse_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    score_changes_endpoint_api_v1_risk_score_changes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScoreChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ScoreChangeReport_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    score_from_active_endpoint_api_v1_risk_score_from_active_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScoreFromActiveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ScoreResponse_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    snapshot_history_endpoint_api_v1_risk_snapshot_history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+        };
+    };
+    var_backtest_endpoint_api_v1_risk_var_backtest_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_VarBacktestOut_"];
                 };
             };
         };
