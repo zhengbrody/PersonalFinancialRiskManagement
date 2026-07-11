@@ -59,24 +59,24 @@ def test_caddyfile_ships_the_security_headers():
         assert origin in csp, f"CSP missing: {origin}"
 
 
-def test_static_seo_pages_use_self_hosted_fonts_only():
-    """The static SEO pages must not call out to Google Fonts (CSP tightness +
-    privacy); they use the committed self-hosted Instrument Serif instead,
-    served by the Caddy /fonts/* handler."""
-    seo_pages = sorted((ROOT / "assets/seo").glob("*.html"))
-    assert seo_pages, "assets/seo pages missing"
-    for page in seo_pages:
-        text = page.read_text()
-        assert "fonts.googleapis" not in text, f"{page.name} still loads Google Fonts CSS"
-        assert "fonts.gstatic" not in text, f"{page.name} still preconnects to gstatic"
-        if "Instrument Serif" in text:
-            assert "@font-face" in text, f"{page.name} uses the serif without a self-hosted source"
+def test_static_seo_pages_migrated_to_next():
+    """The former static SEO pages (assets/seo/*.html) are migrated to Next.js
+    routes — there is now a SINGLE SEO content source (the Next app), and Caddy
+    no longer serves any static page from /srv/seo. The self-hosted brand fonts
+    + /fonts/* handler remain (brand assets)."""
+    seo_html = sorted((ROOT / "assets/seo").glob("*.html"))
+    assert not seo_html, (
+        "static SEO html should be migrated to Next.js routes, but found: "
+        f"{[p.name for p in seo_html]}"
+    )
 
+    caddyfile = (ROOT / "Caddyfile").read_text()
+    # No static SEO handles remain (robots/sitemap/pages all served by Next).
+    assert "root * /srv/seo" not in caddyfile, "Caddy still serves a static /srv/seo page"
+    # Brand fonts are still self-hosted + served by Caddy.
+    assert "handle /fonts/*" in caddyfile, "Caddy /fonts/* handler missing"
     for font in (
         "assets/brand/fonts/instrument-serif-regular.woff2",
         "assets/brand/fonts/instrument-serif-italic.woff2",
     ):
         assert (ROOT / font).exists(), f"missing committed font file: {font}"
-
-    caddyfile = (ROOT / "Caddyfile").read_text()
-    assert "handle /fonts/*" in caddyfile, "Caddy /fonts/* handler missing"

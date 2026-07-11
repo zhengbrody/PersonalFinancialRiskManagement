@@ -1,72 +1,76 @@
-// NOTE: in production Caddy serves /robots.txt and /sitemap.xml from
-// assets/seo/ (see Caddyfile), which SHADOWS these Next routes. Keep the
-// two in sync when adding public pages — this file is what local dev and
-// any non-Caddy deployment will serve.
+// Single sitemap source (Next). The old static assets/seo/sitemap.xml + the
+// Caddy handle that served it are removed, so this is what production serves.
+//
+// `lastModified` is a FIXED content date per route, NOT `new Date()` — a build
+// must not stamp every URL as "changed today". Bump a route's date when its
+// content actually changes. Canonical URLs only: /demo is a 301 → /demo-risk-check
+// and is intentionally absent.
 import type { MetadataRoute } from "next";
+import { SEO_PAGES } from "@/lib/seo-content";
 import { LEARN_SLUGS } from "@/lib/learn-content";
 import { LEGAL_DOCS } from "@/lib/legal-content";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
 
-const PUBLIC_ROUTES: Array<{
-  path: string;
-  changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"];
-  priority: number;
-}> = [
-  { path: "/", changeFrequency: "weekly", priority: 1.0 },
-  { path: "/demo-risk-check", changeFrequency: "weekly", priority: 0.95 },
-  { path: "/score", changeFrequency: "weekly", priority: 0.85 },
-  { path: "/product", changeFrequency: "monthly", priority: 0.9 },
-  { path: "/methodology/health-score", changeFrequency: "monthly", priority: 0.75 },
-  { path: "/methodology/regime-model", changeFrequency: "monthly", priority: 0.7 },
-  { path: "/learn", changeFrequency: "weekly", priority: 0.9 },
-  { path: "/markets", changeFrequency: "daily", priority: 0.8 },
-  { path: "/risk-today", changeFrequency: "daily", priority: 0.85 },
-  { path: "/pricing", changeFrequency: "monthly", priority: 0.7 },
-  { path: "/portfolio-risk-management", changeFrequency: "monthly", priority: 0.9 },
-  { path: "/ai-portfolio-analysis", changeFrequency: "monthly", priority: 0.85 },
-  { path: "/portfolio-var-stress-testing", changeFrequency: "monthly", priority: 0.85 },
-  {
-    path: "/personal-portfolio-risk-analysis",
-    changeFrequency: "monthly",
-    priority: 0.85,
-  },
-  { path: "/margin-risk-calculator", changeFrequency: "monthly", priority: 0.85 },
-  { path: "/portfolio-stress-test", changeFrequency: "monthly", priority: 0.85 },
-  {
-    path: "/stock-portfolio-concentration-risk",
-    changeFrequency: "monthly",
-    priority: 0.8,
-  },
-  { path: "/robinhood-margin-risk", changeFrequency: "monthly", priority: 0.8 },
-  { path: "/about", changeFrequency: "monthly", priority: 0.8 },
-  { path: "/demo", changeFrequency: "monthly", priority: 0.8 },
-  { path: "/sample-risk-report", changeFrequency: "monthly", priority: 0.8 },
-  { path: "/resources", changeFrequency: "monthly", priority: 0.7 },
+type Freq = MetadataRoute.Sitemap[number]["changeFrequency"];
+
+// Non-SEO-landing Next routes (the 9 SEO landing pages come from SEO_PAGES).
+const NEXT_ROUTES: { path: string; changeFrequency: Freq; priority: number; lastmod: string }[] = [
+  { path: "/", changeFrequency: "weekly", priority: 1.0, lastmod: "2026-06-25" },
+  { path: "/demo-risk-check", changeFrequency: "weekly", priority: 0.95, lastmod: "2026-06-25" },
+  { path: "/score", changeFrequency: "weekly", priority: 0.85, lastmod: "2026-06-17" },
+  { path: "/markets", changeFrequency: "daily", priority: 0.8, lastmod: "2026-06-17" },
+  { path: "/risk-today", changeFrequency: "daily", priority: 0.85, lastmod: "2026-07-11" },
+  { path: "/pricing", changeFrequency: "monthly", priority: 0.7, lastmod: "2026-06-17" },
+  { path: "/product", changeFrequency: "monthly", priority: 0.9, lastmod: "2026-06-17" },
+  { path: "/learn", changeFrequency: "weekly", priority: 0.9, lastmod: "2026-06-25" },
+  { path: "/resources", changeFrequency: "monthly", priority: 0.7, lastmod: "2026-06-25" },
+  { path: "/about", changeFrequency: "monthly", priority: 0.8, lastmod: "2026-07-11" },
+  { path: "/methodology/health-score", changeFrequency: "monthly", priority: 0.75, lastmod: "2026-07-10" },
+  { path: "/methodology/regime-model", changeFrequency: "monthly", priority: 0.7, lastmod: "2026-07-11" },
 ];
 
+// The three learn topics added later carry a newer content date.
+const LEARN_NEWER = new Set([
+  "sharpe-ratio-explained",
+  "maximum-drawdown",
+  "diversification-correlation",
+]);
+
 export default function sitemap(): MetadataRoute.Sitemap {
-  const now = new Date();
-  const learn: MetadataRoute.Sitemap = LEARN_SLUGS.map((slug) => ({
-    url: `${SITE_URL}/learn/${slug}`,
-    lastModified: now,
-    changeFrequency: "monthly" as const,
-    priority: 0.8,
-  }));
-  const legal: MetadataRoute.Sitemap = LEGAL_DOCS.map((d) => ({
-    url: `${SITE_URL}/legal/${d.slug}`,
-    lastModified: now,
-    changeFrequency: "yearly" as const,
-    priority: 0.3,
-  }));
-  return [
-    ...PUBLIC_ROUTES.map((route) => ({
-      url: `${SITE_URL}${route.path}`,
-      lastModified: now,
-      changeFrequency: route.changeFrequency,
-      priority: route.priority,
-    })),
-    ...learn,
-    ...legal,
-  ];
+  const rows: MetadataRoute.Sitemap = [];
+
+  for (const r of NEXT_ROUTES) {
+    rows.push({
+      url: `${SITE_URL}${r.path}`,
+      lastModified: r.lastmod,
+      changeFrequency: r.changeFrequency,
+      priority: r.priority,
+    });
+  }
+  for (const p of SEO_PAGES) {
+    rows.push({
+      url: `${SITE_URL}${p.path}`,
+      lastModified: p.lastmod,
+      changeFrequency: p.changeFrequency,
+      priority: p.priority,
+    });
+  }
+  for (const slug of LEARN_SLUGS) {
+    rows.push({
+      url: `${SITE_URL}/learn/${slug}`,
+      lastModified: LEARN_NEWER.has(slug) ? "2026-06-24" : "2026-06-17",
+      changeFrequency: "monthly",
+      priority: 0.85,
+    });
+  }
+  for (const d of LEGAL_DOCS) {
+    rows.push({
+      url: `${SITE_URL}/legal/${d.slug}`,
+      lastModified: "2026-06-24",
+      changeFrequency: "yearly",
+      priority: 0.3,
+    });
+  }
+  return rows;
 }

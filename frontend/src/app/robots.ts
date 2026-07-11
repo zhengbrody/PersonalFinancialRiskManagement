@@ -1,7 +1,5 @@
-// NOTE: in production Caddy serves /robots.txt and /sitemap.xml from
-// assets/seo/ (see Caddyfile), which SHADOWS these Next routes. Keep the
-// two in sync when adding public pages — this file is what local dev and
-// any non-Caddy deployment will serve.
+// Single robots source (Next). The old static assets/seo/robots.txt + its Caddy
+// handle are removed, so this is what production serves at /robots.txt.
 import type { MetadataRoute } from "next";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";

@@ -90,86 +90,21 @@
 		file_server
 	}
 
-	handle /robots.txt {
-		root * /srv/seo
-		file_server
-	}
-
-	handle /sitemap.xml {
-		root * /srv/seo
-		file_server
-	}
+	# /robots.txt and /sitemap.xml are now served by Next.js (single SEO
+	# source) — they fall through to the frontend catch-all below.
 
 	handle /googlecpW5HG50AaWNMEfTxdGBF6JxeviA-0QFaHDYS0xw_N8.html {
 		header Content-Type "text/plain; charset=utf-8"
 		respond "google-site-verification: googlecpW5HG50AaWNMEfTxdGBF6JxeviA-0QFaHDYS0xw_N8.html"
 	}
 
-	handle /about {
-		root * /srv/seo
-		rewrite * /about.html
-		file_server
-	}
-
-	handle /demo {
-		root * /srv/seo
-		rewrite * /demo.html
-		file_server
-	}
-
-	handle /sample-risk-report {
-		root * /srv/seo
-		rewrite * /sample-risk-report.html
-		file_server
-	}
-
-	handle /portfolio-risk-management {
-		root * /srv/seo
-		rewrite * /portfolio-risk-management.html
-		file_server
-	}
-
-	handle /ai-portfolio-analysis {
-		root * /srv/seo
-		rewrite * /ai-portfolio-analysis.html
-		file_server
-	}
-
-	handle /portfolio-var-stress-testing {
-		root * /srv/seo
-		rewrite * /portfolio-var-stress-testing.html
-		file_server
-	}
-
-	handle /personal-portfolio-risk-analysis {
-		root * /srv/seo
-		rewrite * /personal-portfolio-risk-analysis.html
-		file_server
-	}
-
-	handle /margin-risk-calculator {
-		root * /srv/seo
-		rewrite * /margin-risk-calculator.html
-		file_server
-	}
-
-	handle /portfolio-stress-test {
-		root * /srv/seo
-		rewrite * /portfolio-stress-test.html
-		file_server
-	}
-
-	handle /stock-portfolio-concentration-risk {
-		root * /srv/seo
-		rewrite * /stock-portfolio-concentration-risk.html
-		file_server
-	}
-
-	handle /robinhood-margin-risk {
-		root * /srv/seo
-		rewrite * /robinhood-margin-risk.html
-		file_server
-	}
+	# The former static SEO pages (about, demo, sample-risk-report,
+	# portfolio-risk-management, ai-portfolio-analysis,
+	# portfolio-var-stress-testing, personal-portfolio-risk-analysis,
+	# margin-risk-calculator, portfolio-stress-test,
+	# stock-portfolio-concentration-risk, robinhood-margin-risk) are now
+	# Next.js routes — they fall through to the frontend catch-all below.
+	# /demo is a permanent 301 → /demo-risk-check (handled in Next).
 
 	# ── /api/v1/* → FastAPI backend ───────────────────────────────
 	# Caddy's reverse_proxy already sets X-Forwarded-* automatically;

@@ -6,7 +6,7 @@ Goal: make `mindmarket.app` discoverable for queries such as `MindMarket AI`,
 ## What the app serves
 
 - `https://mindmarket.app/robots.txt`
-- `https://mindmarket.app/sitemap.xml` (Caddy serves `assets/seo/sitemap.xml`)
+- `https://mindmarket.app/sitemap.xml` (served by Next.js — single source)
 - `https://mindmarket.app/` — the Next.js marketing landing (SSR, crawlable)
 - `https://mindmarket.app/about`, `/product`, `/learn`, `/resources`, `/risk-today`
 
@@ -50,8 +50,8 @@ deploy once the property is added.
 ## Product-education pages (added 2026-06-15)
 
 The pre-login education layer is now crawlable SSR (Googlebot sees full text,
-not a JS shell). All are in both sitemaps (`assets/seo/sitemap.xml` — served by
-Caddy — and the Next `sitemap.ts` mirror):
+not a JS shell). All are in the single Next.js `sitemap.ts` (the former static
+`assets/seo/sitemap.xml` and its Caddy handle were removed):
 
 - `https://mindmarket.app/product` — four-pillar overview + `SoftwareApplication`
   JSON-LD.
@@ -62,8 +62,8 @@ Caddy — and the Next `sitemap.ts` mirror):
   `options-risk`, `stock-research`, `sharpe-ratio-explained`,
   `maximum-drawdown`, `diversification-correlation`.
 - `https://mindmarket.app/resources` — an internal-linking hub connecting the
-  `/learn/*` guides AND the standalone Caddy keyword pages
-  (`assets/seo/*.html`), which previously had no inbound internal links.
+  `/learn/*` guides AND the standalone keyword pages (now Next.js routes,
+  formerly `assets/seo/*.html`), which previously had no inbound internal links.
 - `https://mindmarket.app/risk-today` — daily-refreshing market risk-state
   (SSR prose + live desk).
 

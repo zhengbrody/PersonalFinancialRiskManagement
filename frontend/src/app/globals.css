@@ -131,7 +131,8 @@
 @media (max-width: 900px) {
   .mm-hero-grid,
   .mm-demo-grid,
-  .mm-pillars {
+  .mm-pillars,
+  .mm-seo-grid {
     grid-template-columns: 1fr !important;
   }
   .mm-float-chip {
