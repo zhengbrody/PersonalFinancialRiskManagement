@@ -467,7 +467,16 @@ def _regime_line() -> str:
     try:
         from .regime_summary import get_regime_summary
 
-        line = (get_regime_summary() or {}).get("headline") or ""
-        return str(line) or "Market-conditions data is temporarily unavailable."
+        s = get_regime_summary() or {}
+        headline = str(s.get("headline") or "")
+        if not headline:
+            return "Market-conditions data is temporarily unavailable."
+        # The headline now leads with a bare figure (e.g. "Elevated-risk
+        # probability: 34%"); make the email line self-contained.
+        band = s.get("probability_band")
+        line = f"Market read — {headline}"
+        if band and not s.get("degraded"):
+            line += f" ({band})"
+        return line + "."
     except Exception:  # noqa: BLE001 - context only
         return "Market-conditions data is temporarily unavailable."
