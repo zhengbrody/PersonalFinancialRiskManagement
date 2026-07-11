@@ -1,15 +1,16 @@
 /**
- * /risk-today — a public, SSR, daily-refreshing market risk-state page.
+ * /risk-today — a public, SSR, daily-refreshing market risk read.
  *
- * Three jobs in one: (1) refreshing SEO content (a trained model's read of the
- * current volatility regime + live VIX/F&G/curve, rendered as real server HTML),
- * (2) a quotable/screenshot artifact (with a one-tap "post today's read"), and
- * (3) a credibility surface for the ML work. Numbers are deterministic from the
+ * Leads with the model's VALIDATED signal — the elevated-risk PROBABILITY — plus
+ * live VIX/F&G/curve, rendered as real server HTML. It is a probability-ranking
+ * signal, NOT a 4-class verdict (on 4-class accuracy the model loses to a
+ * persistence baseline), and NOT a price/return forecast. When the model tier is
+ * inactive, data is stale, or drift is flagged, the backend degrades and the page
+ * shows deterministic market context only. Numbers are deterministic from the
  * backend; the LLM is not involved. Context only — never advice.
  *
  * SSR prose (RegimeReadout) is crawlable; the live client desk (MarketRegime +
- * MacroSnapshot) refreshes on the client. The page never 500s — a dead upstream
- * degrades to a graceful "unavailable" state.
+ * MacroSnapshot) refreshes on the client. The page never 500s.
  */
 
 import type { Metadata } from "next";
@@ -20,6 +21,8 @@ import { MarketRegime } from "@/components/market-regime";
 import { MacroSnapshot } from "@/components/macro-snapshot";
 import { C, display, eyebrow } from "@/components/marketing/theme";
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
+
 // Render on each request, NOT via ISR. The regime data isn't reachable at build
 // time (the backend isn't up during CI), so an ISR prerender would bake the
 // fail-soft "unavailable" fallback and serve it until the first revalidation —
@@ -29,16 +32,31 @@ import { C, display, eyebrow } from "@/components/marketing/theme";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Today’s Market Risk Regime",
+  title: "Today’s Market Elevated-Risk Probability",
   description:
-    "A trained model’s read of the current market risk-state, plus live VIX, Fear & Greed, and the US Treasury yield curve. Updated through the trading day — context, not advice.",
+    "An experimental model estimate of the probability that US equities enter an elevated-volatility regime over the next ~2 weeks, with live VIX, Fear & Greed, and the Treasury yield curve. A probability-ranking signal — not a price or return forecast, and not advice.",
   alternates: { canonical: "/risk-today" },
   openGraph: {
-    title: "Today’s Market Risk Regime | MindMarket",
+    type: "article",
+    title: "Today’s Market Elevated-Risk Probability | MindMarket",
     description:
-      "The current market risk-state (calm → stressed) from a trained model, with live VIX, Fear & Greed, and the yield curve.",
-    url: "/risk-today",
+      "An experimental probability-ranking signal for elevated market-risk pressure, with live VIX, Fear & Greed, and the yield curve. Not a price or return forecast.",
+    url: `${SITE_URL}/risk-today`,
+    siteName: "mindmarket.app",
+    images: ["/og.jpg?v=3"],
   },
+  twitter: { card: "summary_large_image" },
+};
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  headline: "Market elevated-risk probability — today’s read",
+  description:
+    "An experimental probability-ranking signal for elevated market-risk pressure over roughly the next two weeks, with live VIX, Fear & Greed, and the Treasury yield curve. Not a price or return forecast and not investment advice.",
+  url: `${SITE_URL}/risk-today`,
+  isAccessibleForFree: true,
+  about: "US equity market volatility regime",
 };
 
 async function fetchSummary(): Promise<RegimeSummary | null> {
@@ -68,6 +86,10 @@ export default async function RiskTodayPage() {
 
   return (
     <MarketingShell>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <main
         style={{
           maxWidth: 920,
@@ -81,7 +103,7 @@ export default async function RiskTodayPage() {
         <p
           style={{ ...eyebrow, margin: 0 }}
         >
-          Market risk-state · updated through the trading day
+          Elevated-risk probability · updated through the trading day
         </p>
 
         {summary ? (
@@ -142,9 +164,9 @@ export default async function RiskTodayPage() {
 
         <p style={{ color: C.slateDim, fontSize: 12.5, lineHeight: 1.6, margin: 0 }}>
           Educational market context only — not a price forecast and not investment advice.
-          The risk-state model is described on{" "}
-          <Link href="/learn/stress-testing" style={{ color: C.teal, textDecoration: "none" }}>
-            our risk guides
+          The signal, its honest validation metrics, and its limits are on the{" "}
+          <Link href="/methodology/regime-model" style={{ color: C.teal, textDecoration: "none" }}>
+            model card
           </Link>
           .
         </p>

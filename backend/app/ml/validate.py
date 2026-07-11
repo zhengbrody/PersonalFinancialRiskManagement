@@ -21,6 +21,10 @@ from .validation import render_markdown, save_reliability_png, walk_forward_repo
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_OUT = _REPO_ROOT / "docs" / "ml" / "validation_report.md"
 DEFAULT_ASSETS = _REPO_ROOT / "docs" / "ml" / "assets"
+# The machine-readable twin lives with the model artifacts so it ships INSIDE
+# the backend image (docs/ is .dockerignore'd — Caddy-served from a host mount,
+# never baked). The public model-card endpoint reads it from here.
+_ARTIFACTS_JSON = Path(__file__).resolve().parent / "artifacts" / "validation_report.json"
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -52,7 +56,10 @@ def main(argv: list[str] | None = None) -> None:
 
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(render_markdown(report, png_rel_path=png_rel))
-    (out.parent / "validation_report.json").write_text(json.dumps(report, indent=2))
+    # Human-readable report → docs/ (Caddy); machine-readable JSON → artifacts/
+    # (in the backend image) so the model-card endpoint can serve it.
+    _ARTIFACTS_JSON.parent.mkdir(parents=True, exist_ok=True)
+    _ARTIFACTS_JSON.write_text(json.dumps(report, indent=2))
 
     agg = report["aggregate_accuracy"]
     print(f"\n=== validation report → {out} ===")

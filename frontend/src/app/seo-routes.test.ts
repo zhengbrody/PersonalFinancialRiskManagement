@@ -9,6 +9,8 @@ describe("SEO routes", () => {
     expect(urls).toContain("https://mindmarket.app/score");
     expect(urls).toContain("https://mindmarket.app/markets");
     expect(urls).toContain("https://mindmarket.app/pricing");
+    expect(urls).toContain("https://mindmarket.app/risk-today");
+    expect(urls).toContain("https://mindmarket.app/methodology/regime-model");
   });
 
   it("allows public routes and blocks private/account routes", () => {
