@@ -5,17 +5,16 @@
 # either differs from what's committed — i.e. someone changed the backend
 # contract without running `scripts/export_openapi.py` + `npm run gen:api`.
 #
-# The codegen toolchain (fastapi/pydantic/pydantic-core/starlette,
-# openapi-typescript) is PINNED so the schema is byte-deterministic and this
-# gate is decoupled from the runtime dep ceilings — this job only GENERATES the
-# contract, it doesn't ship it. Keep these pins == the versions that produced
-# the committed artifacts (currently the maintainer's local toolchain). Bump
-# both together when regenerating.
+# The codegen toolchain is byte-deterministic because requirements.txt +
+# backend/requirements-backend.txt now pin fastapi/starlette/pydantic EXACTLY
+# (== the runtime AND the versions that produced the committed artifacts), so
+# this job just installs the app deps — no separate override to drift.
+# openapi-typescript is pinned via frontend/package-lock.json. Bump the pins +
+# regenerate the artifacts together.
 #
-# NOTE: pushing this file needs a token with the `workflow` scope
-# (`gh auth refresh -h github.com -s workflow`). Until then it lives locally
-# (see `.git/info/exclude`); the version-stable structural guard in
-# `backend/tests/test_openapi_contract.py` already runs in the backend-tests job.
+# This workflow IS committed (the pushing account has the `workflow` scope). The
+# version-stable structural guard in `backend/tests/test_openapi_contract.py`
+# also runs in the backend-tests job as a fast pre-check.
 
 name: contract
 
@@ -37,18 +36,15 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install app deps + pinned codegen toolchain
+      - name: Install app deps (exact-pinned = deterministic codegen)
         run: |
           python -m pip install --upgrade pip
+          # requirements now pin fastapi==0.139.0 / starlette==1.3.1 /
+          # pydantic==2.12.5 (→ pydantic-core==2.41.5) EXACTLY, and that's the
+          # SAME toolchain that produced the committed openapi.json /
+          # api-types.ts. So the app deps ARE the codegen toolchain — no
+          # separate override to drift out of sync.
           pip install -r requirements.txt -r backend/requirements-backend.txt
-          # Deterministic codegen toolchain (override the runtime ceilings for
-          # generation only). Must match the versions that produced the
-          # committed openapi.json / api-types.ts.
-          pip install \
-            "fastapi==0.128.5" \
-            "pydantic==2.12.5" \
-            "pydantic-core==2.41.5" \
-            "starlette==0.52.1"
 
       - name: Regenerate openapi.json
         run: python scripts/export_openapi.py

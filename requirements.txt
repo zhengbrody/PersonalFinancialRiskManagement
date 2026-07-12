@@ -24,7 +24,11 @@ python-json-logger>=2.0.7,<5
 # Input validation at the Portfolio Copilot domain boundary. Already a
 # transitive dependency of supabase/anthropic, but pin explicitly so a
 # major release upstream can't drop it from the resolve.
-pydantic>=2.0,<3
+# PINNED EXACT so pydantic's OpenAPI schema output is identical across local /
+# prod / CI / OpenAPI-codegen (the contract-drift gate depends on it). This also
+# locks pydantic-core==2.41.5 (pydantic 2.12.5 pins it exactly). Bump alongside
+# the fastapi/starlette pins + contract.yml, re-verifying the contract.
+pydantic==2.12.5
 
 # Auth + per-user portfolios (Supabase Postgres + Auth + RLS)
 supabase>=2.9,<3
