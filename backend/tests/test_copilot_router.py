@@ -351,3 +351,155 @@ def test_system_prompt_instructs_source_attribution_and_missing():
     # The LLM must attribute figures + admit missing sources, not invent confidence.
     assert "ATTRIBUTE" in cr._SYSTEM
     assert "missing" in cr._SYSTEM.lower()
+
+
+# ── PR1: page/route awareness + score-change + ticker-exposure tools ───────────
+from types import SimpleNamespace  # noqa: E402
+
+from libs.mindmarket_core.score_version import SCORE_VERSION  # noqa: E402
+
+
+def test_classify_route_bias_research_ticker():
+    # On /research with a ticker, an ambiguous message is about that stock.
+    assert cr.classify("thoughts?", ["AAPL"], route="/research") == "ticker_research"
+    # No ticker → still portfolio diagnosis; route never overrides a real cue.
+    assert cr.classify("how healthy am I", [], route="/research") == "portfolio_diagnosis"
+    assert cr.classify("what if the market falls 20%", ["AAPL"], route="/research") == (
+        "scenario_simulation"
+    )
+
+
+def test_asks_about_change_en_and_cn():
+    assert cr._asks_about_change("why did my score fall")
+    assert cr._asks_about_change("为什么我的分数下跌了")
+    assert not cr._asks_about_change("is AAPL cheap right now")
+
+
+def test_ticker_exposure_evidence_held_not_held_and_rank():
+    positions = [
+        SimpleNamespace(ticker="NVDA", market_value=60000.0),
+        SimpleNamespace(ticker="AAPL", market_value=25000.0),
+        SimpleNamespace(ticker="MSFT", market_value=15000.0),
+    ]
+    ev = {e.label: e.value for e in cr._ticker_exposure_evidence(["NVDA", "TSLA"], positions)}
+    assert ev["NVDA weight in your book"] == "60.0%"
+    assert ev["NVDA market value"] == "$60,000"
+    assert ev["NVDA position rank"] == "#1 of 3 holdings"
+    assert ev["TSLA in your book"] == "not held"
+
+
+def test_ticker_exposure_evidence_empty_book():
+    assert cr._ticker_exposure_evidence(["NVDA"], []) == []
+    assert cr._ticker_exposure_evidence([], [SimpleNamespace(ticker="A", market_value=1.0)]) == []
+
+
+class _Dim:
+    def __init__(self, score):
+        self.score = score
+
+
+class _ScoreFull:
+    overall_score = 720
+    base_overall = 720
+    metrics = _Metrics()
+    dimensions = {
+        "risk_match": _Dim(6.0),
+        "risk_adjusted_return": _Dim(6.0),
+        "downside_protection": _Dim(6.0),
+    }
+
+
+def _prev_snapshot(**rm):
+    risk_metrics = {
+        "overall_score": 760,
+        "base_overall": 760,
+        "dimensions": {
+            "risk_match": 6.5,
+            "risk_adjusted_return": 6.5,
+            "downside_protection": 6.5,
+        },
+    }
+    risk_metrics.update(rm)
+    return {
+        "created_at": "2026-07-11T00:00:00+00:00",
+        "score_version": SCORE_VERSION,
+        "risk_metrics": risk_metrics,
+        "data_quality": {"confidence": "high"},
+        "top_positions": [{"ticker": "AAA", "weight": 0.5}, {"ticker": "BBB", "weight": 0.5}],
+    }
+
+
+def test_score_change_evidence_emits_attribution(monkeypatch):
+    """A no-trade drop attributes to Market-driven; the evidence is deterministic
+    (reuses build_change_report) and source-attributed."""
+    from backend.app.services import snapshots
+
+    monkeypatch.setattr(snapshots, "get_snapshot_at_window", lambda token, window: _prev_snapshot())
+    user = SimpleNamespace(access_token="jwt", id="u-1")
+    # positions match the prior snapshot's top_positions → no trade → market move
+    positions = [
+        SimpleNamespace(ticker="AAA", market_value=5000.0),
+        SimpleNamespace(ticker="BBB", market_value=5000.0),
+    ]
+    ev = {e.label: e.value for e in cr._score_change_evidence(user, _ScoreFull(), positions)}
+    assert ev["Score change (since last snapshot)"] == "-40 pts"
+    assert ev["↳ Market-driven"] == "-40 pts"
+    assert "↳ Data-quality-driven" in ev
+
+
+def test_score_change_evidence_no_prior_snapshot(monkeypatch):
+    from backend.app.services import snapshots
+
+    monkeypatch.setattr(snapshots, "get_snapshot_at_window", lambda token, window: None)
+    ev = cr._score_change_evidence(SimpleNamespace(access_token="jwt"), _ScoreFull())
+    assert ev == []
+
+
+def test_answer_threads_ticker_context_into_exposure(monkeypatch):
+    """A viewed ticker (page context) is folded in so the exposure tool fires on a
+    portfolio question, even though the message names no ticker."""
+    positions = [
+        SimpleNamespace(ticker="NVDA", market_value=60000.0),
+        SimpleNamespace(ticker="AAPL", market_value=40000.0),
+    ]
+    monkeypatch.setattr(cr, "_load_score_positions", lambda user: (positions, _ScoreFull()))
+    ans = cr.answer(
+        "how much of my risk is this name",
+        user=object(),
+        llm_callable=None,
+        route="/research",
+        ticker="NVDA",
+    )
+    assert "NVDA" in ans.tickers
+    labels = {e.label for e in ans.evidence}
+    assert "NVDA weight in your book" in labels
+
+
+def test_answer_pulls_score_change_when_asked_about_change(monkeypatch):
+    from backend.app.services import snapshots
+
+    monkeypatch.setattr(cr, "_load_score_positions", lambda user: ([], _ScoreFull()))
+    monkeypatch.setattr(snapshots, "get_snapshot_at_window", lambda token, window: _prev_snapshot())
+    ans = cr.answer(
+        "why did my score fall", user=SimpleNamespace(access_token="jwt"), llm_callable=None
+    )
+    labels = {e.label for e in ans.evidence}
+    assert "Score change (since last snapshot)" in labels
+
+
+def test_answer_skips_score_change_when_not_asked(monkeypatch):
+    """Minimum-tool selection: a non-change question doesn't pull score-change."""
+    called = {"n": 0}
+
+    def _boom(token, window):
+        called["n"] += 1
+        return None
+
+    from backend.app.services import snapshots
+
+    monkeypatch.setattr(cr, "_load_score_positions", lambda user: ([], _ScoreFull()))
+    monkeypatch.setattr(snapshots, "get_snapshot_at_window", _boom)
+    cr.answer(
+        "how risky is my portfolio", user=SimpleNamespace(access_token="jwt"), llm_callable=None
+    )
+    assert called["n"] == 0  # score-change tool not invoked

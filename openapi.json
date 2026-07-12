@@ -1554,6 +1554,30 @@
             "minLength": 1,
             "title": "Message",
             "type": "string"
+          },
+          "route": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Route"
+          },
+          "ticker": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ticker"
           }
         },
         "required": [

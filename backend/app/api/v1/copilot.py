@@ -168,7 +168,11 @@ def copilot_ask_endpoint(
     from ...services.ai_cache import ask_cache
     from ...services.ai_telemetry import input_hash
 
-    cache_key = input_hash(f"{user.id}|{body.message.strip()}")
+    # route + ticker steer intent/tools, so they must be in the cache key — else
+    # the same question on two pages could return a stale cross-context answer.
+    cache_key = input_hash(
+        f"{user.id}|{body.message.strip()}|{body.route or ''}|{(body.ticker or '').upper()}"
+    )
     cached = ask_cache.get(cache_key)
     if cached is not None:
         return ok(cached, request=request, started_at=started)
@@ -185,7 +189,9 @@ def copilot_ask_endpoint(
     from ...services import copilot_router
 
     llm = get_llm_callable(with_tools=False)
-    result = copilot_router.answer(body.message, user=user, llm_callable=llm)
+    result = copilot_router.answer(
+        body.message, user=user, llm_callable=llm, route=body.route, ticker=body.ticker
+    )
 
     if llm is not None and not result.data_only:
         _record_ask_cost(user.id, result, started)

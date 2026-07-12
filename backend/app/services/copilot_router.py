@@ -291,9 +291,10 @@ _METRIC_GLOSSARY = {
 }
 
 
-def classify(message: str, tickers: list[str]) -> str:
+def classify(message: str, tickers: list[str], *, route: Optional[str] = None) -> str:
     text = f" {(message or '').lower()} "
     n_tk = len(tickers)
+    r = (route or "").lower()
 
     def has(intent: str) -> bool:
         return any(k in text for k in _KW[intent])
@@ -319,6 +320,11 @@ def classify(message: str, tickers: list[str]) -> str:
         return "ticker_research"
     if has("action_plan"):
         return "action_plan"
+    # Page-awareness (light bias — only when the message has no stronger cue):
+    # on the research page with a ticker in view, an ambiguous question is about
+    # that stock; on the risk/score/scenarios pages it's about the portfolio.
+    if n_tk >= 1 and r.startswith("/research"):
+        return "ticker_research"
     return "portfolio_diagnosis"
 
 
@@ -562,6 +568,183 @@ def _score_quality(score) -> Optional[float]:
         return None
 
 
+_CHANGE_TERMS = (
+    "change",
+    "changed",
+    "fall",
+    "fell",
+    "drop",
+    "dropped",
+    "down",
+    "up",
+    "since",
+    "yesterday",
+    "worse",
+    "better",
+    "why did",
+    "moved",
+    "变化",
+    "下跌",
+    "下降",
+    "为什么",
+    "跌了",
+    "涨了",
+    "变了",
+)
+
+
+def _asks_about_change(message: str) -> bool:
+    m = (message or "").lower()
+    return any(t in m for t in _CHANGE_TERMS)
+
+
+_PORTFOLIO_REL_TERMS = (
+    "my portfolio",
+    "my book",
+    "my holdings",
+    "my risk",
+    "my position",
+    "how much of my",
+    "in my",
+    "contribute",
+    "contribution",
+    "exposure",
+    "do i hold",
+    "do i own",
+    "of this name",
+    "this name",
+    "我的组合",
+    "我的持仓",
+    "我的投资组合",
+    "贡献",
+    "占比",
+    "占我",
+    "仓位",
+    "持仓",
+)
+
+
+def _asks_portfolio_relative(message: str) -> bool:
+    """True when a ticker question is asked RELATIVE to the user's own book —
+    so a research answer should also carry the holding's portfolio exposure."""
+    m = (message or "").lower()
+    return any(t in m for t in _PORTFOLIO_REL_TERMS)
+
+
+def _score_change_evidence(user, score, positions=None) -> list[EvidenceItem]:
+    """Deterministic 'why did my score change?' evidence: the move vs the user's
+    OWN prior snapshot, decomposed into market / holdings / data-quality (reuses
+    ``score_changes.build_change_report`` from the cockpit). Light — a snapshot
+    fetch + arithmetic, no engine run. Empty when there's no prior snapshot or the
+    methodology isn't comparable. ``positions`` (when given) lets the diff tell a
+    market move from a holdings move."""
+    from ..schemas.score_changes import ScoreChangeRequest
+    from . import snapshots
+    from .score_changes import build_change_report
+
+    prev = snapshots.get_snapshot_at_window(user.access_token, "previous")
+    if not prev:
+        return []
+    m = score.metrics
+    dims = {
+        k: float(d.score)
+        for k, d in (getattr(score, "dimensions", None) or {}).items()
+        if getattr(d, "score", None) is not None
+    }
+    top_positions: list[dict] = []
+    total_mv = sum(float(getattr(p, "market_value", 0.0) or 0.0) for p in (positions or []))
+    if total_mv > 0:
+        rows = [
+            {
+                "ticker": str(getattr(p, "ticker", "") or "").upper(),
+                "weight": float(getattr(p, "market_value", 0.0) or 0.0) / total_mv,
+            }
+            for p in positions
+            if getattr(p, "ticker", None)
+        ]
+        top_positions = sorted(rows, key=lambda r: r["weight"], reverse=True)[:10]
+    req = ScoreChangeRequest(
+        window="previous",
+        overall_score=int(score.overall_score),
+        base_overall=int(getattr(score, "base_overall", None) or score.overall_score),
+        dimensions=dims,
+        top_positions=top_positions,
+        metrics={
+            "annual_volatility": getattr(m, "annual_volatility", None),
+            "sharpe_ratio": getattr(m, "sharpe_ratio", None),
+            "max_drawdown": getattr(m, "max_drawdown", None),
+            "var_95_daily": getattr(m, "var_95_daily", None),
+            "beta_to_benchmark": getattr(m, "beta_to_benchmark", None),
+            "net_equity": getattr(m, "net_equity", None),
+            "leverage": getattr(m, "leverage", None),
+        },
+        confidence=getattr(m, "confidence", None),
+    )
+    rep = build_change_report(req, prev)
+    if not rep.available or rep.score_delta is None:
+        return []
+    items = [_ev("Score change (since last snapshot)", f"{rep.score_delta:+d} pts", "engine")]
+    a = rep.attribution
+    if a is not None:
+        if a.separable:
+            items += [
+                _ev("↳ Market-driven", _signed_pts(a.market_driven), "engine"),
+                _ev("↳ Holdings-driven", _signed_pts(a.holding_driven), "engine"),
+                _ev("↳ Data-quality-driven", _signed_pts(a.data_quality_driven), "engine"),
+            ]
+        else:
+            items += [
+                _ev("↳ Market + your changes", _signed_pts(a.combined_market_holdings), "engine"),
+                _ev("↳ Data-quality-driven", _signed_pts(a.data_quality_driven), "engine"),
+            ]
+    if rep.top_negative_contributor is not None:
+        d = rep.top_negative_contributor
+        items.append(_ev("Biggest drag", f"{d.label} ({d.points:+d} pts)", "engine"))
+    return _compact(items)
+
+
+def _signed_pts(v) -> Optional[str]:
+    return f"{v:+d} pts" if isinstance(v, int) else None
+
+
+def _ticker_exposure_evidence(tickers: list[str], positions) -> list[EvidenceItem]:
+    """How much a QUERIED ticker contributes to the caller's OWN book — weight +
+    market value + rank. Portfolio-aware and deterministic. (A full component-VaR
+    contribution needs the risk report; this is the light weight-based exposure,
+    labelled as such.)"""
+    if not tickers or not positions:
+        return []
+    by_ticker: dict[str, float] = {}
+    total = 0.0
+    for p in positions:
+        tk = str(getattr(p, "ticker", "") or "").upper()
+        mv = float(getattr(p, "market_value", 0.0) or 0.0)
+        if tk and mv > 0:
+            by_ticker[tk] = by_ticker.get(tk, 0.0) + mv
+            total += mv
+    if total <= 0:
+        return []
+    ranked = sorted(by_ticker.items(), key=lambda kv: kv[1], reverse=True)
+    rank_of = {tk: i + 1 for i, (tk, _mv) in enumerate(ranked)}
+    items: list[EvidenceItem] = []
+    for tk in tickers[:2]:
+        u = tk.upper()
+        mv = by_ticker.get(u)
+        if mv is None:
+            items.append(EvidenceItem(label=f"{u} in your book", value="not held", source="engine"))
+            continue
+        items.append(_ev(f"{u} weight in your book", _pct(mv / total), "engine"))
+        items.append(_ev(f"{u} market value", _money(mv), "engine"))
+        items.append(
+            EvidenceItem(
+                label=f"{u} position rank",
+                value=f"#{rank_of[u]} of {len(ranked)} holdings",
+                source="engine",
+            )
+        )
+    return _compact(items)
+
+
 def _gather(intent: str, message: str, tickers: list[str], *, user):
     """Returns (evidence, quality_floor). ``quality_floor`` is the grounding
     data's OWN quality (0..1) when the answer rests on the portfolio score /
@@ -578,6 +761,13 @@ def _gather(intent: str, message: str, tickers: list[str], *, user):
             if fp is not None:
                 ev += _factpack_evidence(fp, prefix=tk if intent == "compare_tickers" else "")
                 floors.append(float(getattr(fp.data_quality, "coverage", 0.0) or 0.0))
+        # Portfolio-aware research: when the question is asked relative to the
+        # user's own book ("how much of my risk is this name?"), add the
+        # researched ticker's exposure in their portfolio (best-effort).
+        if _asks_portfolio_relative(message):
+            sp = safe("score_pos", lambda: _load_score_positions(user))
+            if sp is not None:
+                ev += _ticker_exposure_evidence(tickers, sp[0]) or []
         return ev, (min(floors) if floors else 0.0)
 
     if intent == "macro_rates":
@@ -624,6 +814,14 @@ def _gather(intent: str, message: str, tickers: list[str], *, user):
     ev = _score_evidence(score)
     ev += safe("options", lambda: _option_evidence(message, user)) or []
     ev += safe("risk_reference", lambda: _risk_reference_evidence(score, positions)) or []
+
+    # Context-aware, minimum-tool selection (rule #3): only pull the score-change
+    # decomposition when the question is about a change, and per-ticker exposure
+    # only when a ticker is in play (message or page context).
+    if _asks_about_change(message):
+        ev += safe("score_change", lambda: _score_change_evidence(user, score, positions)) or []
+    if tickers:
+        ev += safe("ticker_exposure", lambda: _ticker_exposure_evidence(tickers, positions)) or []
 
     if intent in ("tax_fee_review", "action_plan"):
         scans = safe("optimizer", lambda: _optimizer_scans(score, positions))
@@ -762,9 +960,18 @@ def answer(
     *,
     user,
     llm_callable: Optional[Callable[..., str]] = None,
+    route: Optional[str] = None,
+    ticker: Optional[str] = None,
 ) -> CopilotAnswer:
     tickers = extract_tickers(message)
-    intent = classify(message, tickers)
+    # The page's currently-viewed ticker is CONTEXT — fold it into the ticker set
+    # so exposure/factpack tools see it, but it never becomes citable evidence
+    # unless a deterministic tool computes a number for it.
+    if ticker:
+        t = str(ticker).upper().strip()
+        if t and _TICKER_RE.fullmatch(t) and t not in tickers:
+            tickers = [t, *tickers][:5]
+    intent = classify(message, tickers, route=route)
     evidence, quality_floor = _gather(intent, message, tickers, user=user)
     dc = _answer_confidence(evidence, quality_floor)
 
@@ -802,10 +1009,19 @@ def answer(
             "abbreviations (VaR, Sharpe, P/E) as-is."
         )
 
+    context_line = ""
+    if route or ticker:
+        bits = []
+        if route:
+            bits.append(f"page {route}")
+        if ticker:
+            bits.append(f"viewing {str(ticker).upper()}")
+        context_line = f"User context: {', '.join(bits)} (context only — cite only EVIDENCE)\n"
     prompt = (
         f"User question: {message}\n"
         f"Detected intent: {intent}\n"
-        f"Tickers: {', '.join(tickers) or 'none'}\n\n"
+        f"Tickers: {', '.join(tickers) or 'none'}\n"
+        f"{context_line}\n"
         f"EVIDENCE:\n{_evidence_block(evidence)}\n\n"
         "Write the answer now in the five required sections."
     )
