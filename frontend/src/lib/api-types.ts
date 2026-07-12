@@ -3121,6 +3121,42 @@ export interface components {
             ticker: string;
         };
         /**
+         * LossBreakdown
+         * @description Downside in % AND $ — the losses view of the cockpit. 1-day VaR/CVaR are
+         *     a genuine 1-day historical estimate from the report's price window (the
+         *     report's headline ``var_95`` is a 21-day Monte-Carlo number, surfaced here
+         *     correctly labelled as ``var_21d_95``). All $ figures are on
+         *     ``basis_value`` (net equity).
+         */
+        LossBreakdown: {
+            /** Basis Value */
+            basis_value?: number | null;
+            current_drawdown?: components["schemas"]["LossFigure"] | null;
+            cvar_1d_95?: components["schemas"]["LossFigure"] | null;
+            margin_buffer?: components["schemas"]["MarginBuffer"] | null;
+            stress?: components["schemas"]["LossFigure"] | null;
+            var_1d_95?: components["schemas"]["LossFigure"] | null;
+            var_21d_95?: components["schemas"]["LossFigure"] | null;
+        };
+        /**
+         * LossFigure
+         * @description A downside number shown in BOTH a loss fraction and dollars (over the
+         *     net-equity basis). ``pct`` and ``usd`` are positive magnitudes.
+         */
+        LossFigure: {
+            /** Horizon */
+            horizon?: string | null;
+            /**
+             * Label
+             * @default
+             */
+            label?: string;
+            /** Pct */
+            pct?: number | null;
+            /** Usd */
+            usd?: number | null;
+        };
+        /**
          * MLHealthOut
          * @description GET /api/v1/ml/health — model/artifact identity + drift status.
          *
@@ -3200,6 +3236,33 @@ export interface components {
             training_window?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /**
+         * MarginBuffer
+         * @description How much equity cushion sits above the maintenance-margin line.
+         *     ``maintenance_requirement`` uses a conservative 25% of gross assets (Reg-T
+         *     style); a real broker requirement varies by security. ``status`` is a
+         *     deterministic band, not a margin call prediction.
+         */
+        MarginBuffer: {
+            /** Buffer Pct */
+            buffer_pct?: number | null;
+            /** Buffer Usd */
+            buffer_usd?: number | null;
+            /** Gross Assets */
+            gross_assets?: number | null;
+            /** Maintenance Requirement */
+            maintenance_requirement?: number | null;
+            /** Margin Loan */
+            margin_loan?: number | null;
+            /** Net Equity */
+            net_equity?: number | null;
+            /**
+             * Status
+             * @default n/a
+             * @enum {string}
+             */
+            status?: "none" | "comfortable" | "tight" | "call_risk" | "n/a";
         };
         /**
          * MetaOut
@@ -4470,6 +4533,56 @@ export interface components {
             alerts?: components["schemas"]["RiskAlert"][];
         };
         /**
+         * RiskDimension
+         * @description One risk dimension in the explainable cockpit. Every field is ASSEMBLED
+         *     from numbers the report/score already computed — no new risk math. A
+         *     dimension the book can't measure (no options, no liquidity data) ships
+         *     ``measurable=False`` + ``status='n/a'`` rather than a fake zero.
+         */
+        RiskDimension: {
+            /** Action */
+            action?: string | null;
+            /** Confidence */
+            confidence?: string | null;
+            /** Contribution */
+            contribution?: number | null;
+            /** Display */
+            display?: string | null;
+            /**
+             * Explanation
+             * @default
+             */
+            explanation?: string;
+            /**
+             * Key
+             * @enum {string}
+             */
+            key: "concentration" | "volatility" | "drawdown" | "beta" | "correlation" | "liquidity" | "leverage" | "options";
+            /**
+             * Measurable
+             * @default true
+             */
+            measurable?: boolean;
+            /** Name */
+            name: string;
+            /** Percentile */
+            percentile?: number | null;
+            /** Percentile N */
+            percentile_n?: number | null;
+            /**
+             * Status
+             * @default n/a
+             * @enum {string}
+             */
+            status?: "calm" | "normal" | "elevated" | "high" | "n/a";
+            /** Unit */
+            unit?: string | null;
+            /** Value */
+            value?: number | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * RiskExplainInput
          * @description Compact deterministic summary the page already has. Every field is
          *     optional so the one endpoint serves both the Health Score page (score
@@ -4586,6 +4699,8 @@ export interface components {
             data_confidence?: components["schemas"]["DataConfidence"] | null;
             /** Data Quality Notes */
             data_quality_notes?: string[];
+            /** Dimensions */
+            dimensions?: components["schemas"]["RiskDimension"][];
             /** Drawdown Stats */
             drawdown_stats?: {
                 [key: string]: unknown;
@@ -4594,6 +4709,7 @@ export interface components {
             factor_betas?: components["schemas"]["FactorBetaRow"][];
             /** Liquidity */
             liquidity?: components["schemas"]["LiquidityRow"][];
+            losses?: components["schemas"]["LossBreakdown"] | null;
             /** Macro Betas */
             macro_betas?: {
                 [key: string]: number;
@@ -4664,6 +4780,8 @@ export interface components {
             data_confidence?: components["schemas"]["DataConfidence"] | null;
             /** Data Quality Notes */
             data_quality_notes?: string[];
+            /** Dimensions */
+            dimensions?: components["schemas"]["RiskDimension"][];
             /** Drawdown Stats */
             drawdown_stats?: {
                 [key: string]: unknown;
@@ -4672,6 +4790,7 @@ export interface components {
             factor_betas?: components["schemas"]["FactorBetaRow"][];
             /** Liquidity */
             liquidity?: components["schemas"]["LiquidityRow"][];
+            losses?: components["schemas"]["LossBreakdown"] | null;
             /** Macro Betas */
             macro_betas?: {
                 [key: string]: number;

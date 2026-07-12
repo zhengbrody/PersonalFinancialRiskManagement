@@ -5239,6 +5239,129 @@
         "title": "LiquidityRow",
         "type": "object"
       },
+      "LossBreakdown": {
+        "description": "Downside in % AND $ \u2014 the losses view of the cockpit. 1-day VaR/CVaR are\na genuine 1-day historical estimate from the report's price window (the\nreport's headline ``var_95`` is a 21-day Monte-Carlo number, surfaced here\ncorrectly labelled as ``var_21d_95``). All $ figures are on\n``basis_value`` (net equity).",
+        "properties": {
+          "basis_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis Value"
+          },
+          "current_drawdown": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LossFigure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cvar_1d_95": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LossFigure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "margin_buffer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MarginBuffer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LossFigure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "var_1d_95": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LossFigure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "var_21d_95": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LossFigure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "LossBreakdown",
+        "type": "object"
+      },
+      "LossFigure": {
+        "description": "A downside number shown in BOTH a loss fraction and dollars (over the\nnet-equity basis). ``pct`` and ``usd`` are positive magnitudes.",
+        "properties": {
+          "horizon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Horizon"
+          },
+          "label": {
+            "default": "",
+            "title": "Label",
+            "type": "string"
+          },
+          "pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pct"
+          },
+          "usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usd"
+          }
+        },
+        "title": "LossFigure",
+        "type": "object"
+      },
       "MLHealthOut": {
         "description": "GET /api/v1/ml/health \u2014 model/artifact identity + drift status.\n\n``status``: ok | not_ready | unavailable (service tiers).\n``overall_status``: healthy | watch | drift \u2014 worst feature/prediction\nverdict, each judged against its own calibrated null (live-window PSI vs\nthe distribution of historical same-length training windows) \u2014 null unless\nstatus == ok. Read-only context; never advice.",
         "properties": {
@@ -5508,6 +5631,91 @@
           "source"
         ],
         "title": "MLRegimeOut",
+        "type": "object"
+      },
+      "MarginBuffer": {
+        "description": "How much equity cushion sits above the maintenance-margin line.\n``maintenance_requirement`` uses a conservative 25% of gross assets (Reg-T\nstyle); a real broker requirement varies by security. ``status`` is a\ndeterministic band, not a margin call prediction.",
+        "properties": {
+          "buffer_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Buffer Pct"
+          },
+          "buffer_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Buffer Usd"
+          },
+          "gross_assets": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gross Assets"
+          },
+          "maintenance_requirement": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Maintenance Requirement"
+          },
+          "margin_loan": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Margin Loan"
+          },
+          "net_equity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Equity"
+          },
+          "status": {
+            "default": "n/a",
+            "enum": [
+              "none",
+              "comfortable",
+              "tight",
+              "call_risk",
+              "n/a"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "MarginBuffer",
         "type": "object"
       },
       "MetaOut": {
@@ -9198,6 +9406,146 @@
         "title": "RiskAlertsOutput",
         "type": "object"
       },
+      "RiskDimension": {
+        "additionalProperties": true,
+        "description": "One risk dimension in the explainable cockpit. Every field is ASSEMBLED\nfrom numbers the report/score already computed \u2014 no new risk math. A\ndimension the book can't measure (no options, no liquidity data) ships\n``measurable=False`` + ``status='n/a'`` rather than a fake zero.",
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "contribution": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contribution"
+          },
+          "display": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display"
+          },
+          "explanation": {
+            "default": "",
+            "title": "Explanation",
+            "type": "string"
+          },
+          "key": {
+            "enum": [
+              "concentration",
+              "volatility",
+              "drawdown",
+              "beta",
+              "correlation",
+              "liquidity",
+              "leverage",
+              "options"
+            ],
+            "title": "Key",
+            "type": "string"
+          },
+          "measurable": {
+            "default": true,
+            "title": "Measurable",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "percentile": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentile"
+          },
+          "percentile_n": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percentile N"
+          },
+          "status": {
+            "default": "n/a",
+            "enum": [
+              "calm",
+              "normal",
+              "elevated",
+              "high",
+              "n/a"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "key",
+          "name"
+        ],
+        "title": "RiskDimension",
+        "type": "object"
+      },
       "RiskExplainInput": {
         "description": "Compact deterministic summary the page already has. Every field is\noptional so the one endpoint serves both the Health Score page (score\nside) and the Risk Report page (report side).",
         "properties": {
@@ -9577,6 +9925,13 @@
             "title": "Data Quality Notes",
             "type": "array"
           },
+          "dimensions": {
+            "items": {
+              "$ref": "#/components/schemas/RiskDimension"
+            },
+            "title": "Dimensions",
+            "type": "array"
+          },
           "drawdown_stats": {
             "anyOf": [
               {
@@ -9602,6 +9957,16 @@
             },
             "title": "Liquidity",
             "type": "array"
+          },
+          "losses": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LossBreakdown"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "macro_betas": {
             "additionalProperties": {
@@ -9911,6 +10276,13 @@
             "title": "Data Quality Notes",
             "type": "array"
           },
+          "dimensions": {
+            "items": {
+              "$ref": "#/components/schemas/RiskDimension"
+            },
+            "title": "Dimensions",
+            "type": "array"
+          },
           "drawdown_stats": {
             "anyOf": [
               {
@@ -9936,6 +10308,16 @@
             },
             "title": "Liquidity",
             "type": "array"
+          },
+          "losses": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LossBreakdown"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "macro_betas": {
             "additionalProperties": {

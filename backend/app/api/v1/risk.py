@@ -1257,6 +1257,52 @@ def _rolling_volatility_block(
         return None
 
 
+def _one_day_downside(
+    price_frame, weights: dict[str, float], *, risk_scale: float
+) -> tuple[float | None, float | None, float | None]:
+    """1-day historical VaR/CVaR (95%) + current drawdown from the weighted
+    portfolio return series, ×``risk_scale`` (first-order, matching how the
+    serializer lifts max_drawdown to the levered book). All returned as POSITIVE
+    fractions. Fail-soft to (None, None, None) — a losses extra must never sink
+    the report.
+
+    This is a genuine 1-DAY estimate, distinct from the report's headline
+    ``var_95`` which is a 21-day Monte-Carlo number."""
+    try:
+        cols = [t for t in weights if t in price_frame.columns]
+        if not cols:
+            return None, None, None
+        rets = price_frame[cols].pct_change().dropna(how="any")
+        if len(rets) < 20:
+            return None, None, None
+        w = np.array([float(weights[t]) for t in cols])
+        if w.sum() <= 0:
+            return None, None, None
+        w = w / w.sum()
+        port = pd.Series(rets[cols].to_numpy().dot(w), index=rets.index).dropna()
+        if len(port) < 20:
+            return None, None, None
+        scale = float(risk_scale) if math.isfinite(risk_scale) and risk_scale > 0 else 1.0
+        arr = port.to_numpy()
+        q5 = float(np.percentile(arr, 5))
+        var_1d = max(0.0, -q5 * scale)
+        tail = arr[arr <= q5]
+        cvar_1d = max(0.0, -float(tail.mean()) * scale) if tail.size else var_1d
+        # current drawdown = 1 − last / running-peak of the equity curve
+        curve = (1.0 + port).cumprod()
+        peak = float(curve.cummax().iloc[-1])
+        last = float(curve.iloc[-1])
+        cur_dd = 0.0 if peak <= 0 else max(0.0, 1.0 - last / peak)
+        cur_dd = min(1.0, cur_dd * scale)
+        return (
+            var_1d if math.isfinite(var_1d) else None,
+            cvar_1d if math.isfinite(cvar_1d) else None,
+            cur_dd if math.isfinite(cur_dd) else None,
+        )
+    except Exception:  # noqa: BLE001 - a losses extra must never sink the report
+        return None, None, None
+
+
 def _compute_weights(
     holdings: dict, price_frame, *, tickers: list[str]
 ) -> tuple[dict[str, float], dict[str, float]]:
@@ -1831,6 +1877,64 @@ def report_from_active_endpoint(
             ),
         }
     )
+
+    # ── Explainable risk cockpit (additive): unified per-dimension model +
+    # %/$ losses. Assembled from the numbers `out` already carries + a few
+    # extras the endpoint derived; fail-soft so a cockpit hiccup never sinks
+    # the report. ──
+    try:
+        from ...services import risk_dimensions, snapshots
+
+        net_equity = _finite_float((account_metrics or {}).get("net_equity"))
+        total_value = _finite_float((account_metrics or {}).get("total_value"))
+        leverage = 1.0
+        if margin_loan and margin_loan > 0 and net_equity and net_equity > 0:
+            leverage = min(10.0, (net_equity + margin_loan) / net_equity)
+
+        # Net option delta-notional (light read; full Greeks live in the
+        # options desk view). The overlay already merged equity MV + option
+        # delta-notional per underlying into `concentration_values`.
+        has_options = any(_is_option_holding(h) for h in holdings.values())
+        net_notional: float | None = None
+        if has_options and concentration_values:
+            try:
+                underlyings = set(_option_underlyings(holdings))
+            except Exception:  # noqa: BLE001
+                underlyings = set()
+            if underlyings:
+                net_notional = sum(
+                    float(concentration_values.get(u, 0.0)) - float(market_values.get(u, 0.0))
+                    for u in underlyings
+                )
+
+        var_1d, cvar_1d, current_dd = _one_day_downside(price_frame, weights, risk_scale=risk_scale)
+        ctx = risk_dimensions.DimensionContext(
+            leverage=leverage,
+            net_option_delta_notional=net_notional,
+            has_options=has_options,
+            current_drawdown=current_dd,
+            net_equity=net_equity,
+            observations=len(price_frame),
+            base_confidence=(out.data_confidence.label if out.data_confidence else None),
+            history=snapshots.get_snapshot_history(user.access_token),
+        )
+        out = out.model_copy(
+            update={
+                "dimensions": risk_dimensions.build_dimensions(out, ctx),
+                "losses": risk_dimensions.build_losses(
+                    out,
+                    var_1d_95=var_1d,
+                    cvar_1d_95=cvar_1d,
+                    current_drawdown=current_dd,
+                    net_equity=net_equity,
+                    gross_assets=total_value,
+                    margin_loan=margin_loan,
+                ),
+            }
+        )
+    except Exception as exc:  # noqa: BLE001 - cockpit extras must never 500 the report
+        _log.warning("risk_cockpit.assembly_failed reason=%s", type(exc).__name__)
+
     return ok(out.model_dump(), request=request, started_at=started)
 
 
