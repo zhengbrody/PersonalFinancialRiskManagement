@@ -116,6 +116,73 @@ describe("ScoreChangeReport", () => {
     expect(screen.getByText(/Risk-adjusted Return 6.0 → 1.0\/10/)).toBeInTheDocument();
   });
 
+  it("shows the market/holding/data-quality attribution + top contributors", () => {
+    mockUse.mockReturnValue({
+      isLoading: false,
+      data: {
+        window: "previous",
+        available: true,
+        current_score: 650,
+        previous_score: 700,
+        score_delta: -50,
+        component_deltas: [],
+        input_changes: [],
+        top_drivers: [],
+        data_quality_changes: [],
+        holdings_changes: { added: [], removed: [], reweighted: [] },
+        summary: "Health score fell 50 pts.",
+        attribution: {
+          data_quality_driven: -8,
+          market_driven: -38,
+          holding_driven: -4,
+          combined_market_holdings: null,
+          separable: true,
+          note: "This move was mostly a market move.",
+        },
+        top_positive_contributor: null,
+        top_negative_contributor: { key: "risk_match", label: "Risk Match", points: -39 },
+      },
+    });
+    render(<ScoreChangeReport score={score()} />);
+    expect(screen.getByText("Where the move came from")).toBeInTheDocument();
+    expect(screen.getByText("Market")).toBeInTheDocument();
+    expect(screen.getByText("-38")).toBeInTheDocument();
+    expect(screen.getByText("Your holdings")).toBeInTheDocument();
+    expect(screen.getByText("Data quality")).toBeInTheDocument();
+    expect(screen.getByText(/mostly a market move/)).toBeInTheDocument();
+    expect(screen.getByText(/Risk Match/)).toBeInTheDocument();
+  });
+
+  it("reports a combined market+holdings bucket on a trade day (not separable)", () => {
+    mockUse.mockReturnValue({
+      isLoading: false,
+      data: {
+        window: "previous",
+        available: true,
+        current_score: 640,
+        previous_score: 650,
+        score_delta: -10,
+        component_deltas: [],
+        input_changes: [],
+        top_drivers: [],
+        data_quality_changes: [],
+        holdings_changes: { added: ["NVDA"], removed: [], reweighted: [] },
+        summary: "Health score fell 10 pts.",
+        attribution: {
+          data_quality_driven: 0,
+          market_driven: null,
+          holding_driven: null,
+          combined_market_holdings: -10,
+          separable: false,
+          note: "You changed holdings in this window.",
+        },
+      },
+    });
+    render(<ScoreChangeReport score={score()} />);
+    expect(screen.getByText("Market + your changes")).toBeInTheDocument();
+    expect(screen.getByText(/You changed holdings/)).toBeInTheDocument();
+  });
+
   it("shows a graceful message when no snapshot exists in the window", () => {
     mockUse.mockReturnValue({
       isLoading: false,

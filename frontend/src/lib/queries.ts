@@ -775,6 +775,55 @@ export const rollingVolatilitySchema = z.looseObject({
 });
 export type RollingVolatility = z.infer<typeof rollingVolatilitySchema>;
 
+// ── Explainable cockpit: per-dimension model + %/$ losses (PR A) ──
+export const riskDimensionSchema = z.looseObject({
+  key: z.string(),
+  name: z.string(),
+  value: z.number().nullable().optional(),
+  display: z.string().nullable().optional(),
+  unit: z.string().nullable().optional(),
+  status: z.enum(["calm", "normal", "elevated", "high", "n/a"]).optional().default("n/a"),
+  percentile: z.number().nullable().optional(),
+  percentile_n: z.number().nullable().optional(),
+  contribution: z.number().nullable().optional(),
+  confidence: z.string().nullable().optional(),
+  explanation: z.string().optional().default(""),
+  action: z.string().nullable().optional(),
+  measurable: z.boolean().optional().default(true),
+});
+export type RiskDimension = z.infer<typeof riskDimensionSchema>;
+
+export const lossFigureSchema = z.looseObject({
+  label: z.string().optional().default(""),
+  horizon: z.string().nullable().optional(),
+  pct: z.number().nullable().optional(),
+  usd: z.number().nullable().optional(),
+});
+export type LossFigure = z.infer<typeof lossFigureSchema>;
+
+export const marginBufferSchema = z.looseObject({
+  net_equity: z.number().nullable().optional(),
+  margin_loan: z.number().nullable().optional(),
+  gross_assets: z.number().nullable().optional(),
+  maintenance_requirement: z.number().nullable().optional(),
+  buffer_usd: z.number().nullable().optional(),
+  buffer_pct: z.number().nullable().optional(),
+  status: z
+    .enum(["none", "comfortable", "tight", "call_risk", "n/a"])
+    .optional()
+    .default("n/a"),
+});
+export const lossBreakdownSchema = z.looseObject({
+  basis_value: z.number().nullable().optional(),
+  var_1d_95: lossFigureSchema.nullish(),
+  cvar_1d_95: lossFigureSchema.nullish(),
+  var_21d_95: lossFigureSchema.nullish(),
+  stress: lossFigureSchema.nullish(),
+  current_drawdown: lossFigureSchema.nullish(),
+  margin_buffer: marginBufferSchema.nullish(),
+});
+export type LossBreakdown = z.infer<typeof lossBreakdownSchema>;
+
 export const riskReportSchema = z.looseObject({
   annual_return: z.number().nullable(),
   annual_volatility: z.number().nullable(),
@@ -809,6 +858,8 @@ export const riskReportSchema = z.looseObject({
   correlation: correlationSchema.nullish(),
   rolling_volatility: rollingVolatilitySchema.nullish(),
   data_confidence: dataConfidenceSchema.nullish(),
+  dimensions: z.array(riskDimensionSchema).optional().default([]),
+  losses: lossBreakdownSchema.nullish(),
 });
 export type RiskReport = z.infer<typeof riskReportSchema>;
 
@@ -2139,6 +2190,13 @@ export function useRiskExplain(input: RiskExplainInput | null) {
 }
 
 // ── deterministic "what changed?" vs the user's own prior snapshot ──
+export const driverChangeSchema = z.looseObject({
+  key: z.string(),
+  label: z.string(),
+  points: z.number(),
+  detail: z.string().nullish(),
+});
+
 export const scoreChangeReportSchema = z.looseObject({
   window: z.string(),
   available: z.boolean(),
@@ -2190,6 +2248,20 @@ export const scoreChangeReportSchema = z.looseObject({
     removed: z.array(z.string()),
     reweighted: z.array(z.looseObject({})),
   }),
+  // Single biggest +/- dimension contributor (PR B).
+  top_positive_contributor: driverChangeSchema.nullish(),
+  top_negative_contributor: driverChangeSchema.nullish(),
+  // Market / holding / data-quality attribution (PR B).
+  attribution: z
+    .looseObject({
+      data_quality_driven: z.number().nullish(),
+      market_driven: z.number().nullish(),
+      holding_driven: z.number().nullish(),
+      combined_market_holdings: z.number().nullish(),
+      separable: z.boolean().optional().default(true),
+      note: z.string().optional().default(""),
+    })
+    .nullish(),
   summary: z.string(),
   // Methodology provenance. When `comparable` is false the prior snapshot used a
   // DIFFERENT scoring version — the delta must NOT be shown as a market/holdings
@@ -2216,6 +2288,59 @@ export function useScoreChanges(body: Record<string, unknown> | null) {
         body: body!,
         authToken: accessToken!,
         schema: scoreChangeReportSchema,
+      }),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+}
+
+// ── upgraded Action Cards: deterministic levers + re-scored impact (PR C) ──
+export const simulateHoldingSchema = z.looseObject({
+  ticker: z.string(),
+  market_value: z.number(),
+  asset_type: z.string().optional().default("public_security"),
+});
+export const actionCardSchema = z.looseObject({
+  key: z.string(),
+  title: z.string(),
+  rationale: z.string(),
+  proposed_change: z.string(),
+  expected_score_delta: z.number().nullish(),
+  expected_score_after: z.number().nullish(),
+  expected_var_delta: z.number().nullish(),
+  expected_cvar_delta: z.number().nullish(),
+  trade_offs: z.array(z.string()).optional().default([]),
+  assumptions: z.array(z.string()).optional().default([]),
+  simulate_holdings: z.array(simulateHoldingSchema).optional().default([]),
+  disclaimer: z.string().optional().default(""),
+});
+export type ActionCard = z.infer<typeof actionCardSchema>;
+
+export const actionSimulateSchema = z.looseObject({
+  baseline_score: z.number(),
+  baseline_var_95_daily: z.number().nullish(),
+  baseline_cvar_95_daily: z.number().nullish(),
+  actions: z.array(actionCardSchema).optional().default([]),
+});
+export type ActionSimulate = z.infer<typeof actionSimulateSchema>;
+
+/**
+ * Deterministic risk-lever Action Cards with expected impact re-scored on the
+ * user's active book. Auth-gated query keyed on user.id (deterministic; no
+ * credit). The cards never execute a trade — the simulate payload just prefills
+ * the what-if sandbox.
+ */
+export function useSimulateActions() {
+  const { accessToken, user } = useAuth();
+  return useQuery<ActionSimulate>({
+    queryKey: ["risk", "simulate_actions", user?.id ?? null],
+    enabled: Boolean(accessToken),
+    queryFn: () =>
+      apiFetch<ActionSimulate>("/api/v1/risk/simulate_actions", {
+        method: "POST",
+        body: {},
+        authToken: accessToken!,
+        schema: actionSimulateSchema,
       }),
     staleTime: 5 * 60 * 1000,
     retry: false,
