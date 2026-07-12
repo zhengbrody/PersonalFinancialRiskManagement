@@ -216,6 +216,7 @@ def build_data_confidence(
     sources: list[FieldProvenance],
     missing: Optional[list[FieldProvenance]] = None,
     confidence: Optional[float] = None,
+    label: Optional[ConfidenceLabel] = None,
     base_conviction: Conviction = "high",
     as_of: Optional[str] = None,
     fetched_at: Optional[str] = None,
@@ -223,8 +224,10 @@ def build_data_confidence(
     extra_reasons: Optional[list[ConfidenceReason]] = None,
 ) -> DataConfidence:
     """Assemble the unified block. ``confidence`` is the surface's OWN float when
-    it has one (score/research); else a default is derived. Applies the
-    conviction cap so every surface enforces rule #3 identically."""
+    it has one (score/research); else a default is derived. Pass ``label`` to use
+    the surface's OWN high/med/low label (e.g. the engine's) instead of
+    re-bucketing the float — keeps the score page's two badges consistent.
+    Applies the conviction cap so every surface enforces rule #3 identically."""
     missing = list(missing or [])
     stale = any(s.stale for s in sources) or any(
         m.missing_reason == "stale_fallback" for m in missing
@@ -244,7 +247,7 @@ def build_data_confidence(
 
     reasons = list(extra_reasons or []) + cap_reasons
     return DataConfidence(
-        label=label_from(confidence),
+        label=label if label is not None else label_from(confidence),
         confidence=confidence,
         overall_coverage=round(_clamp01(overall_coverage), 3),
         critical_coverage=round(_clamp01(critical_coverage), 3),

@@ -475,6 +475,17 @@ def explain(
     if not actions:
         actions = list(skeleton.candidate_actions[:4])
 
+    caveats = _coerce_str_list(parsed.get("caveats")) or list(skeleton.caveats)
+    # The LLM doesn't get to drop the data-confidence gate: keep the skeleton's
+    # leading provisional/low-confidence caveat verbatim (it's inserted at index
+    # 0 in build_skeleton only when the read is thin).
+    if (
+        not skeleton.directional_allowed or skeleton.confidence_label == "low"
+    ) and skeleton.caveats:
+        lead = skeleton.caveats[0]
+        if lead not in caveats:
+            caveats = [lead] + caveats
+
     return RiskExplainOutput(
         # severity + primary_driver + confidence gate ALWAYS from the
         # deterministic skeleton — the LLM only rephrases prose.
@@ -484,7 +495,7 @@ def explain(
         summary_bullets=bullets,
         watch_items=_coerce_str_list(parsed.get("watch_items")) or list(skeleton.watch_items),
         suggested_actions=actions,
-        caveats=_coerce_str_list(parsed.get("caveats")) or list(skeleton.caveats),
+        caveats=caveats,
         ai_generated=True,
         confidence_label=skeleton.confidence_label,
         directional_allowed=skeleton.directional_allowed,

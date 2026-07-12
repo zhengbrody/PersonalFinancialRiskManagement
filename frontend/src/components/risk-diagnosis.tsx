@@ -83,6 +83,12 @@ export function RiskDiagnosis({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {explain.directional_allowed === false && (
+          <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            Provisional — there isn&apos;t enough data to assess this with
+            confidence. Add the missing holdings / history before relying on it.
+          </p>
+        )}
         <ul className="space-y-1.5 text-sm">
           {explain.summary_bullets.map((b, i) => (
             <li key={i} className="flex gap-2">
@@ -110,6 +116,14 @@ export function RiskDiagnosis({
               </span>
             ))}
           </div>
+        )}
+
+        {explain.caveats.length > 0 && (
+          <ul className="space-y-0.5 border-t border-border pt-2 text-xs text-muted-foreground">
+            {explain.caveats.map((c, i) => (
+              <li key={i}>{c}</li>
+            ))}
+          </ul>
         )}
       </CardContent>
     </Card>

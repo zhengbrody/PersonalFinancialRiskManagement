@@ -59,3 +59,15 @@ added to risk / research / Copilot.
 `test_confidence.py` (enforcement unit) + `test_confidence_surfaces.py`
 (end-to-end per surface) prove low-quality data can't produce a high-confidence /
 directional conclusion anywhere; `data-confidence.test.tsx` covers the UI states.
+
+## Known follow-ups
+- `copilot_router._factpack_evidence` hardcodes `source="fmp"` for price/PE/
+  margin/ROE even when the FactPack filled them from the yfinance FALLBACK
+  (`_pref`) — so those show a "primary" badge. Pre-existing; the honest fix is to
+  thread the FactPack's per-field source through the compact merge. The verdict's
+  own provenance (`_verdict_confidence`) is already correct.
+- `cross_source_agreement` has a working, tested helper but no production caller
+  yet (always `None` = "where available"); wire it where two independent sources
+  cover the same field (e.g. FMP vs yfinance price during the fallback merge).
+- Fuller research-card consolidation (TrustStrip / SourcesCard / DataQualityBadge
+  → the unified block) — kept per-card provenance for now.

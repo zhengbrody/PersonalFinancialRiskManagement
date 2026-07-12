@@ -98,7 +98,7 @@ def test_gather_ticker_uses_factpack(monkeypatch):
     )
     monkeypatch.setattr(rf, "build_fact_pack", lambda tk: fp)
 
-    ev = cr._gather("ticker_research", "should I buy NVDA", ["NVDA"], user=object())
+    ev, _ = cr._gather("ticker_research", "should I buy NVDA", ["NVDA"], user=object())
     labels = {e.label for e in ev}
     assert "Price" in labels and "Valuation band" in labels
     assert any(e.value == "rich" for e in ev)
@@ -107,7 +107,7 @@ def test_gather_ticker_uses_factpack(monkeypatch):
 
 def test_gather_portfolio_diagnosis(monkeypatch):
     monkeypatch.setattr(cr, "_load_score_positions", lambda user: ([], _Score()))
-    ev = cr._gather("portfolio_diagnosis", "how risky am I", [], user=object())
+    ev, _ = cr._gather("portfolio_diagnosis", "how risky am I", [], user=object())
     labels = {e.label for e in ev}
     assert "Health score" in labels and "Sharpe ratio" in labels
     assert any(e.value == "720/1000" for e in ev)
@@ -119,7 +119,7 @@ def test_gather_failsoft_no_portfolio(monkeypatch):
 
     monkeypatch.setattr(cr, "_load_score_positions", boom)
     # safe() swallows → empty evidence, never raises
-    assert cr._gather("portfolio_diagnosis", "diagnose me", [], user=object()) == []
+    assert cr._gather("portfolio_diagnosis", "diagnose me", [], user=object()) == ([], None)
 
 
 # ── synthesis ───────────────────────────────────────────────────────
@@ -177,7 +177,7 @@ def test_ask_endpoint_requires_auth():
 
 def test_gather_portfolio_includes_risk_reference(monkeypatch):
     monkeypatch.setattr(cr, "_load_score_positions", lambda user: ([], _Score()))
-    ev = cr._gather("portfolio_diagnosis", "how risky am I", [], user=object())
+    ev, _ = cr._gather("portfolio_diagnosis", "how risky am I", [], user=object())
     ref = [e for e in ev if e.label.startswith("Risk reference — ")]
     assert ref, "risk reference rows missing"
     assert all(e.source == "reference" for e in ref)

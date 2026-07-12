@@ -123,9 +123,19 @@ def test_copilot_only_soft_evidence_caps_conviction():
 
 def test_copilot_hard_evidence_can_be_directional():
     ev = [EvidenceItem(label=f"m{i}", value="1", source="engine") for i in range(4)]
-    dc = copilot_router._answer_confidence(ev)
+    dc = copilot_router._answer_confidence(ev)  # no grounding floor → trusts evidence
     assert dc.directional_allowed is True
     assert dc.conviction_cap == "high"
+
+
+def test_copilot_thin_grounding_data_is_not_directional():
+    # All-engine evidence but the portfolio score itself is low-quality (thin
+    # history) — the quality_floor clamps critical coverage, so NO directional
+    # answer. This is the review's HIGH: evidence source-mix alone must not gate.
+    ev = [EvidenceItem(label=f"m{i}", value="1", source="engine") for i in range(4)]
+    dc = copilot_router._answer_confidence(ev, quality_floor=0.25)
+    assert dc.directional_allowed is False
+    assert dc.conviction_cap == "none"
 
 
 # ── RISK EXPLAIN GATE ─────────────────────────────────────────────────────────

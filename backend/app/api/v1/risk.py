@@ -208,6 +208,10 @@ def _score_data_confidence(metrics, price_prov, price_frame, reason_codes):
     critical = min(cov, obs_adequacy)
     dq = getattr(metrics, "data_quality", None)
     dq = float(dq) if dq is not None else cov
+    # Use the ENGINE's own high/med/low label so the score page's two confidence
+    # badges never disagree (portfolio_scoring uses 0.80/0.50 cutoffs).
+    engine_label = getattr(metrics, "confidence", None)
+    engine_label = engine_label if engine_label in ("high", "medium", "low") else None
     extra = _reasons_to_confidence(
         reason_codes, {"low_data_confidence", "missing_price_data", "short_history"}
     )
@@ -217,6 +221,7 @@ def _score_data_confidence(metrics, price_prov, price_frame, reason_codes):
         sources=sources,
         missing=missing,
         confidence=dq,
+        label=engine_label,
         base_conviction="high",
         as_of=as_of,
         extra_reasons=extra,
@@ -239,7 +244,10 @@ def _report_data_confidence(price_prov, price_frame, notes):
     benchmark_missing = (
         "benchmark data was unavailable" in notes_blob or "assumed market beta" in notes_blob
     )
-    critical = min(overall, hist_adequacy) * (0.7 if benchmark_missing else 1.0)
+    # 0.6 (not 0.7) so a fully-priced book with a MISSING benchmark lands BELOW
+    # the 0.70 low-cap boundary (the cap check is strict `<`) and actually caps
+    # conviction, rather than sitting exactly on it and slipping through.
+    critical = min(overall, hist_adequacy) * (0.6 if benchmark_missing else 1.0)
     sources, _, as_of = _price_confidence_parts(price_prov, price_frame, [])
     missing = [
         _conf.field_provenance(f"price ({t})", "unavailable", missing_reason="empty", coverage=0.0)
