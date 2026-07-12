@@ -17,6 +17,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .confidence import DataConfidence
+
 Severity = Literal["low", "moderate", "elevated", "high"]
 
 
@@ -81,6 +83,12 @@ class RiskExplainInput(BaseModel):
 
     snapshot_delta: Optional[ExplainSnapshotDelta] = None
 
+    # The unified data-confidence block the page already fetched (from the score
+    # / risk-report response). Passing it back lets the diagnosis gate its
+    # conviction on data quality — the AI never asserts a confident read on thin
+    # data (enforcement rule #3).
+    data_confidence: Optional[DataConfidence] = None
+
 
 # ── output (structured diagnosis) ──────────────────────────────────────
 
@@ -103,3 +111,8 @@ class RiskExplainOutput(BaseModel):
     # True when LLM phrasing was used; False when the deterministic template
     # produced the prose (no key / quota / parse failure).
     ai_generated: bool = False
+    # Data-confidence gate (rule #3). ``directional_allowed=False`` when critical
+    # coverage < 40% — the diagnosis is provisional, not a confident read.
+    # Always derived deterministically (never from the LLM).
+    confidence_label: Optional[str] = None
+    directional_allowed: bool = True

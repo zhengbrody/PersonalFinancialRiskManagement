@@ -338,7 +338,55 @@ def _num(v, nd=2) -> Optional[str]:
 
 
 def _ev(label, value, source) -> Optional[EvidenceItem]:
-    return EvidenceItem(label=label, value=value, source=source) if value is not None else None
+    if value is None:
+        return None
+    from .confidence import source_type_for
+
+    return EvidenceItem(
+        label=label, value=value, source=source, source_type=source_type_for(source)
+    )
+
+
+# Evidence sources that carry HARD data (computed or provider-reported) vs the
+# "soft" reference sources — used to gauge how directional the answer can be.
+_HARD_EVIDENCE_SOURCES = {
+    "engine",
+    "fmp",
+    "massive",
+    "yfinance",
+    "macro",
+    "fred",
+    "treasury",
+    "sec",
+}
+
+
+def _answer_confidence(evidence: list[EvidenceItem]):
+    """A DataConfidence for a Copilot answer, derived from the evidence mix.
+    Critical coverage = the share of HARD (computed / provider) facts among the
+    evidence; a thin or reference-only answer can't be directional (rule #3)."""
+    from .confidence import build_data_confidence, field_provenance
+
+    total = len(evidence)
+    hard = sum(1 for e in evidence if e.source in _HARD_EVIDENCE_SOURCES)
+    overall = min(1.0, total / 4.0)  # ~4+ vetted facts = full coverage
+    critical = (hard / total) if total else 0.0
+    seen: dict[str, int] = {}
+    for e in evidence:
+        seen[e.source] = seen.get(e.source, 0) + 1
+    sources = [field_provenance(f"evidence ({src})", src, coverage=1.0) for src in seen]
+    base = (
+        "high"
+        if critical >= 0.85
+        else "medium" if critical >= 0.70 else "low" if critical >= 0.40 else "none"
+    )
+    return build_data_confidence(
+        overall_coverage=overall,
+        critical_coverage=critical,
+        sources=sources,
+        confidence=round(0.4 * overall + 0.6 * critical, 3),
+        base_conviction=base,
+    )
 
 
 def _compact(items) -> list[EvidenceItem]:
@@ -625,7 +673,9 @@ _SYSTEM = (
     "prices, ratios, or figures; ATTRIBUTE figures to their source in prose (e.g. "
     "'per FMP', 'per the MindMarket engine', 'per FRED'); if a source is missing or "
     "the evidence is thin, SAY SO plainly rather than implying confidence you don't "
-    "have. BOUNDARY — risk analytics, not investment advice: never tell the user "
+    "have. A DERIVED / estimated figure (source ending 'derived' or 'estimate') must "
+    "be described as an estimate — never as a provider-reported fact. BOUNDARY — "
+    "risk analytics, not investment advice: never tell the user "
     "to buy or sell a specific security, never name a security to add or swap in, "
     "and never give a dollar amount to trade; frame Next Actions as risk-management "
     "levers (e.g. reduce single-name concentration, review leverage, adjust the "
@@ -690,6 +740,7 @@ def answer(
     tickers = extract_tickers(message)
     intent = classify(message, tickers)
     evidence = _gather(intent, message, tickers, user=user)
+    dc = _answer_confidence(evidence)
 
     if llm_callable is None:
         return CopilotAnswer(
@@ -698,6 +749,8 @@ def answer(
             answer_markdown=_deterministic_answer(intent, message, evidence),
             evidence=evidence,
             data_only=True,
+            conviction=dc.conviction_cap,
+            data_confidence=dc,
         )
 
     # Force the reply language when the question is clearly non-English —
@@ -706,6 +759,15 @@ def answer(
 
     lang = detect_reply_language(message)
     system = _SYSTEM
+    if not dc.directional_allowed:
+        # Rule #3: too little hard data for a directional read — instruct the
+        # model to withhold a directional conclusion and say so.
+        system += (
+            "\nDATA-CONFIDENCE GATE: the available evidence is too thin for a "
+            "directional conclusion. In **Conclusion**, state plainly that there "
+            "isn't enough data to give a confident answer and what's missing — do "
+            "NOT assert a directional view."
+        )
     if lang:
         system += (
             f"\nLANGUAGE: the user wrote in {lang} — write the ENTIRE answer in {lang}, "
@@ -732,6 +794,8 @@ def answer(
             evidence=evidence,
             data_only=False,
             model="claude-sonnet-4-6",
+            conviction=dc.conviction_cap,
+            data_confidence=dc,
         )
     except Exception:  # noqa: BLE001 - any LLM failure → deterministic 5-section
         _log.warning("copilot.ask.llm_failed intent=%s", intent)
@@ -741,4 +805,6 @@ def answer(
             answer_markdown=_deterministic_answer(intent, message, evidence),
             evidence=evidence,
             data_only=True,
+            conviction=dc.conviction_cap,
+            data_confidence=dc,
         )

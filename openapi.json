@@ -1258,11 +1258,51 @@
         "title": "ConcentrationOut",
         "type": "object"
       },
+      "ConfidenceReason": {
+        "additionalProperties": true,
+        "description": "A structured, machine-readable reason behind the confidence label /\nconviction cap \u2014 'how missing data affects the conclusion'.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "default": "",
+            "title": "Detail",
+            "type": "string"
+          },
+          "severity": {
+            "default": "watch",
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "ConfidenceReason",
+        "type": "object"
+      },
       "CopilotAnswer": {
         "properties": {
           "answer_markdown": {
             "title": "Answer Markdown",
             "type": "string"
+          },
+          "conviction": {
+            "default": "medium",
+            "title": "Conviction",
+            "type": "string"
+          },
+          "data_confidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataConfidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "data_only": {
             "default": false,
@@ -1849,6 +1889,121 @@
           }
         },
         "title": "DCFRequest",
+        "type": "object"
+      },
+      "DataConfidence": {
+        "additionalProperties": true,
+        "description": "The unified confidence + provenance block. Additive on every truth-bearing\nresponse; the frontend ``<DataConfidence>`` renders it identically everywhere.",
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "conviction_cap": {
+            "default": "high",
+            "enum": [
+              "none",
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Conviction Cap",
+            "type": "string"
+          },
+          "critical_coverage": {
+            "title": "Critical Coverage",
+            "type": "number"
+          },
+          "cross_source_agreement": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cross Source Agreement"
+          },
+          "directional_allowed": {
+            "default": true,
+            "title": "Directional Allowed",
+            "type": "boolean"
+          },
+          "fallback_used": {
+            "default": false,
+            "title": "Fallback Used",
+            "type": "boolean"
+          },
+          "fetched_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fetched At"
+          },
+          "label": {
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Label",
+            "type": "string"
+          },
+          "missing": {
+            "items": {
+              "$ref": "#/components/schemas/FieldProvenance"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "overall_coverage": {
+            "title": "Overall Coverage",
+            "type": "number"
+          },
+          "reason_codes": {
+            "items": {
+              "$ref": "#/components/schemas/ConfidenceReason"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/FieldProvenance"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "label",
+          "confidence",
+          "overall_coverage",
+          "critical_coverage"
+        ],
+        "title": "DataConfidence",
         "type": "object"
       },
       "DataQuality": {
@@ -3453,6 +3608,17 @@
             "title": "Source",
             "type": "string"
           },
+          "source_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Type"
+          },
           "value": {
             "title": "Value",
             "type": "string"
@@ -4142,6 +4308,122 @@
           "message"
         ],
         "title": "FeedbackIn",
+        "type": "object"
+      },
+      "FieldProvenance": {
+        "additionalProperties": true,
+        "description": "Provenance for ONE dataset/field on a response \u2014 the row the expandable\n'source details' panel renders.",
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "coverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage"
+          },
+          "fallback_used": {
+            "default": false,
+            "title": "Fallback Used",
+            "type": "boolean"
+          },
+          "fetched_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fetched At"
+          },
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "missing_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "unsupported",
+                  "no_key",
+                  "provider_error",
+                  "rate_limited",
+                  "insufficient_history",
+                  "not_applicable",
+                  "stale_fallback",
+                  "empty"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing Reason"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_type": {
+            "enum": [
+              "primary",
+              "secondary",
+              "derived"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "field",
+          "source",
+          "source_type"
+        ],
+        "title": "FieldProvenance",
         "type": "object"
       },
       "FrontierPoint": {
@@ -8676,6 +8958,16 @@
             "title": "Conviction",
             "type": "string"
           },
+          "data_confidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataConfidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "data_only": {
             "default": false,
             "title": "Data Only",
@@ -8909,6 +9201,16 @@
       "RiskExplainInput": {
         "description": "Compact deterministic summary the page already has. Every field is\noptional so the one endpoint serves both the Health Score page (score\nside) and the Risk Report page (report side).",
         "properties": {
+          "data_confidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataConfidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "dimensions": {
             "additionalProperties": {
               "$ref": "#/components/schemas/ExplainDimension"
@@ -9011,6 +9313,22 @@
             },
             "title": "Caveats",
             "type": "array"
+          },
+          "confidence_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Label"
+          },
+          "directional_allowed": {
+            "default": true,
+            "title": "Directional Allowed",
+            "type": "boolean"
           },
           "headline": {
             "title": "Headline",
@@ -9241,6 +9559,16 @@
               }
             ],
             "title": "Daily Return"
+          },
+          "data_confidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataConfidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "data_quality_notes": {
             "items": {
@@ -9565,6 +9893,16 @@
               }
             ],
             "title": "Daily Return"
+          },
+          "data_confidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataConfidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "data_quality_notes": {
             "items": {
@@ -10440,6 +10778,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/backend__app__schemas__risk__ConcentrationOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "data_confidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataConfidence"
               },
               {
                 "type": "null"

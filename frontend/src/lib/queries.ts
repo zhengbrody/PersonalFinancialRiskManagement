@@ -21,6 +21,7 @@ import { apiFetch } from "./api";
 import { useAuth } from "./auth-context";
 import {
   concentrationSchema,
+  dataConfidenceSchema,
   priceProvenanceSchema,
   scoreResponseSchema,
   sourceProvenanceSchema,
@@ -807,6 +808,7 @@ export const riskReportSchema = z.looseObject({
   concentration: concentrationSchema.nullish(),
   correlation: correlationSchema.nullish(),
   rolling_volatility: rollingVolatilitySchema.nullish(),
+  data_confidence: dataConfidenceSchema.nullish(),
 });
 export type RiskReport = z.infer<typeof riskReportSchema>;
 
@@ -1206,6 +1208,8 @@ export const copilotAnswerSchema = z.looseObject({
   evidence: z.array(copilotEvidenceSchema),
   data_only: z.boolean(),
   model: z.string().nullish(),
+  conviction: z.string().nullish(),
+  data_confidence: dataConfidenceSchema.nullish(),
 });
 export type CopilotAnswer = z.infer<typeof copilotAnswerSchema>;
 
@@ -1422,6 +1426,7 @@ export const researchVerdictSchema = z.looseObject({
   risks: z.array(z.string()),
   what_would_change_my_mind: z.array(z.string()),
   data_only: z.boolean(),
+  data_confidence: dataConfidenceSchema.nullish(),
 });
 export type ResearchVerdict = z.infer<typeof researchVerdictSchema>;
 
@@ -2104,6 +2109,8 @@ export const riskExplainSchema = z.looseObject({
   suggested_actions: z.array(suggestedActionSchema),
   caveats: z.array(z.string()),
   ai_generated: z.boolean(),
+  confidence_label: z.string().nullish(),
+  directional_allowed: z.boolean().nullish(),
 });
 export type RiskExplain = z.infer<typeof riskExplainSchema>;
 export type Severity = RiskExplain["severity"];

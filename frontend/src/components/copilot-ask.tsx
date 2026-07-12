@@ -14,6 +14,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { DataConfidence } from "@/components/data-confidence";
 import {
   Card,
   CardContent,
@@ -167,6 +168,8 @@ function AnswerCard({ answer }: { answer: CopilotAnswer }) {
       <div className="text-[15px] leading-relaxed">
         <Markdown>{answer.answer_markdown}</Markdown>
       </div>
+
+      <DataConfidence confidence={answer.data_confidence} title="Answer confidence" />
 
       {answer.evidence.length > 0 && (
         <div className="space-y-2 border-t border-border pt-3">

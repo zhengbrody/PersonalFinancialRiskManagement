@@ -412,14 +412,90 @@ def _deterministic_verdict(fp: R.FactPack) -> R.ResearchVerdict:
     )
 
 
+_CRITICAL_FACTPACK_FIELDS = {"profile", "fundamentals", "financials", "price"}
+_CONVICTION_ORDER = ["none", "low", "medium", "high"]
+
+
+def _data_base_conviction(critical_coverage: float) -> str:
+    """The strongest conviction the DATA alone supports (before the LLM can
+    lower it). Data sets the ceiling; the model never raises it."""
+    if critical_coverage >= 0.85:
+        return "high"
+    if critical_coverage >= 0.70:
+        return "medium"
+    if critical_coverage >= 0.40:
+        return "low"
+    return "none"
+
+
+def _min_conviction(a: str, b: str) -> str:
+    ia = _CONVICTION_ORDER.index(a) if a in _CONVICTION_ORDER else len(_CONVICTION_ORDER) - 1
+    ib = _CONVICTION_ORDER.index(b) if b in _CONVICTION_ORDER else len(_CONVICTION_ORDER) - 1
+    return _CONVICTION_ORDER[min(ia, ib)]
+
+
+def _verdict_confidence(fp: R.FactPack):
+    """Map the FactPack's coverage/provenance into the unified DataConfidence +
+    apply the conviction cap. Critical coverage = how complete the core financial
+    facts (profile + fundamentals) are — the inputs a rating actually depends on."""
+    from ..services import confidence as C
+
+    dq = fp.data_quality
+    overall = float(getattr(dq, "coverage", 0.0) or 0.0)
+    crit = [s for s in dq.sources if s.field in _CRITICAL_FACTPACK_FIELDS]
+    critical = (sum(float(s.coverage or 0.0) for s in crit) / len(crit)) if crit else overall
+    sources = [
+        C.field_provenance(s.field, s.source, coverage=float(s.coverage or 0.0), as_of=s.as_of)
+        for s in dq.sources
+    ]
+    reason = C.classify_missing_reason(*dq.warnings)
+    missing = [
+        C.field_provenance(s.field, "unavailable", missing_reason=reason, coverage=0.0)
+        for s in dq.sources
+        if float(s.coverage or 0.0) <= 0.0
+    ]
+    cache = fp.cache
+    return C.build_data_confidence(
+        overall_coverage=overall,
+        critical_coverage=critical,
+        sources=sources,
+        missing=missing,
+        base_conviction=_data_base_conviction(critical),
+        confidence=overall,  # the FactPack's own coverage is its confidence signal
+        as_of=fp.as_of,
+        fetched_at=getattr(cache, "fetched_at", None) if cache else None,
+    )
+
+
 def build_verdict(fp: R.FactPack, llm_callable: Optional[Callable[..., str]] = None):
     """LLM judgment over the FactPack. ``llm_callable`` None → deterministic
     placeholder so the feature renders without a key. Dimension SCORES are
     always the deterministic floor's (same rule as risk_explain: the model
     phrases and ranks, it never invents a number); the LLM's per-dimension
-    note text is kept where the names line up."""
+    note text is kept where the names line up.
+
+    Data-confidence enforcement (rule #3): the DataConfidence's conviction cap is
+    applied to the verdict, and when it disallows a directional read (critical
+    coverage < 40%) NO rating is produced (and no LLM call is made) — the verdict
+    is 'Insufficient data', conviction 'none'."""
     floor = _deterministic_verdict(fp)
+    dc = _verdict_confidence(fp)
+
+    if not dc.directional_allowed:
+        floor.rating = "Insufficient data"
+        floor.conviction = "none"
+        floor.summary = (
+            f"Only {dc.critical_coverage:.0%} of the core financial facts are available "
+            f"for {fp.name or fp.ticker} — not enough to screen it directionally. "
+            "This is informational context only."
+        )
+        floor.data_confidence = dc
+        floor.data_only = True
+        return floor
+
     if llm_callable is None:
+        floor.conviction = dc.conviction_cap
+        floor.data_confidence = dc
         return floor
 
     import json
@@ -431,30 +507,36 @@ def build_verdict(fp: R.FactPack, llm_callable: Optional[Callable[..., str]] = N
         + json.dumps(fp.model_dump(), indent=2, sort_keys=True, default=str)
         + "\n\nReturn the verdict JSON now."
     )
+    verdict = floor
     try:
         raw = llm_callable(prompt=prompt, system=_VERDICT_SYSTEM, max_tokens=1100, temperature=0.3)
         parsed = _extract_json(raw or "")
-        if not parsed:
-            return floor
-        llm_notes = {
-            str(d.get("name", "")).lower(): str(d.get("note", "") or "")
-            for d in (parsed.get("dimensions") or [])
-            if isinstance(d, dict)
-        }
-        parsed["dimensions"] = [
-            {**d.model_dump(), "note": llm_notes.get(d.name.lower()) or d.note}
-            for d in floor.dimensions
-        ]
-        # Vocabulary clamp: the rating must stay in the non-transactional
-        # closed set — an off-vocabulary LLM rating (e.g. "Buy") is replaced
-        # by the deterministic floor's.
-        if parsed.get("rating") not in _RATINGS:
-            parsed["rating"] = floor.rating
-        parsed["data_only"] = False
-        return R.ResearchVerdict.model_validate(parsed)
+        if parsed:
+            llm_notes = {
+                str(d.get("name", "")).lower(): str(d.get("note", "") or "")
+                for d in (parsed.get("dimensions") or [])
+                if isinstance(d, dict)
+            }
+            parsed["dimensions"] = [
+                {**d.model_dump(), "note": llm_notes.get(d.name.lower()) or d.note}
+                for d in floor.dimensions
+            ]
+            # Vocabulary clamp: the rating must stay in the non-transactional
+            # closed set — an off-vocabulary LLM rating (e.g. "Buy") is replaced
+            # by the deterministic floor's.
+            if parsed.get("rating") not in _RATINGS:
+                parsed["rating"] = floor.rating
+            parsed["data_only"] = False
+            verdict = R.ResearchVerdict.model_validate(parsed)
     except Exception:  # noqa: BLE001 - any LLM/parse failure → deterministic floor
         _log.warning("research.verdict.llm_failed ticker=%s", fp.ticker)
-        return floor
+        verdict = floor
+
+    # Enforce the conviction cap: the data sets the ceiling (dc.conviction_cap);
+    # the LLM's own conviction can only LOWER it, never raise above the data.
+    verdict.conviction = _min_conviction(dc.conviction_cap, verdict.conviction)
+    verdict.data_confidence = dc
+    return verdict
 
 
 def _drivers(fp: R.FactPack) -> list[str]:

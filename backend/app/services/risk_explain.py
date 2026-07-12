@@ -102,6 +102,8 @@ class Skeleton:
     candidate_actions: list[SuggestedAction] = field(default_factory=list)
     watch_items: list[str] = field(default_factory=list)
     caveats: list[str] = field(default_factory=list)
+    confidence_label: Optional[str] = None
+    directional_allowed: bool = True
 
 
 def _band(score: Optional[int]) -> Optional[str]:
@@ -257,6 +259,28 @@ def build_skeleton(payload: RiskExplainInput) -> Skeleton:
         "Educational, not financial advice.",
     ]
 
+    # ── data-confidence gate (rule #3) ────────────────────────────────
+    # When the page passed back its unified DataConfidence, honour the conviction
+    # cap: on thin/low-confidence data, LEAD with a provisional caveat so the
+    # diagnosis never reads as a confident assessment. Derived here (never the
+    # LLM), so `explain` stamps it back verbatim.
+    dc = payload.data_confidence
+    confidence_label = dc.label if dc is not None else None
+    directional_allowed = bool(dc.directional_allowed) if dc is not None else True
+    if dc is not None and not directional_allowed:
+        caveats.insert(
+            0,
+            f"Data coverage is only {dc.critical_coverage:.0%} of the critical inputs "
+            "— this diagnosis is provisional, not a confident assessment. Add the "
+            "missing holdings/history before relying on it.",
+        )
+    elif dc is not None and dc.label == "low":
+        caveats.insert(
+            0,
+            "Data confidence is low — treat the read as directional context, not a "
+            "precise assessment.",
+        )
+
     return Skeleton(
         severity=severity,
         primary_driver=primary_driver,
@@ -264,6 +288,8 @@ def build_skeleton(payload: RiskExplainInput) -> Skeleton:
         candidate_actions=actions,
         watch_items=watch,
         caveats=caveats,
+        confidence_label=confidence_label,
+        directional_allowed=directional_allowed,
     )
 
 
@@ -317,6 +343,8 @@ def render_template(skeleton: Skeleton) -> RiskExplainOutput:
         suggested_actions=list(skeleton.candidate_actions[:4]),
         caveats=list(skeleton.caveats),
         ai_generated=False,
+        confidence_label=skeleton.confidence_label,
+        directional_allowed=skeleton.directional_allowed,
     )
 
 
@@ -448,7 +476,8 @@ def explain(
         actions = list(skeleton.candidate_actions[:4])
 
     return RiskExplainOutput(
-        # severity + primary_driver ALWAYS from the deterministic skeleton.
+        # severity + primary_driver + confidence gate ALWAYS from the
+        # deterministic skeleton — the LLM only rephrases prose.
         severity=skeleton.severity,
         primary_driver=skeleton.primary_driver,
         headline=headline,
@@ -457,4 +486,6 @@ def explain(
         suggested_actions=actions,
         caveats=_coerce_str_list(parsed.get("caveats")) or list(skeleton.caveats),
         ai_generated=True,
+        confidence_label=skeleton.confidence_label,
+        directional_allowed=skeleton.directional_allowed,
     )

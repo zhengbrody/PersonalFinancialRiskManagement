@@ -164,6 +164,40 @@ export const reasonCodeSchema = z.looseObject({
 });
 export type ReasonCode = z.infer<typeof reasonCodeSchema>;
 
+// ── unified data-confidence contract (backend schemas/confidence.py) ──
+export const fieldProvenanceSchema = z.looseObject({
+  field: z.string(),
+  source: z.string(),
+  source_type: z.enum(["primary", "secondary", "derived"]).nullish(),
+  label: z.string().nullish(),
+  as_of: z.string().nullish(),
+  fetched_at: z.string().nullish(),
+  stale: z.boolean().nullish(),
+  coverage: z.number().nullish(),
+  fallback_used: z.boolean().nullish(),
+  missing_reason: z.string().nullish(),
+  note: z.string().nullish(),
+});
+export type FieldProvenance = z.infer<typeof fieldProvenanceSchema>;
+
+export const dataConfidenceSchema = z.looseObject({
+  label: z.enum(["high", "medium", "low"]),
+  confidence: z.number(),
+  overall_coverage: z.number(),
+  critical_coverage: z.number(),
+  as_of: z.string().nullish(),
+  fetched_at: z.string().nullish(),
+  stale: z.boolean().nullish(),
+  fallback_used: z.boolean().nullish(),
+  cross_source_agreement: z.number().nullish(),
+  conviction_cap: z.enum(["none", "low", "medium", "high"]).nullish(),
+  directional_allowed: z.boolean().nullish(),
+  sources: z.array(fieldProvenanceSchema).nullish(),
+  missing: z.array(fieldProvenanceSchema).nullish(),
+  reason_codes: z.array(reasonCodeSchema).nullish(),
+});
+export type DataConfidence = z.infer<typeof dataConfidenceSchema>;
+
 export const scoreResponseSchema = z.looseObject({
   overall_score: z.number(),
   risk_preference: z.number(),
@@ -184,5 +218,7 @@ export const scoreResponseSchema = z.looseObject({
   // Methodology version that produced this score (auditable; links the number
   // to the rules on /methodology/health-score).
   score_version: z.string().nullish(),
+  // Unified data-confidence + provenance block (rendered by <DataConfidence>).
+  data_confidence: dataConfidenceSchema.nullish(),
 });
 export type ScoreResponse = z.infer<typeof scoreResponseSchema>;

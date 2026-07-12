@@ -22,6 +22,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { DataConfidence } from "@/components/data-confidence";
 import {
   Card,
   CardContent,
@@ -569,6 +570,8 @@ function VerdictSection({
         {verdict.summary && (
           <p className="text-base leading-relaxed">{verdict.summary}</p>
         )}
+
+        <DataConfidence confidence={verdict.data_confidence} />
 
         {verdict.dimensions.length > 0 && (
           <div className="space-y-3">

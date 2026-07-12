@@ -13,6 +13,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from .confidence import DataConfidence
+
 INTENTS = (
     "portfolio_diagnosis",
     "ticker_research",
@@ -31,6 +33,9 @@ class EvidenceItem(BaseModel):
     label: str
     value: str  # pre-formatted for display ("$1,234", "12.3%", "0.85")
     source: str  # "engine" | "fmp" | "yfinance" | "macro" | "derived" | "glossary"
+    # primary / secondary / derived — so a DERIVED estimate is never shown as a
+    # provider-reported fact (rule #3). Filled from the registry via _ev().
+    source_type: Optional[str] = None
 
 
 class CopilotAskRequest(BaseModel):
@@ -44,3 +49,7 @@ class CopilotAnswer(BaseModel):
     evidence: list[EvidenceItem] = Field(default_factory=list)
     data_only: bool = False  # True when no LLM key → deterministic answer
     model: Optional[str] = None
+    # Conviction the evidence supports (rule #3). "none" → the data is too thin
+    # for a directional conclusion; the answer says so plainly.
+    conviction: str = "medium"
+    data_confidence: Optional[DataConfidence] = None

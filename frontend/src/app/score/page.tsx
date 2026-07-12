@@ -24,12 +24,9 @@ import { RiskAlertsCard } from "@/components/risk-alerts-card";
 import { PortfolioValueSummary } from "@/components/portfolio-value-summary";
 import { BenchmarkContext } from "@/components/benchmark-context";
 import { DataProvenance } from "@/components/data-provenance";
+import { DataConfidence } from "@/components/data-confidence";
 import { MetricTrend } from "@/components/metric-trend";
-import {
-  ScoreChangeReport,
-  ConfidenceBadge,
-  ReasonCodes,
-} from "@/components/score-change-report";
+import { ScoreChangeReport, ReasonCodes } from "@/components/score-change-report";
 import { RegimeContextLine } from "@/components/regime-context";
 import { track } from "@/lib/analytics";
 import { ApiError, apiFetch, isNoPortfolioError } from "@/lib/api";
@@ -457,11 +454,7 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
           </div>
           <ScoreGauge score={result.overall_score} />
           <HeroMeta metrics={result.metrics} />
-          <ConfidenceBadge
-            metrics={result.metrics}
-            baseOverall={result.base_overall}
-            overall={result.overall_score}
-          />
+          <DataConfidence confidence={result.data_confidence} className="mt-1" />
           <RegimeContextLine />
         </CardContent>
       </Card>
