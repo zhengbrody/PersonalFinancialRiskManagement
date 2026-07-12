@@ -351,6 +351,78 @@ def test_happy_path_returns_full_report(
     assert fake_engine.last_kwargs["market_shock"] == pytest.approx(-0.10)
 
 
+def test_report_ships_cockpit_dimensions_and_losses(
+    test_client,
+    mint_token,
+    fake_active_portfolio,
+    fake_price_history,
+    fake_engine,
+    fake_capital,
+    monkeypatch,
+):
+    """The explainable cockpit blocks (dimensions[] + losses) reach the wire,
+    with a genuine 1-day VaR distinct from the report's 21-day var_95."""
+    from backend.app.services import snapshots
+
+    monkeypatch.setattr(snapshots, "get_snapshot_history", lambda *a, **k: [])
+    fake_capital["cash_balance"] = 1000.0
+    fake_capital["margin_loan"] = 0.0
+    fake_capital["contributed_capital"] = 40000.0
+    fake_active_portfolio.set(
+        {"SPY": {"shares": 100, "avg_cost": 400.0}, "BND": {"shares": 50, "avg_cost": 70.0}}
+    )
+    fake_price_history.set(_make_history(["BND", "SPY"]))
+    fake_engine.last_report = _FakeReport(
+        portfolio_factor_betas=pd.DataFrame(
+            {"beta": [0.95], "r_squared": [0.8], "t_stat": [30.0], "p_value": [0.0]},
+            index=["SPY"],
+        ),
+        component_var_pct=pd.Series({"SPY": 0.6, "BND": 0.4}),
+        liquidity_risk=pd.DataFrame(
+            {"Days_to_Liquidate": [0.5, 1.2], "ADV_30d": [1.0e9, 5.0e7]}, index=["SPY", "BND"]
+        ),
+    )
+
+    token = mint_token(sub="user-cockpit")
+    resp = test_client.post(
+        "/api/v1/risk/report_from_active",
+        json={"market_shock": -0.10},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200, resp.json()
+    data = resp.json()["data"]
+
+    # Dimensions — the eight-key unified model reaches the client.
+    dims = {d["key"]: d for d in data["dimensions"]}
+    assert set(dims) == {
+        "concentration",
+        "volatility",
+        "drawdown",
+        "beta",
+        "correlation",
+        "liquidity",
+        "leverage",
+        "options",
+    }
+    # every measurable dimension carries the required cockpit fields
+    for d in data["dimensions"]:
+        if d["measurable"]:
+            assert d["status"] in ("calm", "normal", "elevated", "high")
+            assert d["explanation"] and d["action"]
+    # no options in this book → options is honest n/a, not a fake zero
+    assert dims["options"]["measurable"] is False and dims["options"]["status"] == "n/a"
+    # unlevered book (no margin)
+    assert dims["leverage"]["status"] == "calm"
+
+    # Losses — % AND $, with 1-day distinct from the 21-day headline.
+    losses = data["losses"]
+    assert losses["var_1d_95"]["horizon"] == "1d"
+    assert losses["var_1d_95"]["pct"] is not None and losses["var_1d_95"]["usd"] is not None
+    assert losses["var_21d_95"]["horizon"] == "21d"
+    assert losses["var_21d_95"]["pct"] == pytest.approx(data["var_95"])
+    assert losses["margin_buffer"]["status"] == "none"  # no margin loan
+
+
 def test_margin_scales_report_risk_to_net_equity(
     test_client,
     mint_token,

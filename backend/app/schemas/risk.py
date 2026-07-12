@@ -180,6 +180,90 @@ class RollingVolatilityOut(BaseModel):
     benchmark_ticker: Optional[str] = None
 
 
+DimensionKey = Literal[
+    "concentration",
+    "volatility",
+    "drawdown",
+    "beta",
+    "correlation",
+    "liquidity",
+    "leverage",
+    "options",
+]
+DimensionStatus = Literal["calm", "normal", "elevated", "high", "n/a"]
+
+
+class RiskDimension(BaseModel):
+    """One risk dimension in the explainable cockpit. Every field is ASSEMBLED
+    from numbers the report/score already computed — no new risk math. A
+    dimension the book can't measure (no options, no liquidity data) ships
+    ``measurable=False`` + ``status='n/a'`` rather than a fake zero."""
+
+    model_config = ConfigDict(extra="allow")
+
+    key: DimensionKey
+    name: str
+    value: Optional[float] = None
+    display: Optional[str] = None  # formatted value, e.g. "32%" / "1.18×"
+    unit: Optional[str] = None  # pct | ratio | x | usd | days | count
+    status: DimensionStatus = "n/a"
+    # Percentile of the current value vs the user's OWN snapshot history
+    # (0..1; 0.9 = higher than 90% of their past readings). None until enough
+    # history has accrued (< _MIN_HISTORY snapshots).
+    percentile: Optional[float] = None
+    percentile_n: Optional[int] = None  # observations behind the percentile
+    # Share of the portfolio's current risk ATTENTION (severity-normalised
+    # across the measurable dimensions, sums to ~1). NOT a variance
+    # decomposition — the dimensions overlap; this ranks "what to look at
+    # first", labelled as such in the UI.
+    contribution: Optional[float] = None
+    confidence: Optional[str] = None  # high | medium | low (per-dimension)
+    explanation: str = ""  # plain-English, deterministic
+    action: Optional[str] = None  # a Copilot ?q= prompt or lever key
+    measurable: bool = True
+
+
+class LossFigure(BaseModel):
+    """A downside number shown in BOTH a loss fraction and dollars (over the
+    net-equity basis). ``pct`` and ``usd`` are positive magnitudes."""
+
+    label: str = ""
+    horizon: Optional[str] = None  # "1d" | "21d" | "scenario" | "current"
+    pct: Optional[float] = None
+    usd: Optional[float] = None
+
+
+class MarginBuffer(BaseModel):
+    """How much equity cushion sits above the maintenance-margin line.
+    ``maintenance_requirement`` uses a conservative 25% of gross assets (Reg-T
+    style); a real broker requirement varies by security. ``status`` is a
+    deterministic band, not a margin call prediction."""
+
+    net_equity: Optional[float] = None
+    margin_loan: Optional[float] = None
+    gross_assets: Optional[float] = None
+    maintenance_requirement: Optional[float] = None
+    buffer_usd: Optional[float] = None
+    buffer_pct: Optional[float] = None  # buffer / gross assets
+    status: Literal["none", "comfortable", "tight", "call_risk", "n/a"] = "n/a"
+
+
+class LossBreakdown(BaseModel):
+    """Downside in % AND $ — the losses view of the cockpit. 1-day VaR/CVaR are
+    a genuine 1-day historical estimate from the report's price window (the
+    report's headline ``var_95`` is a 21-day Monte-Carlo number, surfaced here
+    correctly labelled as ``var_21d_95``). All $ figures are on
+    ``basis_value`` (net equity)."""
+
+    basis_value: Optional[float] = None  # net equity the $ figures are computed on
+    var_1d_95: Optional[LossFigure] = None
+    cvar_1d_95: Optional[LossFigure] = None
+    var_21d_95: Optional[LossFigure] = None  # the existing MC number, correctly labelled
+    stress: Optional[LossFigure] = None
+    current_drawdown: Optional[LossFigure] = None
+    margin_buffer: Optional[MarginBuffer] = None
+
+
 class RiskReportOut(BaseModel):
     """JSON-safe projection of the engine's ``RiskReport`` dataclass.
 
@@ -251,6 +335,13 @@ class RiskReportOut(BaseModel):
     data_quality_notes: list[str] = Field(default_factory=list)
     # Unified data-confidence + provenance block (same contract as the score).
     data_confidence: Optional[DataConfidence] = None
+
+    # ── Explainable risk cockpit (additive; assembled from the fields above,
+    # no new risk math). ``dimensions`` is the per-dimension model (value /
+    # status / percentile / contribution / confidence / explanation / action);
+    # ``losses`` shows downside in BOTH % and $. ──
+    dimensions: list[RiskDimension] = Field(default_factory=list)
+    losses: Optional[LossBreakdown] = None
 
 
 class FrontierPoint(BaseModel):

@@ -244,7 +244,7 @@ def get_snapshot_history(access_token: Optional[str], *, limit: int = 90) -> lis
         sb = _client(access_token)
         resp = (
             sb.table("portfolio_snapshots")
-            .select("created_at,risk_metrics,net_equity,contributed_capital")
+            .select("created_at,risk_metrics,net_equity,contributed_capital,leverage")
             .order("created_at", desc=True)
             .limit(max(1, min(limit, 365)))
             .execute()
@@ -254,6 +254,7 @@ def get_snapshot_history(access_token: Optional[str], *, limit: int = 90) -> lis
         for r in rows:
             m = r.get("risk_metrics") or {}
             dims = m.get("dimensions") or {}
+            conc = m.get("concentration") or {}
             dq = r.get("data_quality") or {}
             out.append(
                 {
@@ -274,6 +275,11 @@ def get_snapshot_history(access_token: Optional[str], *, limit: int = 90) -> lis
                     "risk_adjusted_return": _finite(dims.get("risk_adjusted_return")),
                     "downside_protection": _finite(dims.get("downside_protection")),
                     "confidence": dq.get("confidence") or m.get("confidence"),
+                    # Series backing the cockpit's per-dimension historical
+                    # percentiles (additive; already stored, just surfaced).
+                    "beta_to_benchmark": _finite(m.get("beta_to_benchmark")),
+                    "leverage": _finite(r.get("leverage") or m.get("leverage")),
+                    "concentration_top_holding": _finite(conc.get("top_holding_weight")),
                 }
             )
         return out
