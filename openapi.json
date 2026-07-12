@@ -842,6 +842,67 @@
         "title": "CalibrationBinOut",
         "type": "object"
       },
+      "ChangeAttribution": {
+        "description": "The score move split into MARKET / HOLDING / DATA-QUALITY buckets.\n\nExact identity: ``score_delta = data_quality_driven + structural`` where\n``structural = \u0394base`` (the raw dimension-based score, pre-dampening) and\n``data_quality_driven = \u0394(final \u2212 base)`` (the change in how much data\nquality/dampening pulled the score toward neutral). On a day the book didn't\nchange, ``structural`` is entirely market-driven (same holdings, prices\nmoved). On a day the user traded, market and holding aren't separable\nwithout a full-book counterfactual, so they're reported jointly in\n``combined_market_holdings`` with ``separable=False`` \u2014 an honest split, not\na fabricated decimal. The data-quality bucket is the concrete separation of\n'your portfolio changed' from 'the data behind it changed'.",
+        "properties": {
+          "combined_market_holdings": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Combined Market Holdings"
+          },
+          "data_quality_driven": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Quality Driven"
+          },
+          "holding_driven": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Holding Driven"
+          },
+          "market_driven": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Driven"
+          },
+          "note": {
+            "default": "",
+            "title": "Note",
+            "type": "string"
+          },
+          "separable": {
+            "default": true,
+            "title": "Separable",
+            "type": "boolean"
+          }
+        },
+        "title": "ChangeAttribution",
+        "type": "object"
+      },
       "ChangeRow": {
         "properties": {
           "change_pct": {
@@ -10771,6 +10832,16 @@
             ],
             "title": "As Of Previous"
           },
+          "attribution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChangeAttribution"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "available": {
             "title": "Available",
             "type": "boolean"
@@ -10874,6 +10945,26 @@
             },
             "title": "Top Drivers",
             "type": "array"
+          },
+          "top_negative_contributor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriverChange"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "top_positive_contributor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DriverChange"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "window": {
             "title": "Window",
@@ -10987,6 +11078,17 @@
               }
             ],
             "title": "Observations"
+          },
+          "option_penalty": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Option Penalty"
           },
           "overall_score": {
             "title": "Overall Score",

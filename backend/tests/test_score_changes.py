@@ -124,3 +124,132 @@ def test_holdings_diff_added_removed_reweighted():
 def test_endpoint_is_auth_gated(test_client):
     resp = test_client.post("/api/v1/risk/score_changes", json={"overall_score": 500})
     assert resp.status_code == 401
+
+
+# ── PR B: market / holding / data-quality attribution ──────────────────────────
+def test_top_positive_and_negative_contributors():
+    prev = _snap(
+        dimensions={"risk_match": 7.0, "risk_adjusted_return": 6.0, "downside_protection": 6.0}
+    )
+    req = _req(
+        overall_score=480,
+        dimensions={"risk_match": 5.0, "risk_adjusted_return": 7.0, "downside_protection": 6.0},
+    )
+    r = build_change_report(req, prev)
+    assert r.top_negative_contributor is not None
+    assert r.top_negative_contributor.key == "risk_match" and r.top_negative_contributor.points < 0
+    assert r.top_positive_contributor is not None
+    assert r.top_positive_contributor.key == "risk_adjusted_return"
+
+
+def test_attribution_market_driven_on_no_trade_day():
+    """Same holdings, the raw (base) score fell → the move is 100% market."""
+    prev = _snap(overall_score=700, base_overall=700)
+    req = _req(
+        overall_score=650,
+        base_overall=650,
+        dimensions={"risk_match": 5.5, "risk_adjusted_return": 6.0, "downside_protection": 6.0},
+    )
+    r = build_change_report(req, prev)
+    a = r.attribution
+    assert a is not None and a.separable is True
+    assert a.market_driven == r.score_delta  # all of it
+    assert a.holding_driven == 0 and a.data_quality_driven == 0
+
+
+def test_attribution_data_quality_driven_not_the_portfolio():
+    """Confidence collapsed → dampening pulled the score down while the raw
+    (base) score barely moved. The drop must attribute to DATA QUALITY, not the
+    portfolio — the req-1 separation made concrete."""
+    prev = _snap(overall_score=715, base_overall=715)
+    req = _req(
+        overall_score=630,
+        base_overall=710,  # raw score almost unchanged
+        confidence="low",
+    )
+    r = build_change_report(req, prev)
+    a = r.attribution
+    assert a is not None
+    assert a.data_quality_driven <= -60  # the bulk of the −85 move
+    assert abs(a.market_driven) <= 10  # the portfolio itself barely moved
+    assert "data-quality" in a.note
+
+
+def test_attribution_trade_day_is_not_separable():
+    prev = _snap(overall_score=650, base_overall=650)
+    req = _req(
+        overall_score=640,
+        base_overall=640,
+        top_positions=[{"ticker": "AAA", "weight": 0.2}, {"ticker": "NVDA", "weight": 0.8}],
+    )
+    r = build_change_report(req, prev)
+    a = r.attribution
+    assert a.separable is False
+    assert a.market_driven is None and a.holding_driven is None
+    assert a.combined_market_holdings == r.score_delta - a.data_quality_driven
+
+
+def test_attribution_exact_identity_all_buckets_sum_to_delta():
+    prev = _snap(
+        overall_score=700,
+        base_overall=720,
+        dimensions={"risk_match": 7.0, "risk_adjusted_return": 7.0, "downside_protection": 7.0},
+    )
+    req = _req(
+        overall_score=650,
+        base_overall=705,
+        dimensions={"risk_match": 6.8, "risk_adjusted_return": 7.0, "downside_protection": 7.0},
+        confidence="medium",
+    )
+    r = build_change_report(req, prev)
+    a = r.attribution
+    total = a.data_quality_driven + (a.market_driven or 0) + (a.holding_driven or 0)
+    assert total == r.score_delta
+
+
+def test_attribution_option_penalty_is_holding_driven():
+    """A bigger option penalty (same book, same prices, same confidence) is a
+    HOLDING-side move, peeled out of the data-quality bucket."""
+    prev = _snap(overall_score=580, base_overall=600, option_penalty=20)
+    req = _req(
+        overall_score=570,
+        base_overall=600,
+        option_penalty=30,
+    )
+    r = build_change_report(req, prev)
+    a = r.attribution
+    assert a.data_quality_driven == 0  # dampening unchanged
+    assert a.holding_driven == -10  # the +10 penalty costs 10 pts
+    assert a.market_driven == 0
+    assert a.data_quality_driven + a.market_driven + a.holding_driven == r.score_delta
+
+
+def test_attribution_unknown_current_penalty_folds_into_data_quality():
+    """When the client doesn't send option_penalty, the penalty change must NOT
+    be mis-attributed — it folds into data_quality rather than inventing a
+    holding move."""
+    prev = _snap(overall_score=580, base_overall=600, option_penalty=20)
+    req = _req(overall_score=600, base_overall=600)  # option_penalty defaults None
+    r = build_change_report(req, prev)
+    a = r.attribution
+    assert a.holding_driven == 0  # not invented
+    assert a.data_quality_driven + a.market_driven + a.holding_driven == r.score_delta
+
+
+# ── PR B / req-1: a low-quality dataset must never LOOK more unhealthy ──────────
+def test_low_data_quality_only_pulls_a_weak_score_toward_neutral():
+    """Health Score is separated from Data Confidence: poor data can only
+    stabilize a weak dimension TOWARD neutral (less unhealthy-looking), never
+    push it below its raw value. This is the engine guarantee behind req-1."""
+    from libs.mindmarket_core import portfolio_scoring as ps
+
+    weak_raw = 2.0  # a genuinely unhealthy raw dimension
+    fidelity_full = ps._score_fidelity(0.90)  # good data → undamped
+    fidelity_low = ps._score_fidelity(0.25)  # poor data → damped toward neutral
+
+    damped_full = ps._dampen_dimension(weak_raw, fidelity_full)
+    damped_low = ps._dampen_dimension(weak_raw, fidelity_low)
+
+    assert damped_full == weak_raw  # full data leaves the (bad) score untouched
+    assert damped_low > weak_raw  # poor data pulls it UP toward neutral
+    assert damped_low <= ps._NEUTRAL_DIM  # but never past neutral
