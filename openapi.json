@@ -34,6 +34,146 @@
         "title": "AccountDeleteOut",
         "type": "object"
       },
+      "ActionCard": {
+        "properties": {
+          "assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Assumptions",
+            "type": "array"
+          },
+          "disclaimer": {
+            "default": "Educational, not financial advice. Simulation only \u2014 nothing is traded.",
+            "title": "Disclaimer",
+            "type": "string"
+          },
+          "expected_cvar_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Cvar Delta"
+          },
+          "expected_score_after": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Score After"
+          },
+          "expected_score_delta": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Score Delta"
+          },
+          "expected_var_delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Var Delta"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "proposed_change": {
+            "title": "Proposed Change",
+            "type": "string"
+          },
+          "rationale": {
+            "title": "Rationale",
+            "type": "string"
+          },
+          "simulate_holdings": {
+            "items": {
+              "$ref": "#/components/schemas/SimulateHolding"
+            },
+            "title": "Simulate Holdings",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "trade_offs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Trade Offs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "rationale",
+          "proposed_change"
+        ],
+        "title": "ActionCard",
+        "type": "object"
+      },
+      "ActionSimulateOut": {
+        "properties": {
+          "actions": {
+            "items": {
+              "$ref": "#/components/schemas/ActionCard"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "baseline_cvar_95_daily": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Cvar 95 Daily"
+          },
+          "baseline_score": {
+            "title": "Baseline Score",
+            "type": "integer"
+          },
+          "baseline_var_95_daily": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Var 95 Daily"
+          }
+        },
+        "required": [
+          "baseline_score"
+        ],
+        "title": "ActionSimulateOut",
+        "type": "object"
+      },
       "AlertComponentVar": {
         "properties": {
           "pct": {
@@ -2309,6 +2449,39 @@
           "meta"
         ],
         "title": "Envelope[AccountDeleteOut]",
+        "type": "object"
+      },
+      "Envelope_ActionSimulateOut_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActionSimulateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[ActionSimulateOut]",
         "type": "object"
       },
       "Envelope_AttributionResponse_": {
@@ -11625,6 +11798,30 @@
         "title": "SeriesResultOut",
         "type": "object"
       },
+      "SimulateHolding": {
+        "description": "One row of the proposed (hypothetical) book, for the Simulate button.",
+        "properties": {
+          "asset_type": {
+            "default": "public_security",
+            "title": "Asset Type",
+            "type": "string"
+          },
+          "market_value": {
+            "title": "Market Value",
+            "type": "number"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "market_value"
+        ],
+        "title": "SimulateHolding",
+        "type": "object"
+      },
       "SmartMoneyOut": {
         "properties": {
           "as_of": {
@@ -15223,6 +15420,48 @@
           }
         },
         "summary": "Score the authed user's active portfolio using real market data",
+        "tags": [
+          "risk"
+        ]
+      }
+    },
+    "/api/v1/risk/simulate_actions": {
+      "post": {
+        "description": "Upgraded Action Cards: deterministic risk LEVERS (trim the largest\nposition / add a cash buffer / de-lever) with their EXPECTED impact computed\nby actually re-scoring the proposed book on the SAME resolved returns. Never\na security buy/sell pick; NEVER executes a trade \u2014 the ``simulate_holdings``\npayload just prefills the what-if sandbox.",
+        "operationId": "simulate_actions_endpoint_api_v1_risk_simulate_actions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScoreFromActiveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ActionSimulateOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Deterministic risk-lever action cards with expected score/VaR impact",
         "tags": [
           "risk"
         ]
