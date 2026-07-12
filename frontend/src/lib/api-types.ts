@@ -1901,10 +1901,37 @@ export interface components {
             /** Top Sector Weight */
             top_sector_weight?: number | null;
         };
+        /**
+         * ConfidenceReason
+         * @description A structured, machine-readable reason behind the confidence label /
+         *     conviction cap — 'how missing data affects the conclusion'.
+         */
+        ConfidenceReason: {
+            /** Code */
+            code: string;
+            /**
+             * Detail
+             * @default
+             */
+            detail?: string;
+            /**
+             * Severity
+             * @default watch
+             */
+            severity?: string;
+        } & {
+            [key: string]: unknown;
+        };
         /** CopilotAnswer */
         CopilotAnswer: {
             /** Answer Markdown */
             answer_markdown: string;
+            /**
+             * Conviction
+             * @default medium
+             */
+            conviction?: string;
+            data_confidence?: components["schemas"]["DataConfidence"] | null;
             /**
              * Data Only
              * @default false
@@ -2066,6 +2093,59 @@ export interface components {
         /** DCFRequest */
         DCFRequest: {
             overrides?: components["schemas"]["DCFOverrides"] | null;
+        };
+        /**
+         * DataConfidence
+         * @description The unified confidence + provenance block. Additive on every truth-bearing
+         *     response; the frontend ``<DataConfidence>`` renders it identically everywhere.
+         */
+        DataConfidence: {
+            /** As Of */
+            as_of?: string | null;
+            /** Confidence */
+            confidence: number;
+            /**
+             * Conviction Cap
+             * @default high
+             * @enum {string}
+             */
+            conviction_cap?: "none" | "low" | "medium" | "high";
+            /** Critical Coverage */
+            critical_coverage: number;
+            /** Cross Source Agreement */
+            cross_source_agreement?: number | null;
+            /**
+             * Directional Allowed
+             * @default true
+             */
+            directional_allowed?: boolean;
+            /**
+             * Fallback Used
+             * @default false
+             */
+            fallback_used?: boolean;
+            /** Fetched At */
+            fetched_at?: string | null;
+            /**
+             * Label
+             * @enum {string}
+             */
+            label: "high" | "medium" | "low";
+            /** Missing */
+            missing?: components["schemas"]["FieldProvenance"][];
+            /** Overall Coverage */
+            overall_coverage: number;
+            /** Reason Codes */
+            reason_codes?: components["schemas"]["ConfidenceReason"][];
+            /** Sources */
+            sources?: components["schemas"]["FieldProvenance"][];
+            /**
+             * Stale
+             * @default false
+             */
+            stale?: boolean;
+        } & {
+            [key: string]: unknown;
         };
         /** DataQuality */
         DataQuality: {
@@ -2509,6 +2589,8 @@ export interface components {
             label: string;
             /** Source */
             source: string;
+            /** Source Type */
+            source_type?: string | null;
             /** Value */
             value: string;
         };
@@ -2722,6 +2804,46 @@ export interface components {
             context?: string;
             /** Message */
             message: string;
+        };
+        /**
+         * FieldProvenance
+         * @description Provenance for ONE dataset/field on a response — the row the expandable
+         *     'source details' panel renders.
+         */
+        FieldProvenance: {
+            /** As Of */
+            as_of?: string | null;
+            /** Coverage */
+            coverage?: number | null;
+            /**
+             * Fallback Used
+             * @default false
+             */
+            fallback_used?: boolean;
+            /** Fetched At */
+            fetched_at?: string | null;
+            /** Field */
+            field: string;
+            /** Label */
+            label?: string | null;
+            /** Missing Reason */
+            missing_reason?: ("unsupported" | "no_key" | "provider_error" | "rate_limited" | "insufficient_history" | "not_applicable" | "stale_fallback" | "empty") | null;
+            /** Note */
+            note?: string | null;
+            /** Source */
+            source: string;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "primary" | "secondary" | "derived";
+            /**
+             * Stale
+             * @default false
+             */
+            stale?: boolean;
+        } & {
+            [key: string]: unknown;
         };
         /**
          * FrontierPoint
@@ -4278,6 +4400,7 @@ export interface components {
              * @default medium
              */
             conviction?: string;
+            data_confidence?: components["schemas"]["DataConfidence"] | null;
             /**
              * Data Only
              * @default false
@@ -4353,6 +4476,7 @@ export interface components {
          *     side) and the Risk Report page (report side).
          */
         RiskExplainInput: {
+            data_confidence?: components["schemas"]["DataConfidence"] | null;
             /** Dimensions */
             dimensions?: {
                 [key: string]: components["schemas"]["ExplainDimension"];
@@ -4389,6 +4513,13 @@ export interface components {
             ai_generated?: boolean;
             /** Caveats */
             caveats?: string[];
+            /** Confidence Label */
+            confidence_label?: string | null;
+            /**
+             * Directional Allowed
+             * @default true
+             */
+            directional_allowed?: boolean;
             /** Headline */
             headline: string;
             /** Primary Driver */
@@ -4452,6 +4583,7 @@ export interface components {
             daily_pnl?: number | null;
             /** Daily Return */
             daily_return?: number | null;
+            data_confidence?: components["schemas"]["DataConfidence"] | null;
             /** Data Quality Notes */
             data_quality_notes?: string[];
             /** Drawdown Stats */
@@ -4529,6 +4661,7 @@ export interface components {
             daily_pnl?: number | null;
             /** Daily Return */
             daily_return?: number | null;
+            data_confidence?: components["schemas"]["DataConfidence"] | null;
             /** Data Quality Notes */
             data_quality_notes?: string[];
             /** Drawdown Stats */
@@ -4832,6 +4965,7 @@ export interface components {
             /** Base Overall */
             base_overall?: number | null;
             concentration?: components["schemas"]["backend__app__schemas__risk__ConcentrationOut"] | null;
+            data_confidence?: components["schemas"]["DataConfidence"] | null;
             /** Dimensions */
             dimensions: {
                 [key: string]: components["schemas"]["DimensionScoreOut"];

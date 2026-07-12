@@ -14,6 +14,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from .confidence import DataConfidence
+
 
 class SourceRef(BaseModel):
     """Where one slice of the FactPack came from + how complete it was."""
@@ -188,6 +190,10 @@ class ResearchVerdict(BaseModel):
     risks: list[str] = Field(default_factory=list)
     what_would_change_my_mind: list[str] = Field(default_factory=list)
     data_only: bool = False  # True when no LLM key → deterministic placeholder
+    # Unified data-confidence block. When ``data_confidence.directional_allowed``
+    # is False (critical coverage < 40%) the rating is "Insufficient data" and
+    # conviction is "none" — no directional verdict on thin data (rule #3).
+    data_confidence: Optional[DataConfidence] = None
 
 
 # ── request/response envelopes ──────────────────────────────────────

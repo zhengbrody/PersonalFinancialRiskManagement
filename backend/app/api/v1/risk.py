@@ -135,6 +135,152 @@ def _price_provenance(price_prov: dict, price_frame) -> PriceProvenanceOut:
     )
 
 
+def _price_frame_as_of(price_frame) -> "str | None":
+    try:
+        if price_frame is not None and len(price_frame):
+            return pd.Timestamp(price_frame.index[-1]).strftime("%Y-%m-%d")
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def _price_confidence_parts(price_prov: dict, price_frame, dropped: list[str]):
+    """Per-source price FieldProvenance rows + missing rows, shared by score +
+    report so provenance stays in lock-step. Uses the same market_data source
+    labels ('massive' / 'yfinance')."""
+    from ...services import confidence as _conf
+
+    by = dict(price_prov.get("by_ticker", {}) or {})
+    as_of = _price_frame_as_of(price_frame)
+    total = max(1, len(by))
+    sources = []
+    for src in ("massive", "yfinance"):
+        n = sum(1 for s in by.values() if s == src)
+        if n:
+            sources.append(
+                _conf.field_provenance("price", src, coverage=round(n / total, 3), as_of=as_of)
+            )
+    if not sources:
+        sources.append(_conf.field_provenance("price", "yfinance", coverage=0.0, as_of=as_of))
+    missing = [
+        _conf.field_provenance(
+            f"price ({t})", "unavailable", missing_reason="insufficient_history", coverage=0.0
+        )
+        for t in (dropped or [])
+    ]
+    return sources, missing, as_of
+
+
+def _reasons_to_confidence(reason_codes, keep: set[str]):
+    """Lift the DATA-related score reason_codes into ConfidenceReason so the
+    unified block explains 'how missing data affects the conclusion' without
+    re-deriving them."""
+    from ...services import confidence as _conf
+
+    out = []
+    for rc in reason_codes or []:
+        code = getattr(rc, "code", None) or (rc.get("code") if isinstance(rc, dict) else None)
+        if code in keep:
+            sev = getattr(rc, "severity", None) or (
+                rc.get("severity") if isinstance(rc, dict) else "watch"
+            )
+            detail = getattr(rc, "detail", None) or (
+                rc.get("detail") if isinstance(rc, dict) else ""
+            )
+            out.append(
+                _conf.ConfidenceReason(code=code, severity=sev or "watch", detail=detail or "")
+            )
+    return out
+
+
+def _score_data_confidence(metrics, price_prov, price_frame, reason_codes):
+    """Map the score's OWN confidence (data_quality/coverage/observations/dropped)
+    into the unified contract. Preserves the engine's math — this only assembles."""
+    from ...services import confidence as _conf
+
+    dropped = list(getattr(metrics, "dropped_tickers", []) or [])
+    sources, missing, as_of = _price_confidence_parts(price_prov, price_frame, dropped)
+    cov = float(getattr(metrics, "data_coverage", 0.0) or 0.0)
+    obs = int(getattr(metrics, "observations", 0) or 0)
+    obs_adequacy = max(0.0, min(1.0, obs / 60.0))
+    # Prices are THE critical input; an under-observed book also can't support a
+    # directional read, so critical coverage is the worst of the two.
+    critical = min(cov, obs_adequacy)
+    dq = getattr(metrics, "data_quality", None)
+    dq = float(dq) if dq is not None else cov
+    # Use the ENGINE's own high/med/low label so the score page's two confidence
+    # badges never disagree (portfolio_scoring uses 0.80/0.50 cutoffs).
+    engine_label = getattr(metrics, "confidence", None)
+    engine_label = engine_label if engine_label in ("high", "medium", "low") else None
+    extra = _reasons_to_confidence(
+        reason_codes, {"low_data_confidence", "missing_price_data", "short_history"}
+    )
+    return _conf.build_data_confidence(
+        overall_coverage=cov,
+        critical_coverage=critical,
+        sources=sources,
+        missing=missing,
+        confidence=dq,
+        label=engine_label,
+        base_conviction="high",
+        as_of=as_of,
+        extra_reasons=extra,
+    )
+
+
+def _report_data_confidence(price_prov, price_frame, notes):
+    """Assemble the risk report's confidence block. The report has no scalar
+    confidence today, so a default is derived from coverage + history; the
+    conviction cap enforces rule #3 identically to the score."""
+    from ...services import confidence as _conf
+
+    by = dict(price_prov.get("by_ticker", {}) or {})
+    miss = list(price_prov.get("missing", []) or [])
+    n_total = max(1, len(by) + len(miss))
+    overall = len(by) / n_total
+    trading_days = int(len(price_frame)) if price_frame is not None else 0
+    hist_adequacy = max(0.0, min(1.0, trading_days / 60.0))
+    notes_blob = " ".join(notes or []).lower()
+    benchmark_missing = (
+        "benchmark data was unavailable" in notes_blob or "assumed market beta" in notes_blob
+    )
+    # 0.6 (not 0.7) so a fully-priced book with a MISSING benchmark lands BELOW
+    # the 0.70 low-cap boundary (the cap check is strict `<`) and actually caps
+    # conviction, rather than sitting exactly on it and slipping through.
+    critical = min(overall, hist_adequacy) * (0.6 if benchmark_missing else 1.0)
+    sources, _, as_of = _price_confidence_parts(price_prov, price_frame, [])
+    missing = [
+        _conf.field_provenance(f"price ({t})", "unavailable", missing_reason="empty", coverage=0.0)
+        for t in miss
+    ]
+    extra = []
+    if benchmark_missing:
+        extra.append(
+            _conf.ConfidenceReason(
+                code="missing_benchmark_beta",
+                severity="watch",
+                detail="Benchmark beta was unavailable — the stress test assumed market beta (1.0).",
+            )
+        )
+    if 0 < trading_days < 60:
+        extra.append(
+            _conf.ConfidenceReason(
+                code="short_history",
+                severity="watch",
+                detail=f"Only {trading_days} trading days of history — annualized risk is low-confidence.",
+            )
+        )
+    return _conf.build_data_confidence(
+        overall_coverage=overall,
+        critical_coverage=critical,
+        sources=sources,
+        missing=missing,
+        base_conviction="high",
+        as_of=as_of,
+        extra_reasons=extra,
+    )
+
+
 def _serialize_score(score) -> ScoreResponse:
     """Convert the engine's frozen dataclass into the API response
     model. Centralised so /score and /score_from_active stay in lock-
@@ -660,13 +806,17 @@ def score_from_active_endpoint(
     concentration = _concentration_from_values(equity_mv, holdings)
 
     response = _serialize_score(score)
+    merged_metrics = response.metrics.model_copy(
+        update={k: v for k, v in account_metrics.items() if v is not None}
+    )
     response = response.model_copy(
         update={
-            "metrics": response.metrics.model_copy(
-                update={k: v for k, v in account_metrics.items() if v is not None}
-            ),
+            "metrics": merged_metrics,
             "price_provenance": _price_provenance(price_prov, price_frame),
             "concentration": concentration,
+            "data_confidence": _score_data_confidence(
+                merged_metrics, price_prov, price_frame, response.reason_codes
+            ),
         }
     )
 
@@ -1673,6 +1823,7 @@ def report_from_active_endpoint(
         update={
             "price_provenance": _price_provenance(price_prov, price_frame),
             "data_quality_notes": notes,
+            "data_confidence": _report_data_confidence(price_prov, price_frame, notes),
             "component_return": _component_return_rows(price_frame, weights),
             "correlation": _correlation_block(report, weights, price_frame),
             "rolling_volatility": _rolling_volatility_block(

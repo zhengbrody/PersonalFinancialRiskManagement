@@ -15,6 +15,8 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .confidence import DataConfidence
+
 AssetType = Literal["public_security", "cash", "crypto", "real_estate"]
 
 
@@ -247,6 +249,8 @@ class RiskReportOut(BaseModel):
     # stress test fell back to market beta for tickers with too little
     # history). Rendered in the report's data-quality area.
     data_quality_notes: list[str] = Field(default_factory=list)
+    # Unified data-confidence + provenance block (same contract as the score).
+    data_confidence: Optional[DataConfidence] = None
 
 
 class FrontierPoint(BaseModel):
@@ -475,6 +479,10 @@ class ScoreResponse(BaseModel):
     # libs/mindmarket_core/score_version.py). Auditable + used to gate
     # cross-version trend comparison.
     score_version: Optional[str] = None
+    # Unified data-confidence + provenance (coverage, source types, freshness,
+    # missing datasets, conviction cap). Additive; the shared <DataConfidence>
+    # UI renders it. None only on the degenerate no-metrics path.
+    data_confidence: Optional[DataConfidence] = None
 
 
 # ── /api/v1/risk/benchmarks (public reference context) ──────────────

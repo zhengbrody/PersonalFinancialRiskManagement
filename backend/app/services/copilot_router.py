@@ -338,7 +338,59 @@ def _num(v, nd=2) -> Optional[str]:
 
 
 def _ev(label, value, source) -> Optional[EvidenceItem]:
-    return EvidenceItem(label=label, value=value, source=source) if value is not None else None
+    if value is None:
+        return None
+    from .confidence import source_type_for
+
+    return EvidenceItem(
+        label=label, value=value, source=source, source_type=source_type_for(source)
+    )
+
+
+# Evidence sources that carry HARD data (computed or provider-reported) vs the
+# "soft" reference sources — used to gauge how directional the answer can be.
+_HARD_EVIDENCE_SOURCES = {
+    "engine",
+    "fmp",
+    "massive",
+    "yfinance",
+    "macro",
+    "fred",
+    "treasury",
+    "sec",
+}
+
+
+def _answer_confidence(evidence: list[EvidenceItem], quality_floor: Optional[float] = None):
+    """A DataConfidence for a Copilot answer. Critical coverage is the share of
+    HARD facts among the evidence, CLAMPED by the grounding data's own quality
+    (``quality_floor``) — so an all-engine answer over a thin-history book is
+    still low-critical and can't be directional (rule #3). A thin or
+    reference-only answer can't be directional either."""
+    from .confidence import build_data_confidence, field_provenance
+
+    total = len(evidence)
+    hard = sum(1 for e in evidence if e.source in _HARD_EVIDENCE_SOURCES)
+    overall = min(1.0, total / 4.0)  # ~4+ vetted facts = full coverage
+    critical = (hard / total) if total else 0.0
+    if quality_floor is not None:
+        critical = min(critical, max(0.0, min(1.0, quality_floor)))
+    seen: dict[str, int] = {}
+    for e in evidence:
+        seen[e.source] = seen.get(e.source, 0) + 1
+    sources = [field_provenance(f"evidence ({src})", src, coverage=1.0) for src in seen]
+    base = (
+        "high"
+        if critical >= 0.85
+        else "medium" if critical >= 0.70 else "low" if critical >= 0.40 else "none"
+    )
+    return build_data_confidence(
+        overall_coverage=overall,
+        critical_coverage=critical,
+        sources=sources,
+        confidence=round(0.4 * overall + 0.6 * critical, 3),
+        base_conviction=base,
+    )
 
 
 def _compact(items) -> list[EvidenceItem]:
@@ -499,36 +551,57 @@ def _option_evidence(message: str, user) -> list[EvidenceItem]:
     return items
 
 
-def _gather(intent: str, message: str, tickers: list[str], *, user) -> list[EvidenceItem]:
+def _score_quality(score) -> Optional[float]:
+    """The portfolio score's OWN data-quality (0..1) — the real grounding-data
+    ceiling for a portfolio-backed answer (not the evidence source-mix)."""
+    m = getattr(score, "metrics", None)
+    dq = getattr(m, "data_quality", None) if m is not None else None
+    try:
+        return float(dq) if dq is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _gather(intent: str, message: str, tickers: list[str], *, user):
+    """Returns (evidence, quality_floor). ``quality_floor`` is the grounding
+    data's OWN quality (0..1) when the answer rests on the portfolio score /
+    FactPack — so a thin-history book can't yield a directional Copilot answer
+    just because its evidence is engine-computed. None when the answer rests on
+    reference/macro data (gated by evidence presence, not a directional call)."""
     if intent in ("ticker_research", "compare_tickers"):
         from . import research_factpack as rf
 
         ev: list[EvidenceItem] = []
+        floors: list[float] = []
         for tk in (tickers[:3] if intent == "compare_tickers" else tickers[:1]):
             fp = safe(f"factpack:{tk}", lambda tk=tk: rf.build_fact_pack(tk))
             if fp is not None:
                 ev += _factpack_evidence(fp, prefix=tk if intent == "compare_tickers" else "")
-        return ev
+                floors.append(float(getattr(fp.data_quality, "coverage", 0.0) or 0.0))
+        return ev, (min(floors) if floors else 0.0)
 
     if intent == "macro_rates":
         from . import market_regime
 
         snap = safe("regime", lambda: market_regime.get_market_regime())
         if snap is None:
-            return []
+            return [], None
         d = snap.model_dump() if hasattr(snap, "model_dump") else dict(snap)
         vix = d.get("vix") or {}
         fg = d.get("fear_greed") or {}
         yc = d.get("yield_curve") or {}
-        return _compact(
-            [
-                _ev("VIX", _num(vix.get("current"), 1), "macro"),
-                _ev("VIX level", vix.get("level"), "macro"),
-                _ev("Fear & Greed", _num(fg.get("score"), 0), "macro"),
-                _ev("F&G rating", fg.get("rating"), "macro"),
-                _ev("Yield curve", yc.get("status"), "macro"),
-                _ev("3m-10y spread", _num(yc.get("spread_3m_10y"), 2), "macro"),
-            ]
+        return (
+            _compact(
+                [
+                    _ev("VIX", _num(vix.get("current"), 1), "macro"),
+                    _ev("VIX level", vix.get("level"), "macro"),
+                    _ev("Fear & Greed", _num(fg.get("score"), 0), "macro"),
+                    _ev("F&G rating", fg.get("rating"), "macro"),
+                    _ev("Yield curve", yc.get("status"), "macro"),
+                    _ev("3m-10y spread", _num(yc.get("spread_3m_10y"), 2), "macro"),
+                ]
+            ),
+            None,
         )
 
     if intent == "explain_metric":
@@ -541,12 +614,12 @@ def _gather(intent: str, message: str, tickers: list[str], *, user) -> list[Evid
         score = safe("score", lambda: _load_score(user))
         if score is not None:
             ev += _score_evidence(score)
-        return ev
+        return ev, (_score_quality(score) if score is not None else None)
 
     # Portfolio-grounded intents: diagnosis / scenario / tax-fee / action.
     score_positions = safe("score_pos", lambda: _load_score_positions(user))
     if score_positions is None:
-        return []
+        return [], None
     positions, score = score_positions
     ev = _score_evidence(score)
     ev += safe("options", lambda: _option_evidence(message, user)) or []
@@ -556,7 +629,8 @@ def _gather(intent: str, message: str, tickers: list[str], *, user) -> list[Evid
         scans = safe("optimizer", lambda: _optimizer_scans(score, positions))
         for label, value in (scans or {}).items():
             ev.append(EvidenceItem(label=label, value=value, source="engine"))
-    return ev
+    # A portfolio answer's ceiling is the SCORE's own data quality.
+    return ev, _score_quality(score)
 
 
 def _risk_reference_evidence(score, positions) -> list[EvidenceItem]:
@@ -625,7 +699,9 @@ _SYSTEM = (
     "prices, ratios, or figures; ATTRIBUTE figures to their source in prose (e.g. "
     "'per FMP', 'per the MindMarket engine', 'per FRED'); if a source is missing or "
     "the evidence is thin, SAY SO plainly rather than implying confidence you don't "
-    "have. BOUNDARY — risk analytics, not investment advice: never tell the user "
+    "have. A DERIVED / estimated figure (source ending 'derived' or 'estimate') must "
+    "be described as an estimate — never as a provider-reported fact. BOUNDARY — "
+    "risk analytics, not investment advice: never tell the user "
     "to buy or sell a specific security, never name a security to add or swap in, "
     "and never give a dollar amount to trade; frame Next Actions as risk-management "
     "levers (e.g. reduce single-name concentration, review leverage, adjust the "
@@ -689,7 +765,8 @@ def answer(
 ) -> CopilotAnswer:
     tickers = extract_tickers(message)
     intent = classify(message, tickers)
-    evidence = _gather(intent, message, tickers, user=user)
+    evidence, quality_floor = _gather(intent, message, tickers, user=user)
+    dc = _answer_confidence(evidence, quality_floor)
 
     if llm_callable is None:
         return CopilotAnswer(
@@ -698,6 +775,8 @@ def answer(
             answer_markdown=_deterministic_answer(intent, message, evidence),
             evidence=evidence,
             data_only=True,
+            conviction=dc.conviction_cap,
+            data_confidence=dc,
         )
 
     # Force the reply language when the question is clearly non-English —
@@ -706,6 +785,15 @@ def answer(
 
     lang = detect_reply_language(message)
     system = _SYSTEM
+    if not dc.directional_allowed:
+        # Rule #3: too little hard data for a directional read — instruct the
+        # model to withhold a directional conclusion and say so.
+        system += (
+            "\nDATA-CONFIDENCE GATE: the available evidence is too thin for a "
+            "directional conclusion. In **Conclusion**, state plainly that there "
+            "isn't enough data to give a confident answer and what's missing — do "
+            "NOT assert a directional view."
+        )
     if lang:
         system += (
             f"\nLANGUAGE: the user wrote in {lang} — write the ENTIRE answer in {lang}, "
@@ -732,6 +820,8 @@ def answer(
             evidence=evidence,
             data_only=False,
             model="claude-sonnet-4-6",
+            conviction=dc.conviction_cap,
+            data_confidence=dc,
         )
     except Exception:  # noqa: BLE001 - any LLM failure → deterministic 5-section
         _log.warning("copilot.ask.llm_failed intent=%s", intent)
@@ -741,4 +831,6 @@ def answer(
             answer_markdown=_deterministic_answer(intent, message, evidence),
             evidence=evidence,
             data_only=True,
+            conviction=dc.conviction_cap,
+            data_confidence=dc,
         )

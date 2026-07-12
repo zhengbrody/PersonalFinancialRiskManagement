@@ -27,6 +27,7 @@ import { RiskDiagnosis } from "@/components/risk-diagnosis";
 import { PortfolioValueSummary } from "@/components/portfolio-value-summary";
 import { BenchmarkContext } from "@/components/benchmark-context";
 import { DataProvenance } from "@/components/data-provenance";
+import { DataConfidence } from "@/components/data-confidence";
 import { VarBacktest } from "@/components/var-backtest";
 import { LearnHint } from "@/components/learn-hint";
 import { RiskAlertsCard } from "@/components/risk-alerts-card";
@@ -115,6 +116,7 @@ export function ReportSections({ report }: { report: RiskReport }) {
         source="risk"
         title="Executive summary"
       />
+      <DataConfidence confidence={report.data_confidence} />
       <RegimeContextLine />
       <RiskAlertsCard input={alertsInput} source="risk" />
       <PortfolioValueSummary metrics={report} />
