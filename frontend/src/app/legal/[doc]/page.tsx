@@ -18,8 +18,13 @@ export function generateStaticParams() {
   return LEGAL_SLUGS.map((doc) => ({ doc }));
 }
 
-export function generateMetadata({ params }: { params: { doc: string } }): Metadata {
-  const d = LEGAL_BY_SLUG[params.doc];
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ doc: string }>;
+}): Promise<Metadata> {
+  const { doc } = await params;
+  const d = LEGAL_BY_SLUG[doc];
   if (!d) return { title: "Legal" };
   const url = `${SITE_URL}/legal/${d.slug}`;
   return {
@@ -40,8 +45,13 @@ export function generateMetadata({ params }: { params: { doc: string } }): Metad
 
 const linkStyle = { color: C.teal, textDecoration: "none" };
 
-export default function LegalDocPage({ params }: { params: { doc: string } }) {
-  const d = LEGAL_BY_SLUG[params.doc];
+export default async function LegalDocPage({
+  params,
+}: {
+  params: Promise<{ doc: string }>;
+}) {
+  const { doc } = await params;
+  const d = LEGAL_BY_SLUG[doc];
   if (!d) notFound();
 
   const breadcrumbLd = {

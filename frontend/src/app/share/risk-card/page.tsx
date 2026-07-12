@@ -23,7 +23,7 @@ import {
   type ShareBand,
 } from "@/lib/share-card";
 
-type SP = { searchParams: { book?: string } };
+type SP = { searchParams: Promise<{ book?: string }> };
 
 const BAND_COLOR: Record<ShareBand, string> = {
   Poor: C.down,
@@ -32,8 +32,8 @@ const BAND_COLOR: Record<ShareBand, string> = {
   Strong: C.up,
 };
 
-export function generateMetadata({ searchParams }: SP): Metadata {
-  const book = parseShareBook(searchParams.book);
+export async function generateMetadata({ searchParams }: SP): Promise<Metadata> {
+  const book = parseShareBook((await searchParams).book);
   const title = `${book.label}: risk score ${book.score}/1000 (${book.band})`;
   const description = book.takeaway;
   const image = `/share/risk-card/og?book=${book.id}`;
@@ -50,8 +50,8 @@ export function generateMetadata({ searchParams }: SP): Metadata {
   };
 }
 
-export default function ShareRiskCardPage({ searchParams }: SP) {
-  const book = parseShareBook(searchParams.book);
+export default async function ShareRiskCardPage({ searchParams }: SP) {
+  const book = parseShareBook((await searchParams).book);
   const accent = BAND_COLOR[book.band];
 
   return (

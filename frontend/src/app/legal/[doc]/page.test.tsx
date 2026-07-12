@@ -22,30 +22,34 @@ beforeEach(() => {
 });
 
 describe("/legal/[doc]", () => {
-  it("renders Terms of Service with content + last-updated", () => {
-    render(<LegalDocPage params={{ doc: "terms" }} />);
+  // Next 15: the page is an async server component + params is a Promise, so
+  // await the function to get the element, then render it.
+  it("renders Terms of Service with content + last-updated", async () => {
+    render(await LegalDocPage({ params: Promise.resolve({ doc: "terms" }) }));
     expect(screen.getByRole("heading", { level: 1, name: "Terms of Service" })).toBeInTheDocument();
     expect(screen.getByText(/Last updated:/)).toBeInTheDocument();
     expect(screen.getByText(/6\. Acceptable use/)).toBeInTheDocument();
   });
 
-  it("renders Privacy Policy + cross-links to the other docs", () => {
-    render(<LegalDocPage params={{ doc: "privacy" }} />);
+  it("renders Privacy Policy + cross-links to the other docs", async () => {
+    render(await LegalDocPage({ params: Promise.resolve({ doc: "privacy" }) }));
     expect(screen.getByRole("heading", { level: 1, name: "Privacy Policy" })).toBeInTheDocument();
     // body cross-link to a sibling doc (footer uses the short 'Disclaimer' label, so this is unique)
     expect(screen.getByRole("link", { name: /Financial Disclaimer/ })).toBeInTheDocument();
   });
 
-  it("renders the Disclaimer", () => {
-    render(<LegalDocPage params={{ doc: "disclaimer" }} />);
+  it("renders the Disclaimer", async () => {
+    render(await LegalDocPage({ params: Promise.resolve({ doc: "disclaimer" }) }));
     expect(
       screen.getByRole("heading", { level: 1, name: "Financial Disclaimer" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/Not investment advice/)).toBeInTheDocument();
   });
 
-  it("calls notFound() for an unknown doc", () => {
-    expect(() => render(<LegalDocPage params={{ doc: "nope" }} />)).toThrow("NEXT_NOT_FOUND");
+  it("calls notFound() for an unknown doc", async () => {
+    await expect(LegalDocPage({ params: Promise.resolve({ doc: "nope" }) })).rejects.toThrow(
+      "NEXT_NOT_FOUND",
+    );
     expect(notFound).toHaveBeenCalled();
   });
 
@@ -57,8 +61,8 @@ describe("/legal/[doc]", () => {
     ]);
   });
 
-  it("generateMetadata sets a per-doc title + canonical", () => {
-    const m = generateMetadata({ params: { doc: "terms" } });
+  it("generateMetadata sets a per-doc title + canonical", async () => {
+    const m = await generateMetadata({ params: Promise.resolve({ doc: "terms" }) });
     expect(String(m.title)).toContain("Terms");
     expect(m.alternates?.canonical).toBe("/legal/terms");
   });

@@ -19,8 +19,13 @@ export function generateStaticParams() {
   return LEARN_SLUGS.map((slug) => ({ slug }));
 }
 
-export function generateMetadata({ params }: { params: { slug: string } }): Metadata {
-  const topic = LEARN_BY_SLUG[params.slug];
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const topic = LEARN_BY_SLUG[slug];
   if (!topic) return { title: "Learn" };
   const url = `${SITE_URL}/learn/${topic.slug}`;
   return {
@@ -41,8 +46,13 @@ export function generateMetadata({ params }: { params: { slug: string } }): Meta
 
 const linkStyle = { color: C.teal, textDecoration: "none" };
 
-export default function LearnTopicPage({ params }: { params: { slug: string } }) {
-  const topic = LEARN_BY_SLUG[params.slug];
+export default async function LearnTopicPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const topic = LEARN_BY_SLUG[slug];
   if (!topic) notFound();
 
   const faqLd = {
