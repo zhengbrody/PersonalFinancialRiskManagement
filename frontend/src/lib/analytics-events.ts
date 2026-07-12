@@ -33,6 +33,7 @@ export const ANALYTICS_EVENTS = {
   quant_tab_changed: "quant_tab_changed",
   risk_tab_changed: "risk_tab_changed",
   scenario_shock_selected: "scenario_shock_selected",
+  action_simulated: "action_simulated",
   score_change_window: "score_change_window",
   score_viewed: "score_viewed",
   report_export_clicked: "report_export_clicked",

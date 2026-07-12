@@ -53,6 +53,9 @@ function buildRequest(score: ScoreResponse, window: string): Record<string, unkn
     observations: m.observations ?? null,
     data_coverage: m.data_coverage ?? null,
     dropped_tickers: m.dropped_tickers ?? [],
+    // Lets the attribution peel an options-driven move out of the data-quality
+    // bucket (PR B). Absent → the backend folds it into data-quality safely.
+    option_penalty: score.options?.penalty ?? null,
   };
 }
 
@@ -68,6 +71,18 @@ function deltaTone(points: number): string {
   if (points > 0) return "text-emerald-600 dark:text-emerald-400";
   if (points < 0) return "text-red-600 dark:text-red-400";
   return "text-muted-foreground";
+}
+
+/** One labelled attribution number (signed pts). Null → "—" (not applicable). */
+function AttrItem({ label, pts }: { label: string; pts: number | null | undefined }) {
+  return (
+    <div className="flex flex-col">
+      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span className={`font-mono font-semibold tabular-nums ${deltaTone(pts ?? 0)}`}>
+        {pts == null ? "—" : `${pts >= 0 ? "+" : ""}${pts}`}
+      </span>
+    </div>
+  );
 }
 
 export function ScoreChangeReport({ score }: { score: ScoreResponse }) {
@@ -169,6 +184,52 @@ export function ScoreChangeReport({ score }: { score: ScoreResponse }) {
             )}
 
             <p className="text-sm leading-relaxed">{report.summary}</p>
+
+            {/* market / holding / data-quality attribution (PR B). Separates
+                "your portfolio changed" from "the data behind it changed". */}
+            {report.comparable !== false && report.attribution && (
+              <div className="rounded-md border border-border bg-muted/30 px-3 py-2">
+                <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Where the move came from
+                </p>
+                <div className="flex flex-wrap gap-x-6 gap-y-1.5 text-sm">
+                  {report.attribution.separable ? (
+                    <>
+                      <AttrItem label="Market" pts={report.attribution.market_driven} />
+                      <AttrItem label="Your holdings" pts={report.attribution.holding_driven} />
+                      <AttrItem label="Data quality" pts={report.attribution.data_quality_driven} />
+                    </>
+                  ) : (
+                    <>
+                      <AttrItem
+                        label="Market + your changes"
+                        pts={report.attribution.combined_market_holdings}
+                      />
+                      <AttrItem label="Data quality" pts={report.attribution.data_quality_driven} />
+                    </>
+                  )}
+                </div>
+                {report.attribution.note && (
+                  <p className="mt-1.5 text-xs text-muted-foreground">{report.attribution.note}</p>
+                )}
+                {(report.top_positive_contributor || report.top_negative_contributor) && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {report.top_positive_contributor && (
+                      <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-600 dark:text-emerald-400">
+                        ↑ {report.top_positive_contributor.label} +
+                        {report.top_positive_contributor.points}
+                      </span>
+                    )}
+                    {report.top_negative_contributor && (
+                      <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-xs text-red-600 dark:text-red-400">
+                        ↓ {report.top_negative_contributor.label}{" "}
+                        {report.top_negative_contributor.points}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* top drivers — the exact per-dimension decomposition of the move */}
             {report.top_drivers.length > 0 && (

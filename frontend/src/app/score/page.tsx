@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs } from "@/components/ui/tabs";
 import { ScoreGauge, scoreBand } from "@/components/score-gauge";
 import { RiskDiagnosis, ActionCards } from "@/components/risk-diagnosis";
+import { ActionSimulate } from "@/components/action-simulate";
 import { OptionScoreModule } from "@/components/option-score-module";
 import { ScoreDrivers } from "@/components/score-drivers";
 import { ScoreConcentration } from "@/components/score-concentration";
@@ -505,7 +506,11 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
           <ScoreChangeReport score={result} />
         </div>
       )}
-      {tab === "actions" && <ActionCards explain={explain.data} loading={explain.isLoading} />}
+      {tab === "actions" && (
+        <ActionSimulate
+          fallback={<ActionCards explain={explain.data} loading={explain.isLoading} />}
+        />
+      )}
 
       <p className="pt-1 text-sm">
         <Link href="/risk" className="text-primary hover:underline">

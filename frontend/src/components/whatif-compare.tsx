@@ -26,6 +26,7 @@ const METRICS: MetricSpec[] = [
   { label: "Health Score", read: (s) => s.overall_score, fmt: (v) => v.toFixed(0), direction: "higher" },
   { label: "Annual volatility", read: (s) => s.metrics.annual_volatility, fmt: pct, direction: "lower" },
   { label: "VaR 95 (1d)", read: (s) => s.metrics.var_95_daily, fmt: pct, direction: "lower" },
+  { label: "CVaR 95 (1d)", read: (s) => s.metrics.cvar_95_daily, fmt: pct, direction: "lower" },
   { label: "Sharpe", read: (s) => s.metrics.sharpe_ratio, fmt: (v) => v.toFixed(2), direction: "higher" },
   { label: "β", read: (s) => s.metrics.beta_to_benchmark, fmt: (v) => v.toFixed(2), direction: "neutral" },
   {

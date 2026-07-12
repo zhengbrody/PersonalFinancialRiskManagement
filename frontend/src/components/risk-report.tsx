@@ -24,6 +24,8 @@ import { RegimeContextLine } from "@/components/regime-context";
 import { TickerBadge } from "@/components/ui/ticker-badge";
 import { Kpi } from "@/components/ui/kpi";
 import { RiskDiagnosis } from "@/components/risk-diagnosis";
+import { RiskDimensionsGrid } from "@/components/risk-dimensions";
+import { LossesBreakdown } from "@/components/losses-breakdown";
 import { PortfolioValueSummary } from "@/components/portfolio-value-summary";
 import { BenchmarkContext } from "@/components/benchmark-context";
 import { DataProvenance } from "@/components/data-provenance";
@@ -121,6 +123,8 @@ export function ReportSections({ report }: { report: RiskReport }) {
       <RiskAlertsCard input={alertsInput} source="risk" />
       <PortfolioValueSummary metrics={report} />
       <KpiGrid report={report} />
+      <LossesBreakdown losses={report.losses} />
+      <RiskDimensionsGrid dimensions={report.dimensions} />
       <BenchmarkContext mine={report} />
       <MetricTrend
         metric="net_equity"
