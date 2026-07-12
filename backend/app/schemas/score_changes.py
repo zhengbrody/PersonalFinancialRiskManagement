@@ -30,6 +30,11 @@ class ScoreChangeRequest(BaseModel):
     dropped_tickers: list[str] = Field(default_factory=list)
     concentration: dict[str, Optional[float]] = Field(default_factory=dict)
     top_positions: list[dict] = Field(default_factory=list)  # [{ticker, weight}] optional
+    # The current option-score penalty (score response `options.penalty`). Lets
+    # the attribution isolate an options-driven move from data-quality. None =
+    # the client didn't send it → the penalty change folds into data_quality
+    # (documented) rather than being mis-attributed.
+    option_penalty: Optional[int] = None
 
 
 class ComponentDelta(BaseModel):
@@ -74,6 +79,28 @@ class HoldingsChange(BaseModel):
     reweighted: list[dict] = Field(default_factory=list)  # {ticker, previous, current, delta}
 
 
+class ChangeAttribution(BaseModel):
+    """The score move split into MARKET / HOLDING / DATA-QUALITY buckets.
+
+    Exact identity: ``score_delta = data_quality_driven + structural`` where
+    ``structural = Δbase`` (the raw dimension-based score, pre-dampening) and
+    ``data_quality_driven = Δ(final − base)`` (the change in how much data
+    quality/dampening pulled the score toward neutral). On a day the book didn't
+    change, ``structural`` is entirely market-driven (same holdings, prices
+    moved). On a day the user traded, market and holding aren't separable
+    without a full-book counterfactual, so they're reported jointly in
+    ``combined_market_holdings`` with ``separable=False`` — an honest split, not
+    a fabricated decimal. The data-quality bucket is the concrete separation of
+    'your portfolio changed' from 'the data behind it changed'."""
+
+    data_quality_driven: Optional[int] = None  # pts from dampening/fidelity shift
+    market_driven: Optional[int] = None  # pts from market moves (same book)
+    holding_driven: Optional[int] = None  # pts from holdings/options changes
+    combined_market_holdings: Optional[int] = None  # trade day: not separable
+    separable: bool = True  # False when the user traded within the window
+    note: str = ""
+
+
 class ScoreChangeReport(BaseModel):
     window: str
     available: bool
@@ -87,6 +114,12 @@ class ScoreChangeReport(BaseModel):
     top_drivers: list[DriverChange] = Field(default_factory=list)
     data_quality_changes: list[DataQualityChange] = Field(default_factory=list)
     holdings_changes: HoldingsChange = Field(default_factory=HoldingsChange)
+    # The single biggest positive / negative dimension contributor to the move
+    # (from component_deltas' signed points). None when nothing moved that way.
+    top_positive_contributor: Optional[DriverChange] = None
+    top_negative_contributor: Optional[DriverChange] = None
+    # Market / holding / data-quality attribution of the score move.
+    attribution: Optional[ChangeAttribution] = None
     summary: str = ""  # deterministic one-liner (no LLM)
     # Methodology provenance. When the prior snapshot's version differs from the
     # current one, `comparable` is False: the delta must NOT be presented as a

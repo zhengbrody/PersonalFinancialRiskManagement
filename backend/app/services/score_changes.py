@@ -20,6 +20,7 @@ from libs.mindmarket_core.score_version import (
 )
 
 from ..schemas.score_changes import (
+    ChangeAttribution,
     ComponentDelta,
     DataQualityChange,
     DriverChange,
@@ -163,6 +164,91 @@ def _methodology_changed_summary(prev_version: Any, as_of: Optional[str]) -> str
     )
 
 
+def _top_contributors(
+    deltas: list[ComponentDelta],
+) -> tuple[Optional[DriverChange], Optional[DriverChange]]:
+    """Single biggest positive / negative dimension contributor to the move
+    (by signed points). None on that side when nothing moved it that way."""
+    pos: Optional[ComponentDelta] = None
+    neg: Optional[ComponentDelta] = None
+    for d in deltas:
+        pts = d.points_contribution
+        if pts is None or pts == 0:
+            continue
+        if pts > 0 and (pos is None or pts > (pos.points_contribution or 0)):
+            pos = d
+        if pts < 0 and (neg is None or pts < (neg.points_contribution or 0)):
+            neg = d
+
+    def _as_driver(d: Optional[ComponentDelta]) -> Optional[DriverChange]:
+        if d is None or d.points_contribution is None:
+            return None
+        detail = ""
+        if d.previous is not None and d.current is not None:
+            detail = f"{d.name} {d.previous:.1f} → {d.current:.1f}/10"
+        return DriverChange(key=d.key, label=d.name, points=d.points_contribution, detail=detail)
+
+    return _as_driver(pos), _as_driver(neg)
+
+
+def _build_attribution(
+    *,
+    cur_overall: int,
+    cur_base: int,
+    prev_overall: int,
+    prev_base: int,
+    cur_penalty: Optional[int],
+    prev_penalty: Optional[int],
+    holdings_changed: bool,
+) -> ChangeAttribution:
+    """Split the score move into data-quality / market / holding buckets.
+
+    Exact identity (see ChangeAttribution): the raw ``base`` score is the
+    market+holding signal; ``final − base`` is the dampening+penalty adjustment.
+    ``data_quality_driven`` isolates the DAMPENING part (option penalty peeled
+    out when the current penalty is known); ``structural`` (= Δbase) is
+    market-driven on a no-trade day, else jointly reported with holdings."""
+    adjustments = (cur_overall - cur_base) - (prev_overall - prev_base)
+    # Only peel out the option-penalty change when the current penalty is known;
+    # otherwise fold it into data_quality (documented) rather than mis-attribute.
+    if cur_penalty is not None:
+        d_penalty = int(cur_penalty) - int(prev_penalty or 0)
+    else:
+        d_penalty = 0
+    data_quality = adjustments + d_penalty  # pure dampening/fidelity shift
+    options_driven = -d_penalty  # a higher penalty costs points (holding-side)
+    structural = cur_base - prev_base
+
+    if holdings_changed:
+        return ChangeAttribution(
+            data_quality_driven=data_quality,
+            combined_market_holdings=structural + options_driven,
+            separable=False,
+            note=(
+                "You changed holdings in this window, so the market vs. your-changes "
+                "split isn't exact — they're reported together."
+            ),
+        )
+    return ChangeAttribution(
+        data_quality_driven=data_quality,
+        market_driven=structural,
+        holding_driven=options_driven,
+        separable=True,
+        note=_attribution_note(data_quality, structural, options_driven),
+    )
+
+
+def _attribution_note(dq: int, market: int, holding: int) -> str:
+    parts = []
+    if abs(market) >= abs(dq) and abs(market) >= abs(holding) and market != 0:
+        parts.append("mostly a market move (your holdings didn't change)")
+    if abs(dq) >= 3 and abs(dq) >= abs(market):
+        parts.append("largely a data-quality shift, not a change in your portfolio")
+    if abs(holding) >= 1:
+        parts.append("part from your option positions")
+    return "This move was " + ", ".join(parts) + "." if parts else ""
+
+
 def build_change_report(
     req: ScoreChangeRequest, prev_snapshot: Optional[dict]
 ) -> ScoreChangeReport:
@@ -303,10 +389,24 @@ def build_change_report(
     drivers.sort(key=lambda x: abs(x.points), reverse=True)
 
     base_score_delta = None
-    cur_base = req.base_overall if req.base_overall is not None else cur_overall
-    prev_base = prev_rm.get("base_overall")
-    if prev_base is not None:
-        base_score_delta = int(cur_base) - int(prev_base)
+    cur_base = int(req.base_overall) if req.base_overall is not None else cur_overall
+    prev_base_raw = prev_rm.get("base_overall")
+    prev_base = int(prev_base_raw) if prev_base_raw is not None else prev_overall
+    if prev_base_raw is not None:
+        base_score_delta = cur_base - prev_base
+
+    # ── Top +/− contributors + market/holding/data-quality attribution ──
+    top_positive, top_negative = _top_contributors(component_deltas)
+    holdings_changed = bool(holdings.added or holdings.removed or holdings.reweighted)
+    attribution = _build_attribution(
+        cur_overall=cur_overall,
+        cur_base=cur_base,
+        prev_overall=prev_overall,
+        prev_base=prev_base,
+        cur_penalty=req.option_penalty,
+        prev_penalty=prev_rm.get("option_penalty"),
+        holdings_changed=holdings_changed,
+    )
 
     return ScoreChangeReport(
         window=window,
@@ -321,6 +421,9 @@ def build_change_report(
         top_drivers=drivers,
         data_quality_changes=dq_changes,
         holdings_changes=holdings,
+        top_positive_contributor=top_positive,
+        top_negative_contributor=top_negative,
+        attribution=attribution,
         summary=_summarize(score_delta, as_of, drivers, dq_changes),
         current_score_version=SCORE_VERSION,
         previous_score_version=str(prev_version) if prev_version else None,

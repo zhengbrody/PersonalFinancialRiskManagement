@@ -1745,6 +1745,41 @@ export interface components {
             /** Observed Frequency */
             observed_frequency?: number | null;
         };
+        /**
+         * ChangeAttribution
+         * @description The score move split into MARKET / HOLDING / DATA-QUALITY buckets.
+         *
+         *     Exact identity: ``score_delta = data_quality_driven + structural`` where
+         *     ``structural = Δbase`` (the raw dimension-based score, pre-dampening) and
+         *     ``data_quality_driven = Δ(final − base)`` (the change in how much data
+         *     quality/dampening pulled the score toward neutral). On a day the book didn't
+         *     change, ``structural`` is entirely market-driven (same holdings, prices
+         *     moved). On a day the user traded, market and holding aren't separable
+         *     without a full-book counterfactual, so they're reported jointly in
+         *     ``combined_market_holdings`` with ``separable=False`` — an honest split, not
+         *     a fabricated decimal. The data-quality bucket is the concrete separation of
+         *     'your portfolio changed' from 'the data behind it changed'.
+         */
+        ChangeAttribution: {
+            /** Combined Market Holdings */
+            combined_market_holdings?: number | null;
+            /** Data Quality Driven */
+            data_quality_driven?: number | null;
+            /** Holding Driven */
+            holding_driven?: number | null;
+            /** Market Driven */
+            market_driven?: number | null;
+            /**
+             * Note
+             * @default
+             */
+            note?: string;
+            /**
+             * Separable
+             * @default true
+             */
+            separable?: boolean;
+        };
         /** ChangeRow */
         ChangeRow: {
             /** Change Pct */
@@ -4923,6 +4958,7 @@ export interface components {
         ScoreChangeReport: {
             /** As Of Previous */
             as_of_previous?: string | null;
+            attribution?: components["schemas"]["ChangeAttribution"] | null;
             /** Available */
             available: boolean;
             /** Base Score Delta */
@@ -4956,6 +4992,8 @@ export interface components {
             summary?: string;
             /** Top Drivers */
             top_drivers?: components["schemas"]["DriverChange"][];
+            top_negative_contributor?: components["schemas"]["DriverChange"] | null;
+            top_positive_contributor?: components["schemas"]["DriverChange"] | null;
             /** Window */
             window: string;
         };
@@ -4989,6 +5027,8 @@ export interface components {
             };
             /** Observations */
             observations?: number | null;
+            /** Option Penalty */
+            option_penalty?: number | null;
             /** Overall Score */
             overall_score: number;
             /** Top Positions */
