@@ -558,3 +558,55 @@ def test_score_surfaces_concentration_of_the_equity_book(
     assert conc["top5_weight"] == pytest.approx(1.0, abs=1e-6)  # only 2 names
     assert conc["effective_holdings"] is not None
     assert conc["sectors"]  # deterministic sector roll-up present
+
+
+def test_simulate_actions_returns_levered_cards_with_expected_deltas(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_capital
+):
+    """Upgraded Action Cards: a concentrated + levered book yields deterministic
+    risk levers, each with an EXPECTED score delta re-scored on the same returns,
+    trade-offs, assumptions, and a simulate_holdings payload that never adds a
+    new security."""
+    fake_capital["cash_balance"] = 0.0
+    fake_capital["margin_loan"] = 30000.0  # → leverage ~1.43
+    fake_capital["contributed_capital"] = 40000.0
+    fake_active_portfolio.set(
+        {"AAA": {"shares": 900, "avg_cost": 100.0}, "BBB": {"shares": 100, "avg_cost": 100.0}}
+    )
+    fake_price_history.set(_make_history(["AAA", "BBB"]))
+
+    token = mint_token(sub="user-actions")
+    resp = test_client.post(
+        "/api/v1/risk/simulate_actions",
+        json={"risk_preference": 3, "risk_free_rate": 0.045},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200, resp.json()
+    data = resp.json()["data"]
+
+    assert isinstance(data["baseline_score"], int) and 0 <= data["baseline_score"] <= 1000
+    cards = {c["key"]: c for c in data["actions"]}
+    # concentrated (AAA ~90%) + levered book → at least concentration + deleverage
+    assert "reduce_concentration" in cards
+    assert "reduce_leverage" in cards
+
+    original = {"AAA", "BBB", "CASH"}
+    for c in data["actions"]:
+        assert c["trade_offs"] and c["assumptions"]
+        assert c["disclaimer"] and "not financial advice" in c["disclaimer"].lower()
+        assert c["simulate_holdings"]
+        # never introduces a new security (only trims the user's own book / cash)
+        assert {h["ticker"] for h in c["simulate_holdings"]} <= original
+        assert isinstance(c["expected_score_delta"], int)  # re-scored, not None
+
+    # the concentration lever caps AAA at 25% of the WHOLE portfolio, holding cash
+    conc = cards["reduce_concentration"]
+    sim = {h["ticker"]: h["market_value"] for h in conc["simulate_holdings"]}
+    assert "CASH" in sim and sim["CASH"] > 0
+    gross = sum(sim.values())  # equity + cash
+    assert sim["AAA"] / gross == pytest.approx(0.25, abs=0.001)
+
+
+def test_simulate_actions_is_auth_gated(test_client):
+    resp = test_client.post("/api/v1/risk/simulate_actions", json={})
+    assert resp.status_code == 401

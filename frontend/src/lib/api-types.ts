@@ -1429,6 +1429,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/risk/simulate_actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deterministic risk-lever action cards with expected score/VaR impact
+         * @description Upgraded Action Cards: deterministic risk LEVERS (trim the largest
+         *     position / add a cash buffer / de-lever) with their EXPECTED impact computed
+         *     by actually re-scoring the proposed book on the SAME resolved returns. Never
+         *     a security buy/sell pick; NEVER executes a trade — the ``simulate_holdings``
+         *     payload just prefills the what-if sandbox.
+         */
+        post: operations["simulate_actions_endpoint_api_v1_risk_simulate_actions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/risk/snapshot_history": {
         parameters: {
             query?: never;
@@ -1487,6 +1511,47 @@ export interface components {
             deleted: boolean;
             /** Subscription Canceled */
             subscription_canceled: boolean;
+        };
+        /** ActionCard */
+        ActionCard: {
+            /** Assumptions */
+            assumptions?: string[];
+            /**
+             * Disclaimer
+             * @default Educational, not financial advice. Simulation only — nothing is traded.
+             */
+            disclaimer?: string;
+            /** Expected Cvar Delta */
+            expected_cvar_delta?: number | null;
+            /** Expected Score After */
+            expected_score_after?: number | null;
+            /** Expected Score Delta */
+            expected_score_delta?: number | null;
+            /** Expected Var Delta */
+            expected_var_delta?: number | null;
+            /** Key */
+            key: string;
+            /** Proposed Change */
+            proposed_change: string;
+            /** Rationale */
+            rationale: string;
+            /** Simulate Holdings */
+            simulate_holdings?: components["schemas"]["SimulateHolding"][];
+            /** Title */
+            title: string;
+            /** Trade Offs */
+            trade_offs?: string[];
+        };
+        /** ActionSimulateOut */
+        ActionSimulateOut: {
+            /** Actions */
+            actions?: components["schemas"]["ActionCard"][];
+            /** Baseline Cvar 95 Daily */
+            baseline_cvar_95_daily?: number | null;
+            /** Baseline Score */
+            baseline_score: number;
+            /** Baseline Var 95 Daily */
+            baseline_var_95_daily?: number | null;
         };
         /** AlertComponentVar */
         AlertComponentVar: {
@@ -2270,6 +2335,14 @@ export interface components {
         /** Envelope[AccountDeleteOut] */
         Envelope_AccountDeleteOut_: {
             data?: components["schemas"]["AccountDeleteOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[ActionSimulateOut] */
+        Envelope_ActionSimulateOut_: {
+            data?: components["schemas"]["ActionSimulateOut"] | null;
             error?: components["schemas"]["ErrorOut"] | null;
             meta: components["schemas"]["MetaOut"];
         } & {
@@ -5259,6 +5332,21 @@ export interface components {
             /** Series Id */
             series_id: string;
         };
+        /**
+         * SimulateHolding
+         * @description One row of the proposed (hypothetical) book, for the Simulate button.
+         */
+        SimulateHolding: {
+            /**
+             * Asset Type
+             * @default public_security
+             */
+            asset_type?: string;
+            /** Market Value */
+            market_value: number;
+            /** Ticker */
+            ticker: string;
+        };
         /** SmartMoneyOut */
         SmartMoneyOut: {
             /** As Of */
@@ -7541,6 +7629,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_ScoreResponse_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    simulate_actions_endpoint_api_v1_risk_simulate_actions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScoreFromActiveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ActionSimulateOut_"];
                 };
             };
             /** @description Validation Error */

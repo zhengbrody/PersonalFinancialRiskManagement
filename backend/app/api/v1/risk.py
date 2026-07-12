@@ -72,6 +72,7 @@ from ...schemas.risk import (
     StressAssetLoss,
     VarBacktestOut,
 )
+from ...schemas.risk_actions import ActionCard, ActionSimulateOut, SimulateHolding
 from ...schemas.risk_alerts import RiskAlertsInput, RiskAlertsOutput
 from ...schemas.risk_explain import RiskExplainInput, RiskExplainOutput
 from ...schemas.score_changes import ScoreChangeReport, ScoreChangeRequest
@@ -880,6 +881,215 @@ def score_from_active_endpoint(
     )
 
     return ok(response.model_dump(), request=request, started_at=started)
+
+
+def _score_legs(
+    legs: list[dict],
+    cash: float,
+    leverage: float,
+    returns_frame,
+    *,
+    risk_preference: int,
+    risk_free_rate: float,
+):
+    """Score a HYPOTHETICAL book (equity legs + cash + leverage) on an
+    already-resolved returns frame — a pure re-run of the same deterministic
+    engine /score_from_active uses, with no new fetch. Used to size an action
+    card's expected impact."""
+    from domain.models import AssetPositionInput, PortfolioInput
+    from engine.quant import score_portfolio_from_input
+
+    positions = [
+        AssetPositionInput(
+            ticker=str(leg["ticker"]),
+            name=str(leg["ticker"]),
+            asset_type=leg.get("asset_type", "public_security"),
+            market_value=float(leg["market_value"]),
+            cost_basis=None,
+            enabled=True,
+        )
+        for leg in legs
+        if float(leg["market_value"]) > 0
+    ]
+    if cash > 0:
+        positions.append(
+            AssetPositionInput(
+                ticker="CASH",
+                name="Cash",
+                asset_type="cash",
+                market_value=float(cash),
+                cost_basis=float(cash),
+                enabled=True,
+            )
+        )
+    portfolio_input = PortfolioInput(
+        positions=positions,
+        risk_preference=risk_preference,
+        risk_free_rate=risk_free_rate,
+    )
+    return score_portfolio_from_input(portfolio_input, returns_frame, leverage=leverage)
+
+
+@router.post(
+    "/simulate_actions",
+    summary="Deterministic risk-lever action cards with expected score/VaR impact",
+    response_model=Envelope[ActionSimulateOut],
+)
+def simulate_actions_endpoint(
+    body: ScoreFromActiveRequest,
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    """Upgraded Action Cards: deterministic risk LEVERS (trim the largest
+    position / add a cash buffer / de-lever) with their EXPECTED impact computed
+    by actually re-scoring the proposed book on the SAME resolved returns. Never
+    a security buy/sell pick; NEVER executes a trade — the ``simulate_holdings``
+    payload just prefills the what-if sandbox."""
+    started = time.perf_counter()
+
+    holdings = _resolve_active_or_raise(user)
+    tickers = _priceable_tickers(holdings)
+
+    from ...services import market_data, risk_actions
+
+    price_prov: dict = {}
+    try:
+        price_frame = market_data.get_price_history(
+            tickers, days=body.history_days, provenance=price_prov
+        )
+    except Exception as exc:
+        raise server_error("Market data fetch failed.", reason=type(exc).__name__) from exc
+    if price_frame.empty:
+        raise APIError(
+            status=422,
+            code="no_market_data",
+            message="Could not fetch prices for any holding.",
+            details={"tickers": tickers},
+        )
+
+    legs: list[dict] = []
+    for tk in tickers:
+        if tk not in price_frame.columns:
+            continue
+        last_close = float(price_frame[tk].dropna().iloc[-1])
+        h = holdings.get(tk, {}) or {}
+        shares = float(h.get("shares") or 0.0)
+        if shares <= 0 or last_close <= 0:
+            continue
+        legs.append(
+            {
+                "ticker": tk,
+                "market_value": shares * last_close,
+                "asset_type": _normalize_asset_type(h.get("asset_type")),
+            }
+        )
+    if not legs:
+        raise APIError(
+            status=422,
+            code="no_priced_holdings",
+            message="Could not price any holding (shares=0 or no quote).",
+        )
+
+    equity_value = float(sum(leg["market_value"] for leg in legs))
+    cash_balance, margin_loan, _contrib = _resolve_cash_and_margin(user)
+    leverage = _leverage_factor(gross_assets=equity_value + cash_balance, margin_loan=margin_loan)
+    returns_frame = price_frame.pct_change().dropna(how="all")
+
+    try:
+        baseline = _score_legs(
+            legs,
+            cash_balance,
+            leverage,
+            returns_frame,
+            risk_preference=body.risk_preference,
+            risk_free_rate=body.risk_free_rate,
+        )
+    except Exception as exc:
+        raise unprocessable(f"Score computation failed: {exc}") from exc
+
+    bm = baseline.metrics
+    weights = {
+        leg["ticker"]: (leg["market_value"] / equity_value if equity_value > 0 else 0.0)
+        for leg in legs
+    }
+    gross = equity_value + cash_balance
+    # top_weight on the GROSS (whole-portfolio) basis so it matches the cap the
+    # lever applies (≤25% of the whole book).
+    top_ticker = max(weights, key=lambda k: weights[k]) if weights else None
+    top_mv = max((leg["market_value"] for leg in legs), default=0.0)
+    top_weight = (top_mv / gross) if (top_ticker and gross > 0) else None
+    cash_weight = (cash_balance / gross) if gross > 0 else 0.0
+
+    specs = risk_actions.propose_specs(
+        equity_weights=weights,
+        top_ticker=top_ticker,
+        top_weight=top_weight,
+        leverage=leverage,
+        cash_weight=cash_weight,
+        annual_volatility=bm.annual_volatility,
+        beta=bm.beta_to_benchmark,
+    )
+
+    cards: list[ActionCard] = []
+    for spec in specs:
+        mlegs, mcash, mlev = risk_actions.apply_spec(legs, cash_balance, leverage, spec)
+        try:
+            mscore = _score_legs(
+                mlegs,
+                mcash,
+                mlev,
+                returns_frame,
+                risk_preference=body.risk_preference,
+                risk_free_rate=body.risk_free_rate,
+            )
+        except Exception:  # noqa: BLE001 - one lever failing must not sink the rest
+            mscore = None
+
+        sim_holdings = [
+            SimulateHolding(
+                ticker=leg["ticker"],
+                market_value=round(float(leg["market_value"]), 2),
+                asset_type=leg.get("asset_type", "public_security"),
+            )
+            for leg in mlegs
+            if float(leg["market_value"]) > 0
+        ]
+        if mcash > 0:
+            sim_holdings.append(
+                SimulateHolding(
+                    ticker="CASH", market_value=round(float(mcash), 2), asset_type="cash"
+                )
+            )
+
+        card = ActionCard(
+            key=spec.key,
+            title=spec.title,
+            rationale=spec.rationale,
+            proposed_change=spec.proposed_change,
+            trade_offs=spec.trade_offs,
+            assumptions=spec.assumptions,
+            simulate_holdings=sim_holdings,
+        )
+        if mscore is not None:
+            card.expected_score_after = int(mscore.overall_score)
+            card.expected_score_delta = int(mscore.overall_score) - int(baseline.overall_score)
+            if mscore.metrics.var_95_daily is not None and bm.var_95_daily is not None:
+                card.expected_var_delta = float(mscore.metrics.var_95_daily) - float(
+                    bm.var_95_daily
+                )
+            if mscore.metrics.cvar_95_daily is not None and bm.cvar_95_daily is not None:
+                card.expected_cvar_delta = float(mscore.metrics.cvar_95_daily) - float(
+                    bm.cvar_95_daily
+                )
+        cards.append(card)
+
+    out = ActionSimulateOut(
+        baseline_score=int(baseline.overall_score),
+        baseline_var_95_daily=bm.var_95_daily,
+        baseline_cvar_95_daily=bm.cvar_95_daily,
+        actions=cards,
+    )
+    return ok(out.model_dump(), request=request, started_at=started)
 
 
 @router.get(
