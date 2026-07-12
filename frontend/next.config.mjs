@@ -18,8 +18,9 @@ const nextConfig = {
   // hygiene — pairs with the Caddyfile security-header block).
   poweredByHeader: false,
 
-  // Required on Next 14 so `src/instrumentation.ts` (Sentry server init) runs.
-  experimental: { instrumentationHook: true },
+  // Next 15: `instrumentationHook` is stable — `src/instrumentation.ts`
+  // (Sentry server init) is picked up automatically, so the experimental flag
+  // is removed (it now warns as unrecognized).
 };
 
 // Sentry build wrapper. No auth token configured → source-map upload is
