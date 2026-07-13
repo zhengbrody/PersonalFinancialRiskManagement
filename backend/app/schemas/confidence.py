@@ -39,6 +39,7 @@ MissingReason = Literal[
     "insufficient_history",  # not enough history to compute the field
     "not_applicable",  # genuinely N/A for this instrument
     "stale_fallback",  # served last-good cached value after a refresh failure
+    "synthetic_demo",  # illustrative/demo inputs, not observed market data
     "empty",  # reached the provider, nothing usable came back
 ]
 

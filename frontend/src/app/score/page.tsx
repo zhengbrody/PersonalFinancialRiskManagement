@@ -302,7 +302,7 @@ export default function ScorePage() {
         <p className="text-sm text-muted-foreground">
           {signedIn
             ? "A 0–1000 score across risk match, risk-adjusted return, and downside protection — with the drivers, what changed, and what to do."
-            : "A 0–1000 health score from the same deterministic risk engine signed-in members use. Edit the holdings and run it."}
+            : "Try the deterministic scoring workflow with illustrative synthetic returns. Sign in and save holdings for a live market-history analysis."}
         </p>
       </header>
 
@@ -431,16 +431,31 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
   }, [result]);
 
   const band = scoreBand(result.overall_score);
+  const syntheticDemo = isSyntheticDemo(result);
 
   return (
     <div className="space-y-4">
       {/* ── hero: score + gauge (deterministic, paints first) ───────── */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle>Portfolio Health Score</CardTitle>
-          <CardDescription>0–1000 · MindMarket Portfolio Health</CardDescription>
+          <CardTitle>
+            {syntheticDemo ? "Illustrative Portfolio Health Score" : "Portfolio Health Score"}
+          </CardTitle>
+          <CardDescription>
+            {syntheticDemo
+              ? "Synthetic return assumptions · workflow demonstration only"
+              : "0–1000 · MindMarket Portfolio Health"}
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
+          {syntheticDemo && (
+            <div className="rounded-md border border-warning/50 bg-warning/10 px-3 py-2 text-sm text-muted-foreground">
+              <span className="font-medium text-warning">Illustrative sandbox:</span>{" "}
+              this score uses seeded synthetic returns, not live history for the tickers you
+              entered. It demonstrates the scoring workflow; sign in and save a portfolio for a
+              market-history score.
+            </div>
+          )}
           <div className="flex items-baseline gap-3">
             <span
               data-testid="score-page-overall"
@@ -473,13 +488,13 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
         <div className="space-y-4">
           <RiskDiagnosis explain={explain.data} loading={explain.isLoading} source="score" />
           <ReasonCodes score={result} />
-          <RiskAlertsCard input={alertsInput} source="score" />
+          {!syntheticDemo && <RiskAlertsCard input={alertsInput} source="score" />}
           <ScoreConcentration concentration={result.concentration} />
           <ImproveScore score={result} />
-          <ScoreMiniScenario metrics={result.metrics} />
+          {!syntheticDemo && <ScoreMiniScenario metrics={result.metrics} />}
           <OptionScoreModule impact={result.options} />
           <PortfolioValueSummary metrics={result.metrics} />
-          <BenchmarkContext mine={result.metrics} />
+          {!syntheticDemo && <BenchmarkContext mine={result.metrics} />}
           <MetricsCard result={result} />
         </div>
       )}
@@ -546,6 +561,7 @@ function HeroMeta({ metrics }: { metrics: ScoreResponse["metrics"] }) {
 }
 
 function MetricsCard({ result }: { result: ScoreResponse }) {
+  const syntheticDemo = isSyntheticDemo(result);
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -601,7 +617,11 @@ function MetricsCard({ result }: { result: ScoreResponse }) {
         )}
 
         <DataProvenance
-          source="Computed from yfinance history"
+          source={
+            syntheticDemo
+              ? "Illustrative synthetic returns — not live market history"
+              : "Computed from market-price history"
+          }
           observations={result.metrics.observations}
           coverage={result.metrics.data_coverage}
           priceProvenance={result.price_provenance}
@@ -609,6 +629,13 @@ function MetricsCard({ result }: { result: ScoreResponse }) {
         />
       </CardContent>
     </Card>
+  );
+}
+
+function isSyntheticDemo(result: ScoreResponse): boolean {
+  return (
+    result.analysis_mode === "synthetic_demo" ||
+    result.metrics.data_quality_notes.some((note) => note.toLowerCase().includes("synthes"))
   );
 }
 

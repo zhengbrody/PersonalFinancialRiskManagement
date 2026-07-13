@@ -43,6 +43,10 @@ def test_score_happy_path_returns_complete_envelope(test_client):
     # can warn the user when no real returns matrix was sent.
     notes = data["metrics"]["data_quality_notes"]
     assert any("synthesised" in n for n in notes)
+    assert data["analysis_mode"] == "synthetic_demo"
+    assert data["data_confidence"]["directional_allowed"] is False
+    assert data["data_confidence"]["conviction_cap"] == "none"
+    assert data["data_confidence"]["missing"][0]["missing_reason"] == "synthetic_demo"
 
 
 def test_score_with_inline_returns_drops_synthetic_warning(test_client):
@@ -62,6 +66,7 @@ def test_score_with_inline_returns_drops_synthetic_warning(test_client):
 
     notes = resp.json()["data"]["metrics"]["data_quality_notes"]
     assert not any("synthesised" in n for n in notes)
+    assert resp.json()["data"]["analysis_mode"] == "provided_returns"
 
 
 def test_score_surfaces_data_quality_confidence_and_drivers(test_client):

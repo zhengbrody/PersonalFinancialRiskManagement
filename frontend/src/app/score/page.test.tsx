@@ -54,6 +54,7 @@ describe("ScorePage", () => {
     mockEnvelope({
       data: {
         overall_score: 712,
+        analysis_mode: "synthetic_demo",
         risk_preference: 3,
         risk_target: {},
         metrics: {
@@ -99,6 +100,12 @@ describe("ScorePage", () => {
     expect(await screen.findByText("712")).toBeInTheDocument();
     expect(
       screen.getByText(/returns matrix synthesised for testing/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/illustrative portfolio health score/i)).toBeInTheDocument();
+    expect(screen.getByText(/seeded synthetic returns, not live history/i)).toBeInTheDocument();
+    expect(screen.queryByText(/how you compare/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/illustrative synthetic returns — not live market history/i),
     ).toBeInTheDocument();
 
     // Dimension driver cards live behind the Drivers tab now.

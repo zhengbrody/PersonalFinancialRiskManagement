@@ -498,10 +498,44 @@ def score_portfolio_endpoint(body: ScoreRequest, request: Request):
     if not body.returns:
         # Stamp the synthetic-data caveat so the frontend can warn the user.
         notes = list(response.metrics.data_quality_notes)
-        notes.append("returns matrix synthesised for testing; not real market data")
-        response = response.model_copy(
-            update={"metrics": response.metrics.model_copy(update={"data_quality_notes": notes})}
+        notes.append(
+            "returns matrix synthesised for the illustrative sandbox; not observed market data"
         )
+        from ...services import confidence as _conf
+
+        synthetic_confidence = _conf.build_data_confidence(
+            overall_coverage=0.0,
+            critical_coverage=0.0,
+            sources=[
+                _conf.field_provenance(
+                    "returns",
+                    "synthetic",
+                    coverage=1.0,
+                    note="Seeded illustrative return assumptions; not observed ticker history.",
+                )
+            ],
+            missing=[
+                _conf.field_provenance(
+                    "live market history",
+                    "unavailable",
+                    coverage=0.0,
+                    missing_reason="synthetic_demo",
+                    note="The anonymous sandbox intentionally avoids a market-data fetch.",
+                )
+            ],
+            confidence=0.0,
+            label="low",
+            base_conviction="none",
+        )
+        response = response.model_copy(
+            update={
+                "analysis_mode": "synthetic_demo",
+                "data_confidence": synthetic_confidence,
+                "metrics": response.metrics.model_copy(update={"data_quality_notes": notes}),
+            }
+        )
+    else:
+        response = response.model_copy(update={"analysis_mode": "provided_returns"})
     return ok(response.model_dump(), request=request, started_at=started)
 
 

@@ -48,6 +48,7 @@ const MISSING_REASON: Record<string, string> = {
   insufficient_history: "not enough history",
   not_applicable: "not applicable",
   stale_fallback: "stale (served from cache)",
+  synthetic_demo: "illustrative synthetic data — not market history",
   unsupported: "not available on this plan",
   empty: "no data returned",
 };

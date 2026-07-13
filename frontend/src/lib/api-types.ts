@@ -2944,7 +2944,7 @@ export interface components {
             /** Label */
             label?: string | null;
             /** Missing Reason */
-            missing_reason?: ("unsupported" | "no_key" | "provider_error" | "rate_limited" | "insufficient_history" | "not_applicable" | "stale_fallback" | "empty") | null;
+            missing_reason?: ("unsupported" | "no_key" | "provider_error" | "rate_limited" | "insufficient_history" | "not_applicable" | "stale_fallback" | "synthetic_demo" | "empty") | null;
             /** Note */
             note?: string | null;
             /** Source */
@@ -5203,6 +5203,12 @@ export interface components {
         };
         /** ScoreResponse */
         ScoreResponse: {
+            /**
+             * Analysis Mode
+             * @default live_market
+             * @enum {string}
+             */
+            analysis_mode?: "live_market" | "provided_returns" | "synthetic_demo";
             /** Base Overall */
             base_overall?: number | null;
             concentration?: components["schemas"]["backend__app__schemas__risk__ConcentrationOut"] | null;
