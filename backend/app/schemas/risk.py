@@ -574,6 +574,9 @@ class ScoreResponse(BaseModel):
     # missing datasets, conviction cap). Additive; the shared <DataConfidence>
     # UI renders it. None only on the degenerate no-metrics path.
     data_confidence: Optional[DataConfidence] = None
+    # Makes the source of the returns matrix explicit. The anonymous sandbox is
+    # synthetic by design; saved portfolios use observed market history.
+    analysis_mode: Literal["live_market", "provided_returns", "synthetic_demo"] = "live_market"
 
 
 # ── /api/v1/risk/benchmarks (public reference context) ──────────────

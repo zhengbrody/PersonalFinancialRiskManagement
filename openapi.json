@@ -4641,6 +4641,7 @@
                   "insufficient_history",
                   "not_applicable",
                   "stale_fallback",
+                  "synthetic_demo",
                   "empty"
                 ],
                 "type": "string"
@@ -11449,6 +11450,16 @@
       },
       "ScoreResponse": {
         "properties": {
+          "analysis_mode": {
+            "default": "live_market",
+            "enum": [
+              "live_market",
+              "provided_returns",
+              "synthetic_demo"
+            ],
+            "title": "Analysis Mode",
+            "type": "string"
+          },
           "base_overall": {
             "anyOf": [
               {

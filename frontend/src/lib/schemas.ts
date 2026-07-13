@@ -221,5 +221,6 @@ export const scoreResponseSchema = z.looseObject({
   score_version: z.string().nullish(),
   // Unified data-confidence + provenance block (rendered by <DataConfidence>).
   data_confidence: dataConfidenceSchema.nullish(),
+  analysis_mode: z.enum(["live_market", "provided_returns", "synthetic_demo"]).nullish(),
 });
 export type ScoreResponse = z.infer<typeof scoreResponseSchema>;
