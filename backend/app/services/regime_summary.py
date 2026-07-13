@@ -58,12 +58,13 @@ def _fmt_signed(x: Optional[float], digits: int = 1) -> Optional[str]:
 
 
 def _macro_clause(vix, fear_greed, curve) -> str:
-    """A compact 'VIX 18.4 (+0.6), curve normal, F&G 55 Greed' clause, omitting
-    any leg that's null."""
+    """A compact 'VIX 18.4 (+0.6%), curve normal, F&G 55 Greed' clause,
+    omitting any leg that's null. ``VixState.change`` is a fractional return,
+    not an index-point move, so convert it to percentage points for display."""
     bits: list[str] = []
     if vix.current is not None:
-        chg = _fmt_signed(vix.change)
-        bits.append(f"VIX {vix.current:.1f}" + (f" ({chg})" if chg else ""))
+        chg = _fmt_signed(vix.change * 100) if vix.change is not None else None
+        bits.append(f"VIX {vix.current:.1f}" + (f" ({chg}%)" if chg else ""))
     if curve.status:
         bits.append(f"curve {curve.status.lower()}")
     if fear_greed.score is not None:

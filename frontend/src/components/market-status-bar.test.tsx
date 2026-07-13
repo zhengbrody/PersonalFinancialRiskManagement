@@ -22,7 +22,7 @@ import { MarketStatusBar } from "./market-status-bar";
 afterEach(() => vi.clearAllMocks());
 
 const REGIME = {
-  vix: { current: 14.2, change: -0.8, level: "calm" },
+  vix: { current: 14.2, change: -0.008, level: "calm" },
   fear_greed: { score: 62, rating: "Greed" },
   yield_curve: { status: "Normal", spread_3m_10y: 0.45, inverted: false },
 };
@@ -35,7 +35,7 @@ describe("MarketStatusBar", () => {
 
     expect(screen.getByText(/US market open/i)).toBeInTheDocument();
     expect(screen.getByText("14.2")).toBeInTheDocument();
-    expect(screen.getByText("-0.8")).toBeInTheDocument(); // VIX delta
+    expect(screen.getByText("-0.8%")).toBeInTheDocument(); // VIX daily % change
     expect(screen.getByText(/62 Greed/)).toBeInTheDocument();
     expect(screen.getByText(/Normal \(\+0\.45\)/)).toBeInTheDocument();
   });

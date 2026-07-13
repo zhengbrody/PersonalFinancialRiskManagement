@@ -14,7 +14,7 @@ const BASE: RegimeSummary = {
     { label: "3-month volatility", vs_normal: "above normal" },
     { label: "VIX level", vs_normal: "elevated" },
   ],
-  vix: { current: 18.4, change: 0.6, level: "Elevated" },
+  vix: { current: 18.4, change: 0.006, level: "Elevated" },
   fear_greed: { score: 55, rating: "Greed" },
   curve: { status: "Normal", spread_3m_10y: 0.45, inverted: false },
   as_of: "2026-06-23",
@@ -26,7 +26,7 @@ const BASE: RegimeSummary = {
   caveat:
     "Risk-state only — not a price forecast, not investment advice, and it does not change your Health Score.",
   post_text:
-    "Elevated-risk probability 58% (Very high). VIX 18.4 (+0.6). Experimental probability signal — not a price or return forecast. Context, not advice. mindmarket.app/risk-today",
+    "Elevated-risk probability 58% (Very high). VIX 18.4 (+0.6%). Experimental probability signal — not a price or return forecast. Context, not advice. mindmarket.app/risk-today",
 };
 
 describe("RegimeReadout", () => {
@@ -49,6 +49,7 @@ describe("RegimeReadout", () => {
     // Provenance carries model version + data as-of + drift check.
     expect(screen.getByText(/model regime-v1\.1\.0 · data as of 2026-06-23 · drift check: healthy/)).toBeInTheDocument();
     expect(screen.getByText("18.4")).toBeInTheDocument(); // VIX still shown
+    expect(screen.getByText("+0.6% today")).toBeInTheDocument();
   });
 
   it("degrades to deterministic market context when the model is unavailable — NO probability", () => {

@@ -58,6 +58,7 @@ export function MarketStatusBar() {
             value={vix.toFixed(1)}
             delta={vixChange}
             deltaInvert
+            deltaPercent
           />
         )}
         {fg != null && (
@@ -90,26 +91,31 @@ function Quote({
   value,
   delta,
   deltaInvert,
+  deltaPercent,
 }: {
   label: string;
   value: string;
   delta?: number | null;
   /** true when a RISING value is bad (e.g. VIX). */
   deltaInvert?: boolean;
+  /** true when the API value is a fractional return (0.01 = +1%). */
+  deltaPercent?: boolean;
 }) {
   const good = delta != null && (deltaInvert ? delta < 0 : delta > 0);
+  const shownDelta = delta != null ? delta * (deltaPercent ? 100 : 1) : null;
   return (
     <span>
       <Label>{label}</Label> {value}
-      {delta != null && (
+      {shownDelta != null && (
         <span
           className={
             good ? "text-[hsl(var(--success))]" : "text-destructive"
           }
         >
           {" "}
-          {delta >= 0 ? "+" : ""}
-          {delta.toFixed(1)}
+          {shownDelta >= 0 ? "+" : ""}
+          {shownDelta.toFixed(1)}
+          {deltaPercent ? "%" : ""}
         </span>
       )}
     </span>

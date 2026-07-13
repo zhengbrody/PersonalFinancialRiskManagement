@@ -17,7 +17,7 @@ _TODAY = date(2026, 6, 24)  # one day after the fixture's data date → fresh
 
 def _snapshot(
     vix=18.4,
-    vix_chg=0.6,
+    vix_chg=0.006,
     vix_level="Elevated",
     fg=55.0,
     fg_rating="Greed",
@@ -72,6 +72,7 @@ def test_leads_with_elevated_risk_probability_when_healthy():
     # post_text uses probability + limitation language, no advice.
     pt = out["post_text"]
     assert "Elevated-risk probability 58%" in pt
+    assert "VIX 18.4 (+0.6%)" in pt
     assert "not a price or return forecast" in pt
     assert "mindmarket.app/risk-today" in pt
     assert len(pt) <= 280

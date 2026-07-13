@@ -28,7 +28,7 @@ _cache: dict[str, tuple[float, "RegimeSnapshot"]] = {}
 @dataclass(frozen=True)
 class VixState:
     current: Optional[float]
-    change: Optional[float]
+    change: Optional[float]  # day-over-day fractional return (0.01 = +1%)
     level: Optional[str]
 
 
