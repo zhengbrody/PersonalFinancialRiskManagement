@@ -85,6 +85,37 @@ def extract_tickers(message: str) -> list[str]:
     return out[:5]
 
 
+# A safe INTERNAL app path: leading "/", then only path chars (letters, digits,
+# "/", "_", "-"), ≤120 total. This deliberately rejects URLs ("://"), query
+# strings ("?", "&", "="), path traversal + hosts (".", ":"), whitespace/prose,
+# angle brackets and any control character — so untrusted `route` context can
+# never carry an injection into the classifier or the LLM prompt (F1).
+_ROUTE_RE = re.compile(r"^/[A-Za-z0-9/_-]{0,119}$")
+_CONTEXT_TICKER_RE = re.compile(r"^[A-Z][A-Z0-9.-]{0,9}$")
+
+
+def _safe_route(route: Optional[str]) -> Optional[str]:
+    """Return ``route`` only if it's a strict safe internal path; else None.
+    ``route`` is UNTRUSTED (client-supplied page context) — anything that isn't a
+    plain internal path (URLs, query injection, prose, control chars) is dropped
+    so it never reaches classify() or the prompt."""
+    if not route or not isinstance(route, str):
+        return None
+    if route.startswith("//") or "//" in route:
+        return None
+    return route if _ROUTE_RE.fullmatch(route) else None
+
+
+def _safe_ticker(ticker: Optional[str]) -> Optional[str]:
+    """Normalize a page-context ticker and reject everything but a bounded
+    exchange-style symbol. Unlike message extraction, context must not accept a
+    leading ``$`` or arbitrary prose because it is copied into the model prompt."""
+    if not ticker or not isinstance(ticker, str):
+        return None
+    normalized = ticker.strip().upper()
+    return normalized if _CONTEXT_TICKER_RE.fullmatch(normalized) else None
+
+
 # ── intent classification (deterministic) ───────────────────────────
 
 # English keywords are space-delimited word tokens; Chinese has no word
@@ -681,7 +712,24 @@ def _score_change_evidence(user, score, positions=None) -> list[EvidenceItem]:
         confidence=getattr(m, "confidence", None),
     )
     rep = build_change_report(req, prev)
-    if not rep.available or rep.score_delta is None:
+    if not rep.available:
+        return []
+    if rep.comparable is False:
+        # F4: an incompatible prior methodology is an EXPLICIT limitation — never
+        # imply "no change". Surface the deterministic methodology-change notice so
+        # the answer says the two scores aren't directly comparable.
+        return [
+            EvidenceItem(
+                label="Score change",
+                value=(
+                    rep.summary
+                    or "Not directly comparable — your earlier score used a different "
+                    "methodology version."
+                ),
+                source="engine",
+            )
+        ]
+    if rep.score_delta is None:
         return []
     items = [_ev("Score change (since last snapshot)", f"{rep.score_delta:+d} pts", "engine")]
     a = rep.attribution
@@ -707,41 +755,60 @@ def _signed_pts(v) -> Optional[str]:
     return f"{v:+d} pts" if isinstance(v, int) else None
 
 
-def _ticker_exposure_evidence(tickers: list[str], positions) -> list[EvidenceItem]:
-    """How much a QUERIED ticker contributes to the caller's OWN book — weight +
-    market value + rank. Portfolio-aware and deterministic. (A full component-VaR
-    contribution needs the risk report; this is the light weight-based exposure,
-    labelled as such.)"""
-    if not tickers or not positions:
+def _dropped_tickers(score) -> set[str]:
+    """Uppercase set of tickers the engine HELD but could not price (dropped from
+    the returns matrix). Authoritative 'held-but-unpriced' ownership check (F2)."""
+    m = getattr(score, "metrics", None)
+    return {str(t).upper() for t in (getattr(m, "dropped_tickers", None) or [])}
+
+
+def _ticker_exposure_evidence(
+    tickers: list[str], positions, dropped_tickers=()
+) -> list[EvidenceItem]:
+    """How much a QUERIED ticker contributes to the caller's OWN book, three-way
+    (F2): PRICED → weight + market value + rank; HELD-BUT-UNPRICED → an explicit
+    'held — current price unavailable' (never 'not held'); otherwise NOT HELD.
+    ``dropped_tickers`` is the engine's held-but-unpriceable set (authoritative
+    ownership for the unpriced case). Weight-based exposure, honestly labelled —
+    NOT a component-VaR contribution (that needs the risk report; F5)."""
+    if not tickers:
         return []
+    dropped = {str(t).upper() for t in (dropped_tickers or [])}
     by_ticker: dict[str, float] = {}
     total = 0.0
-    for p in positions:
+    for p in positions or []:
         tk = str(getattr(p, "ticker", "") or "").upper()
         mv = float(getattr(p, "market_value", 0.0) or 0.0)
         if tk and mv > 0:
             by_ticker[tk] = by_ticker.get(tk, 0.0) + mv
             total += mv
-    if total <= 0:
-        return []
     ranked = sorted(by_ticker.items(), key=lambda kv: kv[1], reverse=True)
     rank_of = {tk: i + 1 for i, (tk, _mv) in enumerate(ranked)}
     items: list[EvidenceItem] = []
     for tk in tickers[:2]:
         u = tk.upper()
         mv = by_ticker.get(u)
-        if mv is None:
-            items.append(EvidenceItem(label=f"{u} in your book", value="not held", source="engine"))
-            continue
-        items.append(_ev(f"{u} weight in your book", _pct(mv / total), "engine"))
-        items.append(_ev(f"{u} market value", _money(mv), "engine"))
-        items.append(
-            EvidenceItem(
-                label=f"{u} position rank",
-                value=f"#{rank_of[u]} of {len(ranked)} holdings",
-                source="engine",
+        if mv is not None and total > 0:
+            items.append(_ev(f"{u} weight in your book", _pct(mv / total), "engine"))
+            items.append(_ev(f"{u} market value", _money(mv), "engine"))
+            items.append(
+                EvidenceItem(
+                    label=f"{u} position rank",
+                    value=f"#{rank_of[u]} of {len(ranked)} holdings",
+                    source="engine",
+                )
             )
-        )
+        elif u in dropped:
+            # HELD but the current price is unavailable — explicit, never "not held".
+            items.append(
+                EvidenceItem(
+                    label=f"{u} in your book",
+                    value="held — current price unavailable",
+                    source="engine",
+                )
+            )
+        else:
+            items.append(EvidenceItem(label=f"{u} in your book", value="not held", source="engine"))
     return _compact(items)
 
 
@@ -764,11 +831,15 @@ def _gather(intent: str, message: str, tickers: list[str], *, user):
         # Portfolio-aware research: when the question is asked relative to the
         # user's own book ("how much of my risk is this name?"), add the
         # researched ticker's exposure in their portfolio (best-effort).
+        floor = min(floors) if floors else 0.0
         if _asks_portfolio_relative(message):
             sp = safe("score_pos", lambda: _load_score_positions(user))
             if sp is not None:
-                ev += _ticker_exposure_evidence(tickers, sp[0]) or []
-        return ev, (min(floors) if floors else 0.0)
+                dropped = _dropped_tickers(sp[1])
+                ev += _ticker_exposure_evidence(tickers, sp[0], dropped) or []
+                if any(t.upper() in dropped for t in tickers):
+                    floor = min(floor if floor is not None else 1.0, 0.5)
+        return ev, floor
 
     if intent == "macro_rates":
         from . import market_regime
@@ -818,17 +889,26 @@ def _gather(intent: str, message: str, tickers: list[str], *, user):
     # Context-aware, minimum-tool selection (rule #3): only pull the score-change
     # decomposition when the question is about a change, and per-ticker exposure
     # only when a ticker is in play (message or page context).
+    dropped = _dropped_tickers(score)
     if _asks_about_change(message):
         ev += safe("score_change", lambda: _score_change_evidence(user, score, positions)) or []
     if tickers:
-        ev += safe("ticker_exposure", lambda: _ticker_exposure_evidence(tickers, positions)) or []
+        ev += (
+            safe("ticker_exposure", lambda: _ticker_exposure_evidence(tickers, positions, dropped))
+            or []
+        )
 
     if intent in ("tax_fee_review", "action_plan"):
         scans = safe("optimizer", lambda: _optimizer_scans(score, positions))
         for label, value in (scans or {}).items():
             ev.append(EvidenceItem(label=label, value=value, source="engine"))
-    # A portfolio answer's ceiling is the SCORE's own data quality.
-    return ev, _score_quality(score)
+    # A portfolio answer's ceiling is the SCORE's own data quality. A queried
+    # ticker that's HELD BUT UNPRICED makes THIS answer less reliable → clamp the
+    # floor so conviction drops (F2).
+    floor = _score_quality(score)
+    if any(t.upper() in dropped for t in tickers):
+        floor = min(floor if floor is not None else 1.0, 0.5)
+    return ev, floor
 
 
 def _risk_reference_evidence(score, positions) -> list[EvidenceItem]:
@@ -963,14 +1043,17 @@ def answer(
     route: Optional[str] = None,
     ticker: Optional[str] = None,
 ) -> CopilotAnswer:
+    # route + ticker are UNTRUSTED client context. Sanitize BOTH before either
+    # touches the classifier or the LLM prompt (F1): route must be a strict safe
+    # internal path, ticker a valid symbol; anything else is dropped.
+    route = _safe_route(route)
+    ticker = _safe_ticker(ticker)
     tickers = extract_tickers(message)
     # The page's currently-viewed ticker is CONTEXT — fold it into the ticker set
     # so exposure/factpack tools see it, but it never becomes citable evidence
     # unless a deterministic tool computes a number for it.
-    if ticker:
-        t = str(ticker).upper().strip()
-        if t and _TICKER_RE.fullmatch(t) and t not in tickers:
-            tickers = [t, *tickers][:5]
+    if ticker and ticker not in tickers:
+        tickers = [ticker, *tickers][:5]
     intent = classify(message, tickers, route=route)
     evidence, quality_floor = _gather(intent, message, tickers, user=user)
     dc = _answer_confidence(evidence, quality_floor)
