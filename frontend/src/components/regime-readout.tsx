@@ -91,7 +91,7 @@ export function RegimeReadout({ summary }: { summary: RegimeSummary }) {
   const vix = summary.vix.current != null ? summary.vix.current.toFixed(1) : "—";
   const vixSub =
     summary.vix.change != null
-      ? `${summary.vix.change >= 0 ? "+" : ""}${summary.vix.change.toFixed(1)} today`
+      ? `${summary.vix.change >= 0 ? "+" : ""}${(summary.vix.change * 100).toFixed(1)}% today`
       : summary.vix.level ?? undefined;
 
   return (
