@@ -444,17 +444,31 @@ def _verdict_confidence(fp: R.FactPack):
     overall = float(getattr(dq, "coverage", 0.0) or 0.0)
     crit = [s for s in dq.sources if s.field in _CRITICAL_FACTPACK_FIELDS]
     critical = (sum(float(s.coverage or 0.0) for s in crit) / len(crit)) if crit else overall
+    cache = fp.cache
+    cache_stale = bool(getattr(cache, "stale", False)) if cache else False
     sources = [
-        C.field_provenance(s.field, s.source, coverage=float(s.coverage or 0.0), as_of=s.as_of)
+        C.field_provenance(
+            s.field,
+            s.source,
+            coverage=float(s.coverage or 0.0),
+            as_of=s.as_of,
+            stale=cache_stale,
+            critical=s.field in _CRITICAL_FACTPACK_FIELDS,
+        )
         for s in dq.sources
     ]
     reason = C.classify_missing_reason(*dq.warnings)
     missing = [
-        C.field_provenance(s.field, "unavailable", missing_reason=reason, coverage=0.0)
+        C.field_provenance(
+            s.field,
+            "unavailable",
+            missing_reason=reason,
+            coverage=0.0,
+            critical=s.field in _CRITICAL_FACTPACK_FIELDS,
+        )
         for s in dq.sources
         if float(s.coverage or 0.0) <= 0.0
     ]
-    cache = fp.cache
     return C.build_data_confidence(
         overall_coverage=overall,
         critical_coverage=critical,

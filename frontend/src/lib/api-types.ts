@@ -2928,6 +2928,11 @@ export interface components {
             /** Coverage */
             coverage?: number | null;
             /**
+             * Critical
+             * @default false
+             */
+            critical?: boolean;
+            /**
              * Fallback Used
              * @default false
              */

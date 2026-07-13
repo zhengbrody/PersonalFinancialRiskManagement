@@ -4594,6 +4594,11 @@
             ],
             "title": "Coverage"
           },
+          "critical": {
+            "default": false,
+            "title": "Critical",
+            "type": "boolean"
+          },
           "fallback_used": {
             "default": false,
             "title": "Fallback Used",

@@ -104,6 +104,34 @@ def test_research_verdict_llm_cannot_exceed_data_ceiling():
     assert v.data_confidence.conviction_cap in ("none", "low")
 
 
+def test_research_noncritical_gap_does_not_cap_complete_core_facts():
+    fp = R.FactPack(
+        ticker="TST",
+        data_quality=R.DataQuality(
+            coverage=0.86,
+            sources=[
+                R.SourceRef(field="profile", source="fmp", coverage=1.0),
+                R.SourceRef(field="fundamentals", source="fmp", coverage=1.0),
+                R.SourceRef(field="news", source="unavailable", coverage=0.0),
+            ],
+            warnings=["news_empty"],
+        ),
+    )
+    v = research_factpack.build_verdict(fp, llm_callable=None)
+    assert v.data_confidence.critical_coverage == 1.0
+    assert v.data_confidence.missing[0].field == "news"
+    assert v.data_confidence.missing[0].critical is False
+    assert v.data_confidence.conviction_cap == "high"
+
+
+def test_research_stale_factpack_is_visible_and_caps_conviction():
+    fp = _factpack(1.0)
+    fp.cache = R.CacheProvenance(stale=True, fetched_at="2026-07-01T00:00:00Z")
+    v = research_factpack.build_verdict(fp, llm_callable=None)
+    assert v.data_confidence.stale is True
+    assert v.data_confidence.conviction_cap == "low"
+
+
 # ── COPILOT ───────────────────────────────────────────────────────────────────
 def test_copilot_no_evidence_is_not_directional():
     dc = copilot_router._answer_confidence([])

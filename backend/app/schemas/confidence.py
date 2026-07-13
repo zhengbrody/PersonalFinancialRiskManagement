@@ -67,6 +67,10 @@ class FieldProvenance(BaseModel):
     stale: bool = False  # served past its freshness window / stale fallback
     coverage: Optional[float] = None  # 0..1 completeness of THIS field
     fallback_used: bool = False  # a secondary source stood in for the primary
+    # Whether this field is required for the surface's directional conclusion.
+    # Missing/stale non-critical context is still disclosed, but must not cap an
+    # otherwise well-supported verdict.
+    critical: bool = False
     missing_reason: Optional[MissingReason] = None  # set when the field is absent
     note: Optional[str] = None
 
@@ -113,4 +117,8 @@ class DataConfidence(BaseModel):
 
     @property
     def missing_critical(self) -> list[FieldProvenance]:
-        return [m for m in self.missing if m.coverage is None or (m.coverage or 0) < 1.0]
+        return [
+            m
+            for m in self.missing
+            if m.critical and (m.coverage is None or (m.coverage or 0) < 1.0)
+        ]

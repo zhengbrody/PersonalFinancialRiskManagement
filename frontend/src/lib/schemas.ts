@@ -175,6 +175,7 @@ export const fieldProvenanceSchema = z.looseObject({
   stale: z.boolean().nullish(),
   coverage: z.number().nullish(),
   fallback_used: z.boolean().nullish(),
+  critical: z.boolean().nullish(),
   missing_reason: z.string().nullish(),
   note: z.string().nullish(),
 });
