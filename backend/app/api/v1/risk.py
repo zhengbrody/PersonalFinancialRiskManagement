@@ -159,13 +159,21 @@ def _price_confidence_parts(price_prov: dict, price_frame, dropped: list[str]):
         n = sum(1 for s in by.values() if s == src)
         if n:
             sources.append(
-                _conf.field_provenance("price", src, coverage=round(n / total, 3), as_of=as_of)
+                _conf.field_provenance(
+                    "price", src, coverage=round(n / total, 3), as_of=as_of, critical=True
+                )
             )
     if not sources:
-        sources.append(_conf.field_provenance("price", "yfinance", coverage=0.0, as_of=as_of))
+        sources.append(
+            _conf.field_provenance("price", "yfinance", coverage=0.0, as_of=as_of, critical=True)
+        )
     missing = [
         _conf.field_provenance(
-            f"price ({t})", "unavailable", missing_reason="insufficient_history", coverage=0.0
+            f"price ({t})",
+            "unavailable",
+            missing_reason="insufficient_history",
+            coverage=0.0,
+            critical=True,
         )
         for t in (dropped or [])
     ]
@@ -251,7 +259,13 @@ def _report_data_confidence(price_prov, price_frame, notes):
     critical = min(overall, hist_adequacy) * (0.6 if benchmark_missing else 1.0)
     sources, _, as_of = _price_confidence_parts(price_prov, price_frame, [])
     missing = [
-        _conf.field_provenance(f"price ({t})", "unavailable", missing_reason="empty", coverage=0.0)
+        _conf.field_provenance(
+            f"price ({t})",
+            "unavailable",
+            missing_reason="empty",
+            coverage=0.0,
+            critical=True,
+        )
         for t in miss
     ]
     extra = []

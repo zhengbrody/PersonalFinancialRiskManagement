@@ -107,6 +107,46 @@ def test_builder_full_quality_is_high_confidence():
     assert dc.conviction_cap == "high"
 
 
+def test_noncritical_missing_or_stale_is_disclosed_without_capping_verdict():
+    dc = C.build_data_confidence(
+        overall_coverage=0.9,
+        critical_coverage=1.0,
+        sources=[
+            C.field_provenance("fundamentals", "fmp", coverage=1.0, critical=True),
+            C.field_provenance("news", "fmp", coverage=0.0, stale=True, critical=False),
+        ],
+        missing=[
+            C.field_provenance(
+                "news", "unavailable", coverage=0.0, missing_reason="empty", critical=False
+            )
+        ],
+        confidence=0.9,
+        base_conviction="high",
+    )
+    assert dc.stale is True  # still visible to the user
+    assert dc.missing and dc.missing[0].critical is False
+    assert dc.directional_allowed is True
+    assert dc.conviction_cap == "high"
+    assert dc.missing_critical == []
+
+
+def test_critical_missing_caps_an_otherwise_complete_verdict():
+    dc = C.build_data_confidence(
+        overall_coverage=0.9,
+        critical_coverage=0.9,
+        sources=[C.field_provenance("price", "massive", coverage=1.0, critical=True)],
+        missing=[
+            C.field_provenance(
+                "fundamentals", "unavailable", coverage=0.0, missing_reason="empty", critical=True
+            )
+        ],
+        confidence=0.9,
+        base_conviction="high",
+    )
+    assert dc.conviction_cap == "low"
+    assert [m.field for m in dc.missing_critical] == ["fundamentals"]
+
+
 def test_builder_passes_through_surface_own_confidence_float():
     # score/research pass their OWN float — the builder must not recompute it.
     dc = C.build_data_confidence(

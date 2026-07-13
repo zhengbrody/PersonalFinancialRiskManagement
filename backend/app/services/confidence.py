@@ -90,6 +90,7 @@ def field_provenance(
     stale: bool = False,
     coverage: Optional[float] = None,
     fallback_used: Optional[bool] = None,
+    critical: bool = False,
     missing_reason: Optional[MissingReason] = None,
     note: Optional[str] = None,
 ) -> FieldProvenance:
@@ -106,6 +107,7 @@ def field_provenance(
         stale=stale,
         coverage=coverage,
         fallback_used=(info.kind == registry.FALLBACK) if fallback_used is None else fallback_used,
+        critical=critical,
         missing_reason=missing_reason,
         note=note,
     )
@@ -232,8 +234,11 @@ def build_data_confidence(
     stale = any(s.stale for s in sources) or any(
         m.missing_reason == "stale_fallback" for m in missing
     )
+    stale_critical = any(s.stale and s.critical for s in sources) or any(
+        m.critical and m.missing_reason == "stale_fallback" for m in missing
+    )
     fallback_used = any(s.fallback_used for s in sources)
-    missing_critical = any((m.coverage or 0) < 1.0 for m in missing)
+    missing_critical = any(m.critical and (m.coverage or 0) < 1.0 for m in missing)
 
     if confidence is None:
         confidence = default_confidence(
@@ -242,7 +247,10 @@ def build_data_confidence(
     confidence = _clamp01(confidence)
 
     conviction, directional, cap_reasons = cap_conviction(
-        base_conviction, critical_coverage, stale=stale, missing_critical=missing_critical
+        base_conviction,
+        critical_coverage,
+        stale=stale_critical,
+        missing_critical=missing_critical,
     )
 
     reasons = list(extra_reasons or []) + cap_reasons
