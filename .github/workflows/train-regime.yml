@@ -41,8 +41,13 @@ jobs:
         run: |
           pip install -r requirements.txt
           pip install -r backend/requirements-backend.txt
+          pip install -r backend/app/ml/requirements-train.txt
       - name: Train + write artifact
-        run: python -m backend.app.ml.train
+        # --config is REQUIRED wiring: without it the run stamps the code-default
+        # model_version ("regime-v1") instead of the YAML's semantic version, and
+        # the [skip ci] artifact commit breaks test_model_card on the NEXT PR
+        # (exactly what the 2026-07-12 weekly run did).
+        run: python -m backend.app.ml.train --config backend/app/ml/configs/risk_today.yaml
       - name: Commit artifact if changed
         run: |
           git config user.name "regime-train-bot"
