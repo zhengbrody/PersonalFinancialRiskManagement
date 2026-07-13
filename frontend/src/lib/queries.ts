@@ -1249,8 +1249,22 @@ const copilotEvidenceSchema = z.looseObject({
   label: z.string(),
   value: z.string(),
   source: z.string(), // engine|fmp|yfinance|macro|derived|glossary
+  // PR2 traceability (additive): per-answer id ("E1"…) + producing tool.
+  id: z.string().nullish(),
+  tool: z.string().nullish(),
 });
 export type CopilotEvidence = z.infer<typeof copilotEvidenceSchema>;
+
+// PR2: one of the six structured answer sections. `answer_markdown` is
+// composed from these on the backend, so flat and structured cannot drift;
+// rendering the flat answer (current UI) stays fully supported.
+const copilotSectionSchema = z.looseObject({
+  key: z.string(), // direct_answer|portfolio_relevance|evidence|data_confidence|what_would_change|simulation
+  title: z.string(),
+  markdown: z.string(),
+  ai_generated: z.boolean().optional(),
+});
+export type CopilotSection = z.infer<typeof copilotSectionSchema>;
 
 export const copilotAnswerSchema = z.looseObject({
   intent: z.string(),
@@ -1261,6 +1275,10 @@ export const copilotAnswerSchema = z.looseObject({
   model: z.string().nullish(),
   conviction: z.string().nullish(),
   data_confidence: dataConfidenceSchema.nullish(),
+  // PR2 additive fields — optional so pre-PR2 responses still validate.
+  sections: z.array(copilotSectionSchema).optional(),
+  language: z.string().optional(),
+  disclaimer: z.string().nullish(),
 });
 export type CopilotAnswer = z.infer<typeof copilotAnswerSchema>;
 

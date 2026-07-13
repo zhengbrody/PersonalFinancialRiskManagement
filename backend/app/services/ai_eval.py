@@ -22,13 +22,19 @@ _ADVICE_RE = re.compile(
     r"|time to (buy|sell))",
     re.IGNORECASE,
 )
+# Chinese imperative buy/sell phrases (same conservative discipline: an action
+# prefix + a trade verb, so honest framing like "如果你想卖出…" doesn't trip).
+# The (?<!不) lookbehind keeps negated boundary language ("不建议买入") clean.
+_ADVICE_ZH_RE = re.compile(r"(?<!不)(立即|马上|应该|建议|强烈)(买入|卖出|清仓|抛售|加仓|做空)")
 
 # A salient money or percent figure (the kind a verdict/answer cites).
-_SALIENT_NUM_RE = re.compile(r"(\$\s?\d[\d,]*\.?\d*|\d[\d,]*\.?\d*\s?%)")
+_SALIENT_NUM_RE = re.compile(r"([$¥￥]\s?\d[\d,]*\.?\d*|\d[\d,]*\.?\d*\s?[%％])")
 
 
 def detect_direct_advice(text: str | None) -> bool:
-    return bool(text and _ADVICE_RE.search(text))
+    if not text:
+        return False
+    return bool(_ADVICE_RE.search(text) or _ADVICE_ZH_RE.search(text))
 
 
 def answer_grounded(text: str | None, evidence_count: int) -> bool:
@@ -76,12 +82,25 @@ _MONEY_CLAIM_RE = re.compile(
     re.IGNORECASE,
 )
 # The sign is a minus only when NOT preceded by a digit — "3-5%" is a range
-# whose right side is +5%, not -5%.
-_PCT_CLAIM_RE = re.compile(r"((?:(?<!\d)-)?\d[\d,]*(?:\.\d+)?)\s?%")
+# whose right side is +5%, not -5%. Full-width ％ is normal zh-CN typography.
+_PCT_CLAIM_RE = re.compile(r"((?:(?<!\d)-)?\d[\d,]*(?:\.\d+)?)\s?[%％]")
 _MULT_CLAIM_RE = re.compile(
     r"((?:(?<!\d)-)?\d[\d,]*(?:\.\d+)?)\s?[x×](?![A-Za-z0-9])", re.IGNORECASE
 )
-_BARE_CLAIM_RE = re.compile(r"(?<![0-9A-Za-z_.,])-?\d[\d,]*(?:\.\d+)?(?![0-9A-Za-z_%×])")
+_BARE_CLAIM_RE = re.compile(r"(?<![0-9A-Za-z_.,])-?\d[\d,]*(?:\.\d+)?(?![0-9A-Za-z_%％×])")
+
+# Chinese financial number formats (PR2): ¥-prefixed / 元-suffixed money and the
+# 万/亿 magnitude suffixes ("1.2万" = 12,000; "3亿" = 300,000,000). The 元
+# lookahead skips common non-currency compounds (元素/元气/元件).
+_CJK_MULT = {"万": 1e4, "亿": 1e8}
+_CJK_MONEY_PREFIX_RE = re.compile(r"[¥￥]\s?(-?\d[\d,]*(?:\.\d+)?)\s?(万|亿)?")
+_CJK_MONEY_SUFFIX_RE = re.compile(r"(-?\d[\d,]*(?:\.\d+)?)\s?(万|亿)?\s?元(?![素气件])")
+_CJK_BARE_MULT_RE = re.compile(r"(-?\d[\d,]*(?:\.\d+)?)\s?(万|亿)")
+
+# Full-width digits/point/minus (ＣＪＫ typography and the U+2212 minus some
+# models emit) normalise 1:1 to ASCII BEFORE extraction, so "波动率３０％" is
+# a visible claim and spans stay aligned (equal-length translation).
+_FULLWIDTH_TRANS = str.maketrans("０１２３４５６７８９．－−", "0123456789..-")
 
 # Structural digit patterns masked BEFORE extraction (spaces of equal length,
 # so spans stay aligned): ISO/slash dates and small "2-4"-style ranges. A
@@ -126,6 +145,7 @@ def extract_numeric_claims(text: str | None) -> list[dict]:
     Each claim: {raw, value, kind, context (±40 chars), span}."""
     if not text:
         return []
+    text = text.translate(_FULLWIDTH_TRANS)
     original = text
     text = _mask_datelike(text)
     claims: list[dict] = []
@@ -147,10 +167,18 @@ def extract_numeric_claims(text: str | None) -> list[dict]:
     for m in _MONEY_CLAIM_RE.finditer(text):
         mult = _SUFFIX_MULT.get((m.group(2) or "").lower(), 1.0)
         add(m, _to_float(m.group(1)) * mult, "money")
+    for m in _CJK_MONEY_PREFIX_RE.finditer(text):
+        add(m, _to_float(m.group(1)) * _CJK_MULT.get(m.group(2) or "", 1.0), "money")
+    for m in _CJK_MONEY_SUFFIX_RE.finditer(text):
+        add(m, _to_float(m.group(1)) * _CJK_MULT.get(m.group(2) or "", 1.0), "money")
     for m in _PCT_CLAIM_RE.finditer(text):
         add(m, _to_float(m.group(1)), "percent")
     for m in _MULT_CLAIM_RE.finditer(text):
         add(m, _to_float(m.group(1)), "multiple")
+    # Magnitude-suffixed numbers without a currency marker ("1.2万") — a real
+    # numeric claim at its expanded value, kind "number" (unit unstated).
+    for m in _CJK_BARE_MULT_RE.finditer(text):
+        add(m, _to_float(m.group(1)) * _CJK_MULT[m.group(2)], "number")
     for m in _BARE_CLAIM_RE.finditer(text):
         a, b = m.span()
         if overlaps(a, b):
@@ -225,6 +253,7 @@ def eval_signals(
     intent: str | None = None,
     tool_turn_count: int | None = None,
     fallback_used: bool | None = None,
+    sections_failed_grounding: int | None = None,
 ) -> dict:
     """Bundle the eval fields for telemetry metadata. All keys are scalar +
     privacy-safe (no tickers / $ / holdings / raw prompt)."""
@@ -239,4 +268,8 @@ def eval_signals(
         out["tool_turn_count"] = tool_turn_count
     if fallback_used is not None:
         out["fallback_used"] = fallback_used
+    if sections_failed_grounding is not None:
+        # How many LLM-phrased sections the grounding gate replaced with the
+        # deterministic fallback this answer (0 = clean pass).
+        out["sections_failed_grounding"] = sections_failed_grounding
     return out

@@ -207,6 +207,14 @@ def _record_ask_cost(user_id: str, result, started: float) -> None:
     from ...services.ai_telemetry import input_hash, record_ai_call
 
     ev_text = "\n".join(f"{e.label}:{e.value}" for e in result.evidence)
+    # How many LLM-phrased narrative sections the grounding gate replaced with
+    # deterministic text (privacy-safe scalar; None on the all-deterministic path).
+    narrative_keys = {"direct_answer", "portfolio_relevance", "what_would_change"}
+    sections_failed = (
+        sum(1 for s in result.sections if s.key in narrative_keys and not s.ai_generated)
+        if result.sections and not result.data_only
+        else None
+    )
     record_ai_call(
         user_id,
         "chat",
@@ -222,6 +230,7 @@ def _record_ask_cost(user_id: str, result, started: float) -> None:
             evidence_count=len(result.evidence),
             intent=result.intent,
             fallback_used=bool(result.data_only),
+            sections_failed_grounding=sections_failed,
         ),
     )
 

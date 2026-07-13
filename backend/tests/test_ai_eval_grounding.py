@@ -115,6 +115,47 @@ def test_cjk_adjacent_bare_numbers_extract():
     assert 1.18 in vals and 0.67 in vals and 18.0 in vals
 
 
+def test_cjk_money_formats_extract():
+    """PR2: ¥-prefixed / 元-suffixed money and 万/亿 magnitude suffixes are
+    numeric claims at their EXPANDED values."""
+    claims = {
+        (c["kind"], c["value"])
+        for c in ai_eval.extract_numeric_claims("账户价值¥48,250，投入了1.5万美元，其中亏损3000元")
+    }
+    assert ("money", 48250.0) in claims
+    assert ("number", 15000.0) in claims  # 1.5万 — magnitude suffix, unit unstated
+    assert ("money", 3000.0) in claims  # 3000元
+
+
+def test_cjk_money_multiplier_and_fullwidth_percent():
+    claims = {
+        (c["kind"], c["value"])
+        for c in ai_eval.extract_numeric_claims("市值¥120万，回撤-25％，波动率18％")
+    }
+    assert ("money", 1200000.0) in claims
+    assert ("percent", -25.0) in claims and ("percent", 18.0) in claims
+
+
+def test_cjk_yuan_compounds_are_not_currency():
+    # 元素/元气/元件 are vocabulary, not a currency suffix
+    assert ai_eval.numeric_values("第5元素") == []
+
+
+def test_cjk_expanded_claims_match_absolute_evidence():
+    claims = ai_eval.extract_numeric_claims("大约亏损1.5万")
+    assert ai_eval.match_claims(claims, [15000.0])["faithfulness"] == 1.0
+
+
+def test_fullwidth_digits_normalize_and_extract():
+    """Adversarial-review fix: full-width digits (ＣＪＫ typography) and the
+    U+2212 minus must not slip the extractor — '３０％' is a visible claim."""
+    claims = {
+        (c["kind"], c["value"]) for c in ai_eval.extract_numeric_claims("波动率３０％，回撤−２５％")
+    }
+    assert ("percent", 30.0) in claims
+    assert ("percent", -25.0) in claims
+
+
 # ── the 30-case suite ─────────────────────────────────────────────────
 
 
@@ -124,17 +165,17 @@ def _cases() -> list[dict]:
 
 def test_cases_schema_and_distribution():
     cases = _cases()
-    assert len(cases) == 30
+    assert len(cases) == 36
     ids = [c["id"] for c in cases]
-    assert len(set(ids)) == 30
+    assert len(set(ids)) == 36
     by_cat: dict[str, int] = {}
     for c in cases:
         by_cat[c["category"]] = by_cat.get(c["category"], 0) + 1
         assert c["question"] and c["intent_expected"]
         assert "fixture" in c
-        if c["category"] == "induced":
+        if c["category"] in ("induced", "injection"):
             assert c.get("trap"), f"{c['id']} missing trap description"
-    assert by_cat == {"normal": 14, "induced": 8, "boundary": 8}
+    assert by_cat == {"normal": 14, "induced": 8, "boundary": 8, "injection": 6}
 
 
 def _load_runner():
@@ -177,15 +218,19 @@ def test_llm_mode_excludes_silent_template_fallbacks():
 
 
 def test_template_mode_full_run_is_fully_traceable_offline():
-    """The CI gate: all 30 cases through the REAL router (template mode, no
+    """The CI gate: all 36 cases through the REAL router (template mode, no
     network, no key) — every numeric claim traceable, every intent as
-    authored. ~100% is structural in template mode (evidence is printed
-    verbatim); this guards the router + extraction/matching machinery."""
+    authored, every injection predicate clean. ~100% is structural in template
+    mode (evidence is printed verbatim); this guards the router + the grounding
+    gate + the extraction/matching machinery."""
     runner = _load_runner()
     rows = [runner.run_case(c, None) for c in _cases()]
     summary = runner.summarize(rows)
-    assert summary["cases"] == 30
+    assert summary["cases"] == 36
     assert summary["intent_mismatches"] == []
+    assert summary["check_failures"] == [], [
+        (r["id"], r["check_failures"]) for r in rows if r.get("check_failures")
+    ]
     assert summary["faithfulness"] == 1.0, [
         (r["id"], r["violations"]) for r in rows if r["violations"]
     ]
