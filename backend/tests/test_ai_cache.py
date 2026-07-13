@@ -174,7 +174,7 @@ def test_ask_cache_is_user_scoped(test_client, mint_token, monkeypatch):
 
     calls = {"n": 0}
 
-    def fake_answer(message, *, user, llm_callable):
+    def fake_answer(message, *, user, llm_callable, route=None, ticker=None):
         calls["n"] += 1
         return _FakeAsk()
 

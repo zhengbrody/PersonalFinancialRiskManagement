@@ -40,6 +40,12 @@ class EvidenceItem(BaseModel):
 
 class CopilotAskRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
+    # Page-awareness context (optional, additive). `route` is the app path the
+    # user is on (e.g. "/research", "/risk"); `ticker` is the security currently
+    # in view. Both only STEER intent + which deterministic tools run — they
+    # never become evidence the answer can cite.
+    route: Optional[str] = Field(default=None, max_length=120)
+    ticker: Optional[str] = Field(default=None, max_length=20)
 
 
 class CopilotAnswer(BaseModel):

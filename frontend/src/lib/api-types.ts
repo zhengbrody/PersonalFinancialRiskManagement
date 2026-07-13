@@ -2050,6 +2050,10 @@ export interface components {
         CopilotAskRequest: {
             /** Message */
             message: string;
+            /** Route */
+            route?: string | null;
+            /** Ticker */
+            ticker?: string | null;
         };
         /** CorrTopPair */
         CorrTopPair: {

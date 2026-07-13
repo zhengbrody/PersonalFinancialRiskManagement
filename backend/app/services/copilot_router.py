@@ -85,6 +85,37 @@ def extract_tickers(message: str) -> list[str]:
     return out[:5]
 
 
+# A safe INTERNAL app path: leading "/", then only path chars (letters, digits,
+# "/", "_", "-"), ≤120 total. This deliberately rejects URLs ("://"), query
+# strings ("?", "&", "="), path traversal + hosts (".", ":"), whitespace/prose,
+# angle brackets and any control character — so untrusted `route` context can
+# never carry an injection into the classifier or the LLM prompt (F1).
+_ROUTE_RE = re.compile(r"^/[A-Za-z0-9/_-]{0,119}$")
+_CONTEXT_TICKER_RE = re.compile(r"^[A-Z][A-Z0-9.-]{0,9}$")
+
+
+def _safe_route(route: Optional[str]) -> Optional[str]:
+    """Return ``route`` only if it's a strict safe internal path; else None.
+    ``route`` is UNTRUSTED (client-supplied page context) — anything that isn't a
+    plain internal path (URLs, query injection, prose, control chars) is dropped
+    so it never reaches classify() or the prompt."""
+    if not route or not isinstance(route, str):
+        return None
+    if route.startswith("//") or "//" in route:
+        return None
+    return route if _ROUTE_RE.fullmatch(route) else None
+
+
+def _safe_ticker(ticker: Optional[str]) -> Optional[str]:
+    """Normalize a page-context ticker and reject everything but a bounded
+    exchange-style symbol. Unlike message extraction, context must not accept a
+    leading ``$`` or arbitrary prose because it is copied into the model prompt."""
+    if not ticker or not isinstance(ticker, str):
+        return None
+    normalized = ticker.strip().upper()
+    return normalized if _CONTEXT_TICKER_RE.fullmatch(normalized) else None
+
+
 # ── intent classification (deterministic) ───────────────────────────
 
 # English keywords are space-delimited word tokens; Chinese has no word
@@ -291,9 +322,10 @@ _METRIC_GLOSSARY = {
 }
 
 
-def classify(message: str, tickers: list[str]) -> str:
+def classify(message: str, tickers: list[str], *, route: Optional[str] = None) -> str:
     text = f" {(message or '').lower()} "
     n_tk = len(tickers)
+    r = (route or "").lower()
 
     def has(intent: str) -> bool:
         return any(k in text for k in _KW[intent])
@@ -319,6 +351,11 @@ def classify(message: str, tickers: list[str]) -> str:
         return "ticker_research"
     if has("action_plan"):
         return "action_plan"
+    # Page-awareness (light bias — only when the message has no stronger cue):
+    # on the research page with a ticker in view, an ambiguous question is about
+    # that stock; on the risk/score/scenarios pages it's about the portfolio.
+    if n_tk >= 1 and r.startswith("/research"):
+        return "ticker_research"
     return "portfolio_diagnosis"
 
 
@@ -562,6 +599,219 @@ def _score_quality(score) -> Optional[float]:
         return None
 
 
+_CHANGE_TERMS = (
+    "change",
+    "changed",
+    "fall",
+    "fell",
+    "drop",
+    "dropped",
+    "down",
+    "up",
+    "since",
+    "yesterday",
+    "worse",
+    "better",
+    "why did",
+    "moved",
+    "变化",
+    "下跌",
+    "下降",
+    "为什么",
+    "跌了",
+    "涨了",
+    "变了",
+)
+
+
+def _asks_about_change(message: str) -> bool:
+    m = (message or "").lower()
+    return any(t in m for t in _CHANGE_TERMS)
+
+
+_PORTFOLIO_REL_TERMS = (
+    "my portfolio",
+    "my book",
+    "my holdings",
+    "my risk",
+    "my position",
+    "how much of my",
+    "in my",
+    "contribute",
+    "contribution",
+    "exposure",
+    "do i hold",
+    "do i own",
+    "of this name",
+    "this name",
+    "我的组合",
+    "我的持仓",
+    "我的投资组合",
+    "贡献",
+    "占比",
+    "占我",
+    "仓位",
+    "持仓",
+)
+
+
+def _asks_portfolio_relative(message: str) -> bool:
+    """True when a ticker question is asked RELATIVE to the user's own book —
+    so a research answer should also carry the holding's portfolio exposure."""
+    m = (message or "").lower()
+    return any(t in m for t in _PORTFOLIO_REL_TERMS)
+
+
+def _score_change_evidence(user, score, positions=None) -> list[EvidenceItem]:
+    """Deterministic 'why did my score change?' evidence: the move vs the user's
+    OWN prior snapshot, decomposed into market / holdings / data-quality (reuses
+    ``score_changes.build_change_report`` from the cockpit). Light — a snapshot
+    fetch + arithmetic, no engine run. Empty when there's no prior snapshot or the
+    methodology isn't comparable. ``positions`` (when given) lets the diff tell a
+    market move from a holdings move."""
+    from ..schemas.score_changes import ScoreChangeRequest
+    from . import snapshots
+    from .score_changes import build_change_report
+
+    prev = snapshots.get_snapshot_at_window(user.access_token, "previous")
+    if not prev:
+        return []
+    m = score.metrics
+    dims = {
+        k: float(d.score)
+        for k, d in (getattr(score, "dimensions", None) or {}).items()
+        if getattr(d, "score", None) is not None
+    }
+    top_positions: list[dict] = []
+    total_mv = sum(float(getattr(p, "market_value", 0.0) or 0.0) for p in (positions or []))
+    if total_mv > 0:
+        rows = [
+            {
+                "ticker": str(getattr(p, "ticker", "") or "").upper(),
+                "weight": float(getattr(p, "market_value", 0.0) or 0.0) / total_mv,
+            }
+            for p in positions
+            if getattr(p, "ticker", None)
+        ]
+        top_positions = sorted(rows, key=lambda r: r["weight"], reverse=True)[:10]
+    req = ScoreChangeRequest(
+        window="previous",
+        overall_score=int(score.overall_score),
+        base_overall=int(getattr(score, "base_overall", None) or score.overall_score),
+        dimensions=dims,
+        top_positions=top_positions,
+        metrics={
+            "annual_volatility": getattr(m, "annual_volatility", None),
+            "sharpe_ratio": getattr(m, "sharpe_ratio", None),
+            "max_drawdown": getattr(m, "max_drawdown", None),
+            "var_95_daily": getattr(m, "var_95_daily", None),
+            "beta_to_benchmark": getattr(m, "beta_to_benchmark", None),
+            "net_equity": getattr(m, "net_equity", None),
+            "leverage": getattr(m, "leverage", None),
+        },
+        confidence=getattr(m, "confidence", None),
+    )
+    rep = build_change_report(req, prev)
+    if not rep.available:
+        return []
+    if rep.comparable is False:
+        # F4: an incompatible prior methodology is an EXPLICIT limitation — never
+        # imply "no change". Surface the deterministic methodology-change notice so
+        # the answer says the two scores aren't directly comparable.
+        return [
+            EvidenceItem(
+                label="Score change",
+                value=(
+                    rep.summary
+                    or "Not directly comparable — your earlier score used a different "
+                    "methodology version."
+                ),
+                source="engine",
+            )
+        ]
+    if rep.score_delta is None:
+        return []
+    items = [_ev("Score change (since last snapshot)", f"{rep.score_delta:+d} pts", "engine")]
+    a = rep.attribution
+    if a is not None:
+        if a.separable:
+            items += [
+                _ev("↳ Market-driven", _signed_pts(a.market_driven), "engine"),
+                _ev("↳ Holdings-driven", _signed_pts(a.holding_driven), "engine"),
+                _ev("↳ Data-quality-driven", _signed_pts(a.data_quality_driven), "engine"),
+            ]
+        else:
+            items += [
+                _ev("↳ Market + your changes", _signed_pts(a.combined_market_holdings), "engine"),
+                _ev("↳ Data-quality-driven", _signed_pts(a.data_quality_driven), "engine"),
+            ]
+    if rep.top_negative_contributor is not None:
+        d = rep.top_negative_contributor
+        items.append(_ev("Biggest drag", f"{d.label} ({d.points:+d} pts)", "engine"))
+    return _compact(items)
+
+
+def _signed_pts(v) -> Optional[str]:
+    return f"{v:+d} pts" if isinstance(v, int) else None
+
+
+def _dropped_tickers(score) -> set[str]:
+    """Uppercase set of tickers the engine HELD but could not price (dropped from
+    the returns matrix). Authoritative 'held-but-unpriced' ownership check (F2)."""
+    m = getattr(score, "metrics", None)
+    return {str(t).upper() for t in (getattr(m, "dropped_tickers", None) or [])}
+
+
+def _ticker_exposure_evidence(
+    tickers: list[str], positions, dropped_tickers=()
+) -> list[EvidenceItem]:
+    """How much a QUERIED ticker contributes to the caller's OWN book, three-way
+    (F2): PRICED → weight + market value + rank; HELD-BUT-UNPRICED → an explicit
+    'held — current price unavailable' (never 'not held'); otherwise NOT HELD.
+    ``dropped_tickers`` is the engine's held-but-unpriceable set (authoritative
+    ownership for the unpriced case). Weight-based exposure, honestly labelled —
+    NOT a component-VaR contribution (that needs the risk report; F5)."""
+    if not tickers:
+        return []
+    dropped = {str(t).upper() for t in (dropped_tickers or [])}
+    by_ticker: dict[str, float] = {}
+    total = 0.0
+    for p in positions or []:
+        tk = str(getattr(p, "ticker", "") or "").upper()
+        mv = float(getattr(p, "market_value", 0.0) or 0.0)
+        if tk and mv > 0:
+            by_ticker[tk] = by_ticker.get(tk, 0.0) + mv
+            total += mv
+    ranked = sorted(by_ticker.items(), key=lambda kv: kv[1], reverse=True)
+    rank_of = {tk: i + 1 for i, (tk, _mv) in enumerate(ranked)}
+    items: list[EvidenceItem] = []
+    for tk in tickers[:2]:
+        u = tk.upper()
+        mv = by_ticker.get(u)
+        if mv is not None and total > 0:
+            items.append(_ev(f"{u} weight in your book", _pct(mv / total), "engine"))
+            items.append(_ev(f"{u} market value", _money(mv), "engine"))
+            items.append(
+                EvidenceItem(
+                    label=f"{u} position rank",
+                    value=f"#{rank_of[u]} of {len(ranked)} holdings",
+                    source="engine",
+                )
+            )
+        elif u in dropped:
+            # HELD but the current price is unavailable — explicit, never "not held".
+            items.append(
+                EvidenceItem(
+                    label=f"{u} in your book",
+                    value="held — current price unavailable",
+                    source="engine",
+                )
+            )
+        else:
+            items.append(EvidenceItem(label=f"{u} in your book", value="not held", source="engine"))
+    return _compact(items)
+
+
 def _gather(intent: str, message: str, tickers: list[str], *, user):
     """Returns (evidence, quality_floor). ``quality_floor`` is the grounding
     data's OWN quality (0..1) when the answer rests on the portfolio score /
@@ -578,7 +828,18 @@ def _gather(intent: str, message: str, tickers: list[str], *, user):
             if fp is not None:
                 ev += _factpack_evidence(fp, prefix=tk if intent == "compare_tickers" else "")
                 floors.append(float(getattr(fp.data_quality, "coverage", 0.0) or 0.0))
-        return ev, (min(floors) if floors else 0.0)
+        # Portfolio-aware research: when the question is asked relative to the
+        # user's own book ("how much of my risk is this name?"), add the
+        # researched ticker's exposure in their portfolio (best-effort).
+        floor = min(floors) if floors else 0.0
+        if _asks_portfolio_relative(message):
+            sp = safe("score_pos", lambda: _load_score_positions(user))
+            if sp is not None:
+                dropped = _dropped_tickers(sp[1])
+                ev += _ticker_exposure_evidence(tickers, sp[0], dropped) or []
+                if any(t.upper() in dropped for t in tickers):
+                    floor = min(floor if floor is not None else 1.0, 0.5)
+        return ev, floor
 
     if intent == "macro_rates":
         from . import market_regime
@@ -625,12 +886,29 @@ def _gather(intent: str, message: str, tickers: list[str], *, user):
     ev += safe("options", lambda: _option_evidence(message, user)) or []
     ev += safe("risk_reference", lambda: _risk_reference_evidence(score, positions)) or []
 
+    # Context-aware, minimum-tool selection (rule #3): only pull the score-change
+    # decomposition when the question is about a change, and per-ticker exposure
+    # only when a ticker is in play (message or page context).
+    dropped = _dropped_tickers(score)
+    if _asks_about_change(message):
+        ev += safe("score_change", lambda: _score_change_evidence(user, score, positions)) or []
+    if tickers:
+        ev += (
+            safe("ticker_exposure", lambda: _ticker_exposure_evidence(tickers, positions, dropped))
+            or []
+        )
+
     if intent in ("tax_fee_review", "action_plan"):
         scans = safe("optimizer", lambda: _optimizer_scans(score, positions))
         for label, value in (scans or {}).items():
             ev.append(EvidenceItem(label=label, value=value, source="engine"))
-    # A portfolio answer's ceiling is the SCORE's own data quality.
-    return ev, _score_quality(score)
+    # A portfolio answer's ceiling is the SCORE's own data quality. A queried
+    # ticker that's HELD BUT UNPRICED makes THIS answer less reliable → clamp the
+    # floor so conviction drops (F2).
+    floor = _score_quality(score)
+    if any(t.upper() in dropped for t in tickers):
+        floor = min(floor if floor is not None else 1.0, 0.5)
+    return ev, floor
 
 
 def _risk_reference_evidence(score, positions) -> list[EvidenceItem]:
@@ -762,9 +1040,21 @@ def answer(
     *,
     user,
     llm_callable: Optional[Callable[..., str]] = None,
+    route: Optional[str] = None,
+    ticker: Optional[str] = None,
 ) -> CopilotAnswer:
+    # route + ticker are UNTRUSTED client context. Sanitize BOTH before either
+    # touches the classifier or the LLM prompt (F1): route must be a strict safe
+    # internal path, ticker a valid symbol; anything else is dropped.
+    route = _safe_route(route)
+    ticker = _safe_ticker(ticker)
     tickers = extract_tickers(message)
-    intent = classify(message, tickers)
+    # The page's currently-viewed ticker is CONTEXT — fold it into the ticker set
+    # so exposure/factpack tools see it, but it never becomes citable evidence
+    # unless a deterministic tool computes a number for it.
+    if ticker and ticker not in tickers:
+        tickers = [ticker, *tickers][:5]
+    intent = classify(message, tickers, route=route)
     evidence, quality_floor = _gather(intent, message, tickers, user=user)
     dc = _answer_confidence(evidence, quality_floor)
 
@@ -802,10 +1092,19 @@ def answer(
             "abbreviations (VaR, Sharpe, P/E) as-is."
         )
 
+    context_line = ""
+    if route or ticker:
+        bits = []
+        if route:
+            bits.append(f"page {route}")
+        if ticker:
+            bits.append(f"viewing {str(ticker).upper()}")
+        context_line = f"User context: {', '.join(bits)} (context only — cite only EVIDENCE)\n"
     prompt = (
         f"User question: {message}\n"
         f"Detected intent: {intent}\n"
-        f"Tickers: {', '.join(tickers) or 'none'}\n\n"
+        f"Tickers: {', '.join(tickers) or 'none'}\n"
+        f"{context_line}\n"
         f"EVIDENCE:\n{_evidence_block(evidence)}\n\n"
         "Write the answer now in the five required sections."
     )
