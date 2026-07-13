@@ -145,7 +145,13 @@ def test_answer_with_llm(monkeypatch):
     from backend.app.schemas import research as R
     from backend.app.services import research_factpack as rf
 
-    monkeypatch.setattr(rf, "build_fact_pack", lambda tk: R.FactPack(ticker=tk, price=100.0))
+    # A well-covered pack — factpack coverage is the quality floor, and the
+    # LLM only runs when the data supports a directional answer.
+    monkeypatch.setattr(
+        rf,
+        "build_fact_pack",
+        lambda tk: R.FactPack(ticker=tk, price=100.0, data_quality=R.DataQuality(coverage=1.0)),
+    )
 
     seen = {}
 
@@ -546,7 +552,9 @@ def test_safe_context_ticker(ticker, expected):
 
 
 def test_invalid_route_and_ticker_never_reach_llm_prompt(monkeypatch):
-    monkeypatch.setattr(cr, "_gather", lambda *args, **kwargs: ([], None))
+    # A real portfolio so the answer is directional-allowed and the LLM runs
+    # (empty evidence would structurally skip the LLM — separately tested).
+    monkeypatch.setattr(cr, "_load_score_positions", lambda user: ([], _ScoreFull()))
     seen = {}
 
     def fake_llm(**kwargs):

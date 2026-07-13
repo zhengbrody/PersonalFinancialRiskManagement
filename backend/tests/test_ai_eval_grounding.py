@@ -71,16 +71,16 @@ def test_sign_and_abs_phrasing():
     assert ai_eval.match_claims(claims, [-31.0])["faithfulness"] == 1.0
 
 
-def test_rtol_boundary():
+def test_display_rounding_boundary():
     claims = ai_eval.extract_numeric_claims("about 22% volatility")
-    assert ai_eval.match_claims(claims, [22.1])["faithfulness"] == 1.0  # 0.45% off
-    assert ai_eval.match_claims(claims, [24.0])["faithfulness"] == 0.0  # 8.3% off
+    assert ai_eval.match_claims(claims, [22.1])["faithfulness"] == 1.0  # 22 == round(22.1, 0)
+    assert ai_eval.match_claims(claims, [24.0])["faithfulness"] == 0.0  # no rounding of 24 is 22
 
 
 def test_no_claims_is_faithful_and_violations_carry_context():
     assert ai_eval.match_claims([], [1.0])["faithfulness"] == 1.0
     claims = ai_eval.extract_numeric_claims("the fund charges 47 bps under the hood")
-    res = ai_eval.match_claims(claims, [0.6])  # 0.47 vs 0.6 is well past rtol
+    res = ai_eval.match_claims(claims, [0.6])  # 47 is no representation/rounding of 0.6
     assert res["faithfulness"] == 0.0
     assert "47" in res["violations"][0]["raw"]
     assert "under the hood" in res["violations"][0]["context"]
@@ -102,7 +102,7 @@ def test_percent_claims_never_scale_up():
 
 def test_money_and_multiples_are_absolute():
     # scale transforms don't exist for $/×: $193 must not match ratio 1.93
-    # (×100 apart), and 2.4× must not match 240 — same-scale rtol still works
+    # (×100 apart), and 2.4× must not match 240 — same-scale exactness still works
     claims = ai_eval.extract_numeric_claims("roughly $193 in fees at 2.4× leverage")
     assert ai_eval.match_claims(claims, [1.93, 240.0])["faithfulness"] == 0.0
     assert ai_eval.match_claims(claims, [193.0, 2.4])["faithfulness"] == 1.0
@@ -154,6 +154,113 @@ def test_fullwidth_digits_normalize_and_extract():
     }
     assert ("percent", 30.0) in claims
     assert ("percent", -25.0) in claims
+
+
+# ── round-2 matching: unit-normalized rounding equivalence (Fix B) ────
+
+
+def test_percent_near_collisions_rejected():
+    """30% must not match 31% / 31.8% / 28.5% — only the exact value or a
+    genuine display rounding (29.7% → 30% at 0dp) qualifies. The blanket ±6%
+    relative tolerance is gone."""
+    claims = ai_eval.extract_numeric_claims("expect a 30% move")
+    assert ai_eval.match_claims(claims, [(31.0, "percent")])["faithfulness"] == 0.0
+    assert ai_eval.match_claims(claims, [(31.8, "percent")])["faithfulness"] == 0.0
+    assert ai_eval.match_claims(claims, [(28.5, "percent")])["faithfulness"] == 0.0
+    assert ai_eval.match_claims(claims, [(29.7, "percent")])["faithfulness"] == 1.0
+    assert ai_eval.match_claims(claims, [(30.0, "percent")])["faithfulness"] == 1.0
+
+
+def test_fraction_percent_conversion_typed():
+    """fraction ↔ percent is a UNIT CONVERSION, applied to the evidence and
+    rounded at PERCENT display precision — never a slop window."""
+    claims = ai_eval.extract_numeric_claims("returned 8.3% this year")
+    assert ai_eval.match_claims(claims, [(0.083, "number")])["faithfulness"] == 1.0
+    claims8 = ai_eval.extract_numeric_claims("returned about 8% this year")
+    assert ai_eval.match_claims(claims8, [(0.083, "number")])["faithfulness"] == 1.0
+    # the old 1dp-rounding-on-the-RATIO laundering (10% ↔ 0.12) is dead
+    claims10 = ai_eval.extract_numeric_claims("returned about 10% this year")
+    assert ai_eval.match_claims(claims10, [(0.12, "number")])["faithfulness"] == 0.0
+
+
+def test_currency_score_count_never_cross_match():
+    """$720 must not be satisfied by a score/count of 720; 50% must not be
+    satisfied by $50; a bare integer restating a same-kind value stays exact."""
+    dollars = ai_eval.extract_numeric_claims("that costs $720 per year")
+    assert ai_eval.match_claims(dollars, [(720.0, "number")])["faithfulness"] == 0.0
+    pct = ai_eval.extract_numeric_claims("a 72% share")
+    assert ai_eval.match_claims(pct, [(720.0, "number")])["faithfulness"] == 0.0
+    pct2 = ai_eval.extract_numeric_claims("a 50% chance")
+    assert ai_eval.match_claims(pct2, [(50.0, "money")])["faithfulness"] == 0.0
+    bare = ai_eval.extract_numeric_claims("the score printed 720 today")
+    assert ai_eval.match_claims(bare, [(720.0, "number")])["faithfulness"] == 1.0
+    money_ok = ai_eval.extract_numeric_claims("$19,700 in total")
+    assert ai_eval.match_claims(money_ok, [(19700.0, "money")])["faithfulness"] == 1.0
+
+
+def test_integer_scores_and_counts_exact_only():
+    claims = ai_eval.extract_numeric_claims("your score printed 719 today")
+    assert ai_eval.match_claims(claims, [(720.0, "number")])["faithfulness"] == 0.0
+    # 9.99 must not reach the /1000 score denominator via a ×100 transform
+    claims2 = ai_eval.extract_numeric_claims("Sharpe hitting 9.99")
+    ev = [(720.0, "number"), (1000.0, "number")]
+    assert ai_eval.match_claims(claims2, ev)["faithfulness"] == 0.0
+
+
+def test_money_magnitude_quotes():
+    """'$20k' is a legitimate 2-significant-figure quote of $19,700; '$21k'
+    is not a rounding of it and stays a violation."""
+    claims = ai_eval.extract_numeric_claims("roughly $20k of exposure")
+    assert ai_eval.match_claims(claims, [(19700.0, "money")])["faithfulness"] == 1.0
+    claims2 = ai_eval.extract_numeric_claims("roughly $21k of exposure")
+    assert ai_eval.match_claims(claims2, [(19700.0, "money")])["faithfulness"] == 0.0
+
+
+def test_invented_precision_rejected():
+    """A claim MORE precise than the evidence is invented precision."""
+    claims = ai_eval.extract_numeric_claims("volatility of 22.14%")
+    assert ai_eval.match_claims(claims, [(22.1, "percent")])["faithfulness"] == 0.0
+
+
+def test_zero_erasing_rounding_is_not_a_display_form():
+    """Adversarial round-2 fix: rounding 0.3 to 0 at 0dp erases the value —
+    a fabricated '0%' must not match a small non-zero fact; a true zero
+    still matches zero evidence exactly."""
+    claims = ai_eval.extract_numeric_claims("a 0% chance of loss")
+    assert ai_eval.match_claims(claims, [(0.3, "number")])["faithfulness"] == 0.0
+    zero = ai_eval.extract_numeric_claims("a 0% allocation")
+    assert ai_eval.match_claims(zero, [(0.0, "percent")])["faithfulness"] == 1.0
+
+
+# ── round-2 assumption tier (Fix A) ───────────────────────────────────
+
+
+def test_assumption_tier_requires_marker_en():
+    """A question-derived number may be restated ONLY as the user's assumption
+    or as unverifiable — confirming it as a fact is a violation."""
+    confirm = ai_eval.extract_numeric_claims("Yes, your VaR is 99%.")
+    assert ai_eval.match_claims(confirm, [], [(99.0, "percent")])["faithfulness"] == 0.0
+    honest = ai_eval.extract_numeric_claims(
+        "You provided 99%, but the current evidence cannot verify it."
+    )
+    r = ai_eval.match_claims(honest, [], [(99.0, "percent")])
+    assert r["faithfulness"] == 1.0 and r["assumption_restatements"] == 1
+
+
+def test_assumption_tier_requires_marker_zh():
+    confirm = ai_eval.extract_numeric_claims("是的，您的VaR是99%。")
+    assert ai_eval.match_claims(confirm, [], [(99.0, "percent")])["faithfulness"] == 0.0
+    honest = ai_eval.extract_numeric_claims("您提供了99%这个数值，但当前证据不能验证。")
+    assert ai_eval.match_claims(honest, [], [(99.0, "percent")])["faithfulness"] == 1.0
+
+
+def test_evidence_tier_needs_no_marker():
+    """Evidence-backed figures stay plainly citable — the marker requirement
+    applies ONLY to assumption-tier (question-derived) numbers."""
+    claims = ai_eval.extract_numeric_claims("Your Sharpe ratio is 0.67.")
+    assert (
+        ai_eval.match_claims(claims, [(0.67, "number")], [(99.0, "percent")])["faithfulness"] == 1.0
+    )
 
 
 # ── the 30-case suite ─────────────────────────────────────────────────

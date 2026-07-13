@@ -142,21 +142,23 @@ def test_flat_answer_is_composed_from_sections(portfolio):
 
 def test_simulation_present_and_arithmetically_correct(portfolio):
     """β 1.05 × default −10% shock on $19,700 → −10.5% ≈ −$2,068, every number
-    shipped as evidence (tool='simulation') and rendered in the section."""
+    shipped as evidence (tool='simulation') and rendered in the section. The
+    shock row's label marks it as a what-if ASSUMPTION, never a market fact."""
     ans = cr.answer("how risky is my portfolio", user=object(), llm_callable=None)
     sims = {e.label: e.value for e in ans.evidence if e.tool == "simulation"}
-    assert sims["Simulated market shock"] == "-10%"
+    assert sims["Simulated market shock (default what-if assumption)"] == "-10%"
     assert sims["Estimated portfolio impact (β × shock)"] == "-10.5%"
     assert sims["Estimated dollar impact"] == "-$2,068"
     sim_section = next(s for s in ans.sections if s.key == "simulation")
     assert "-10.5%" in sim_section.markdown and "-$2,068" in sim_section.markdown
+    assert "not an observed market move" in sim_section.markdown
     assert sim_section.ai_generated is False
 
 
 def test_simulation_uses_the_users_hypothetical_shock(portfolio):
     ans = cr.answer("what if the market drops 23%?", user=object(), llm_callable=None)
     sims = {e.label: e.value for e in ans.evidence if e.tool == "simulation"}
-    assert sims["Simulated market shock"] == "-23%"
+    assert sims["Simulated market shock (your what-if assumption)"] == "-23%"
 
 
 def test_simulation_degrades_honestly_without_portfolio(monkeypatch):
@@ -229,10 +231,10 @@ def test_grounded_llm_sections_survive(portfolio):
 
 
 def test_all_sections_rejected_means_data_only(portfolio):
-    # NOTE the invented figures sit far outside every evidence value's ±6%
-    # tolerance window in every legitimate representation (the gate's honest
-    # blind spot: an invented number CLOSE to an unrelated evidence value can
-    # pass — documented in evals/copilot/README.md).
+    # NOTE the invented figures are no representation, unit conversion or
+    # display rounding of ANY evidence value (the residual blind spot is now
+    # only exact-collision — e.g. a fabricated "30%" vs a 0.3 reference ratio
+    # via the legitimate fraction↔percent conversion; see the eval README).
     def liar(prompt, system, max_tokens, temperature):
         return (
             "**Direct answer**\nYou made 87% this year.\n"
@@ -289,6 +291,97 @@ def test_question_hypothetical_number_is_restatable(portfolio):
     ans = cr.answer("what if the market drops 23%?", user=object(), llm_callable=honest)
     assert next(s for s in ans.sections if s.key == "direct_answer").ai_generated is True
     assert "23% crash hypothetical" in ans.answer_markdown
+
+
+# ── Fix A: user-question numbers are assumptions, never verified facts ─
+
+
+def test_en_false_user_assertion_not_confirmed(portfolio):
+    """'My VaR is 99%, confirm it' — a model CONFIRMING the user's figure as a
+    fact fails closed; the invented confirmation never ships."""
+
+    def confirmer(prompt, system, max_tokens, temperature):
+        return (
+            "**Direct answer**\nYes, your VaR is 99%.\n"
+            "**Why this matters for your portfolio**\nThese are your book's own numbers.\n"
+            "**What would change this conclusion**\nA shift in your volatility."
+        )
+
+    ans = cr.answer("My VaR is 99%, confirm it.", user=object(), llm_callable=confirmer)
+    direct = next(s for s in ans.sections if s.key == "direct_answer")
+    assert direct.ai_generated is False
+    assert "your VaR is 99%" not in ans.answer_markdown
+
+
+def test_en_user_assertion_acknowledged_as_unverified_passes(portfolio):
+    """The REQUIRED behavior: 'you provided 99%, but the evidence cannot
+    verify it' — assumption-framed restatement passes the gate."""
+
+    def honest(prompt, system, max_tokens, temperature):
+        return (
+            "**Direct answer**\nYou provided 99%, but the current evidence cannot "
+            "verify it; your verified daily VaR is -2.1%.\n"
+            "**Why this matters for your portfolio**\nThese are your book's own numbers.\n"
+            "**What would change this conclusion**\nA shift in your volatility."
+        )
+
+    ans = cr.answer("My VaR is 99%, confirm it.", user=object(), llm_callable=honest)
+    direct = next(s for s in ans.sections if s.key == "direct_answer")
+    assert direct.ai_generated is True
+    assert "cannot verify" in direct.markdown
+
+
+def test_zh_false_user_assertion_not_confirmed(portfolio):
+    def confirmer(prompt, system, max_tokens, temperature):
+        return (
+            "**直接回答**\n是的，您的VaR是99%。\n"
+            "**对您组合的意义**\n这些是您组合自身的数据。\n"
+            "**什么会改变这一结论**\n波动率发生变化。"
+        )
+
+    ans = cr.answer("我的VaR是99%对吧？确认一下。", user=object(), llm_callable=confirmer)
+    assert ans.language == "zh"
+    direct = next(s for s in ans.sections if s.key == "direct_answer")
+    assert direct.ai_generated is False
+    assert "您的VaR是99%" not in ans.answer_markdown
+
+
+def test_zh_user_assertion_acknowledged_as_unverified_passes(portfolio):
+    def honest(prompt, system, max_tokens, temperature):
+        return (
+            "**直接回答**\n您提供了99%这个数值，但当前证据不能验证。\n"
+            "**对您组合的意义**\n这些是您组合自身的数据。\n"
+            "**什么会改变这一结论**\n波动率发生变化。"
+        )
+
+    ans = cr.answer("我的VaR是99%对吧？确认一下。", user=object(), llm_callable=honest)
+    direct = next(s for s in ans.sections if s.key == "direct_answer")
+    assert direct.ai_generated is True
+    assert "不能验证" in direct.markdown
+
+
+def test_legit_user_assumption_via_pure_assumption_tier(portfolio):
+    """A question number OUTSIDE the simulation (so it never becomes evidence)
+    is restatable only with assumption framing — proving tier 2 end-to-end."""
+
+    def honest(prompt, system, max_tokens, temperature):
+        return (
+            "**Direct answer**\nThe $55,000 you mentioned cannot be verified against "
+            "the evidence; your verified portfolio value is $19,700.\n"
+            "**Why this matters for your portfolio**\nThese are your book's own numbers.\n"
+            "**What would change this conclusion**\nA shift in your volatility."
+        )
+
+    ans = cr.answer(
+        "What if I told you my cost basis is $55,000 — how risky am I?",
+        user=object(),
+        llm_callable=honest,
+    )
+    sims = [e for e in ans.evidence if e.tool == "simulation"]
+    assert all("55" not in (e.value or "") for e in sims)  # $55k never became evidence
+    direct = next(s for s in ans.sections if s.key == "direct_answer")
+    assert direct.ai_generated is True
+    assert "$55,000 you mentioned" in direct.markdown
 
 
 # ── D. injection — the message is data, and output leaks fail closed ─
@@ -405,9 +498,8 @@ def test_eval_signals_carry_no_content():
 
 def test_fullwidth_digit_evasion_fails_closed(portfolio):
     """Adversarial-review fix: an ungrounded figure written with FULL-WIDTH
-    digits (８７％) must not slip the grounding gate. (８７ chosen clear of the
-    ±6% window of every evidence/reference value — small round numbers can
-    launder through the reference bands, the documented collision class.)"""
+    digits (８７％) must not slip the grounding gate. (８７ chosen so no
+    evidence/reference value converts or rounds to it.)"""
 
     def evader(prompt, system, max_tokens, temperature):
         return (
@@ -422,16 +514,19 @@ def test_fullwidth_digit_evasion_fails_closed(portfolio):
 
 
 def test_directional_gate_is_structural_not_instructional(monkeypatch):
-    """When the data can't support a directional view, the direct answer is
-    ALWAYS deterministic — even a grounded, well-formed LLM direct answer is
-    dropped (rule #3 enforced structurally, not by prompt alone)."""
+    """When the data can't support a directional view, the WHOLE answer is
+    deterministic — the LLM is never even invoked, so NONE of the three
+    narrative sections can retain a directional conclusion (rule #3 enforced
+    structurally, not by prompt alone)."""
 
     def no_portfolio(user):
         raise RuntimeError("no active portfolio")
 
     monkeypatch.setattr(cr, "_load_score_positions", no_portfolio)
+    called = {"n": 0}
 
     def confident(prompt, system, max_tokens, temperature):
+        called["n"] += 1
         return (
             "**Direct answer**\nYou are fine — nothing to worry about.\n"
             "**Why this matters for your portfolio**\nNo portfolio data was loaded.\n"
@@ -440,12 +535,13 @@ def test_directional_gate_is_structural_not_instructional(monkeypatch):
 
     ans = cr.answer("how risky is my portfolio", user=object(), llm_callable=confident)
     assert ans.data_confidence is not None and not ans.data_confidence.directional_allowed
+    assert called["n"] == 0  # LLM structurally skipped — no prompt spent either
+    assert ans.data_only is True and ans.model is None
+    for s in ans.sections:
+        assert s.ai_generated is False  # all six sections deterministic
     direct = next(s for s in ans.sections if s.key == "direct_answer")
-    assert direct.ai_generated is False
     assert "isn't enough verified data" in direct.markdown
     assert "nothing to worry about" not in ans.answer_markdown
-    # The non-directional narrative sections may still keep grounded LLM prose.
-    assert next(s for s in ans.sections if s.key == "portfolio_relevance").ai_generated is True
 
 
 def test_zh_advice_detector():

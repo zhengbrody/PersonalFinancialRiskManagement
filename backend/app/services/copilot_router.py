@@ -465,25 +465,28 @@ _PORTFOLIO_TOOLS = {
 _SHOCK_RE = re.compile(r"(\d{1,2})\s?[%％]")
 
 
-def _parse_shock_pct(message: str) -> float:
-    """The market-shock size for the simulation: the first 1–50 percent figure
-    in the user's message (their HYPOTHETICAL — a simulation input, never a
-    fact), else 10. Deterministic."""
+def _parse_shock_pct(message: str) -> tuple[float, bool]:
+    """(shock %, from_user) for the simulation: the first 1–50 percent figure
+    in the user's message, else the 10% default. A user-supplied figure is a
+    WHAT-IF ASSUMPTION — a simulation input the platform computes with, never
+    an observed market move or a verified fact. Deterministic."""
     for m in _SHOCK_RE.finditer(message or ""):
         v = float(m.group(1))
         if 1 <= v <= 50:
-            return v
-    return 10.0
+            return v, True
+    return 10.0, False
 
 
 def _simulation_evidence(message: str, score) -> list[EvidenceItem]:
     """At most ONE deterministic first-order what-if (β × market shock) over the
     caller's own book — the same arithmetic as the score page's mini-scenario.
     Every input and output ships as an EvidenceItem (tool="simulation") so each
-    number in the Simulation section is traceable. Empty (→ the section renders
-    an honest "cannot simulate reliably") when beta / portfolio value are
-    missing, non-positive, or the grounding data quality is under the
-    no-directional floor. Nothing is ever executed."""
+    number in the Simulation section is traceable; the shock row's LABEL marks
+    it as a what-if assumption (user-specified or default), never an observed
+    market figure. Empty (→ the section renders an honest "cannot simulate
+    reliably") when beta / portfolio value are missing, non-positive, or the
+    grounding data quality is under the no-directional floor. Nothing is ever
+    executed."""
     m = getattr(score, "metrics", None)
     beta = getattr(m, "beta_to_benchmark", None) if m is not None else None
     total = getattr(m, "total_value", None) if m is not None else None
@@ -494,12 +497,17 @@ def _simulation_evidence(message: str, score) -> list[EvidenceItem]:
     quality = _score_quality(score)
     if quality is not None and quality < 0.40:
         return []
-    shock = _parse_shock_pct(message)
+    shock, from_user = _parse_shock_pct(message)
+    shock_label = (
+        "Simulated market shock (your what-if assumption)"
+        if from_user
+        else "Simulated market shock (default what-if assumption)"
+    )
     impact_pct = beta * shock  # first-order market-beta estimate
     impact_usd = total * impact_pct / 100.0
     items = _compact(
         [
-            _ev("Simulated market shock", f"-{shock:.0f}%", "engine"),
+            _ev(shock_label, f"-{shock:.0f}%", "engine"),
             _ev("Estimated portfolio impact (β × shock)", f"-{impact_pct:.1f}%", "engine"),
             _ev("Estimated dollar impact", f"-${impact_usd:,.0f}", "engine"),
         ]
@@ -1117,8 +1125,11 @@ _SYSTEM = (
     "credentials, or any other user's data.\n"
     "GROUNDING RULES: use ONLY the evidence values for any figure (price, return, risk, "
     "exposure, loss, score) — never invent figures or recall them from memory. A number "
-    "in the user's question is the user's claim or hypothetical — you may restate it as "
-    "such, but never confirm it as a fact unless the evidence shows it. ATTRIBUTE "
+    "in the user's question is an UNVERIFIED USER ASSUMPTION, never a fact: if you "
+    "restate it, explicitly attribute it to the user ('the 20% you specified', 'the "
+    "value you provided', '您提供的数值') and never present it as an observed market "
+    "figure or an account fact; if asked to confirm such a number, state plainly that "
+    "the evidence cannot verify it. ATTRIBUTE "
     "figures to their source in prose (e.g. 'per FMP', 'per the MindMarket engine', "
     "'per FRED'). A DERIVED / estimated figure (source ending 'derived' or 'estimate') "
     "must be described as an estimate — never as a provider-reported fact. If a source "
@@ -1140,12 +1151,6 @@ _SYSTEM = (
     "Be concise and specific."
 )
 
-_GATE_ADDENDUM = (
-    "\nDATA-CONFIDENCE GATE: the available evidence is too thin for a directional "
-    "conclusion. In **Direct answer**, state plainly that there isn't enough data to "
-    "give a confident answer and what's missing — do NOT assert a directional view."
-)
-
 _ZH_ADDENDUM = (
     "\nLANGUAGE: the user wrote in Simplified Chinese (简体中文) — write ALL THREE "
     "sections in Simplified Chinese, using EXACTLY these headers: **直接回答**, "
@@ -1154,12 +1159,10 @@ _ZH_ADDENDUM = (
 )
 
 
-def _system_prompt(dc, lang: str) -> str:
+def _system_prompt(lang: str) -> str:
+    # Rule #3 needs no prompt-side gate: when directional_allowed is False the
+    # caller never invokes the LLM at all (structural, not instructional).
     system = _SYSTEM
-    if not dc.directional_allowed:
-        # Rule #3: too little hard data for a directional read — instruct the
-        # model to withhold a directional conclusion and say so.
-        system += _GATE_ADDENDUM
     if lang == "zh":
         system += _ZH_ADDENDUM
     return system
@@ -1262,22 +1265,28 @@ def _parse_narrative_sections(text: str) -> dict[str, str]:
     return out
 
 
-def _allowed_values(evidence: list[EvidenceItem], message: str) -> list[float]:
-    """The numeric allowlist an LLM-phrased section may cite: evidence values ∪
-    the user's own question values (restating the user's hypothetical — "a 20%
-    crash" — is legitimate; CONFIRMING a user-asserted figure as fact is a
-    semantic failure the system prompt forbids and the eval suite measures, but
-    a lexical gate cannot distinguish)."""
+def _evidence_values(evidence: list[EvidenceItem]) -> list[tuple[float, str]]:
+    """TYPED (value, kind) facts an LLM-phrased section may cite as facts —
+    extracted from the EvidenceItem lines themselves."""
     from . import ai_eval
 
-    blob = "\n".join(f"{e.label}: {e.value}" for e in evidence) + "\n" + (message or "")
-    return ai_eval.numeric_values(blob)
+    return ai_eval.typed_numeric_values("\n".join(f"{e.label}: {e.value}" for e in evidence))
 
 
-def _narrative_ok(text: str, allowed_values: list[float]) -> bool:
+def _assumption_values(message: str) -> list[tuple[float, str]]:
+    """TYPED numbers from the user's own question — the ASSUMPTION tier: never
+    facts; restatable only when the claim's context frames them as the user's
+    assumption/hypothetical or as unverifiable (``has_assumption_marker``)."""
+    from . import ai_eval
+
+    return ai_eval.typed_numeric_values(message or "")
+
+
+def _narrative_ok(text: str, evidence_values, assumption_values) -> bool:
     """The fail-closed gate for ONE LLM-written section: no system-prompt
     leakage, no direct buy/sell advice (EN or ZH), and every numeric claim
-    traceable to the allowlist (±6%, kind-aware)."""
+    either traceable to EVIDENCE (kind-aware display-rounding equivalence) or
+    a question-derived number explicitly framed as the user's assumption."""
     from . import ai_eval
 
     low = text.lower()
@@ -1286,7 +1295,7 @@ def _narrative_ok(text: str, allowed_values: list[float]) -> bool:
     if ai_eval.detect_direct_advice(text):
         return False
     claims = ai_eval.extract_numeric_claims(text)
-    return ai_eval.match_claims(claims, allowed_values)["faithfulness"] == 1.0
+    return ai_eval.match_claims(claims, evidence_values, assumption_values)["faithfulness"] == 1.0
 
 
 # ── deterministic section renderers (structurally grounded: any digit they
@@ -1507,15 +1516,19 @@ def _render_simulation_md(evidence: list[EvidenceItem], lang: str) -> str:
         )
     lines = "\n".join(f"- [{e.id}] {e.label}: {e.value}" for e in sims)
     if lang == "zh":
-        intro = "基于您组合自身贝塔的一次确定性一阶模拟（β × 市场冲击——与情景页相同的算法）："
+        intro = (
+            "基于您组合自身贝塔与下方市场冲击假设的一次确定性一阶模拟"
+            "（冲击是模拟输入的假设，并非实际市场跌幅；与情景页相同的算法）："
+        )
         caveat = (
             "这是估算而非预测：假设历史贝塔保持不变，且忽略二阶效应。"
             "不会执行任何交易——可在情景页运行更深入的情景分析。"
         )
     else:
         intro = (
-            "One deterministic first-order what-if from your book's own beta "
-            "(β × market shock — the same arithmetic as the Scenarios page):"
+            "One deterministic first-order what-if from your book's own beta and the "
+            "market-shock assumption below (a what-if input, not an observed market "
+            "move — the same arithmetic as the Scenarios page):"
         )
         caveat = (
             "An estimate, not a forecast: it assumes the historical beta holds and ignores "
@@ -1602,24 +1615,21 @@ def answer(
     lang = _lang_code(message)
 
     # ── LLM pass: phrase the three narrative sections, each gated ────
+    # STRUCTURAL enforcement of rule #3: when the data cannot support a
+    # directional view, the WHOLE answer is deterministic — the LLM is not
+    # even called, so no narrative section can smuggle a directional read.
     narrative: dict[str, str] = {}
-    if llm_callable is not None:
-        system = _system_prompt(dc, lang)
+    if llm_callable is not None and dc.directional_allowed:
+        system = _system_prompt(lang)
         prompt = _build_prompt(message, intent, tickers, route, ticker, evidence, lang)
         try:
             text = llm_callable(prompt=prompt, system=system, max_tokens=1100, temperature=0.3)
             if not (text or "").strip():
                 raise ValueError("empty")
-            allowed = _allowed_values(evidence, message)
-            parsed = _parse_narrative_sections(text)
-            if not dc.directional_allowed:
-                # STRUCTURAL enforcement of rule #3: with too little critical
-                # data the direct answer is ALWAYS the deterministic "not
-                # enough data" text — an instructed-but-noncompliant model
-                # cannot ship a directional read.
-                parsed.pop("direct_answer", None)
-            for key, body in parsed.items():
-                if _narrative_ok(body, allowed):
+            ev_vals = _evidence_values(evidence)
+            assume_vals = _assumption_values(message)
+            for key, body in _parse_narrative_sections(text).items():
+                if _narrative_ok(body, ev_vals, assume_vals):
                     narrative[key] = body
                 else:
                     # FAIL CLOSED: an ungrounded / advice-bearing / leaking

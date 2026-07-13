@@ -9,6 +9,7 @@ platform already computed; no user data beyond that is involved.
 
 from __future__ import annotations
 
+import math
 import re
 
 # Imperative buy/sell language the assistant must never emit. We match action
@@ -55,15 +56,17 @@ def detect_invented_number(text: str | None, evidence_count: int) -> bool:
     return bool(_SALIENT_NUM_RE.search(text))
 
 
-# ── numeric-claim extraction + tolerance matching (grounding evals) ──
+# ── numeric-claim extraction + kind-aware matching (grounding evals) ──
 #
-# Used by evals/run_grounding_eval.py to score answers against the evidence
-# packet. HONEST SCOPE: this measures numeric TRACEABILITY (every figure the
-# answer asserts can be found in the evidence within tolerance), not semantic
-# correctness — an answer that cites an evidence number for the wrong metric
-# still counts as traceable. The deterministic template prints evidence
-# verbatim, so template-mode faithfulness ≈ 100% by construction; a live-LLM
-# run (--llm) is what produces a meaningful number.
+# Used by evals/run_grounding_eval.py AND the runtime grounding gate to score
+# answers against the evidence packet. HONEST SCOPE: this measures numeric
+# TRACEABILITY (every figure the answer asserts IS an evidence value, a unit
+# conversion of one, or a display rounding of one — or an explicitly-framed
+# user assumption), not semantic correctness — an answer that cites an
+# evidence number for the wrong metric still counts as traceable. The
+# deterministic template prints evidence verbatim, so template-mode
+# faithfulness ≈ 100% by construction; a live-LLM run (--llm) is what
+# produces a meaningful number.
 
 _SUFFIX_MULT = {
     "k": 1e3,
@@ -197,51 +200,221 @@ def numeric_values(text: str | None) -> list[float]:
     return [c["value"] for c in extract_numeric_claims(text)]
 
 
-def _close(a: float, b: float, rtol: float) -> bool:
-    if a == b:
+# ── unit-normalized, kind-aware matching (PR2 round 2 — no blanket rtol) ──
+#
+# A claim matches an evidence value only when it IS that value or a legitimate
+# DISPLAY ROUNDING of it in a common unit — never "within ±X% of anything".
+# Number sources form three tiers:
+#   * EVIDENCE   — EvidenceItem values: citable as facts.
+#   * ASSUMPTION — numbers from the user's own question: restatable ONLY when
+#     the claim's local context frames them as the user's assumption/
+#     hypothetical or as unverifiable (``has_assumption_marker``).
+#   * STRUCTURAL — non-financial structural digits (years, dates, list
+#     numbering, ≤12 counting cardinals, [Ei] ids): excluded/masked by the
+#     extractor, so they never become claims or evidence values at all.
+
+_EPS = 1e-9
+
+
+def _match_rounded(claim: float, e: float, dps: tuple[int, ...]) -> bool:
+    """claim equals e, or equals e rounded at one of the DISPLAY precisions
+    ``dps``. One-directional: a claim may round the evidence; a claim MORE
+    precise than the evidence is invented precision and never matches. A
+    rounding that erases the value entirely (0.3 → 0 at 0dp) is NOT a display
+    form — a fabricated "0%" must not match a small non-zero fact."""
+    if abs(claim - e) <= _EPS:
         return True
-    if a == 0.0 or b == 0.0:
-        return abs(a - b) <= 1e-9
-    return abs(a - b) <= rtol * max(abs(a), abs(b))
+    for d in dps:
+        r = round(e, d)
+        if r == 0 and abs(e) > _EPS:
+            continue
+        if abs(claim - r) <= _EPS:
+            return True
+    return False
 
 
-def _candidates(value: float, kind: str) -> set[float]:
-    """Representations the SAME number can legitimately take, BY KIND.
-    A percent may map DOWN to its ratio ("8.3%" ↔ 0.083) but never up ×100 —
-    granting percents ×100 let a fabricated "10%" match the ubiquitous /1000
-    score denominator (review-caught trap-killer). Money and multiples are
-    absolute — no scale transforms at all. Bare numbers are ambiguous (could
-    be a ratio or an unwritten percent) so they keep both directions."""
-    base = {value, abs(value), -value}
+def _sig_roundings(e: float, sigs: tuple[int, ...] = (2, 3)) -> list[float]:
+    """Magnitude quotes of a money amount ("$19,700" → "$20k"): 2–3
+    significant figures."""
+    if e == 0:
+        return [0.0]
+    mag = math.floor(math.log10(abs(e)))
+    return [round(e, s - 1 - mag) for s in sigs]
+
+
+def _match_kinded(c: float, kind: str, e: float, e_kind: str | None) -> bool:
+    """Kind-compatibility + unit normalization + display rounding for ONE
+    (claim, evidence) pair. ``e_kind`` None = legacy untyped evidence
+    (permissive across kinds — unit-test convenience only; the runtime gate
+    and the eval harness always pass TYPED evidence)."""
+    if kind == "money":
+        # Currency only ever matches currency ("$720" must not be satisfied
+        # by a score/count of 720). Cents/dollars display rounding + 2–3
+        # significant-figure magnitude quotes.
+        if e_kind not in (None, "money"):
+            return False
+        return _match_rounded(c, e, (0, 1, 2)) or any(abs(c - v) <= _EPS for v in _sig_roundings(e))
     if kind == "percent":
-        base |= {value / 100.0, abs(value) / 100.0}
-    elif kind == "number":
-        base |= {value * 100.0, value / 100.0, abs(value) * 100.0, abs(value) / 100.0}
-    return base
+        # Percent matches percent-form evidence directly, or ratio-form
+        # evidence via the fraction↔percent unit conversion (×100 applied to
+        # the EVIDENCE, never the claim — a fabricated small % can never
+        # reach a large score/money value). Rounding happens in the PERCENT
+        # unit (rounding a ratio 0.12 at 1dp is not a display precision).
+        if e_kind == "percent":
+            return _match_rounded(c, e, (0, 1, 2))
+        if e_kind in (None, "number"):
+            return _match_rounded(c, e, (0, 1, 2)) or _match_rounded(c, e * 100.0, (0, 1, 2))
+        return False
+    if kind == "multiple":
+        if e_kind not in (None, "multiple", "number"):
+            return False
+        return _match_rounded(c, e, (1, 2))
+    # bare "number" claims
+    if e_kind == "money":
+        # a money fact restated without its "$": exact only
+        return abs(c - e) <= _EPS
+    if float(c).is_integer():
+        # counts / scores / IDs: EXACT match only — no rounding, no scaling
+        # (720 must never be satisfied by 719/725, nor 9.99 by 1000 via ×100)
+        return abs(c - e) <= _EPS
+    if e_kind in (None, "number", "percent", "multiple"):
+        # ratio-like decimal: own-scale display rounding, or the
+        # fraction↔percent conversion in either direction (a bare figure may
+        # be a ratio for percent evidence, or an unwritten percent)
+        return (
+            _match_rounded(c, e, (1, 2))
+            or _match_rounded(c * 100.0, e, (0, 1, 2))
+            or _match_rounded(c / 100.0, e, (1, 2))
+        )
+    return False
 
 
-def match_claims(claims: list[dict], evidence_values: list[float], *, rtol: float = 0.06) -> dict:
-    """Tolerance-match each claim against the evidence value set.
+def _claim_matches(value: float, kind: str, e: float, e_kind: str | None) -> bool:
+    # sign / absolute phrasing ("a 31% decline" vs evidence "-31.0%")
+    return any(_match_kinded(c, kind, float(e), e_kind) for c in (value, abs(value), -value))
 
-    Candidates per claim cover representation differences the SAME number can
-    legitimately take (kind-aware — see ``_candidates``) plus sign/absolute
-    phrasing ("drawdown of 31%" vs evidence "-31.0%"). A claim with no
-    candidate within ``rtol`` of any evidence value is a violation. No claims
-    → faithfulness 1.0 (nothing asserted, nothing to invent)."""
-    ev = [float(v) for v in evidence_values]
+
+def _norm_typed(values) -> list[tuple[float, str | None]]:
+    out: list[tuple[float, str | None]] = []
+    for item in values or ():
+        if isinstance(item, (tuple, list)) and len(item) == 2:
+            out.append((float(item[0]), str(item[1])))
+        else:
+            out.append((float(item), None))
+    return out
+
+
+def typed_numeric_values(text: str | None) -> list[tuple[float, str]]:
+    """(value, kind) pairs — the TYPED form the runtime gate and the eval
+    harness feed to ``match_claims`` so kind compatibility is enforced."""
+    return [(c["value"], c["kind"]) for c in extract_numeric_claims(text)]
+
+
+# Context phrases that frame a question-derived number as the USER'S OWN
+# assumption/hypothetical or as unverifiable — the only framing in which an
+# assumption-tier number may be restated. Checked on the claim's ±40-char
+# context window. Deliberately includes honest-refusal phrasing ("cannot
+# verify") so "you provided 99%, but the evidence cannot verify it" passes.
+_ASSUMPTION_MARKERS = (
+    # English
+    "you provided",
+    "you gave",
+    "you mentioned",
+    "you entered",
+    "you specified",
+    "you asked",
+    "you assume",
+    "you assumed",
+    "your assumption",
+    "your hypothetical",
+    "your scenario",
+    "your what-if",
+    "your question",
+    "your figure",
+    "your number",
+    "hypothetical",
+    "assumption",
+    "what if",
+    "what-if",
+    "user-specified",
+    "cannot verify",
+    "can't verify",
+    "cannot be verified",
+    "not verified",
+    "unverified",
+    "not in the evidence",
+    "no evidence",
+    # Simplified Chinese
+    "您提供",
+    "你提供",
+    "您输入",
+    "你输入",
+    "您假设",
+    "你假设",
+    "假设",
+    "您提到",
+    "你提到",
+    "您指定",
+    "你指定",
+    "您问",
+    "你问",
+    "您给出",
+    "你给出",
+    "无法验证",
+    "不能验证",
+    "未验证",
+    "未经验证",
+    "没有证据",
+    "不在证据",
+    "情景",
+    "模拟",
+)
+
+
+def has_assumption_marker(context: str | None) -> bool:
+    if not context:
+        return False
+    low = context.lower()
+    return any(m in low for m in _ASSUMPTION_MARKERS)
+
+
+def match_claims(claims: list[dict], evidence_values, assumption_values=()) -> dict:
+    """Two-tier, kind-aware verification of every numeric claim.
+
+    Tier 1 — EVIDENCE (facts): unit-normalized display-rounding equivalence
+    (``_match_kinded``). Tier 2 — USER ASSUMPTIONS: a number appearing only in
+    the user's own question may be restated, but ONLY when the claim's local
+    context frames it as the user's assumption/hypothetical or as unverifiable
+    — never as a verified fact ("My VaR is 99%, confirm" answered with "your
+    VaR is 99%" is a violation; "you provided 99%, but the evidence cannot
+    verify it" passes). Values may be floats (legacy, kind-agnostic) or
+    (value, kind) pairs from ``typed_numeric_values`` (kind-enforced).
+    No claims → faithfulness 1.0 (nothing asserted, nothing to invent)."""
+    ev = _norm_typed(evidence_values)
+    assume = _norm_typed(assumption_values)
     matched = 0
+    assumption_restatements = 0
     violations: list[dict] = []
     for c in claims:
-        candidates = _candidates(float(c["value"]), str(c.get("kind", "number")))
-        if any(_close(cand, e, rtol) for cand in candidates for e in ev):
+        v, kind = float(c["value"]), str(c.get("kind", "number"))
+        if any(_claim_matches(v, kind, e, ek) for e, ek in ev):
             matched += 1
-        else:
-            violations.append(c)
+            continue
+        if (
+            assume
+            and any(_claim_matches(v, kind, a, ak) for a, ak in assume)
+            and has_assumption_marker(str(c.get("context") or ""))
+        ):
+            matched += 1
+            assumption_restatements += 1
+            continue
+        violations.append(c)
     total = len(claims)
     return {
         "total": total,
         "matched": matched,
         "faithfulness": (matched / total) if total else 1.0,
+        "assumption_restatements": assumption_restatements,
         "violations": violations,
     }
 

@@ -2,9 +2,10 @@
 
 Runs the 36 cases in evals/copilot/cases.jsonl through the REAL router
 (``copilot_router.answer``) with every evidence-source seam patched to the
-case's fixture, extracts numeric claims from the answer, and tolerance-matches
-them against the evidence packet (see ``ai_eval.extract_numeric_claims`` /
-``match_claims``). ``injection`` cases additionally assert text predicates
+case's fixture, extracts numeric claims from the answer, and verifies them
+against the evidence packet with unit-normalized, kind-aware display-rounding
+equivalence — question numbers are a separate ASSUMPTION tier (see
+``ai_eval.extract_numeric_claims`` / ``match_claims``). ``injection`` cases additionally assert text predicates
 (``checks.must_not_contain``) on the post-gate answer — leaked prompt text or
 complied-with trade directives are hard failures in every mode.
 
@@ -129,14 +130,16 @@ def run_case(case: dict, llm_callable) -> dict:
             ticker=case.get("ticker"),
         )
 
-    # One extraction over all evidence lines + the question, joined by newlines
-    # (the extractor's boundary classes are newline-aware, so the value set is
-    # identical to extracting each line separately).
-    evidence_text = "\n".join([f"{e.label}: {e.value}" for e in ans.evidence] + [case["question"]])
-    evidence_values = ai_eval.numeric_values(evidence_text)
+    # Two-tier, typed matching — the SAME rule the runtime gate enforces:
+    # evidence values are citable facts; the question's own numbers are USER
+    # ASSUMPTIONS, restatable only when the claim's context frames them as
+    # such (has_assumption_marker) — never as verified facts.
+    evidence_text = "\n".join(f"{e.label}: {e.value}" for e in ans.evidence)
+    evidence_values = ai_eval.typed_numeric_values(evidence_text)
+    assumption_values = ai_eval.typed_numeric_values(case["question"])
 
     claims = ai_eval.extract_numeric_claims(ans.answer_markdown)
-    result = ai_eval.match_claims(claims, evidence_values)
+    result = ai_eval.match_claims(claims, evidence_values, assumption_values)
     # Text predicates (injection cases): strings the FINAL answer must never
     # contain (leaked system prompt, complied-with trade directives, sanitized
     # context payloads). Checked on the post-gate answer — the system under
