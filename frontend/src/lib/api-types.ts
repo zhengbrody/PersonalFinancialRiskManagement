@@ -2037,14 +2037,48 @@ export interface components {
              * @default false
              */
             data_only?: boolean;
+            /** Disclaimer */
+            disclaimer?: string | null;
             /** Evidence */
             evidence?: components["schemas"]["EvidenceItem"][];
             /** Intent */
             intent: string;
+            /**
+             * Language
+             * @default en
+             * @enum {string}
+             */
+            language?: "en" | "zh";
             /** Model */
             model?: string | null;
+            /** Sections */
+            sections?: components["schemas"]["CopilotAnswerSection"][];
             /** Tickers */
             tickers?: string[];
+        };
+        /**
+         * CopilotAnswerSection
+         * @description One of the six structured answer sections (closed key set, fixed order).
+         *
+         *     ``ai_generated`` is True only for a narrative section whose prose the LLM
+         *     wrote AND that passed the grounding gate; the deterministic sections
+         *     (evidence / data_confidence / simulation) are always False.
+         */
+        CopilotAnswerSection: {
+            /**
+             * Ai Generated
+             * @default false
+             */
+            ai_generated?: boolean;
+            /**
+             * Key
+             * @enum {string}
+             */
+            key: "direct_answer" | "portfolio_relevance" | "evidence" | "data_confidence" | "what_would_change" | "simulation";
+            /** Markdown */
+            markdown: string;
+            /** Title */
+            title: string;
         };
         /** CopilotAskRequest */
         CopilotAskRequest: {
@@ -2697,12 +2731,16 @@ export interface components {
          * @description One vetted fact the answer is allowed to use.
          */
         EvidenceItem: {
+            /** Id */
+            id?: string | null;
             /** Label */
             label: string;
             /** Source */
             source: string;
             /** Source Type */
             source_type?: string | null;
+            /** Tool */
+            tool?: string | null;
             /** Value */
             value: string;
         };

@@ -130,11 +130,12 @@ def test_answer_deterministic_without_llm(monkeypatch):
     ans = cr.answer("how risky is my portfolio", user=object(), llm_callable=None)
     assert ans.intent == "portfolio_diagnosis" and ans.data_only is True
     for section in (
-        "**Conclusion**",
+        "**Direct answer**",
+        "**Why this matters for your portfolio**",
         "**Evidence**",
-        "**Risks**",
-        "**Next Actions**",
-        "**Disclaimer**",
+        "**Data confidence & missing data**",
+        "**What would change this conclusion**",
+        "**Simulation**",
     ):
         assert section in ans.answer_markdown
     assert ans.evidence  # score evidence present
@@ -144,27 +145,38 @@ def test_answer_with_llm(monkeypatch):
     from backend.app.schemas import research as R
     from backend.app.services import research_factpack as rf
 
-    monkeypatch.setattr(rf, "build_fact_pack", lambda tk: R.FactPack(ticker=tk, price=100.0))
+    # A well-covered pack — factpack coverage is the quality floor, and the
+    # LLM only runs when the data supports a directional answer.
+    monkeypatch.setattr(
+        rf,
+        "build_fact_pack",
+        lambda tk: R.FactPack(ticker=tk, price=100.0, data_quality=R.DataQuality(coverage=1.0)),
+    )
 
     seen = {}
 
     def fake_llm(prompt, system, max_tokens, temperature):
         seen["prompt"] = prompt
         seen["system"] = system
-        return "**Conclusion**\nBuy.\n**Evidence**\n- Price: $100"
+        return (
+            "**Direct answer**\nBoth trade at $100 per the FMP data.\n"
+            "**Why this matters for your portfolio**\nGeneral context, not personalized.\n"
+            "**What would change this conclusion**\nNew price data."
+        )
 
     ans = cr.answer("compare AAPL vs MSFT", user=object(), llm_callable=fake_llm)
     assert ans.intent == "compare_tickers" and ans.data_only is False
     assert ans.tickers == ["AAPL", "MSFT"]
     assert "ONLY" in seen["system"]  # no-invented-numbers rule reaches the model
-    assert "EVIDENCE:" in seen["prompt"]
+    assert "EVIDENCE" in seen["prompt"]
+    assert "<user_question>" in seen["prompt"]  # message rides inside the data boundary
 
 
 def test_answer_llm_empty_falls_back(monkeypatch):
     monkeypatch.setattr(cr, "_load_score_positions", lambda user: ([], _Score()))
     ans = cr.answer("diagnose my portfolio", user=object(), llm_callable=lambda **k: "  ")
-    assert ans.data_only is True  # empty model output → deterministic 5-section
-    assert "**Conclusion**" in ans.answer_markdown
+    assert ans.data_only is True  # empty model output → deterministic six sections
+    assert "**Direct answer**" in ans.answer_markdown
 
 
 # ── endpoint ────────────────────────────────────────────────────────
@@ -192,12 +204,13 @@ def test_answer_chinese_question_forces_chinese_reply(monkeypatch):
 
     def fake_llm(prompt, system, max_tokens, temperature):
         seen["system"] = system
-        return "**结论**\n风险偏高。"
+        return "**直接回答**\n风险偏高。"
 
     ans = cr.answer("我的组合风险高吗？", user=object(), llm_callable=fake_llm)
     assert ans.data_only is False
+    assert ans.language == "zh"
     assert "简体中文" in seen["system"]
-    assert "结论" in seen["system"]  # translated section headers instructed
+    assert "直接回答" in seen["system"]  # translated section headers instructed
 
 
 def test_answer_english_question_keeps_default_system(monkeypatch):
@@ -213,21 +226,29 @@ def test_answer_english_question_keeps_default_system(monkeypatch):
 
 
 def test_answer_chinese_deterministic_without_llm(monkeypatch):
-    """No LLM key + Chinese question → the deterministic 5-section template
+    """No LLM key + Chinese question → the deterministic six-section answer
     itself comes back in Chinese (translated headers, no English sections)."""
     monkeypatch.setattr(cr, "_load_score_positions", lambda user: ([], _Score()))
     ans = cr.answer("我的组合风险高吗？", user=object(), llm_callable=None)
     assert ans.data_only is True
-    for section in ("**结论**", "**证据**", "**风险**", "**下一步**", "**免责声明**"):
+    assert ans.language == "zh"
+    for section in (
+        "**直接回答**",
+        "**对您组合的意义**",
+        "**证据**",
+        "**数据可信度与缺失数据**",
+        "**什么会改变这一结论**",
+        "**模拟**",
+    ):
         assert section in ans.answer_markdown
-    assert "**Conclusion**" not in ans.answer_markdown
+    assert "**Direct answer**" not in ans.answer_markdown
     assert "组合诊断" in ans.answer_markdown  # intent rendered in Chinese, not raw token
     assert "portfolio diagnosis" not in ans.answer_markdown
     assert ans.evidence  # evidence labels/values stay verbatim (data)
 
 
 def test_answer_chinese_llm_failure_falls_back_chinese(monkeypatch):
-    """The LLM-failure path uses the same deterministic template — a Chinese
+    """The LLM-failure path uses the same deterministic composer — a Chinese
     question must still get a Chinese fallback."""
     monkeypatch.setattr(cr, "_load_score_positions", lambda user: ([], _Score()))
 
@@ -236,8 +257,8 @@ def test_answer_chinese_llm_failure_falls_back_chinese(monkeypatch):
 
     ans = cr.answer("我的组合风险高吗？", user=object(), llm_callable=boom)
     assert ans.data_only is True
-    assert "**结论**" in ans.answer_markdown
-    assert "**Conclusion**" not in ans.answer_markdown
+    assert "**直接回答**" in ans.answer_markdown
+    assert "**Direct answer**" not in ans.answer_markdown
 
 
 # ── option-exposure evidence (Copilot option-awareness) ──────────────────────
@@ -531,7 +552,9 @@ def test_safe_context_ticker(ticker, expected):
 
 
 def test_invalid_route_and_ticker_never_reach_llm_prompt(monkeypatch):
-    monkeypatch.setattr(cr, "_gather", lambda *args, **kwargs: ([], None))
+    # A real portfolio so the answer is directional-allowed and the LLM runs
+    # (empty evidence would structurally skip the LLM — separately tested).
+    monkeypatch.setattr(cr, "_load_score_positions", lambda user: ([], _ScoreFull()))
     seen = {}
 
     def fake_llm(**kwargs):

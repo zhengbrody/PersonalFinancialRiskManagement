@@ -1510,6 +1510,17 @@
             "title": "Data Only",
             "type": "boolean"
           },
+          "disclaimer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disclaimer"
+          },
           "evidence": {
             "items": {
               "$ref": "#/components/schemas/EvidenceItem"
@@ -1519,6 +1530,15 @@
           },
           "intent": {
             "title": "Intent",
+            "type": "string"
+          },
+          "language": {
+            "default": "en",
+            "enum": [
+              "en",
+              "zh"
+            ],
+            "title": "Language",
             "type": "string"
           },
           "model": {
@@ -1531,6 +1551,13 @@
               }
             ],
             "title": "Model"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/CopilotAnswerSection"
+            },
+            "title": "Sections",
+            "type": "array"
           },
           "tickers": {
             "items": {
@@ -1545,6 +1572,43 @@
           "answer_markdown"
         ],
         "title": "CopilotAnswer",
+        "type": "object"
+      },
+      "CopilotAnswerSection": {
+        "description": "One of the six structured answer sections (closed key set, fixed order).\n\n``ai_generated`` is True only for a narrative section whose prose the LLM\nwrote AND that passed the grounding gate; the deterministic sections\n(evidence / data_confidence / simulation) are always False.",
+        "properties": {
+          "ai_generated": {
+            "default": false,
+            "title": "Ai Generated",
+            "type": "boolean"
+          },
+          "key": {
+            "enum": [
+              "direct_answer",
+              "portfolio_relevance",
+              "evidence",
+              "data_confidence",
+              "what_would_change",
+              "simulation"
+            ],
+            "title": "Key",
+            "type": "string"
+          },
+          "markdown": {
+            "title": "Markdown",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "markdown"
+        ],
+        "title": "CopilotAnswerSection",
         "type": "object"
       },
       "CopilotAskRequest": {
@@ -3858,6 +3922,17 @@
       "EvidenceItem": {
         "description": "One vetted fact the answer is allowed to use.",
         "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
           "label": {
             "title": "Label",
             "type": "string"
@@ -3876,6 +3951,17 @@
               }
             ],
             "title": "Source Type"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
           },
           "value": {
             "title": "Value",
