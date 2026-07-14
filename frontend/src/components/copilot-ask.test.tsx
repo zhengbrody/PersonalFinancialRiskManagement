@@ -14,6 +14,7 @@ import { ApiError } from "@/lib/api";
 const askMock = vi.fn();
 vi.mock("@/lib/queries", () => ({
   useCopilotAsk: () => askMock(),
+  useMyPortfolios: () => ({ data: undefined, isLoading: false, isError: false }),
 }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 

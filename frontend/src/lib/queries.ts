@@ -1290,13 +1290,130 @@ export type CopilotAnswer = z.infer<typeof copilotAnswerSchema>;
  */
 export function useCopilotAsk() {
   const { accessToken } = useAuth();
-  return useMutation<CopilotAnswer, Error, { message: string }>({
-    mutationFn: ({ message }) =>
+  return useMutation<
+    CopilotAnswer,
+    Error,
+    { message: string; route?: string; ticker?: string }
+  >({
+    mutationFn: ({ message, route, ticker }) =>
       apiFetch<CopilotAnswer>("/api/v1/copilot/ask", {
         method: "POST",
-        body: { message },
+        // route/ticker are page CONTEXT — they steer intent + tool choice on
+        // the backend but never become citable evidence.
+        body: { message, ...(route ? { route } : {}), ...(ticker ? { ticker } : {}) },
         authToken: accessToken ?? undefined,
         schema: copilotAnswerSchema,
+      }),
+  });
+}
+
+// ── Copilot PR3/PR4 — confirmed preferences + proactive insights ─────
+
+export const copilotPreferencesSchema = z.looseObject({
+  confirmed: z.boolean(),
+  risk_tolerance: z.number().nullish(),
+  investment_horizon: z.string().nullish(),
+  liquidity_need: z.string().nullish(),
+  concentration_limit: z.number().nullish(),
+  margin_limit: z.number().nullish(),
+  confirmed_at: z.string().nullish(),
+  updated_at: z.string().nullish(),
+});
+export type CopilotPreferences = z.infer<typeof copilotPreferencesSchema>;
+
+export type CopilotPreferencesInput = {
+  risk_tolerance?: number | null;
+  investment_horizon?: string | null;
+  liquidity_need?: string | null;
+  concentration_limit?: number | null;
+  margin_limit?: number | null;
+};
+
+/** The user's confirmed Copilot preferences. 503 = the feature isn't
+ * provisioned → surfaces as an error the card uses to hide itself. */
+export function useCopilotPreferences() {
+  const { accessToken } = useAuth();
+  return useQuery<CopilotPreferences, Error>({
+    queryKey: ["copilot-preferences"],
+    enabled: Boolean(accessToken),
+    retry: false,
+    staleTime: 60_000,
+    queryFn: () =>
+      apiFetch<CopilotPreferences>("/api/v1/copilot/preferences", {
+        authToken: accessToken ?? undefined,
+        schema: copilotPreferencesSchema,
+      }),
+  });
+}
+
+/** The explicit CONFIRMATION act — the only write path for preferences. */
+export function useSaveCopilotPreferences() {
+  const { accessToken } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation<CopilotPreferences, Error, CopilotPreferencesInput>({
+    mutationFn: (body) =>
+      apiFetch<CopilotPreferences>("/api/v1/copilot/preferences", {
+        method: "PUT",
+        body,
+        authToken: accessToken ?? undefined,
+        schema: copilotPreferencesSchema,
+      }),
+    onSuccess: (data) => queryClient.setQueryData(["copilot-preferences"], data),
+  });
+}
+
+/** Complete erasure of the stored preferences. */
+export function useClearCopilotPreferences() {
+  const { accessToken } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation<{ cleared?: boolean }, Error, void>({
+    mutationFn: () =>
+      apiFetch<{ cleared?: boolean }>("/api/v1/copilot/preferences", {
+        method: "DELETE",
+        authToken: accessToken ?? undefined,
+        schema: z.looseObject({ cleared: z.boolean().optional() }),
+      }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["copilot-preferences"] }),
+  });
+}
+
+const copilotInsightSchema = z.looseObject({
+  id: z.string(),
+  kind: z.string(),
+  severity: z.string(),
+  what_changed: z.string(),
+  why_it_matters: z.string(),
+  evidence: z.array(copilotEvidenceSchema),
+  confidence: z.string().nullish(),
+  as_of: z.string().nullish(),
+  missing_data: z.array(z.string()),
+  suggested_next_analysis: z
+    .looseObject({ label: z.string(), href: z.string() })
+    .nullish(),
+});
+export type CopilotInsight = z.infer<typeof copilotInsightSchema>;
+
+export const copilotInsightsSchema = z.looseObject({
+  insights: z.array(copilotInsightSchema),
+  as_of: z.string().nullish(),
+  portfolio_available: z.boolean(),
+  missing_data: z.array(z.string()).optional(),
+});
+export type CopilotInsights = z.infer<typeof copilotInsightsSchema>;
+
+/** Deterministic proactive insights — material changes only, never advice. */
+export function useCopilotInsights() {
+  const { accessToken } = useAuth();
+  return useQuery<CopilotInsights, Error>({
+    queryKey: ["copilot-insights"],
+    enabled: Boolean(accessToken),
+    retry: false,
+    staleTime: 5 * 60_000,
+    queryFn: () =>
+      apiFetch<CopilotInsights>("/api/v1/copilot/insights", {
+        authToken: accessToken ?? undefined,
+        schema: copilotInsightsSchema,
       }),
   });
 }

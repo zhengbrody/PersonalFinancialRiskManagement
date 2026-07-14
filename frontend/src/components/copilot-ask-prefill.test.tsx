@@ -13,6 +13,7 @@ vi.mock("@/lib/queries", () => ({
     data: undefined,
     error: null,
   }),
+  useMyPortfolios: () => ({ data: undefined, isLoading: false, isError: false }),
 }));
 
 function renderWithQuery(ui: React.ReactElement) {

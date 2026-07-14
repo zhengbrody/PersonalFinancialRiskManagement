@@ -70,15 +70,105 @@ const SCORE = {
   },
 };
 
-/** Structured /copilot/ask answer (matches copilotAnswerSchema). */
+/** Structured /copilot/ask answer (matches copilotAnswerSchema — PR2's
+ * six-section contract, so the section renderer is what e2e exercises). */
 const COPILOT_ANSWER = {
-  intent: "risk_overview",
+  intent: "portfolio_diagnosis",
   tickers: [],
   answer_markdown:
-    "**Conclusion:** Your book looks reasonably balanced for your stated risk level.",
-  evidence: [],
+    "**Direct answer**\nYour health score is 720/1000.\n\n**Evidence**\n- [E1] Health score: 720/1000",
+  evidence: [
+    {
+      label: "Health score",
+      value: "720/1000",
+      source: "engine",
+      source_type: "derived",
+      id: "E1",
+      tool: "portfolio_score",
+    },
+  ],
   data_only: false,
   model: "e2e-stub",
+  conviction: "medium",
+  language: "en",
+  disclaimer: "Educational analysis, not financial advice.",
+  sections: [
+    {
+      key: "direct_answer",
+      title: "Direct answer",
+      markdown: "Your health score is 720/1000.",
+      ai_generated: true,
+    },
+    {
+      key: "portfolio_relevance",
+      title: "Why this matters for your portfolio",
+      markdown: "These figures are computed from your own current holdings.",
+      ai_generated: false,
+    },
+    { key: "evidence", title: "Evidence", markdown: "- [E1] Health score: 720/1000" },
+    {
+      key: "data_confidence",
+      title: "Data confidence & missing data",
+      markdown: "Data confidence: **high**.",
+    },
+    {
+      key: "what_would_change",
+      title: "What would change this conclusion",
+      markdown: "Fresher price data or a change in your holdings.",
+    },
+    {
+      key: "simulation",
+      title: "Simulation",
+      markdown:
+        "- [E2] Simulated market shock (default what-if assumption): -10%",
+    },
+  ],
+};
+
+/** Confirmed-preferences roundtrip state (in-memory per page). */
+const PREFS_EMPTY = {
+  confirmed: false,
+  risk_tolerance: null,
+  investment_horizon: null,
+  liquidity_need: null,
+  concentration_limit: null,
+  margin_limit: null,
+  metadata: {},
+  confirmed_at: null,
+  updated_at: null,
+};
+
+/** One deterministic proactive insight for the strip. */
+const INSIGHTS = {
+  insights: [
+    {
+      id: "concentration:SPY",
+      kind: "concentration",
+      severity: "watch",
+      what_changed: "A single position is 100.0% of your book.",
+      why_it_matters:
+        "Above the one-quarter-of-book line, one name's bad day moves your whole portfolio.",
+      evidence: [
+        {
+          label: "Largest position weight",
+          value: "100.0%",
+          source: "engine",
+          id: "E1",
+          tool: "concentration",
+        },
+      ],
+      confidence: "high",
+      as_of: "2026-07-14T00:00:00+00:00",
+      missing_data: [],
+      suggested_next_analysis: {
+        label: "Review concentration in the Risk Report",
+        href: "/risk",
+      },
+    },
+  ],
+  as_of: "2026-07-14T00:00:00+00:00",
+  portfolio_available: true,
+  missing_data: [],
 };
 
 /** Server-Sent-Events frames for the streaming /copilot/chat/stream path. The
@@ -124,6 +214,40 @@ export async function mockBackend(page: Page): Promise<void> {
   );
   await page.route("**/api/v1/copilot/ask", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: envelope(COPILOT_ANSWER) }),
+  );
+  // Preferences: PUT confirms (echo back confirmed), GET starts unconfirmed,
+  // DELETE clears — enough for the confirm/clear UI flow.
+  await page.route("**/api/v1/copilot/preferences", (route) => {
+    const method = route.request().method();
+    if (method === "PUT") {
+      const sent = route.request().postDataJSON() as Record<string, unknown>;
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: envelope({
+          ...PREFS_EMPTY,
+          ...sent,
+          confirmed: true,
+          confirmed_at: "2026-07-14T00:00:00+00:00",
+          updated_at: "2026-07-14T00:00:00+00:00",
+        }),
+      });
+    }
+    if (method === "DELETE") {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: envelope({ cleared: true }),
+      });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: envelope(PREFS_EMPTY),
+    });
+  });
+  await page.route("**/api/v1/copilot/insights", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: envelope(INSIGHTS) }),
   );
   await page.route("**/api/v1/copilot/chat/stream", (route) =>
     route.fulfill({ status: 200, contentType: "text/event-stream", body: SSE_STREAM }),

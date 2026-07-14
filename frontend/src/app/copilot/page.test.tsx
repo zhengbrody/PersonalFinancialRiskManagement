@@ -19,6 +19,7 @@ const replaceMock = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: replaceMock, push: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
+  usePathname: () => "/copilot",
 }));
 
 const useAuthMock = vi.fn();
