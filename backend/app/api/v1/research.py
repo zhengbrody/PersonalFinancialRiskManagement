@@ -24,6 +24,7 @@ from ...core.responses import forbidden, ok, too_many_requests, unprocessable
 from ...schemas.envelope import Envelope
 from ...schemas.news import TickerNewsResponse
 from ...schemas.research import FactPack, VerdictRequest
+from ...schemas.research_coverage import ResearchCoverageOut
 from ...schemas.valuation import DCFRequest
 from ...services import news as news_svc
 from ...services import research_dcf as rdcf
@@ -61,6 +62,29 @@ def fact_pack(
         raise unprocessable(f"Could not build a FactPack for {ticker!r}.") from exc
 
     return ok({"fact_pack": fp.model_dump()}, request=request, started_at=started)
+
+
+@router.get(
+    "/{ticker}/coverage",
+    summary="Data-coverage matrix: which datasets back this ticker, freshness, typed missing reasons",
+    response_model=Envelope[ResearchCoverageOut],
+)
+def research_coverage(
+    request: Request,
+    ticker: str = Path(min_length=1, max_length=20),
+    user: AuthedUser = Depends(require_user),
+):
+    """Phase 5: ONE normalized coverage matrix assembled from the SAME cached
+    builders the page already triggers — per-dataset source tier / as-of /
+    staleness / typed missing reason, core fields graded critical, and the
+    shared DataConfidence enforcement block (thin critical coverage caps
+    conviction exactly like every other surface). Fail-soft: a dead provider
+    yields missing rows, never a 500."""
+    started = time.perf_counter()
+    from ...services.research_coverage import build_coverage
+
+    out = build_coverage(ticker)
+    return ok(out.model_dump(), request=request, started_at=started)
 
 
 @router.get(

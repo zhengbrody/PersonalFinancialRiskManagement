@@ -3717,6 +3717,39 @@
         "title": "Envelope[ReportResponse]",
         "type": "object"
       },
+      "Envelope_ResearchCoverageOut_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResearchCoverageOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[ResearchCoverageOut]",
+        "type": "object"
+      },
       "Envelope_RiskAlertsOutput_": {
         "additionalProperties": true,
         "properties": {
@@ -4991,6 +5024,17 @@
           "field": {
             "title": "Field",
             "type": "string"
+          },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
           },
           "label": {
             "anyOf": [
@@ -9920,6 +9964,64 @@
           "kind"
         ],
         "title": "ReportResponse",
+        "type": "object"
+      },
+      "ResearchCoverageOut": {
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "data_confidence": {
+            "$ref": "#/components/schemas/DataConfidence"
+          },
+          "disclaimer": {
+            "default": "Educational analysis, not financial advice.",
+            "title": "Disclaimer",
+            "type": "string"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/FieldProvenance"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "missing": {
+            "items": {
+              "$ref": "#/components/schemas/FieldProvenance"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "data_confidence"
+        ],
+        "title": "ResearchCoverageOut",
         "type": "object"
       },
       "ResearchVerdict": {
@@ -15295,6 +15397,51 @@
           }
         },
         "summary": "Consolidated research bundle \u2014 one fetch for the whole page (no credit)",
+        "tags": [
+          "research"
+        ]
+      }
+    },
+    "/api/v1/research/{ticker}/coverage": {
+      "get": {
+        "description": "Phase 5: ONE normalized coverage matrix assembled from the SAME cached\nbuilders the page already triggers \u2014 per-dataset source tier / as-of /\nstaleness / typed missing reason, core fields graded critical, and the\nshared DataConfidence enforcement block (thin critical coverage caps\nconviction exactly like every other surface). Fail-soft: a dead provider\nyields missing rows, never a 500.",
+        "operationId": "research_coverage_api_v1_research__ticker__coverage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ticker",
+            "required": true,
+            "schema": {
+              "maxLength": 20,
+              "minLength": 1,
+              "title": "Ticker",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ResearchCoverageOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Data-coverage matrix: which datasets back this ticker, freshness, typed missing reasons",
         "tags": [
           "research"
         ]
