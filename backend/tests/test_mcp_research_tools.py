@@ -62,17 +62,32 @@ def test_compare_tickers_skips_bad_one(monkeypatch):
 # ── macro context reuses market_regime ──────────────────────────────
 
 
-def test_get_macro_context(monkeypatch):
+def test_get_macro_context_with_real_dataclass(monkeypatch):
+    """The REAL return type: a frozen RegimeSnapshot dataclass. The old
+    hand-rolled `dict(snap)` fallback raised TypeError on it in production —
+    the fixture used to mask this with a model_dump-shaped fake."""
     from backend.app.services import market_regime
+    from backend.app.services.market_regime import (
+        FearGreedState,
+        RegimeSnapshot,
+        VixState,
+        YieldCurveState,
+    )
     from backend.mcp_server.tools import get_macro_context
 
-    class _Snap:
-        def model_dump(self):
-            return {"vix": {"current": 14.0}, "fear_greed": {"score": 60}}
-
-    monkeypatch.setattr(market_regime, "get_market_regime", lambda: _Snap())
+    snap = RegimeSnapshot(
+        vix=VixState(current=14.0, change=0.012, level="Low"),
+        fear_greed=FearGreedState(score=60.0, rating="Greed"),
+        yield_curve=YieldCurveState(status="Normal", spread_3m_10y=0.45, inverted=False),
+    )
+    monkeypatch.setattr(market_regime, "get_market_regime", lambda: snap)
     out = _run(get_macro_context({}))
     assert out["vix"]["current"] == 14.0
+    assert out["vix"]["change"] == 0.012  # fractional return, unchanged semantics
+    assert out["fear_greed"]["rating"] == "Greed"
+    assert out["yield_curve"]["spread_3m_10y"] == 0.45
+    # nested states are PLAIN dicts — no dataclass leaks into the tool payload
+    assert all(isinstance(v, dict) for v in out.values())
 
 
 # ── portfolio tools reuse the deterministic score ───────────────────

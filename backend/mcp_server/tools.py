@@ -326,9 +326,13 @@ async def get_macro_context(arguments: dict[str, Any]) -> dict[str, Any]:
     """Current market regime (VIX / Fear & Greed / yield curve) — the same
     fail-soft snapshot the /markets page shows."""
     from backend.app.services import market_regime
+    from backend.app.services._common import snapshot_to_mapping
 
+    # get_market_regime returns a frozen DATACLASS — the old hand-rolled
+    # `dict(snap)` fallback raised TypeError on it (same production bug as the
+    # Copilot macro branch); the shared helper converts recursively + fail-soft.
     snap = market_regime.get_market_regime()
-    return snap.model_dump() if hasattr(snap, "model_dump") else dict(snap)
+    return snapshot_to_mapping(snap) or {}
 
 
 # ── tool: get_portfolio_risk_drivers ───────────────────────────────
