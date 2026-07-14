@@ -72,6 +72,9 @@ export function CopilotPreferencesCard() {
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    // The Confirm button is disabled while saving, but pressing Enter in a
+    // number input still fires onSubmit — guard so a save can't double-fire.
+    if (save.isPending) return;
     const body = {
       risk_tolerance: form.risk_tolerance ? Number(form.risk_tolerance) : null,
       investment_horizon: form.investment_horizon || null,

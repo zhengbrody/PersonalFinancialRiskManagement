@@ -28,6 +28,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import type { Session, User } from "@supabase/supabase-js";
 import { getSupabase } from "./supabase";
+import { clearUserScopedStorage, syncUserScopedStorage } from "./user-scoped-storage";
 
 export type AuthState = {
   /** Current Supabase user, or null when signed out / no env. */
@@ -109,6 +110,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [supabase]);
 
+  // Data-isolation for per-user BROWSER storage (Copilot insight dismissals,
+  // saved answers, chat transcripts, the researched ticker). Once auth has
+  // RESOLVED, wipe that storage whenever the signed-in identity differs from
+  // whoever it last belonged to — the storage analogue of queryClient.clear()
+  // in signOut. Gated on !loading so the transient null during session restore
+  // (a reload where the SAME user is about to resolve) never wipes their own
+  // state. Same identity → kept; different account / signed-out → cleared.
+  const userId = session?.user?.id ?? null;
+  useEffect(() => {
+    if (loading) return;
+    syncUserScopedStorage(userId);
+  }, [loading, userId]);
+
   const signIn = useCallback(
     async (email: string, password: string) => {
       if (!supabase) {
@@ -183,8 +197,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // portfolios / billing data lingers in the React Query cache and is
     // visible to the next person on a shared machine (via back-button
     // or devtools) before a refetch replaces it. Clearing on sign-out
-    // is the data-isolation boundary.
+    // is the data-isolation boundary — and its browser-storage half
+    // (Copilot dismissals/answers/chat, researched ticker) clears too.
     queryClient.clear();
+    clearUserScopedStorage();
   }, [supabase, queryClient]);
 
   const value: AuthState = useMemo(

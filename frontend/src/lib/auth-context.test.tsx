@@ -31,6 +31,13 @@ vi.mock("./supabase", () => ({
   getSupabase: () => fakeClient,
 }));
 
+const clearUserScopedStorage = vi.fn();
+const syncUserScopedStorage = vi.fn();
+vi.mock("./user-scoped-storage", () => ({
+  clearUserScopedStorage: () => clearUserScopedStorage(),
+  syncUserScopedStorage: (id: string | null) => syncUserScopedStorage(id),
+}));
+
 import { AuthProvider, useAuth } from "./auth-context";
 
 function Probe() {
@@ -224,5 +231,29 @@ describe("AuthProvider", () => {
 
     await waitFor(() => expect(fakeClient.auth.signOut).toHaveBeenCalled());
     expect(clearSpy).toHaveBeenCalled();
+    // …and the per-user browser storage half of the isolation boundary.
+    expect(clearUserScopedStorage).toHaveBeenCalled();
+  });
+
+  it("syncs per-user storage once auth resolves (identity-change wipe)", async () => {
+    fakeClient.auth.getSession.mockResolvedValueOnce({
+      data: { session: { access_token: "t", user: { id: "user-42", email: "a@b.c" } } },
+    });
+    fakeClient.auth.onAuthStateChange.mockReturnValueOnce({
+      data: { subscription: { unsubscribe: vi.fn() } },
+    });
+
+    renderWithQuery(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("loading").textContent).toBe("false"),
+    );
+    // Resolved with a real user id → sync is called with it (never during the
+    // transient loading=true null, which would wipe a returning user's state).
+    expect(syncUserScopedStorage).toHaveBeenCalledWith("user-42");
+    expect(syncUserScopedStorage).not.toHaveBeenCalledWith(null);
   });
 });
