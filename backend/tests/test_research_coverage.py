@@ -39,32 +39,46 @@ def _rich_pack() -> R.FactPack:
     )
 
 
-def _financials(coverage=1.0, source="fmp"):
+def _quarter(**kw):
+    base = dict(
+        fiscal_date="2026-06-30",
+        revenue=1000.0,
+        net_income=100.0,
+        eps=1.0,
+        cash=500.0,
+        debt=200.0,
+        free_cash_flow=80.0,
+        capex=-20.0,
+    )
+    base.update(kw)
+    return SimpleNamespace(**base)
+
+
+def _financials(with_balance_cashflow=True, source="fmp+yfinance"):
+    """REAL shape: the provider merges income+balance+cashflow into ONE dataset
+    per period — provenance carries ONLY income_quarterly/income_annual; the
+    per-statement signal lives in the quarter-row FIELDS."""
+    if with_balance_cashflow:
+        quarters = [_quarter(), _quarter(fiscal_date="2026-03-31")]
+    else:
+        quarters = [
+            _quarter(cash=None, debt=None, free_cash_flow=None, capex=None),
+            _quarter(
+                fiscal_date="2026-03-31", cash=None, debt=None, free_cash_flow=None, capex=None
+            ),
+        ]
     return SimpleNamespace(
+        quarters=quarters,
         provenance=[
             SimpleNamespace(
                 dataset="income_quarterly",
                 source=source,
                 as_of="2026-06-30",
                 fetched_at="2026-07-14T00:00:00Z",
-                coverage=coverage,
-            ),
-            SimpleNamespace(
-                dataset="balance_quarterly",
-                source=source,
-                as_of="2026-06-30",
-                fetched_at=None,
-                coverage=coverage,
-            ),
-            SimpleNamespace(
-                dataset="cashflow_quarterly",
-                source="none",
-                as_of=None,
-                fetched_at=None,
-                coverage=0.0,
+                coverage=0.8,
             ),
         ],
-        missing_data=[SimpleNamespace(dataset="cashflow_quarterly", reason="requires_paid_plan")],
+        missing_data=[SimpleNamespace(dataset="income_quarterly", reason="requires_paid_plan")],
     )
 
 
@@ -130,9 +144,12 @@ def test_rich_ticker_matrix_grades_and_sources(monkeypatch):
     assert by_field["analyst_estimates"].source_type == "secondary"
     assert by_field["analyst_estimates"].fallback_used is True
     assert by_field["revenue_growth"].source_type == "derived"
-    # statements ride the financials provenance
-    assert by_field["income_quarterly"].as_of == "2026-06-30"
-    assert by_field["income_quarterly"].group == "Financial statements"
+    # statements derived from the quarter-row FIELDS (the provider has no
+    # per-statement datasets — the old lookup by invented names always missed)
+    assert by_field["income_statement_quarterly"].as_of == "2026-06-30"
+    assert by_field["income_statement_quarterly"].group == "Financial statements"
+    assert by_field["balance_sheet_quarterly"].source == "fmp+yfinance"
+    assert by_field["cashflow_statement_quarterly"].coverage == 1.0
     # freshness stamps survive
     assert by_field["price"].as_of == "2026-07-14"
     # groups everywhere
@@ -140,12 +157,16 @@ def test_rich_ticker_matrix_grades_and_sources(monkeypatch):
 
 
 def test_missing_fields_carry_typed_reasons_never_fake_values(monkeypatch):
+    # income-only tier: balance/cashflow FIELDS all None in every quarter
     _wire(monkeypatch)
+    monkeypatch.setattr(rc, "_financials", lambda tk: _financials(with_balance_cashflow=False))
     out = rc.build_coverage("AAPL")
     by_missing = {r.field: r for r in out.missing}
-    # premium-gated cashflow → typed "unsupported" (from requires_paid_plan)
-    assert by_missing["cashflow_quarterly"].missing_reason == "unsupported"
-    assert by_missing["cashflow_quarterly"].critical is True
+    assert by_missing["balance_sheet_quarterly"].missing_reason == "unsupported"
+    assert by_missing["balance_sheet_quarterly"].critical is True
+    assert by_missing["cashflow_statement_quarterly"].missing_reason == "unsupported"
+    # income itself still present from the same rows
+    assert any(f.field == "income_statement_quarterly" for f in out.fields)
     # transcripts absent → typed reason, coverage 0 (no fake placeholders)
     assert by_missing["transcripts"].missing_reason == "unsupported"
     assert all((r.coverage or 0) == 0.0 for r in out.missing)
@@ -159,7 +180,11 @@ def test_conviction_gate_reacts_to_thin_critical_coverage(monkeypatch):
     assert dc.directional_allowed is False
     assert dc.conviction_cap == "none"
     # every absent core dataset is an explicit missing row with a typed reason
-    assert {r.field for r in out.missing} >= {"price", "profit_margins", "income_quarterly"}
+    assert {r.field for r in out.missing} >= {
+        "price",
+        "profit_margins",
+        "income_statement_quarterly",
+    }
     assert all(r.missing_reason for r in out.missing)
 
 
@@ -167,10 +192,10 @@ def test_rich_coverage_supports_conviction(monkeypatch):
     _wire(monkeypatch)
     out = rc.build_coverage("AAPL")
     dc = out.data_confidence
-    # one critical statement (cashflow) missing → reduced, but directional
+    # all critical datasets present → full critical coverage, directional
     assert dc.directional_allowed is True
-    assert dc.conviction_cap in ("low", "medium", "high")
-    assert 0.5 < dc.critical_coverage < 1.0
+    assert dc.critical_coverage == 1.0
+    assert dc.conviction_cap in ("medium", "high")
 
 
 def test_fail_soft_legs_become_missing_rows(monkeypatch):
@@ -203,3 +228,29 @@ def test_coverage_endpoint_auth_and_happy(test_client, mint_token, monkeypatch):
     assert data["ticker"] == "AAPL"
     assert data["data_confidence"]["conviction_cap"] in ("none", "low", "medium", "high")
     assert any(f["field"] == "price" for f in data["fields"])
+
+
+def test_thin_factpack_gets_short_cache_ttl(monkeypatch):
+    """A freshly-built pack with coverage under the no-directional floor is
+    cached for minutes, not the full TTL — a provider throttle window must not
+    pin low-coverage answers for half an hour."""
+    from backend.app.schemas import research as R
+    from backend.app.services import research_factpack as rf
+    from backend.app.services.cache import get_cache
+    from backend.app.services.cache_keys import make_key
+
+    rf.reset_enrich_cache()
+    thin = R.FactPack(ticker="THIN", price=1.0, data_quality=R.DataQuality(coverage=0.1))
+    monkeypatch.setattr(rf, "build_fact_pack", lambda tk, yf_enricher=None: thin)
+    rf.build_fact_pack_cached("THIN")
+    env = get_cache().get(make_key("research:factpack", rf.FACTPACK_VERSION, "THIN"))
+    window = float(env["expires_at"]) - float(env["fetched_at"])
+    assert window <= rf._THIN_PACK_TTL + 1
+
+    rf.reset_enrich_cache()
+    rich = R.FactPack(ticker="RICH", price=1.0, data_quality=R.DataQuality(coverage=0.9))
+    monkeypatch.setattr(rf, "build_fact_pack", lambda tk, yf_enricher=None: rich)
+    rf.build_fact_pack_cached("RICH")
+    env2 = get_cache().get(make_key("research:factpack", rf.FACTPACK_VERSION, "RICH"))
+    window2 = float(env2["expires_at"]) - float(env2["fetched_at"])
+    assert window2 >= rf._FACTPACK_TTL - 1

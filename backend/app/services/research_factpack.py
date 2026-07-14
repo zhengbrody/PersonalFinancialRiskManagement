@@ -15,6 +15,8 @@ renders for free-tier/no-key deploys.
 
 from __future__ import annotations
 
+import time
+
 import logging
 from typing import Callable, Optional
 
@@ -37,6 +39,11 @@ _ENRICH_VERSION = "v1"
 # good pack marked stale (see build_fact_pack_cached). Bump on shape changes.
 FACTPACK_VERSION = "v1"
 _FACTPACK_TTL = 30 * 60
+# A THIN pack (coverage under the shared no-directional floor — typically a
+# provider throttle/outage window) must not lock research verdicts + copilot
+# ticker answers behind the directional gate for the full TTL: recheck soon.
+_THIN_PACK_COVERAGE = 0.40
+_THIN_PACK_TTL = 5 * 60
 
 
 def reset_enrich_cache() -> None:
@@ -316,6 +323,15 @@ def build_fact_pack_cached(
         ttl=_FACTPACK_TTL,
     )
     fp = R.FactPack.model_validate(res.value)
+    if not res.cache_hit and float(fp.data_quality.coverage or 0.0) < _THIN_PACK_COVERAGE:
+        # Freshly-built THIN pack: shorten its freshness window so a transient
+        # provider failure doesn't pin low-coverage answers for 30 minutes.
+        now = time.time()
+        get_cache().set(
+            key,
+            {"v": res.value, "fetched_at": now, "expires_at": now + _THIN_PACK_TTL},
+            ttl=_THIN_PACK_TTL + 3600,  # keep a stale-fallback copy around
+        )
     fp.cache = R.CacheProvenance(
         cache_hit=res.cache_hit,
         fetched_at=res.fetched_at,
