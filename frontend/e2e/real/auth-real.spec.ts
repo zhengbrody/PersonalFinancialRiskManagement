@@ -38,10 +38,17 @@ test.describe("real auth smoke (live Supabase + backend)", () => {
     page,
   }) => {
     await login(page);
-    // The /portfolios page body greets the signed-in user by email
-    // ("Signed in as …") — a signed-in-only render. (NOT the account menu:
-    // PR #140 deliberately removed the email from the top bar.)
-    await expect(page.getByText(EMAIL).first()).toBeVisible();
+    // Identity proof: /settings is the ONE page that renders the account
+    // email ("Signed in as …", settings/page.tsx) — and it renders it from a
+    // real backend round-trip (/api/v1/billing/me), so this asserts the
+    // JWT → backend → identity chain, not just the login redirect.
+    //
+    // History: this test previously asserted the email on /portfolios, which
+    // never renders it (PR #140 removed email from the top bar; the page body
+    // never had it) — the assertion was stale and burned the nightly red.
+    // Assert identity where the product actually shows it.
+    await page.goto("/settings");
+    await expect(page.getByText(EMAIL).first()).toBeVisible({ timeout: 30_000 });
   });
 
   test("a signed-in data page loads through the real backend", async ({ page, baseURL }) => {
