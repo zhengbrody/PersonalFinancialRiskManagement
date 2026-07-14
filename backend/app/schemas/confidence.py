@@ -62,6 +62,9 @@ class FieldProvenance(BaseModel):
     field: str  # e.g. "price", "fundamentals", "benchmark_beta", "yield_curve"
     source: str  # canonical registry id (massive / fmp / yfinance / engine / …)
     source_type: SourceType
+    # Optional display grouping for matrix views ("Financial health", …) —
+    # additive; ungrouped rows render flat.
+    group: Optional[str] = None
     label: Optional[str] = None  # human label from the registry
     as_of: Optional[str] = None  # the datum's own date (not fetch time)
     fetched_at: Optional[str] = None  # when we retrieved it

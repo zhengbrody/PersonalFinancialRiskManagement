@@ -1066,6 +1066,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/research/{ticker}/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Data-coverage matrix: which datasets back this ticker, freshness, typed missing reasons
+         * @description Phase 5: ONE normalized coverage matrix assembled from the SAME cached
+         *     builders the page already triggers — per-dataset source tier / as-of /
+         *     staleness / typed missing reason, core fields graded critical, and the
+         *     shared DataConfidence enforcement block (thin critical coverage caps
+         *     conviction exactly like every other surface). Fail-soft: a dead provider
+         *     yields missing rows, never a 500.
+         */
+        get: operations["research_coverage_api_v1_research__ticker__coverage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/research/{ticker}/dcf": {
         parameters: {
             query?: never;
@@ -2720,6 +2745,14 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** Envelope[ResearchCoverageOut] */
+        Envelope_ResearchCoverageOut_: {
+            data?: components["schemas"]["ResearchCoverageOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
         /** Envelope[RiskAlertsOutput] */
         Envelope_RiskAlertsOutput_: {
             data?: components["schemas"]["RiskAlertsOutput"] | null;
@@ -3105,6 +3138,8 @@ export interface components {
             fetched_at?: string | null;
             /** Field */
             field: string;
+            /** Group */
+            group?: string | null;
             /** Label */
             label?: string | null;
             /** Missing Reason */
@@ -4779,6 +4814,25 @@ export interface components {
             input_hash: string;
             /** Kind */
             kind: string;
+        };
+        /** ResearchCoverageOut */
+        ResearchCoverageOut: {
+            /** As Of */
+            as_of?: string | null;
+            data_confidence: components["schemas"]["DataConfidence"];
+            /**
+             * Disclaimer
+             * @default Educational analysis, not financial advice.
+             */
+            disclaimer?: string;
+            /** Fields */
+            fields?: components["schemas"]["FieldProvenance"][];
+            /** Generated At */
+            generated_at?: string | null;
+            /** Missing */
+            missing?: components["schemas"]["FieldProvenance"][];
+            /** Ticker */
+            ticker: string;
         };
         /**
          * ResearchVerdict
@@ -7390,6 +7444,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    research_coverage_api_v1_research__ticker__coverage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ResearchCoverageOut_"];
                 };
             };
             /** @description Validation Error */
