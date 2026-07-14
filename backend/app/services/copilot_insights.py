@@ -109,7 +109,7 @@ def build_insights(user) -> InsightsOut:
         add(ins)
     ins = safe(
         "insights.concentration",
-        lambda: _concentration_insight(score, prev, confidence, now),
+        lambda: _concentration_insight(score, positions, prev, confidence, now),
     )
     if ins:
         add(ins)
@@ -226,9 +226,28 @@ def _dimension_insight(rep, confidence, now) -> Optional[InsightOut]:
     )
 
 
-def _concentration_insight(score, prev, confidence, now) -> Optional[InsightOut]:
+def _top_position_weight(positions) -> tuple[Optional[str], Optional[float]]:
+    """Largest priced position's (ticker, weight) from the live positions —
+    the engine score object doesn't carry the API-layer concentration block,
+    so the insight derives the one number it needs deterministically."""
+    rows = [
+        (str(getattr(p, "ticker", "") or "").upper(), float(getattr(p, "market_value", 0.0) or 0.0))
+        for p in positions or []
+    ]
+    rows = [(t, mv) for t, mv in rows if t and mv > 0]
+    total = sum(mv for _t, mv in rows)
+    if total <= 0:
+        return None, None
+    ticker, mv = max(rows, key=lambda r: r[1])
+    return ticker, mv / total
+
+
+def _concentration_insight(score, positions, prev, confidence, now) -> Optional[InsightOut]:
     conc = getattr(score, "concentration", None)
     cur = _finite(getattr(conc, "top_holding_weight", None)) if conc is not None else None
+    derived_ticker = None
+    if cur is None:
+        derived_ticker, cur = _top_position_weight(positions)
     if cur is None or cur <= CONCENTRATION_LIMIT:
         return None
     prev_conc = ((prev or {}).get("risk_metrics") or {}).get("concentration") or {}
@@ -240,7 +259,7 @@ def _concentration_insight(score, prev, confidence, now) -> Optional[InsightOut]
         pass
     elif prev_w is None:
         missing.append("no prior snapshot to compare against")
-    ticker = getattr(conc, "top_holding_ticker", None) or "your largest holding"
+    ticker = getattr(conc, "top_holding_ticker", None) or derived_ticker or "your largest holding"
     evidence = _with_ids(
         [
             _ev("Largest position weight", f"{cur * 100:.1f}%", "engine", "concentration"),

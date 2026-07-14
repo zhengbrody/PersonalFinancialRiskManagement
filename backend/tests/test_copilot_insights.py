@@ -268,3 +268,19 @@ def test_insights_endpoint_happy_and_failsoft(test_client, mint_token, monkeypat
     assert resp2.status_code == 200  # fail-soft, never a 500
     assert resp2.json()["data"]["insights"] == []
     assert api is not None
+
+
+def test_concentration_derived_from_positions_when_score_lacks_block(wired, monkeypatch):
+    """PR4.1: copilot_context's ENGINE score has no API-layer concentration
+    block — the insight must derive the top weight from the live positions."""
+    bare = _score()
+    del bare.concentration  # engine score shape: no concentration attribute
+    heavy_positions = [
+        SimpleNamespace(ticker="NVDA", market_value=8000.0),
+        SimpleNamespace(ticker="AAA", market_value=2000.0),
+    ]
+    wired(score=bare, prev=_prev_snapshot(), positions=heavy_positions)
+    conc = [i for i in ci.build_insights(USER).insights if i.kind == "concentration"]
+    assert len(conc) == 1
+    assert conc[0].id == "concentration:NVDA"
+    assert "80.0%" in conc[0].what_changed
