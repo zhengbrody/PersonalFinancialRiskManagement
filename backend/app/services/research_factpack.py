@@ -15,13 +15,12 @@ renders for free-tier/no-key deploys.
 
 from __future__ import annotations
 
-import time
-
 import logging
+import time
 from typing import Callable, Optional
 
 from ..schemas import research as R
-from .cache import get_cache
+from .cache import _iso, get_cache
 from .cache_keys import make_key
 from .providers import fmp_provider as fmp
 
@@ -323,19 +322,24 @@ def build_fact_pack_cached(
         ttl=_FACTPACK_TTL,
     )
     fp = R.FactPack.model_validate(res.value)
+    expires_at = res.expires_at
     if not res.cache_hit and float(fp.data_quality.coverage or 0.0) < _THIN_PACK_COVERAGE:
         # Freshly-built THIN pack: shorten its freshness window so a transient
-        # provider failure doesn't pin low-coverage answers for 30 minutes.
+        # provider failure doesn't pin low-coverage answers for the full TTL.
+        # Clamped — a thin pack must never outlive a normal one, whatever
+        # _FACTPACK_TTL is configured (or monkeypatched) to.
         now = time.time()
+        thin_window = min(_THIN_PACK_TTL, _FACTPACK_TTL)
         get_cache().set(
             key,
-            {"v": res.value, "fetched_at": now, "expires_at": now + _THIN_PACK_TTL},
-            ttl=_THIN_PACK_TTL + 3600,  # keep a stale-fallback copy around
+            {"v": res.value, "fetched_at": now, "expires_at": now + thin_window},
+            ttl=max(float(_FACTPACK_TTL), thin_window + 3600.0),  # stale copy survives
         )
+        expires_at = _iso(now + thin_window)
     fp.cache = R.CacheProvenance(
         cache_hit=res.cache_hit,
         fetched_at=res.fetched_at,
-        expires_at=res.expires_at,
+        expires_at=expires_at,
         stale=res.stale,
     )
     return fp

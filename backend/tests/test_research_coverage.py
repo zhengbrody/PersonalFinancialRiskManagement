@@ -7,6 +7,7 @@ and the authed endpoint.
 
 from __future__ import annotations
 
+from datetime import datetime
 from types import SimpleNamespace
 
 from backend.app.schemas import research as R
@@ -242,10 +243,15 @@ def test_thin_factpack_gets_short_cache_ttl(monkeypatch):
     rf.reset_enrich_cache()
     thin = R.FactPack(ticker="THIN", price=1.0, data_quality=R.DataQuality(coverage=0.1))
     monkeypatch.setattr(rf, "build_fact_pack", lambda tk, yf_enricher=None: thin)
-    rf.build_fact_pack_cached("THIN")
+    fp = rf.build_fact_pack_cached("THIN")
     env = get_cache().get(make_key("research:factpack", rf.FACTPACK_VERSION, "THIN"))
     window = float(env["expires_at"]) - float(env["fetched_at"])
     assert window <= rf._THIN_PACK_TTL + 1
+    # …and the RESPONSE provenance reports the shortened expiry, not the
+    # normal TTL — the UI's "cached · as of …" line must not overstate it.
+    exp = datetime.fromisoformat(fp.cache.expires_at)
+    fetched = datetime.fromisoformat(fp.cache.fetched_at)
+    assert (exp - fetched).total_seconds() <= rf._THIN_PACK_TTL + 1
 
     rf.reset_enrich_cache()
     rich = R.FactPack(ticker="RICH", price=1.0, data_quality=R.DataQuality(coverage=0.9))
@@ -254,3 +260,25 @@ def test_thin_factpack_gets_short_cache_ttl(monkeypatch):
     env2 = get_cache().get(make_key("research:factpack", rf.FACTPACK_VERSION, "RICH"))
     window2 = float(env2["expires_at"]) - float(env2["fetched_at"])
     assert window2 >= rf._FACTPACK_TTL - 1
+
+
+def test_thin_pack_window_clamped_to_factpack_ttl(monkeypatch):
+    """min(thin, normal): a thin pack must never OUTLIVE a normal one.
+
+    Regression: with a small _FACTPACK_TTL (as the provider-cache stale tests
+    monkeypatch it) the thin re-set produced a FUTURE expiry — the entry
+    outlived the normal TTL and the stale-on-rebuild-failure path never ran.
+    """
+    from backend.app.schemas import research as R
+    from backend.app.services import research_factpack as rf
+    from backend.app.services.cache import get_cache
+    from backend.app.services.cache_keys import make_key
+
+    rf.reset_enrich_cache()
+    monkeypatch.setattr(rf, "_FACTPACK_TTL", 0.05)
+    thin = R.FactPack(ticker="TINY", price=1.0, data_quality=R.DataQuality(coverage=0.1))
+    monkeypatch.setattr(rf, "build_fact_pack", lambda tk, yf_enricher=None: thin)
+    rf.build_fact_pack_cached("TINY")
+    env = get_cache().get(make_key("research:factpack", rf.FACTPACK_VERSION, "TINY"))
+    window = float(env["expires_at"]) - float(env["fetched_at"])
+    assert window <= 0.05 + 0.001
