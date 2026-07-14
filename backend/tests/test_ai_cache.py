@@ -194,3 +194,60 @@ def test_ask_cache_is_user_scoped(test_client, mint_token, monkeypatch):
     )
     assert b1.status_code == 200
     assert calls["n"] == 2
+
+
+def test_ask_cache_invalidated_when_preferences_change(test_client, mint_token, monkeypatch):
+    """Confirming/clearing a preference bumps the user's cache generation —
+    a cached answer that folded the OLD preference evidence must not be
+    re-served for the rest of the TTL (it can contradict the new state)."""
+    from backend.app.api.v1 import copilot as copilot_api
+    from backend.app.services import copilot_preferences, copilot_router
+
+    calls = {"n": 0}
+
+    def fake_answer(message, *, user, llm_callable, route=None, ticker=None):
+        calls["n"] += 1
+        return _FakeAsk()
+
+    monkeypatch.setattr(copilot_router, "answer", fake_answer)
+    monkeypatch.setattr(copilot_api, "get_llm_callable", lambda *a, **k: (lambda **_: "x"))
+    monkeypatch.setattr(copilot_api, "_record_ask_cost", lambda *a, **k: None)
+    row = {"risk_tolerance": 2, "confirmed_at": "2026-07-14T00:00:00Z"}
+    monkeypatch.setattr(copilot_preferences, "upsert_confirmed", lambda tok, uid, vals: row)
+    monkeypatch.setattr(copilot_preferences, "clear", lambda tok, uid: None)
+
+    body = {"message": "How should I think about my risk?"}
+    test_client.post("/api/v1/copilot/ask", json=body, headers=_auth(mint_token))
+    test_client.post("/api/v1/copilot/ask", json=body, headers=_auth(mint_token))
+    assert calls["n"] == 1  # warm: second ask served from cache
+
+    put = test_client.put(
+        "/api/v1/copilot/preferences", json={"risk_tolerance": 2}, headers=_auth(mint_token)
+    )
+    assert put.status_code == 200
+    r3 = test_client.post("/api/v1/copilot/ask", json=body, headers=_auth(mint_token))
+    assert r3.status_code == 200
+    assert calls["n"] == 2  # preference change → recomputed, not the stale answer
+
+    test_client.post("/api/v1/copilot/ask", json=body, headers=_auth(mint_token))
+    assert calls["n"] == 2  # re-warmed under the new generation
+
+    wipe = test_client.request("DELETE", "/api/v1/copilot/preferences", headers=_auth(mint_token))
+    assert wipe.status_code == 200
+    r5 = test_client.post("/api/v1/copilot/ask", json=body, headers=_auth(mint_token))
+    assert r5.status_code == 200
+    assert calls["n"] == 3  # erasure invalidates too
+
+
+def test_user_generation_unit():
+    from backend.app.services import ai_cache
+
+    ai_cache.reset_all()
+    assert ai_cache.user_generation("u1") == 0
+    ai_cache.bump_user_generation("u1")
+    ai_cache.bump_user_generation("u1")
+    assert ai_cache.user_generation("u1") == 2
+    assert ai_cache.user_generation("u2") == 0  # isolated per user
+    ai_cache.bump_user_generation("")  # no-op, never raises
+    ai_cache.reset_all()
+    assert ai_cache.user_generation("u1") == 0

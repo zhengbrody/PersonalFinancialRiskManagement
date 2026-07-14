@@ -105,6 +105,36 @@ def test_gather_ticker_uses_factpack(monkeypatch):
     assert any(e.source == "fmp" for e in ev)
 
 
+def test_factpack_evidence_cites_the_actual_provider(monkeypatch):
+    """A yfinance-fallback figure must be cited as yfinance — the evidence
+    badge lied 'FMP' for every scalar regardless of which provider actually
+    served it (documented follow-up from the data-confidence PR)."""
+    from backend.app.schemas import research as R
+
+    fp = R.FactPack(
+        ticker="NVDA",
+        price=120.0,
+        valuation=R.ValuationBlock(pe=45.0),
+        quality=R.QualityBlock(net_margin=0.5, roe=0.9),
+        data_quality=R.DataQuality(
+            coverage=0.8,
+            sources=[
+                R.SourceRef(field="profile", source="yfinance", coverage=1.0),
+                R.SourceRef(field="fundamentals", source="fmp+yfinance", coverage=1.0),
+            ],
+        ),
+    )
+    ev = cr._factpack_evidence(fp)
+    by_label = {e.label: e.source for e in ev}
+    assert by_label["Price"] == "yfinance"  # profile leg fell back
+    assert by_label["P/E"] == "fmp+yfinance"  # fundamentals were merged
+    assert by_label["Net margin"] == "fmp+yfinance"
+
+    # Absent provenance keeps the primary default (backward compatible).
+    bare = R.FactPack(ticker="NVDA", price=120.0, valuation=R.ValuationBlock(pe=45.0))
+    assert {e.label: e.source for e in cr._factpack_evidence(bare)}["Price"] == "fmp"
+
+
 def test_gather_portfolio_diagnosis(monkeypatch):
     monkeypatch.setattr(cr, "_load_score_positions", lambda user: ([], _Score()))
     ev, _ = cr._gather("portfolio_diagnosis", "how risky am I", [], user=object())

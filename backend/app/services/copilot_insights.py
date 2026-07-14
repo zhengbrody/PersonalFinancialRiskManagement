@@ -207,7 +207,11 @@ def _dimension_insight(rep, confidence, now) -> Optional[InsightOut]:
     if d is None or d.points is None or d.points > -DIMENSION_DRAG_MIN_PTS:
         return None
     return InsightOut(
-        id=f"dimension_drag:{d.label}:{_day(now)}",
+        # Same anchor as score_move — this insight is derived from the SAME
+        # change report, so its id must key to the prior snapshot it was
+        # measured against, not the current day (a _day(now) key advanced
+        # daily and re-surfaced a dismissed card every morning).
+        id=f"dimension_drag:{d.label}:{_day(getattr(rep, 'as_of_previous', None) or now)}",
         kind="dimension_drag",
         severity="watch",
         what_changed=f"{d.label} is the biggest drag on your score since the last snapshot.",
@@ -229,10 +233,18 @@ def _dimension_insight(rep, confidence, now) -> Optional[InsightOut]:
 def _top_position_weight(positions) -> tuple[Optional[str], Optional[float]]:
     """Largest priced position's (ticker, weight) from the live positions —
     the engine score object doesn't carry the API-layer concentration block,
-    so the insight derives the one number it needs deterministically."""
+    so the insight derives the one number it needs deterministically.
+
+    CASH is excluded from both the candidates AND the denominator, matching
+    the canonical /risk concentration (risk.py builds equity_mv with
+    asset_type != "cash"): copilot_context folds a synthetic CASH position
+    into the list, and counting it made cash-heavy books fire a nonsensical
+    "Largest position: CASH" high alert while UNDERSTATING every real equity
+    weight vs what /risk shows."""
     rows = [
         (str(getattr(p, "ticker", "") or "").upper(), float(getattr(p, "market_value", 0.0) or 0.0))
         for p in positions or []
+        if str(getattr(p, "asset_type", "") or "").lower() != "cash"
     ]
     rows = [(t, mv) for t, mv in rows if t and mv > 0]
     total = sum(mv for _t, mv in rows)
@@ -375,7 +387,11 @@ def _data_quality_insight(score, now) -> InsightOut:
     m = score.metrics
     reasons = [str(r) for r in (getattr(m, "reason_codes", None) or [])][:4]
     return InsightOut(
-        id=f"data_quality:{_day(now)}",
+        # A STATE insight keys to the state itself (confidence + reason set),
+        # not the calendar day — a persistent thin-data condition stays one
+        # dismissable episode; a CHANGED state (a reason resolves/appears) is
+        # a new episode and correctly re-surfaces.
+        id=f"data_quality:{getattr(m, 'confidence', None)}:{'+'.join(sorted(reasons)) or 'none'}",
         kind="data_quality",
         severity="watch",
         what_changed="The data behind your score is too thin for directional insights right now.",
