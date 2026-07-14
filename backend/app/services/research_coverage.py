@@ -370,18 +370,24 @@ def _factpack_rows(fp, fields: list, missing: list) -> None:
     )
 
 
+# Which FinancialQuarter FIELDS constitute each statement — the provider merges
+# income + balance-sheet + cash-flow into ONE dataset per period (provenance
+# dataset "income_quarterly"), so per-statement presence is derived from the
+# quarter rows themselves, never from dataset names that don't exist.
+_STATEMENT_FIELDS = (
+    ("income_statement_quarterly", True, ("revenue", "net_income", "eps")),
+    ("balance_sheet_quarterly", True, ("cash", "debt")),
+    ("cashflow_statement_quarterly", True, ("free_cash_flow", "capex")),
+)
+
+
 def _financials_rows(fin, fields: list, missing: list) -> None:
-    datasets = (
-        ("income_quarterly", G_STATEMENTS, True),
-        ("balance_quarterly", G_STATEMENTS, True),
-        ("cashflow_quarterly", G_STATEMENTS, True),
-    )
     if fin is None:
-        for name, group, crit in datasets:
+        for name, crit, _cols in _STATEMENT_FIELDS:
             missing.append(
                 _row(
                     name,
-                    group,
+                    G_STATEMENTS,
                     critical=crit,
                     present=False,
                     source="unavailable",
@@ -394,30 +400,34 @@ def _financials_rows(fin, fields: list, missing: list) -> None:
         m.dataset: classify_missing_reason(getattr(m, "reason", None))
         for m in (getattr(fin, "missing_data", None) or [])
     }
-    for name, group, crit in datasets:
-        p = prov.get(name)
-        if p is not None and (p.coverage or 0) > 0 and p.source not in (None, "none"):
+    quarters = getattr(fin, "quarters", None) or []
+    stmt_prov = prov.get("income_quarterly")  # the merged-statements fetch
+    base_reason = reasons.get("income_quarterly", "empty")
+    for name, crit, cols in _STATEMENT_FIELDS:
+        rows_with_data = [q for q in quarters if any(getattr(q, c, None) is not None for c in cols)]
+        if rows_with_data:
             fields.append(
                 _row(
                     name,
-                    group,
+                    G_STATEMENTS,
                     critical=crit,
                     present=True,
-                    source=p.source,
-                    as_of=p.as_of,
-                    fetched_at=p.fetched_at,
-                    coverage=p.coverage,
+                    source=(getattr(stmt_prov, "source", None) or "fmp"),
+                    as_of=getattr(stmt_prov, "as_of", None)
+                    or getattr(rows_with_data[0], "fiscal_date", None),
+                    fetched_at=getattr(stmt_prov, "fetched_at", None),
+                    coverage=round(len(rows_with_data) / max(len(quarters), 1), 3),
                 )
             )
         else:
             missing.append(
                 _row(
                     name,
-                    group,
+                    G_STATEMENTS,
                     critical=crit,
                     present=False,
-                    source=(p.source if p is not None and p.source else "unavailable"),
-                    missing_reason=reasons.get(name, "empty"),
+                    source=(getattr(stmt_prov, "source", None) or "unavailable"),
+                    missing_reason=base_reason,
                 )
             )
 
