@@ -311,3 +311,100 @@ def test_quota_status_marks_exhausted(mock_supabase):
     assert s["kinds"]["analysis"]["exhausted"] is True
     assert s["kinds"]["analysis"]["remaining"] == 0
     assert s["kinds"]["chat"]["exhausted"] is False
+
+
+# ── backend context: service-role client, session client unavailable ──
+#
+# In the streamlit-free FastAPI image, `_client()` raises (access_token()
+# needs the Streamlit session) — and even with streamlit installed a FastAPI
+# process has no session, so the anon insert dies on RLS. That kept EVERY
+# backend record_event silently dead from the 2026-05-29 cutover until the
+# _cost_client switch (fail-soft swallowed it; latest prod usage_events row
+# was 2026-05-29, verified empirically). These tests encode the contract:
+# billing reads/writes must work with the session client UNAVAILABLE.
+
+
+def _admin_fake():
+    sb = MagicMock()
+    sb.table.return_value = sb
+    sb.select.return_value = sb
+    sb.insert.return_value = sb
+    sb.eq.return_value = sb
+    sb.gte.return_value = sb
+    sb.limit.return_value = sb
+    return sb
+
+
+@pytest.fixture
+def backend_context(monkeypatch):
+    """Session client dead (like the backend image) + a working admin client."""
+    from libs.auth import admin_client as admin_mod
+    from libs.billing import usage as usage_mod
+
+    def no_session_client():
+        raise ModuleNotFoundError("No module named 'streamlit'")
+
+    monkeypatch.setattr(usage_mod, "_client", no_session_client)
+    sb = _admin_fake()
+    monkeypatch.setattr(admin_mod, "get_supabase_admin", lambda: sb)
+    return sb
+
+
+def test_record_event_writes_via_service_role_without_streamlit(backend_context):
+    from libs.billing.usage import record_event
+
+    backend_context.execute.return_value = MagicMock(data=[{"id": "x"}])
+    record_event(
+        "user-1",
+        "chat",
+        provider="anthropic",
+        model="claude-sonnet-4-6",
+        tokens_in=100,
+        tokens_out=400,
+        cost_usd=0.0123,
+    )
+    backend_context.table.assert_called_with("usage_events")
+    inserted = backend_context.insert.call_args[0][0]
+    assert inserted["user_id"] == "user-1"
+    assert inserted["kind"] == "chat"
+    assert inserted["cost_usd"] == pytest.approx(0.0123)
+    backend_context.execute.assert_called_once()
+
+
+def test_get_user_plan_reads_via_service_role_without_streamlit(backend_context):
+    from libs.billing.usage import get_user_plan
+
+    backend_context.execute.return_value = MagicMock(data=[{"plan": "basic"}])
+    assert get_user_plan("user-1", email="someone@example.com") == "basic"
+
+
+def test_get_subscription_record_reads_via_service_role_without_streamlit(backend_context):
+    from libs.billing.usage import get_subscription_record
+
+    row = {"plan": "pro", "status": "active", "stripe_customer_id": "cus_1"}
+    backend_context.execute.return_value = MagicMock(data=[row])
+    assert get_subscription_record("user-1") == row
+
+
+def test_get_used_this_month_counts_via_service_role_without_streamlit(backend_context):
+    from libs.billing.usage import get_used_this_month
+
+    backend_context.execute.return_value = MagicMock(data=[], count=7)
+    assert get_used_this_month("user-1", "chat") == 7
+
+
+def test_record_event_still_fail_soft_when_no_client_at_all(monkeypatch):
+    """No admin key AND no session → the write is lost with a warning, never
+    an exception (the user-visible action must not break on telemetry)."""
+    from libs.auth import admin_client as admin_mod
+    from libs.billing import usage as usage_mod
+
+    def no_session_client():
+        raise ModuleNotFoundError("No module named 'streamlit'")
+
+    def no_admin():
+        raise RuntimeError("SUPABASE_SERVICE_KEY not configured")
+
+    monkeypatch.setattr(usage_mod, "_client", no_session_client)
+    monkeypatch.setattr(admin_mod, "get_supabase_admin", no_admin)
+    usage_mod.record_event("user-1", "chat")  # must not raise
