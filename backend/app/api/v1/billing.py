@@ -26,7 +26,7 @@ import time
 from fastapi import APIRouter, Depends, Request
 
 from ...core.deps_auth import AuthedUser, require_owner, require_user
-from ...core.responses import APIError, ok
+from ...core.responses import APIError, ok, service_unavailable
 from ...schemas.billing import (
     AnthropicTopupRequest,
     BillingMeResponse,
@@ -239,11 +239,25 @@ def billing_admin_set_anthropic_topup(
     refreshed balances. 403 for non-owners."""
     started = time.perf_counter()
 
-    from libs.billing.usage import set_anthropic_topup
+    from libs.billing.usage import get_anthropic_topup, set_anthropic_topup
 
     from ...services import api_balance
 
     set_anthropic_topup(user.id, float(body.balance))
+    # READ-BACK VERIFICATION: the marker write rides the fail-soft telemetry
+    # path (record_event swallows failures), which silently 200'd for a month
+    # while the 0002 kind CHECK rejected the row (fixed by migration 0010).
+    # An owner action must confirm its own persistence — never a hollow 200.
+    stored = None
+    try:
+        stored = get_anthropic_topup()
+    except Exception:  # noqa: BLE001 - read blip → treated as unverified below
+        stored = None
+    if not stored or abs(float(stored.get("balance") or 0.0) - float(body.balance)) > 1e-6:
+        raise service_unavailable(
+            "The balance was not persisted (storage rejected the marker row). "
+            "Check that migration 0010_usage_event_kinds has been applied."
+        )
     api_balance.invalidate()
     return ok(api_balance.balances(), request=request, started_at=started)
 

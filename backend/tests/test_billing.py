@@ -337,3 +337,72 @@ def test_portal_stripe_error_maps_to_502(test_client, mint_token, fake_billing):
     )
     assert resp.status_code == 502
     assert resp.json()["error"]["code"] == "stripe_error"
+
+
+# ── POST /billing/admin/anthropic-topup — persistence must be VERIFIED ──
+#
+# The marker write rides the fail-soft telemetry path; before migration 0010
+# the 0002 kind CHECK silently rejected it and the endpoint 200'd for a month.
+# The endpoint now reads the value back and 503s when nothing persisted.
+
+_OWNER_EMAIL = "owner@mindmarket.test"
+
+
+def _owner_headers(mint_token, monkeypatch):
+    monkeypatch.setenv("MINDMARKET_OWNER_EMAILS", _OWNER_EMAIL)
+    return {"Authorization": f"Bearer {mint_token(sub='owner-1', email=_OWNER_EMAIL)}"}
+
+
+def test_topup_persisted_returns_refreshed_balances(test_client, mint_token, monkeypatch):
+    from libs.billing import usage
+
+    stored = {}
+
+    def fake_set(user_id, balance):
+        stored["balance"] = balance
+        stored["set_at"] = "2026-07-14T00:00:00+00:00"
+
+    monkeypatch.setattr(usage, "set_anthropic_topup", fake_set)
+    monkeypatch.setattr(usage, "get_anthropic_topup", lambda: dict(stored) if stored else None)
+    monkeypatch.setattr(
+        "backend.app.services.api_balance.balances",
+        lambda: {"anthropic": {"remaining": 1.23}},
+    )
+    resp = test_client.post(
+        "/api/v1/billing/admin/anthropic-topup",
+        json={"balance": 1.23},
+        headers=_owner_headers(mint_token, monkeypatch),
+    )
+    assert resp.status_code == 200
+    assert stored["balance"] == 1.23
+
+
+def test_topup_unpersisted_write_returns_503_not_hollow_200(test_client, mint_token, monkeypatch):
+    from libs.billing import usage
+
+    # The write path swallows the failure (telemetry discipline) …
+    monkeypatch.setattr(usage, "set_anthropic_topup", lambda user_id, balance: None)
+    # … and the read-back finds nothing → the endpoint must NOT pretend success.
+    monkeypatch.setattr(usage, "get_anthropic_topup", lambda: None)
+    resp = test_client.post(
+        "/api/v1/billing/admin/anthropic-topup",
+        json={"balance": 1.23},
+        headers=_owner_headers(mint_token, monkeypatch),
+    )
+    assert resp.status_code == 503
+    assert "not persisted" in (resp.json()["error"]["message"] or "")
+
+
+def test_topup_stale_readback_value_also_503s(test_client, mint_token, monkeypatch):
+    from libs.billing import usage
+
+    monkeypatch.setattr(usage, "set_anthropic_topup", lambda user_id, balance: None)
+    monkeypatch.setattr(
+        usage, "get_anthropic_topup", lambda: {"balance": 99.0, "set_at": "2026-01-01"}
+    )
+    resp = test_client.post(
+        "/api/v1/billing/admin/anthropic-topup",
+        json={"balance": 1.23},
+        headers=_owner_headers(mint_token, monkeypatch),
+    )
+    assert resp.status_code == 503
