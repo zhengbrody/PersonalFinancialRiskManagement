@@ -21,9 +21,14 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
 from ...core.deps_auth import AuthedUser, require_user
-from ...core.responses import APIError, ok, too_many_requests
+from ...core.responses import APIError, ok, service_unavailable, too_many_requests
 from ...schemas.copilot import ChatRequest, ChatResponse
 from ...schemas.copilot2 import CopilotAnswer, CopilotAskRequest
+from ...schemas.copilot_prefs import (
+    CopilotPreferencesCleared,
+    CopilotPreferencesIn,
+    CopilotPreferencesOut,
+)
 from ...schemas.envelope import Envelope
 from ...services import copilot_context
 from ...services.llm_client import get_answer_streamer, get_llm_callable
@@ -359,3 +364,89 @@ def copilot_chat_stream_endpoint(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ── user-CONFIRMED preferences (Copilot PR3) ─────────────────────────
+#
+# ONLY the explicit PUT (the user's confirmation act) writes; the app never
+# auto-infers preferences. RLS (auth.uid() = user_id) enforces isolation at
+# the database — the repository always uses the CALLER's JWT, never the
+# service role. A missing 0009 table maps to 503 (the UI hides the card),
+# mirroring the digest-prefs contract. Preference VALUES never reach logs
+# or telemetry.
+
+
+def _prefs_out(row: dict | None) -> dict:
+    row = row or {}
+    return CopilotPreferencesOut(
+        confirmed=bool(row.get("confirmed_at")),
+        risk_tolerance=row.get("risk_tolerance"),
+        investment_horizon=row.get("investment_horizon"),
+        liquidity_need=row.get("liquidity_need"),
+        concentration_limit=row.get("concentration_limit"),
+        margin_limit=row.get("margin_limit"),
+        metadata=row.get("metadata") or {},
+        confirmed_at=row.get("confirmed_at"),
+        updated_at=row.get("updated_at"),
+    ).model_dump()
+
+
+@router.get(
+    "/preferences",
+    summary="The caller's confirmed Copilot preferences (empty = no memory)",
+    response_model=Envelope[CopilotPreferencesOut],
+)
+def copilot_preferences_get(request: Request, user: AuthedUser = Depends(require_user)):
+    started = time.perf_counter()
+    from ...services import copilot_preferences as prefs
+
+    try:
+        row = prefs.get_row(user.access_token, user.id)
+    except Exception as exc:  # noqa: BLE001
+        if prefs.table_missing(exc):
+            raise service_unavailable("Copilot preferences are not provisioned yet.") from None
+        _log.warning("copilot.preferences.get_failed err=%s", type(exc).__name__)
+        raise service_unavailable("Copilot preferences are temporarily unavailable.") from None
+    return ok(_prefs_out(row), request=request, started_at=started)
+
+
+@router.put(
+    "/preferences",
+    summary="Explicitly CONFIRM (save) Copilot preferences — the only write path",
+    response_model=Envelope[CopilotPreferencesOut],
+)
+def copilot_preferences_put(
+    body: CopilotPreferencesIn,
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    started = time.perf_counter()
+    from ...services import copilot_preferences as prefs
+
+    try:
+        row = prefs.upsert_confirmed(user.access_token, user.id, body.model_dump())
+    except Exception as exc:  # noqa: BLE001
+        if prefs.table_missing(exc):
+            raise service_unavailable("Copilot preferences are not provisioned yet.") from None
+        _log.warning("copilot.preferences.put_failed err=%s", type(exc).__name__)
+        raise service_unavailable("Copilot preferences are temporarily unavailable.") from None
+    return ok(_prefs_out(row), request=request, started_at=started)
+
+
+@router.delete(
+    "/preferences",
+    summary="Completely clear the caller's Copilot preferences",
+    response_model=Envelope[CopilotPreferencesCleared],
+)
+def copilot_preferences_delete(request: Request, user: AuthedUser = Depends(require_user)):
+    started = time.perf_counter()
+    from ...services import copilot_preferences as prefs
+
+    try:
+        prefs.clear(user.access_token, user.id)
+    except Exception as exc:  # noqa: BLE001
+        if prefs.table_missing(exc):
+            raise service_unavailable("Copilot preferences are not provisioned yet.") from None
+        _log.warning("copilot.preferences.delete_failed err=%s", type(exc).__name__)
+        raise service_unavailable("Copilot preferences are temporarily unavailable.") from None
+    return ok(CopilotPreferencesCleared().model_dump(), request=request, started_at=started)

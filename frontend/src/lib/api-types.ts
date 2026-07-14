@@ -293,6 +293,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/copilot/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's confirmed Copilot preferences (empty = no memory) */
+        get: operations["copilot_preferences_get_api_v1_copilot_preferences_get"];
+        /** Explicitly CONFIRM (save) Copilot preferences — the only write path */
+        put: operations["copilot_preferences_put_api_v1_copilot_preferences_put"];
+        post?: never;
+        /** Completely clear the caller's Copilot preferences */
+        delete: operations["copilot_preferences_delete_api_v1_copilot_preferences_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/data/health": {
         parameters: {
             query?: never;
@@ -2089,6 +2108,66 @@ export interface components {
             /** Ticker */
             ticker?: string | null;
         };
+        /** CopilotPreferencesCleared */
+        CopilotPreferencesCleared: {
+            /**
+             * Cleared
+             * @default true
+             */
+            cleared?: boolean;
+        };
+        /**
+         * CopilotPreferencesIn
+         * @description The user's explicit confirmation payload. Every field optional — a user
+         *     may confirm only the dimensions they care about; bounds mirror the DB
+         *     CHECK constraints.
+         */
+        CopilotPreferencesIn: {
+            /** Concentration Limit */
+            concentration_limit?: number | null;
+            /** Investment Horizon */
+            investment_horizon?: ("short" | "medium" | "long") | null;
+            /** Liquidity Need */
+            liquidity_need?: ("low" | "medium" | "high") | null;
+            /** Margin Limit */
+            margin_limit?: number | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Risk Tolerance */
+            risk_tolerance?: number | null;
+        };
+        /**
+         * CopilotPreferencesOut
+         * @description The stored preferences. ``confirmed`` is False (and fields None) when
+         *     the user has never confirmed — equivalent to no memory.
+         */
+        CopilotPreferencesOut: {
+            /** Concentration Limit */
+            concentration_limit?: number | null;
+            /**
+             * Confirmed
+             * @default false
+             */
+            confirmed?: boolean;
+            /** Confirmed At */
+            confirmed_at?: string | null;
+            /** Investment Horizon */
+            investment_horizon?: string | null;
+            /** Liquidity Need */
+            liquidity_need?: string | null;
+            /** Margin Limit */
+            margin_limit?: number | null;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** Risk Tolerance */
+            risk_tolerance?: number | null;
+            /** Updated At */
+            updated_at?: string | null;
+        };
         /** CorrTopPair */
         CorrTopPair: {
             /** A */
@@ -2437,6 +2516,22 @@ export interface components {
         /** Envelope[CopilotAnswer] */
         Envelope_CopilotAnswer_: {
             data?: components["schemas"]["CopilotAnswer"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[CopilotPreferencesCleared] */
+        Envelope_CopilotPreferencesCleared_: {
+            data?: components["schemas"]["CopilotPreferencesCleared"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[CopilotPreferencesOut] */
+        Envelope_CopilotPreferencesOut_: {
+            data?: components["schemas"]["CopilotPreferencesOut"] | null;
             error?: components["schemas"]["ErrorOut"] | null;
             meta: components["schemas"]["MetaOut"];
         } & {
@@ -6092,6 +6187,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    copilot_preferences_get_api_v1_copilot_preferences_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_CopilotPreferencesOut_"];
+                };
+            };
+        };
+    };
+    copilot_preferences_put_api_v1_copilot_preferences_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CopilotPreferencesIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_CopilotPreferencesOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    copilot_preferences_delete_api_v1_copilot_preferences_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_CopilotPreferencesCleared_"];
                 };
             };
         };
