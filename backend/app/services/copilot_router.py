@@ -18,7 +18,7 @@ import re
 from typing import Callable, Optional
 
 from ..schemas.copilot2 import CopilotAnswer, CopilotAnswerSection, EvidenceItem
-from ._common import safe
+from ._common import safe, snapshot_to_mapping
 from .providers import registry as reg
 
 _log = logging.getLogger(__name__)
@@ -932,12 +932,17 @@ def _gather(intent: str, message: str, tickers: list[str], *, user):
         from . import market_regime
 
         snap = safe("regime", lambda: market_regime.get_market_regime())
-        if snap is None:
+        # Real snapshots are frozen DATACLASSES (RegimeSnapshot); eval/test
+        # fixtures use Mappings; snapshot_to_mapping handles both (plus
+        # pydantic) and fail-softs unknown shapes to None → empty evidence,
+        # never a 500. Legs go through the same helper so a mixed shape
+        # (dict top, dataclass legs) can't reintroduce the crash.
+        d = snapshot_to_mapping(snap)
+        if d is None:
             return [], None
-        d = snap.model_dump() if hasattr(snap, "model_dump") else dict(snap)
-        vix = d.get("vix") or {}
-        fg = d.get("fear_greed") or {}
-        yc = d.get("yield_curve") or {}
+        vix = snapshot_to_mapping(d.get("vix")) or {}
+        fg = snapshot_to_mapping(d.get("fear_greed")) or {}
+        yc = snapshot_to_mapping(d.get("yield_curve")) or {}
         return (
             _stamp(
                 _compact(

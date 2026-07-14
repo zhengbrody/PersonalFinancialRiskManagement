@@ -4,14 +4,18 @@
 ``market_*`` / ``institutions`` adapters all use; ``active_tickers`` is the
 fail-soft "tickers in the caller's active portfolio" resolver shared by the
 discovery routers (institutions, market sentiment) that want ``[]`` on an empty
-or unavailable portfolio rather than a 422.
+or unavailable portfolio rather than a 422; ``snapshot_to_mapping`` is the ONE
+place a provider snapshot (pydantic model / dataclass / Mapping) becomes a
+plain dict.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import logging
+from collections.abc import Mapping
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 _log = logging.getLogger(__name__)
 
@@ -28,6 +32,35 @@ def safe(label: str, fn: Callable[[], Any], default: Any = None) -> Any:
     except Exception as exc:  # pragma: no cover - upstream variability
         _log.warning("%s.failed err=%s", label, type(exc).__name__)
         return default
+
+
+def snapshot_to_mapping(obj: object) -> Optional[dict[str, Any]]:
+    """Normalize a provider snapshot/state into a plain ``dict``.
+
+    Handles every shape the service layer legitimately returns — pydantic
+    models (``model_dump()``), dataclasses (``dataclasses.asdict``, which is
+    recursive so nested states like ``VixState`` become plain dicts too), and
+    Mappings. ``None`` passes through as ``None``. Any OTHER shape logs a
+    structured warning and returns ``None`` so callers degrade to missing
+    evidence / an empty payload instead of a 500 — a deliberate type dispatch,
+    not a blanket ``except`` that could mask real programming errors.
+
+    THE single home for this conversion (production bug: the Copilot
+    macro_rates branch and the MCP ``get_macro_context`` tool each hand-rolled
+    ``dict(snap)`` on ``market_regime.RegimeSnapshot`` — a frozen dataclass —
+    and 500'd; tests masked it with dict-shaped fixtures).
+    """
+    if obj is None:
+        return None
+    dump = getattr(obj, "model_dump", None)
+    if callable(dump):
+        return dump()
+    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+        return dataclasses.asdict(obj)
+    if isinstance(obj, Mapping):
+        return dict(obj)
+    _log.warning("snapshot_to_mapping.unsupported_type type=%s", type(obj).__name__)
+    return None
 
 
 def active_tickers(access_token: str | None) -> list[str]:
