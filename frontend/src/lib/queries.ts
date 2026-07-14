@@ -1761,6 +1761,54 @@ export function useResearchFinancials(ticker: string | null) {
   });
 }
 
+// ── research data-coverage matrix (Phase 5) ─────────────────────────
+
+const coverageFieldSchema = z.looseObject({
+  field: z.string(),
+  source: z.string(),
+  source_type: z.string(),
+  label: z.string().nullish(),
+  group: z.string().nullish(),
+  as_of: z.string().nullish(),
+  fetched_at: z.string().nullish(),
+  stale: z.boolean().optional(),
+  coverage: z.number().nullish(),
+  fallback_used: z.boolean().optional(),
+  critical: z.boolean().optional(),
+  missing_reason: z.string().nullish(),
+  note: z.string().nullish(),
+});
+export type CoverageField = z.infer<typeof coverageFieldSchema>;
+
+export const researchCoverageSchema = z.looseObject({
+  ticker: z.string(),
+  as_of: z.string().nullish(),
+  generated_at: z.string().nullish(),
+  fields: z.array(coverageFieldSchema),
+  missing: z.array(coverageFieldSchema),
+  data_confidence: dataConfidenceSchema,
+  disclaimer: z.string().nullish(),
+});
+export type ResearchCoverage = z.infer<typeof researchCoverageSchema>;
+
+/** The normalized data-coverage matrix for a ticker — which datasets back
+ * the research, freshness, and typed missing reasons. Cache-warm after the
+ * page's own fetches. */
+export function useResearchCoverage(ticker: string | null) {
+  const { accessToken } = useAuth();
+  return useQuery<ResearchCoverage>({
+    queryKey: ["research", "coverage", ticker],
+    enabled: Boolean(accessToken && ticker),
+    queryFn: () =>
+      apiFetch<ResearchCoverage>(
+        `/api/v1/research/${encodeURIComponent(ticker!)}/coverage`,
+        { authToken: accessToken!, schema: researchCoverageSchema },
+      ),
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  });
+}
+
 // ── DCF valuation (deterministic; user overrides recalc) ────────────
 const dcfAssumptionSchema = z.looseObject({
   name: z.string(),

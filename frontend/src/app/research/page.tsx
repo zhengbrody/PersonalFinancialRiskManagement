@@ -35,6 +35,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable, type Column } from "@/components/ui/data-table";
 import { CreditsBadge } from "@/components/credits-badge";
 import { TickerNews } from "@/components/ticker-news";
+import { ResearchCoverageCard } from "@/components/research-coverage";
 import { LearnHint } from "@/components/learn-hint";
 import { ReportExportButton } from "@/components/report-export-button";
 import { ResearchFinancials } from "@/components/research-financials";
@@ -245,6 +246,7 @@ function ResearchReport({
 
       {/* News + provenance */}
       <TickerNews ticker={fp.ticker} data={b.news ?? undefined} />
+      <ResearchCoverageCard ticker={fp.ticker} />
       <SourcesCard fp={fp} />
 
       {/* Full HTML report (on demand) + Copilot handoff */}
