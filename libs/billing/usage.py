@@ -255,10 +255,17 @@ def _client():
 
 
 def _cost_client() -> tuple[Any, bool]:
-    """Return a client for spend guardrails.
+    """Server-preferred client: service-role when configured, else the legacy
+    session-bound client.
 
-    Prefer service-role so daily/monthly cost limits protect total platform
-    spend. If unavailable, fall back to the current user's RLS-scoped rows.
+    This is the ONLY client billing reads/writes may use from the FastAPI
+    backend: `_client()` binds the caller via the STREAMLIT session
+    (`access_token()`), which raises in the streamlit-free backend image —
+    and even with streamlit installed a FastAPI process has no session, so
+    the anon client's usage_events insert dies on RLS. That combination kept
+    every backend `record_event` silently dead from the 2026-05-29 cutover
+    (fail-soft swallowed it) until this fix. The legacy fallback keeps the
+    Streamlit-era tests and any session-context caller working.
     """
     try:
         from libs.auth.admin_client import get_supabase_admin
@@ -329,7 +336,8 @@ def get_user_plan(user_id: str, *, email: str | None = None) -> str:
     if is_owner_identity(user_id, email):
         return "owner"
     try:
-        resp = _client().table("profiles").select("plan").eq("user_id", user_id).limit(1).execute()
+        sb, _ = _cost_client()  # session client is dead in the backend image
+        resp = sb.table("profiles").select("plan").eq("user_id", user_id).limit(1).execute()
         rows = resp.data or []
         if rows and rows[0].get("plan") in PLAN_LIMITS:
             return rows[0]["plan"]
@@ -347,9 +355,9 @@ def get_subscription_record(user_id: str) -> dict[str, Any] | None:
       current_period_start, current_period_end, cancel_at_period_end.
     """
     try:
+        sb, _ = _cost_client()  # session client is dead in the backend image
         resp = (
-            _client()
-            .table("subscriptions")
+            sb.table("subscriptions")
             .select(
                 "stripe_customer_id, stripe_subscription_id, plan, status, "
                 "current_period_start, current_period_end, cancel_at_period_end"
@@ -477,9 +485,9 @@ def check_spend_limit(
 def get_used_this_month(user_id: str, kind: str) -> int:
     """Count usage_events of `kind` for `user_id` in the current month."""
     try:
+        sb, _ = _cost_client()  # session client is dead in the backend image
         resp = (
-            _client()
-            .table("usage_events")
+            sb.table("usage_events")
             .select("id", count="exact")
             .eq("user_id", user_id)
             .eq("kind", kind)
@@ -614,7 +622,8 @@ def record_event(
 ) -> None:
     """Insert a usage_events row. Caller responsible for cost calc."""
     try:
-        _client().table("usage_events").insert(
+        sb, _ = _cost_client()  # service-role preferred — see _cost_client docstring
+        sb.table("usage_events").insert(
             {
                 "user_id": user_id,
                 "kind": kind,
