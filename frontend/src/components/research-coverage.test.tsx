@@ -41,7 +41,7 @@ const DATA = {
   ],
   missing: [
     {
-      field: "cashflow_quarterly",
+      field: "cashflow_statement_quarterly",
       source: "unavailable",
       source_type: "derived",
       group: "Financial statements",
