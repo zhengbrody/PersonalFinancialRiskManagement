@@ -171,13 +171,16 @@ def copilot_ask_endpoint(
     # ── Response cache (input-hash, 30 min). Keyed per-user because the
     # evidence folds in the caller's portfolio — never share across users.
     # Checked before the credit gate so a repeated question is free.
-    from ...services.ai_cache import ask_cache
+    from ...services.ai_cache import ask_cache, user_generation
     from ...services.ai_telemetry import input_hash
 
     # route + ticker steer intent/tools, so they must be in the cache key — else
     # the same question on two pages could return a stale cross-context answer.
+    # The per-user GENERATION is bumped when confirmed preferences change, so a
+    # cached answer that folded the old preference evidence can't be re-served.
     cache_key = input_hash(
-        f"{user.id}|{body.message.strip()}|{body.route or ''}|{(body.ticker or '').upper()}"
+        f"{user.id}|g{user_generation(user.id)}|{body.message.strip()}"
+        f"|{body.route or ''}|{(body.ticker or '').upper()}"
     )
     cached = ask_cache.get(cache_key)
     if cached is not None:
@@ -207,6 +210,16 @@ def copilot_ask_endpoint(
 
 
 def _record_ask_cost(user_id: str, result, started: float) -> None:
+    """Best-effort telemetry — never raises (an already-computed, already-paid
+    answer must not become a 500 because bookkeeping hiccupped; same contract
+    as _record_chat_cost)."""
+    try:
+        _record_ask_cost_inner(user_id, result, started)
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("copilot.ask.telemetry_failed err=%s", type(exc).__name__)
+
+
+def _record_ask_cost_inner(user_id: str, result, started: float) -> None:
     from libs.billing.costs import estimate_tokens
 
     from ...services.ai_eval import eval_signals
@@ -431,6 +444,10 @@ def copilot_preferences_put(
             raise service_unavailable("Copilot preferences are not provisioned yet.") from None
         _log.warning("copilot.preferences.put_failed err=%s", type(exc).__name__)
         raise service_unavailable("Copilot preferences are temporarily unavailable.") from None
+    # Cached /ask answers folded the OLD preference evidence — invalidate them.
+    from ...services.ai_cache import bump_user_generation
+
+    bump_user_generation(user.id)
     return ok(_prefs_out(row), request=request, started_at=started)
 
 
@@ -450,6 +467,10 @@ def copilot_preferences_delete(request: Request, user: AuthedUser = Depends(requ
             raise service_unavailable("Copilot preferences are not provisioned yet.") from None
         _log.warning("copilot.preferences.delete_failed err=%s", type(exc).__name__)
         raise service_unavailable("Copilot preferences are temporarily unavailable.") from None
+    # Erasure must also unreference cached answers that cited the preference.
+    from ...services.ai_cache import bump_user_generation
+
+    bump_user_generation(user.id)
     return ok(CopilotPreferencesCleared().model_dump(), request=request, started_at=started)
 
 

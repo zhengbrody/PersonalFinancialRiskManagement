@@ -559,14 +559,22 @@ def _score_evidence(score) -> list[EvidenceItem]:
 
 def _factpack_evidence(fp, prefix: str = "") -> list[EvidenceItem]:
     p = f"{prefix} " if prefix else ""
-    src = "fmp"
+    # Per-field provider from the pack's OWN provenance — the citation must name
+    # the provider that actually served the figure (a yfinance-fallback price
+    # must never be badged FMP). Field names follow research_factpack's
+    # _data_quality labels; absent provenance keeps the primary as before.
+    srcs = {
+        s.field: s.source for s in (fp.data_quality.sources or []) if getattr(s, "source", None)
+    }
+    profile_src = srcs.get("profile", "fmp")
+    fund_src = srcs.get("fundamentals", "fmp")
     items = _compact(
         [
-            _ev(f"{p}Price", _money(fp.price), src),
-            _ev(f"{p}P/E", _num(fp.valuation.pe, 1), src),
+            _ev(f"{p}Price", _money(fp.price), profile_src),
+            _ev(f"{p}P/E", _num(fp.valuation.pe, 1), fund_src),
             _ev(f"{p}Valuation band", fp.valuation.band, "derived"),
-            _ev(f"{p}Net margin", _pct(fp.quality.net_margin), src),
-            _ev(f"{p}ROE", _pct(fp.quality.roe), src),
+            _ev(f"{p}Net margin", _pct(fp.quality.net_margin), fund_src),
+            _ev(f"{p}ROE", _pct(fp.quality.roe), fund_src),
             _ev(f"{p}Revenue CAGR", _pct(fp.growth.revenue_cagr), "derived"),
             _ev(f"{p}Analyst implied upside", _pct(fp.analyst.implied_upside_pct), "derived"),
         ]

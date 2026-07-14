@@ -76,7 +76,35 @@ explain_cache = AiResponseCache(ttl_seconds=45 * 60)
 ask_cache = AiResponseCache(ttl_seconds=30 * 60)
 
 
+# ── per-user cache generation ────────────────────────────────────────────────
+# The /ask key is an input HASH, so a user's entries can't be enumerated for
+# targeted eviction. Instead, per-user keys fold in a monotonic generation
+# counter; bumping it makes every previously-cached key for that user
+# unreachable — exact O(1) invalidation. Used when the user changes/clears
+# confirmed Copilot preferences (the cached answer folded the OLD preference
+# evidence in and would contradict the new state for up to the TTL).
+# In-proc like the caches themselves: both reset together on deploy/restart,
+# and one int per preference-changing user per process is negligible.
+
+_user_gen: dict[str, int] = {}
+_gen_lock = threading.Lock()
+
+
+def user_generation(user_id: str) -> int:
+    return _user_gen.get(user_id or "", 0)
+
+
+def bump_user_generation(user_id: str) -> None:
+    """Invalidate every generation-keyed cache entry for this user."""
+    if not user_id:
+        return
+    with _gen_lock:
+        _user_gen[user_id] = _user_gen.get(user_id, 0) + 1
+
+
 def reset_all() -> None:
     """Test hook."""
     for cache in (verdict_cache, explain_cache, ask_cache):
         cache.reset()
+    with _gen_lock:
+        _user_gen.clear()

@@ -284,3 +284,68 @@ def test_concentration_derived_from_positions_when_score_lacks_block(wired, monk
     assert len(conc) == 1
     assert conc[0].id == "concentration:NVDA"
     assert "80.0%" in conc[0].what_changed
+
+
+def test_concentration_excludes_cash_matching_risk_math(wired):
+    """copilot_context ALWAYS folds a synthetic CASH AssetPosition into the
+    positions list (the earlier fixture omitted it — the wrong-shape trap).
+    Cash must not be a concentration candidate NOR inflate the denominator:
+    the canonical /risk concentration excludes cash, and counting it fired a
+    nonsensical 'Largest position: CASH' high alert on cash-heavy books
+    while understating every real equity weight."""
+    bare = _score()
+    del bare.concentration
+    # Real copilot_context shape: equities + the folded-in cash sleeve.
+    positions = [
+        SimpleNamespace(ticker="NVDA", market_value=4000.0, asset_type="equity"),
+        SimpleNamespace(ticker="AAA", market_value=1000.0, asset_type="equity"),
+        SimpleNamespace(ticker="CASH", market_value=5000.0, asset_type="cash"),
+    ]
+    wired(score=bare, prev=_prev_snapshot(), positions=positions)
+    conc = [i for i in ci.build_insights(USER).insights if i.kind == "concentration"]
+    # NVDA is 80% of the EQUITY book (4000/5000) — cash-inclusive math would
+    # have said CASH 50% (bogus alert) or NVDA 40% (understated).
+    assert len(conc) == 1
+    assert conc[0].id == "concentration:NVDA"
+    assert "80.0%" in conc[0].what_changed
+
+
+def test_all_cash_book_fires_no_concentration_insight(wired):
+    bare = _score()
+    del bare.concentration
+    wired(
+        score=bare,
+        prev=_prev_snapshot(),
+        positions=[SimpleNamespace(ticker="CASH", market_value=9000.0, asset_type="cash")],
+    )
+    assert not [i for i in ci.build_insights(USER).insights if i.kind == "concentration"]
+
+
+# ── episode-id stability (client dismissal must survive the episode) ──
+
+
+def test_dimension_drag_id_anchors_to_the_prior_snapshot_not_today(wired):
+    """dimension_drag derives from the SAME change report as score_move — its
+    id must key to the prior snapshot it was measured against. Keyed to
+    _day(now) it advanced every day, re-surfacing a dismissed card each
+    morning while the co-derived score_move stayed dismissed."""
+    prev = _prev_snapshot(overall=780)
+    prev["risk_metrics"]["dimensions"]["risk_adjusted_return"] = 9.0  # → big single-dim drag
+    wired(score=_score(overall=700), prev=prev)
+    drags = [i for i in ci.build_insights(USER).insights if i.kind == "dimension_drag"]
+    assert len(drags) == 1
+    # anchored to the fixture's prior-snapshot day, never the wall clock
+    assert drags[0].id.endswith(":2026-07-13")
+
+
+def test_data_quality_id_keys_to_the_state_not_the_day(wired):
+    """A STATE insight keys to the state itself: a persistent thin-data
+    condition stays one dismissable episode; a changed reason set is a new
+    episode. The old _day(now) key re-nagged daily for the same state."""
+    bad = _score(overall=300, data_quality=0.2, confidence="low")
+    bad.metrics.reason_codes = ["missing_price_data", "low_data_confidence"]
+    wired(score=bad, prev=None)
+    out = ci.build_insights(USER)
+    dq = [i for i in out.insights if i.kind == "data_quality"]
+    assert len(dq) == 1
+    assert dq[0].id == "data_quality:low:low_data_confidence+missing_price_data"

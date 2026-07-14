@@ -63,6 +63,11 @@ _REGISTRY: dict[str, ProviderInfo] = {
     REFERENCE: ProviderInfo(REFERENCE, "Reference", "Static reference", COMPUTED),
     MACRO: ProviderInfo(MACRO, "Macro", "Macro indicators", PRIMARY),
     UNAVAILABLE: ProviderInfo(UNAVAILABLE, "Unavailable", "No source available", FALLBACK),
+    # Composite emitted by the FactPack builders when FMP is primary and free
+    # yfinance filled the gaps — labelled honestly rather than title-cased.
+    "fmp+yfinance": ProviderInfo(
+        "fmp+yfinance", "FMP + Yahoo Finance", "FMP primary · yfinance gap-fill", PRIMARY
+    ),
 }
 
 
