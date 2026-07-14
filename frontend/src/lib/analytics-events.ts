@@ -48,6 +48,10 @@ export const ANALYTICS_EVENTS = {
   copilot_opened: "copilot_opened",
   copilot_followup_clicked: "copilot_followup_clicked",
   copilot_ask: "copilot_ask",
+  // PR5 — kind-only / value-free (no preference values, no insight content)
+  copilot_insight_dismissed: "copilot_insight_dismissed",
+  copilot_prefs_confirmed: "copilot_prefs_confirmed",
+  copilot_prefs_cleared: "copilot_prefs_cleared",
   sticky_cta_clicked: "sticky_cta_clicked",
   markets_sentiment_viewed: "markets_sentiment_viewed",
 } as const;

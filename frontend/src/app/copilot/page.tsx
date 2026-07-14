@@ -26,6 +26,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { CopilotConversation } from "@/components/copilot-conversation";
 import { CopilotAsk } from "@/components/copilot-ask";
+import { CopilotInsightsStrip } from "@/components/copilot-insights";
+import { CopilotPreferencesCard } from "@/components/copilot-preferences";
 import { CreditsBadge } from "@/components/credits-badge";
 import { isBillingEnabled } from "@/lib/billing-flag";
 import { useAuth } from "@/lib/auth-context";
@@ -73,11 +75,15 @@ export default function CopilotPage() {
         <CreditsBadge />
       </header>
 
+      <CopilotInsightsStrip />
+
       <Suspense fallback={<CopilotAsk />}>
         <CopilotAskWithPrefill />
       </Suspense>
 
       <CopilotConversation variant="page" />
+
+      <CopilotPreferencesCard />
     </div>
   );
 }
