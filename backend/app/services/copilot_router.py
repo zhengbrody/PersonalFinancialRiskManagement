@@ -407,9 +407,12 @@ def _answer_confidence(evidence: list[EvidenceItem], quality_floor: Optional[flo
     HARD facts among the evidence, CLAMPED by the grounding data's own quality
     (``quality_floor``) — so an all-engine answer over a thin-history book is
     still low-critical and can't be directional (rule #3). A thin or
-    reference-only answer can't be directional either."""
+    reference-only answer can't be directional either. User-confirmed
+    PREFERENCES are excluded entirely (explanation context only — they must
+    never raise or lower the data-driven conviction)."""
     from .confidence import build_data_confidence, field_provenance
 
+    evidence = [e for e in evidence if e.tool != "user_preferences"]
     total = len(evidence)
     hard = sum(1 for e in evidence if e.source in _HARD_EVIDENCE_SOURCES)
     overall = min(1.0, total / 4.0)  # ~4+ vetted facts = full coverage
@@ -985,6 +988,7 @@ def _gather(intent: str, message: str, tickers: list[str], *, user):
         safe("risk_reference", lambda: _risk_reference_evidence(score, positions)) or [],
         "risk_reference",
     )
+    ev += safe("preferences", lambda: _preference_evidence(user)) or []
 
     # Context-aware, minimum-tool selection (rule #3): only pull the score-change
     # decomposition when the question is about a change, and per-ticker exposure
@@ -1014,6 +1018,64 @@ def _gather(intent: str, message: str, tickers: list[str], *, user):
     if any(t.upper() in dropped for t in tickers):
         floor = min(floor if floor is not None else 1.0, 0.5)
     return ev, floor
+
+
+def _preference_evidence(user) -> list[EvidenceItem]:
+    """The user's explicitly-CONFIRMED Copilot preferences as reference
+    evidence (tool="user_preferences") — explanation context only. Fail-soft:
+    no row / unconfirmed / any repository failure → []. Excluded from the
+    DataConfidence math entirely (see _answer_confidence), so preferences can
+    never raise OR lower conviction; the LLM may cite them only as the user's
+    own stated preferences."""
+    from . import copilot_preferences as prefs
+
+    row = prefs.get_confirmed(getattr(user, "access_token", None), getattr(user, "id", None))
+    if not row:
+        return []
+    horizon_txt = {"short": "short", "medium": "medium", "long": "long"}
+    liquidity_txt = {"low": "low", "medium": "medium", "high": "high"}
+    items = _compact(
+        [
+            _ev(
+                "Your confirmed risk tolerance",
+                (
+                    f"{int(row['risk_tolerance'])} / 5"
+                    if row.get("risk_tolerance") is not None
+                    else None
+                ),
+                "reference",
+            ),
+            _ev(
+                "Your confirmed investment horizon",
+                horizon_txt.get(str(row.get("investment_horizon") or "")),
+                "reference",
+            ),
+            _ev(
+                "Your confirmed liquidity need",
+                liquidity_txt.get(str(row.get("liquidity_need") or "")),
+                "reference",
+            ),
+            _ev(
+                "Your confirmed single-name concentration limit",
+                (
+                    _pct(row.get("concentration_limit"))
+                    if row.get("concentration_limit") is not None
+                    else None
+                ),
+                "reference",
+            ),
+            _ev(
+                "Your confirmed margin-leverage limit",
+                (
+                    f"{float(row['margin_limit']):.1f}×"
+                    if row.get("margin_limit") is not None
+                    else None
+                ),
+                "reference",
+            ),
+        ]
+    )
+    return _stamp(items, "user_preferences")
 
 
 def _risk_reference_evidence(score, positions) -> list[EvidenceItem]:
@@ -1143,7 +1205,9 @@ _SYSTEM = (
     "BOUNDARY: never tell the user to buy or sell a specific security, never name a "
     "security to add or swap in, and never give a dollar amount to trade; frame any "
     "step as a risk-management lever evaluated in the platform's What-if lab / "
-    "Scenarios / Risk Report.\n"
+    "Scenarios / Risk Report. Evidence labelled 'Your confirmed …' is the user's own "
+    "STATED PREFERENCE — use it only to tailor which risks you emphasise; it is not "
+    "market data and never justifies a directional call or higher confidence.\n"
     "OUTPUT — write EXACTLY these three markdown sections, each starting with its bold "
     "header on its own line, and nothing else (the platform composes the evidence, "
     "data-confidence and simulation sections itself):\n"

@@ -1650,6 +1650,194 @@
         "title": "CopilotAskRequest",
         "type": "object"
       },
+      "CopilotPreferencesCleared": {
+        "properties": {
+          "cleared": {
+            "default": true,
+            "title": "Cleared",
+            "type": "boolean"
+          }
+        },
+        "title": "CopilotPreferencesCleared",
+        "type": "object"
+      },
+      "CopilotPreferencesIn": {
+        "description": "The user's explicit confirmation payload. Every field optional \u2014 a user\nmay confirm only the dimensions they care about; bounds mirror the DB\nCHECK constraints.",
+        "properties": {
+          "concentration_limit": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Concentration Limit"
+          },
+          "investment_horizon": {
+            "anyOf": [
+              {
+                "enum": [
+                  "short",
+                  "medium",
+                  "long"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Investment Horizon"
+          },
+          "liquidity_need": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Liquidity Need"
+          },
+          "margin_limit": {
+            "anyOf": [
+              {
+                "maximum": 10.0,
+                "minimum": 1.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Margin Limit"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "risk_tolerance": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Tolerance"
+          }
+        },
+        "title": "CopilotPreferencesIn",
+        "type": "object"
+      },
+      "CopilotPreferencesOut": {
+        "description": "The stored preferences. ``confirmed`` is False (and fields None) when\nthe user has never confirmed \u2014 equivalent to no memory.",
+        "properties": {
+          "concentration_limit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Concentration Limit"
+          },
+          "confirmed": {
+            "default": false,
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "confirmed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed At"
+          },
+          "investment_horizon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Investment Horizon"
+          },
+          "liquidity_need": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Liquidity Need"
+          },
+          "margin_limit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Margin Limit"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "title": "Metadata",
+            "type": "object"
+          },
+          "risk_tolerance": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Tolerance"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "title": "CopilotPreferencesOut",
+        "type": "object"
+      },
       "CorrTopPair": {
         "properties": {
           "a": {
@@ -2801,6 +2989,72 @@
           "meta"
         ],
         "title": "Envelope[CopilotAnswer]",
+        "type": "object"
+      },
+      "Envelope_CopilotPreferencesCleared_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CopilotPreferencesCleared"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[CopilotPreferencesCleared]",
+        "type": "object"
+      },
+      "Envelope_CopilotPreferencesOut_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CopilotPreferencesOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[CopilotPreferencesOut]",
         "type": "object"
       },
       "Envelope_EfficientFrontierOut_": {
@@ -13466,6 +13720,85 @@
           }
         },
         "summary": "Streaming (SSE) Copilot chat \u2014 answer tokens arrive as written",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/preferences": {
+      "delete": {
+        "operationId": "copilot_preferences_delete_api_v1_copilot_preferences_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CopilotPreferencesCleared_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Completely clear the caller's Copilot preferences",
+        "tags": [
+          "copilot"
+        ]
+      },
+      "get": {
+        "operationId": "copilot_preferences_get_api_v1_copilot_preferences_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CopilotPreferencesOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "The caller's confirmed Copilot preferences (empty = no memory)",
+        "tags": [
+          "copilot"
+        ]
+      },
+      "put": {
+        "operationId": "copilot_preferences_put_api_v1_copilot_preferences_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopilotPreferencesIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CopilotPreferencesOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Explicitly CONFIRM (save) Copilot preferences \u2014 the only write path",
         "tags": [
           "copilot"
         ]

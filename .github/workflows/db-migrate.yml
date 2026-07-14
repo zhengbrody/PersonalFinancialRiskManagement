@@ -1,0 +1,63 @@
+# Manually apply ONE additive migration from supabase/migrations/ to the
+# production database — dispatch-only, never scheduled, never on push.
+#
+# Guardrails:
+#   * psql --single-transaction -v ON_ERROR_STOP=1 — all-or-nothing.
+#   * The migration name is validated (no paths, must exist in the repo).
+#   * Output is psql's DDL statuses only (CREATE TABLE / CREATE POLICY …) —
+#     this repo is PUBLIC, so the job must never print data. Migrations in
+#     this repo are additive-by-convention; anything destructive needs an
+#     owner decision, not this workflow.
+#   * Uses SUPABASE_DB_URL (the SESSION-POOLER string — same secret, same
+#     trust boundary as db-backup.yml).
+#
+# NOTE the postgres image digest MUST stay in sync with db-backup.yml and
+# db-restore-drill.yml — a solo bump here would migrate with a different
+# client than the backup/restore pair verifies.
+
+name: DB migrate (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      migration:
+        description: "Filename under supabase/migrations/ (e.g. 0009_copilot_preferences.sql)"
+        required: true
+        type: string
+
+concurrency:
+  group: db-migrate
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate input
+        env:
+          MIGRATION: ${{ github.event.inputs.migration }}
+        run: |
+          case "$MIGRATION" in
+            "" | *[!A-Za-z0-9._-]* ) echo "invalid migration name"; exit 1 ;;
+          esac
+          test -f "supabase/migrations/$MIGRATION" || { echo "no such migration: $MIGRATION"; exit 1; }
+          echo "applying supabase/migrations/$MIGRATION"
+
+      - name: Apply migration (single transaction)
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          MIGRATION: ${{ github.event.inputs.migration }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "SUPABASE_DB_URL secret not set"; exit 1
+          fi
+          # Single-quoted sh -c so $PGURL expands INSIDE the container (the
+          # db-backup review-caught gotcha), and the migration mounts read-only.
+          docker run --rm \
+            -v "$PWD/supabase/migrations:/migrations:ro" \
+            -e PGURL="$SUPABASE_DB_URL" \
+            -e MIGRATION="$MIGRATION" \
+            postgres:17-alpine@sha256:dc17045ccfd343b49600570ea734b9c4991cf1c3f3302e67df51e3b402dd55c4 \
+            sh -c 'psql "$PGURL" --single-transaction -v ON_ERROR_STOP=1 -f "/migrations/$MIGRATION"'
