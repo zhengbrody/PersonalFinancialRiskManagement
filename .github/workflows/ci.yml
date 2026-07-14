@@ -97,8 +97,10 @@ jobs:
   # the same 30-case run via test_ai_eval_grounding.py; this job surfaces the
   # faithfulness report as its own visible check.
   copilot-eval:
+    # BLOCKING (PR6): grounding faithfulness, six-section integrity, injection
+    # predicates, language contract, confidence gate and the isolation probe
+    # are hard failures; the machine-readable report uploads as an artifact.
     runs-on: ubuntu-latest
-    continue-on-error: true
 
     steps:
     - uses: actions/checkout@v4
@@ -115,8 +117,16 @@ jobs:
         pip install -r requirements.txt
         pip install -r backend/requirements-backend.txt
 
-    - name: Grounding eval (offline template mode)
-      run: python evals/run_grounding_eval.py --threshold 0.98
+    - name: Grounding eval (offline template mode, machine-readable report)
+      run: python evals/run_grounding_eval.py --threshold 0.98 --json copilot-eval-report.json
+
+    - name: Upload eval report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: copilot-eval-report
+        path: copilot-eval-report.json
+        retention-days: 30
 
   # ── Dependency vulnerability scan (advisory). Non-blocking until the known
   # starlette findings are resolved via a fastapi/starlette ceiling bump
