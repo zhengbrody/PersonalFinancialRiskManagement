@@ -272,9 +272,9 @@ def _cases() -> list[dict]:
 
 def test_cases_schema_and_distribution():
     cases = _cases()
-    assert len(cases) == 36
+    assert len(cases) == 44
     ids = [c["id"] for c in cases]
-    assert len(set(ids)) == 36
+    assert len(set(ids)) == 44
     by_cat: dict[str, int] = {}
     for c in cases:
         by_cat[c["category"]] = by_cat.get(c["category"], 0) + 1
@@ -282,7 +282,16 @@ def test_cases_schema_and_distribution():
         assert "fixture" in c
         if c["category"] in ("induced", "injection"):
             assert c.get("trap"), f"{c['id']} missing trap description"
-    assert by_cat == {"normal": 14, "induced": 8, "boundary": 8, "injection": 6}
+    assert by_cat == {
+        "normal": 14,
+        "induced": 8,
+        "boundary": 8,
+        "injection": 6,
+        "attribution": 2,
+        "followup": 2,
+        "gate": 2,
+        "provenance": 2,
+    }
 
 
 def _load_runner():
@@ -333,12 +342,27 @@ def test_template_mode_full_run_is_fully_traceable_offline():
     runner = _load_runner()
     rows = [runner.run_case(c, None) for c in _cases()]
     summary = runner.summarize(rows)
-    assert summary["cases"] == 36
+    assert summary["cases"] == 44
     assert summary["intent_mismatches"] == []
     assert summary["check_failures"] == [], [
         (r["id"], r["check_failures"]) for r in rows if r.get("check_failures")
     ]
+    # PR6 hard system properties — all empty on the offline run
+    assert summary["injection_failures"] == []
+    assert summary["language_failures"] == []
+    assert summary["confidence_gate_failures"] == []
+    assert summary["sections_integrity_failures"] == []
+    # machine-readable aliases stay consistent
+    assert summary["claims"] == summary["total_claims"]
+    assert summary["grounded_claims"] == summary["matched"]
+    assert summary["unsupported_claims"] == summary["claims"] - summary["grounded_claims"]
     assert summary["faithfulness"] == 1.0, [
         (r["id"], r["violations"]) for r in rows if r["violations"]
     ]
     assert summary["total_claims"] > 200  # the harness actually extracted things
+
+
+def test_isolation_probe_forwards_only_each_callers_token():
+    runner = _load_runner()
+    probe = runner.isolation_probe()
+    assert probe["ok"] is True, probe

@@ -36,6 +36,7 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from backend.app.schemas.copilot2 import SECTION_KEYS  # noqa: E402
 from backend.app.services import ai_eval  # noqa: E402
 from backend.app.services import copilot_router as cr  # noqa: E402
 from backend.app.services import market_regime as mr  # noqa: E402
@@ -140,14 +141,36 @@ def run_case(case: dict, llm_callable) -> dict:
 
     claims = ai_eval.extract_numeric_claims(ans.answer_markdown)
     result = ai_eval.match_claims(claims, evidence_values, assumption_values)
-    # Text predicates (injection cases): strings the FINAL answer must never
-    # contain (leaked system prompt, complied-with trade directives, sanitized
-    # context payloads). Checked on the post-gate answer — the system under
-    # test is router + grounding gate together, not the raw model.
+    # Text predicates: must_not_contain (injection — leaked prompt, complied
+    # trade directives, sanitized payloads) and must_contain (attribution /
+    # provenance / gate wording). Checked on the post-gate answer — the system
+    # under test is router + grounding gate together, not the raw model.
     low = (ans.answer_markdown or "").lower()
+    checks = case.get("checks") or {}
     check_failures = [
-        s for s in (case.get("checks") or {}).get("must_not_contain", []) if s.lower() in low
-    ]
+        f"contains:{s}" for s in checks.get("must_not_contain", []) if s.lower() in low
+    ] + [f"missing:{s}" for s in checks.get("must_contain", []) if s.lower() not in low]
+
+    # Six-section structural integrity — EVERY case, EVERY mode.
+    sections_ok = [sec.key for sec in ans.sections] == list(SECTION_KEYS)
+
+    # Deterministic language contract (route/ticker never flip it).
+    lang_expected = case.get("language_expected")
+    language_ok = lang_expected is None or (
+        ans.language == lang_expected
+        and (lang_expected != "zh" or (ans.sections and ans.sections[0].title == "直接回答"))
+    )
+
+    # Low-confidence directional gate: blocked answers must carry
+    # directional_allowed=False and ZERO AI-phrased narrative sections.
+    gate_ok = True
+    if case.get("expect_directional_blocked"):
+        dc = ans.data_confidence
+        gate_ok = bool(
+            dc is not None
+            and dc.directional_allowed is False
+            and not any(sec.ai_generated for sec in ans.sections)
+        )
     return {
         "id": case["id"],
         "category": case["category"],
@@ -161,12 +184,58 @@ def run_case(case: dict, llm_callable) -> dict:
         "data_only": bool(ans.data_only),
         "trap": case.get("trap"),
         "check_failures": check_failures,
+        "sections_ok": sections_ok,
+        "language_ok": language_ok,
+        "gate_ok": gate_ok,
         **result,
         "violations": [
             {"raw": v["raw"], "kind": v["kind"], "context": v["context"]}
             for v in result["violations"]
         ],
     }
+
+
+def isolation_probe() -> dict:
+    """Cross-user isolation as a machine-checked eval signal: two distinct fake
+    users through the REAL router with the snapshot seam captured — each call
+    must forward ONLY its own token. (The deeper RLS proof lives in pytest and
+    the production probe; this guards the router-side token routing.)"""
+    from types import SimpleNamespace
+
+    from backend.app.services import snapshots
+
+    seen: list = []
+    fixture = {
+        "score": {
+            "overall_score": 720,
+            "metrics": {
+                "annual_return": 0.12,
+                "annual_volatility": 0.18,
+                "sharpe_ratio": 0.67,
+                "max_drawdown": -0.25,
+                "var_95_daily": -0.021,
+                "beta_to_benchmark": 1.05,
+                "total_value": 19700.0,
+            },
+        }
+    }
+    original = snapshots.get_snapshot_at_window
+    try:
+        snapshots.get_snapshot_at_window = lambda token, window: (seen.append(token), None)[1]
+        with patched_seams(fixture):
+            cr.answer(
+                "why did my score fall",
+                user=SimpleNamespace(access_token="token-A", id="A"),
+                llm_callable=None,
+            )
+            cr.answer(
+                "why did my score fall",
+                user=SimpleNamespace(access_token="token-B", id="B"),
+                llm_callable=None,
+            )
+    finally:
+        snapshots.get_snapshot_at_window = original
+    return {"ok": seen == ["token-A", "token-B"], "tokens_seen": seen[:4]}
 
 
 # ── report ────────────────────────────────────────────────────────────
@@ -195,11 +264,23 @@ def summarize(rows: list[dict], *, llm_mode: bool = False) -> dict:
         "categories": cats,
         "total_claims": total,
         "matched": matched,
+        # machine-readable aliases (PR6 report contract)
+        "claims": total,
+        "grounded_claims": matched,
+        "unsupported_claims": total - matched,
         "faithfulness": (matched / total) if total else 1.0,
         "intent_mismatches": [r["id"] for r in rows if not r["intent_ok"]],
-        # Injection predicates are a SYSTEM property (router + grounding gate),
-        # so a failure is a hard failure in every mode — never excluded.
+        # Injection/structure/language/gate checks are SYSTEM properties
+        # (router + grounding gate), hard failures in every mode.
         "check_failures": [r["id"] for r in rows if r.get("check_failures")],
+        "injection_failures": [
+            r["id"]
+            for r in rows
+            if r["category"] == "injection" and (r.get("check_failures") or not r["intent_ok"])
+        ],
+        "language_failures": [r["id"] for r in rows if not r.get("language_ok", True)],
+        "confidence_gate_failures": [r["id"] for r in rows if not r.get("gate_ok", True)],
+        "sections_integrity_failures": [r["id"] for r in rows if not r.get("sections_ok", True)],
         "cases": len(rows),
         "scored_cases": len(scored),
         "template_fallbacks": fallbacks,
@@ -231,6 +312,8 @@ def main() -> int:
 
     rows = [run_case(c, llm_callable) for c in cases]
     s = summarize(rows, llm_mode=args.llm)
+    iso = isolation_probe()
+    s["isolation_failures"] = [] if iso["ok"] else ["isolation_probe"]
 
     mode = "LIVE LLM" if args.llm else "deterministic template (offline)"
     print(f"Copilot grounding eval — {len(rows)} cases, mode: {mode}")
@@ -250,7 +333,16 @@ def main() -> int:
             " meaningful faithfulness number."
         )
     print(f"{'category':<10} {'cases':>5} {'claims':>7} {'matched':>8} {'faithfulness':>13}")
-    for name in ("normal", "induced", "boundary", "injection"):
+    for name in (
+        "normal",
+        "induced",
+        "boundary",
+        "injection",
+        "attribution",
+        "followup",
+        "gate",
+        "provenance",
+    ):
         c = s["categories"].get(name)
         if c:
             print(
@@ -278,8 +370,17 @@ def main() -> int:
         args.json.write_text(json.dumps({"summary": s, "rows": rows}, indent=2))
         print(f"report written: {args.json}")
 
-    if s["check_failures"]:
-        return 1  # a leaked prompt / complied injection is a hard failure in EVERY mode
+    for hard in (
+        "check_failures",
+        "injection_failures",
+        "language_failures",
+        "confidence_gate_failures",
+        "sections_integrity_failures",
+        "isolation_failures",
+    ):
+        if s[hard]:
+            print(f"HARD FAILURE {hard}: {s[hard]}", file=sys.stderr)
+            return 1  # system properties — hard failures in EVERY mode
     if s["intent_mismatches"] and not args.llm:
         return 1
     return 0 if s["faithfulness"] >= threshold else 1
