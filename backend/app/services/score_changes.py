@@ -429,3 +429,45 @@ def build_change_report(
         previous_score_version=str(prev_version) if prev_version else None,
         comparable=True,
     )
+
+
+def request_from_score(score, positions=None, *, window: str = "previous") -> ScoreChangeRequest:
+    """Build a change-report request from a LIVE ScoreResponse-like object —
+    the single shared constructor for server-side callers (the Copilot
+    score-change tool, proactive insights). No recompute: it only re-shapes
+    numbers the score already carries."""
+    m = score.metrics
+    dims = {
+        k: float(d.score)
+        for k, d in (getattr(score, "dimensions", None) or {}).items()
+        if getattr(d, "score", None) is not None
+    }
+    top_positions: list[dict] = []
+    total_mv = sum(float(getattr(p, "market_value", 0.0) or 0.0) for p in (positions or []))
+    if total_mv > 0:
+        rows = [
+            {
+                "ticker": str(getattr(p, "ticker", "") or "").upper(),
+                "weight": float(getattr(p, "market_value", 0.0) or 0.0) / total_mv,
+            }
+            for p in positions
+            if getattr(p, "ticker", None)
+        ]
+        top_positions = sorted(rows, key=lambda r: r["weight"], reverse=True)[:10]
+    return ScoreChangeRequest(
+        window=window,
+        overall_score=int(score.overall_score),
+        base_overall=int(getattr(score, "base_overall", None) or score.overall_score),
+        dimensions=dims,
+        top_positions=top_positions,
+        metrics={
+            "annual_volatility": getattr(m, "annual_volatility", None),
+            "sharpe_ratio": getattr(m, "sharpe_ratio", None),
+            "max_drawdown": getattr(m, "max_drawdown", None),
+            "var_95_daily": getattr(m, "var_95_daily", None),
+            "beta_to_benchmark": getattr(m, "beta_to_benchmark", None),
+            "net_equity": getattr(m, "net_equity", None),
+            "leverage": getattr(m, "leverage", None),
+        },
+        confidence=getattr(m, "confidence", None),
+    )

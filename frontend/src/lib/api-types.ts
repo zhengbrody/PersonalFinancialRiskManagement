@@ -293,6 +293,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/copilot/insights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Deterministic proactive insights — material changes only, no advice
+         * @description Server-computed, deterministic, credit-free. Materiality thresholds +
+         *     one-per-kind dedup + stable episode ids (client dismissal survives while a
+         *     condition persists). Thin data → only the data-quality insight. FAIL-SOFT:
+         *     any internal failure degrades to an empty list, never a 500.
+         */
+        get: operations["copilot_insights_endpoint_api_v1_copilot_insights_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/copilot/preferences": {
         parameters: {
             query?: never;
@@ -2553,6 +2576,14 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** Envelope[InsightsOut] */
+        Envelope_InsightsOut_: {
+            data?: components["schemas"]["InsightsOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
         /** Envelope[InstitutionDetailOut] */
         Envelope_InstitutionDetailOut_: {
             data?: components["schemas"]["InstitutionDetailOut"] | null;
@@ -3322,6 +3353,55 @@ export interface components {
             sells_90d?: number;
             /** Signal */
             signal?: string | null;
+        };
+        /**
+         * InsightNextAnalysis
+         * @description A non-transactional next step — always an ANALYSIS surface, never a trade.
+         */
+        InsightNextAnalysis: {
+            /** Href */
+            href: string;
+            /** Label */
+            label: string;
+        };
+        /** InsightOut */
+        InsightOut: {
+            /** As Of */
+            as_of?: string | null;
+            /** Confidence */
+            confidence?: string | null;
+            /** Evidence */
+            evidence?: components["schemas"]["EvidenceItem"][];
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Missing Data */
+            missing_data?: string[];
+            /**
+             * Severity
+             * @default info
+             */
+            severity?: string;
+            suggested_next_analysis?: components["schemas"]["InsightNextAnalysis"] | null;
+            /** What Changed */
+            what_changed: string;
+            /** Why It Matters */
+            why_it_matters: string;
+        };
+        /** InsightsOut */
+        InsightsOut: {
+            /** As Of */
+            as_of?: string | null;
+            /** Insights */
+            insights?: components["schemas"]["InsightOut"][];
+            /** Missing Data */
+            missing_data?: string[];
+            /**
+             * Portfolio Available
+             * @default false
+             */
+            portfolio_available?: boolean;
         };
         /** InstitutionChanges */
         InstitutionChanges: {
@@ -6187,6 +6267,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    copilot_insights_endpoint_api_v1_copilot_insights_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_InsightsOut_"];
                 };
             };
         };

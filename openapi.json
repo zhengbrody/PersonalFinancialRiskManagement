@@ -3123,6 +3123,39 @@
         "title": "Envelope[HistoricalScenariosOut]",
         "type": "object"
       },
+      "Envelope_InsightsOut_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InsightsOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[InsightsOut]",
+        "type": "object"
+      },
       "Envelope_InstitutionDetailOut_": {
         "additionalProperties": true,
         "properties": {
@@ -5682,6 +5715,140 @@
           }
         },
         "title": "InsiderBlock",
+        "type": "object"
+      },
+      "InsightNextAnalysis": {
+        "description": "A non-transactional next step \u2014 always an ANALYSIS surface, never a trade.",
+        "properties": {
+          "href": {
+            "title": "Href",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "href"
+        ],
+        "title": "InsightNextAnalysis",
+        "type": "object"
+      },
+      "InsightOut": {
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceItem"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "missing_data": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Data",
+            "type": "array"
+          },
+          "severity": {
+            "default": "info",
+            "title": "Severity",
+            "type": "string"
+          },
+          "suggested_next_analysis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InsightNextAnalysis"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "what_changed": {
+            "title": "What Changed",
+            "type": "string"
+          },
+          "why_it_matters": {
+            "title": "Why It Matters",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "what_changed",
+          "why_it_matters"
+        ],
+        "title": "InsightOut",
+        "type": "object"
+      },
+      "InsightsOut": {
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "insights": {
+            "items": {
+              "$ref": "#/components/schemas/InsightOut"
+            },
+            "title": "Insights",
+            "type": "array"
+          },
+          "missing_data": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Data",
+            "type": "array"
+          },
+          "portfolio_available": {
+            "default": false,
+            "title": "Portfolio Available",
+            "type": "boolean"
+          }
+        },
+        "title": "InsightsOut",
         "type": "object"
       },
       "InstitutionChanges": {
@@ -13720,6 +13887,28 @@
           }
         },
         "summary": "Streaming (SSE) Copilot chat \u2014 answer tokens arrive as written",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/insights": {
+      "get": {
+        "description": "Server-computed, deterministic, credit-free. Materiality thresholds +\none-per-kind dedup + stable episode ids (client dismissal survives while a\ncondition persists). Thin data \u2192 only the data-quality insight. FAIL-SOFT:\nany internal failure degrades to an empty list, never a 500.",
+        "operationId": "copilot_insights_endpoint_api_v1_copilot_insights_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_InsightsOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Deterministic proactive insights \u2014 material changes only, no advice",
         "tags": [
           "copilot"
         ]
