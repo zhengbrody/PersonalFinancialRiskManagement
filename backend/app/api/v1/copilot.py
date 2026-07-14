@@ -24,6 +24,7 @@ from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import APIError, ok, service_unavailable, too_many_requests
 from ...schemas.copilot import ChatRequest, ChatResponse
 from ...schemas.copilot2 import CopilotAnswer, CopilotAskRequest
+from ...schemas.copilot_insights import InsightsOut
 from ...schemas.copilot_prefs import (
     CopilotPreferencesCleared,
     CopilotPreferencesIn,
@@ -450,3 +451,27 @@ def copilot_preferences_delete(request: Request, user: AuthedUser = Depends(requ
         _log.warning("copilot.preferences.delete_failed err=%s", type(exc).__name__)
         raise service_unavailable("Copilot preferences are temporarily unavailable.") from None
     return ok(CopilotPreferencesCleared().model_dump(), request=request, started_at=started)
+
+
+# ── proactive insights (Copilot PR4) ─────────────────────────────────
+
+
+@router.get(
+    "/insights",
+    summary="Deterministic proactive insights — material changes only, no advice",
+    response_model=Envelope[InsightsOut],
+)
+def copilot_insights_endpoint(request: Request, user: AuthedUser = Depends(require_user)):
+    """Server-computed, deterministic, credit-free. Materiality thresholds +
+    one-per-kind dedup + stable episode ids (client dismissal survives while a
+    condition persists). Thin data → only the data-quality insight. FAIL-SOFT:
+    any internal failure degrades to an empty list, never a 500."""
+    started = time.perf_counter()
+    from ...services.copilot_insights import build_insights
+
+    try:
+        out = build_insights(user)
+    except Exception as exc:  # noqa: BLE001 - insights are a nice-to-have
+        _log.warning("copilot.insights_failed err=%s", type(exc).__name__)
+        out = InsightsOut(insights=[], portfolio_available=False)
+    return ok(out.model_dump(), request=request, started_at=started)
