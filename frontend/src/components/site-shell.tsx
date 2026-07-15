@@ -28,12 +28,12 @@ import { Badge } from "@/components/ui/badge";
 
 type NavItem = { href: string; label: string; external?: boolean };
 
-const PORTFOLIO_ITEMS: NavItem[] = [
-  { href: "/score", label: "Health Score" },
-  { href: "/portfolios", label: "Holdings" },
-  { href: "/risk", label: "Risk" },
-  { href: "/quant", label: "Backtest" },
-  { href: "/scenarios", label: "Scenarios" },
+// Primary top-level links: Today (dashboard) · Analyze (the unified risk
+// workspace that subsumes Health Score / Risk / Scenarios — those routes stay
+// reachable by URL as compatibility/rollback entries).
+const MAIN_LINKS: NavItem[] = [
+  { href: "/", label: "Today" },
+  { href: "/analyze", label: "Analyze" },
 ];
 
 const RESEARCH_ITEMS: NavItem[] = [
@@ -42,9 +42,12 @@ const RESEARCH_ITEMS: NavItem[] = [
   { href: "/institutions", label: "Smart money" },
 ];
 
-/** Account-menu links, shared by the desktop AccountMenu + the mobile menu. */
+/** Account-menu links, shared by the desktop AccountMenu + the mobile menu.
+ * Holdings + Backtest live here now that Analyze is the primary risk surface. */
 function accountLinks(isOwner: boolean): NavItem[] {
   return [
+    { href: "/portfolios", label: "Holdings" },
+    { href: "/quant", label: "Backtest" },
     { href: "/settings", label: "Settings" },
     // Pricing / billing is hidden during the free beta (Stripe stays in code).
     ...(isBillingEnabled()
@@ -113,7 +116,15 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
           </Link>
           {/* Desktop nav */}
           <nav className="hidden items-center gap-1 text-sm md:flex">
-            <NavGroup label="Portfolio" items={PORTFOLIO_ITEMS} />
+            {MAIN_LINKS.map((l) => (
+              <Link
+                key={l.href}
+                href={l.href}
+                className="rounded px-3 py-1.5 font-medium text-foreground hover:bg-accent hover:text-accent-foreground"
+              >
+                {l.label}
+              </Link>
+            ))}
             <NavGroup label="Research" items={RESEARCH_ITEMS} />
             <Link
               href="/copilot"
@@ -208,7 +219,9 @@ function MobileNav() {
       </button>
       {open && (
         <div className="absolute right-0 z-50 mt-2 w-60 rounded-md border border-border bg-card p-2 shadow-lg">
-          <Section label="Portfolio" items={PORTFOLIO_ITEMS} onNavigate={close} />
+          {MAIN_LINKS.map((it) => (
+            <MenuLink key={it.href} item={it} onNavigate={close} />
+          ))}
           <Section label="Research" items={RESEARCH_ITEMS} onNavigate={close} />
           <MenuLink item={{ href: "/copilot", label: "Copilot" }} onNavigate={close} />
           <div className="my-1 border-t border-border" />

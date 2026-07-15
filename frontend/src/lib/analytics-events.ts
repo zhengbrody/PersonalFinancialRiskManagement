@@ -56,6 +56,13 @@ export const ANALYTICS_EVENTS = {
   markets_sentiment_viewed: "markets_sentiment_viewed",
   // ── portfolio operating system (value-free: no id/name/ticker/$) ─────────
   portfolio_switched: "portfolio_switched",
+  analyze_view_changed: "analyze_view_changed",
+  stress_test_started: "stress_test_started",
+  stress_test_completed: "stress_test_completed",
+  risk_plan_saved: "risk_plan_saved",
+  risk_plan_reviewed: "risk_plan_reviewed",
+  risk_plan_resolved: "risk_plan_resolved",
+  journey_step_completed: "journey_step_completed",
 } as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[keyof typeof ANALYTICS_EVENTS];

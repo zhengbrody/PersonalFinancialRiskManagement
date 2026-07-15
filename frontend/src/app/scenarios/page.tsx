@@ -81,6 +81,9 @@ export default function ScenariosPage() {
     <div className="space-y-6">
       <header className="space-y-1">
         <h1 className="text-3xl font-semibold tracking-tight">Scenarios</h1>
+        <a href="/analyze?view=stress" className="text-xs font-medium text-primary hover:underline">
+          Open in the Analyze workspace →
+        </a>
         <p className="text-sm text-muted-foreground">
           Stress-test your portfolio before the market does. All free, no AI
           credits used.
