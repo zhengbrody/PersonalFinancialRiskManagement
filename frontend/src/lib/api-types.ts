@@ -855,6 +855,29 @@ export interface paths {
         patch: operations["update_portfolio_endpoint_api_v1_portfolios__portfolio_id__patch"];
         trace?: never;
     };
+    "/api/v1/portfolios/{portfolio_id}/activate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Atomically make this the caller's active (default) portfolio
+         * @description Flip the active book in ONE atomic, RLS-scoped statement (migration 0011's
+         *     ``activate_portfolio`` RPC). A portfolio the caller doesn't own — or one that
+         *     doesn't exist — both return 404 identically (no existence leak). After this,
+         *     every ``*_from_active`` endpoint resolves THIS portfolio.
+         */
+        post: operations["activate_portfolio_endpoint_api_v1_portfolios__portfolio_id__activate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/public/risk_check": {
         parameters: {
             query?: never;
@@ -7118,6 +7141,37 @@ export interface operations {
                 "application/json": components["schemas"]["PortfolioPatchRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_PortfolioOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    activate_portfolio_endpoint_api_v1_portfolios__portfolio_id__activate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

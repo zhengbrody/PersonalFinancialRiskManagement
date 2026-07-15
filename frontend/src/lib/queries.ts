@@ -337,6 +337,9 @@ export function useUpdatePortfolio(portfolioId: string) {
 const deleteResultSchema = z.looseObject({
   deleted: z.boolean(),
   id: z.string(),
+  // The backend promotes + reports the new active book after a delete
+  // (exactly-one-active). Null when the user deleted their last portfolio.
+  active_portfolio_id: z.string().nullish(),
 });
 
 export function useDeletePortfolio() {
@@ -350,6 +353,24 @@ export function useDeletePortfolio() {
         schema: deleteResultSchema,
       }),
     onSuccess: () => invalidatePortfoliosKey(qc),
+  });
+}
+
+/**
+ * Atomically make one portfolio the caller's active (default) book. The
+ * response is the activated row; the PORTFOLIO CONTEXT orchestrates the cache
+ * reset + cross-tab broadcast (this hook stays a thin request so the context
+ * owns the switch side-effects). A non-owned / missing id → 404.
+ */
+export function useActivatePortfolio() {
+  const { accessToken } = useAuth();
+  return useMutation<PortfolioRow, Error, string>({
+    mutationFn: (portfolioId) =>
+      apiFetch<PortfolioRow>(`/api/v1/portfolios/${portfolioId}/activate`, {
+        method: "POST",
+        authToken: accessToken ?? undefined,
+        schema: portfolioRowSchema,
+      }),
   });
 }
 

@@ -180,16 +180,92 @@ def test_delete_requires_bearer(test_client):
 
 def test_delete_forwards_jwt(test_client, mint_token, fake_portfolio_mutations):
     token = mint_token()
+    fake_portfolio_mutations["ensure_active"].set_return(_sample_row(id="p-next"))
     resp = test_client.delete(
         "/api/v1/portfolios/p-target",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 200
     body = resp.json()["data"]
-    assert body == {"deleted": True, "id": "p-target"}
+    # Delete now also promotes + reports the new active book (exactly-one-active).
+    assert body == {"deleted": True, "id": "p-target", "active_portfolio_id": "p-next"}
     assert fake_portfolio_mutations["delete"].calls == [
         {"portfolio_id": "p-target", "access_token": token}
     ]
+    # The promotion runs with the caller's JWT (RLS-scoped).
+    assert fake_portfolio_mutations["ensure_active"].calls == [{"access_token": token}]
+
+
+def test_delete_of_last_portfolio_reports_no_active(
+    test_client, mint_token, fake_portfolio_mutations
+):
+    # ensure_active returns None (no rows left) → active_portfolio_id is null.
+    resp = test_client.delete(
+        "/api/v1/portfolios/p-only",
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["active_portfolio_id"] is None
+
+
+def test_delete_survives_promotion_failure(test_client, mint_token, fake_portfolio_mutations):
+    # A promotion hiccup must NOT fail the delete (read path still falls back).
+    fake_portfolio_mutations["ensure_active"].raise_with(RuntimeError("promotion blip"))
+    resp = test_client.delete(
+        "/api/v1/portfolios/p-1",
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"] == {"deleted": True, "id": "p-1", "active_portfolio_id": None}
+
+
+# ── POST /portfolios/{id}/activate — atomic switch ─────────────────
+
+
+def test_activate_requires_bearer(test_client):
+    resp = test_client.post("/api/v1/portfolios/p-1/activate")
+    assert resp.status_code == 401
+
+
+def test_activate_forwards_jwt_and_returns_row(test_client, mint_token, fake_portfolio_mutations):
+    token = mint_token(sub="user-77")
+    fake_portfolio_mutations["activate"].set_return(_sample_row(id="p-b", name="Book B"))
+    resp = test_client.post(
+        "/api/v1/portfolios/p-b/activate",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()["data"]
+    assert body["id"] == "p-b" and body["name"] == "Book B" and body["is_default"] is True
+    assert fake_portfolio_mutations["activate"].calls == [
+        {"portfolio_id": "p-b", "access_token": token}
+    ]
+
+
+def test_activate_non_owned_or_missing_id_returns_404(
+    test_client, mint_token, fake_portfolio_mutations
+):
+    # The RPC returns None for BOTH a non-owned id and a non-existent id — the
+    # endpoint 404s identically so existence is never leaked.
+    fake_portfolio_mutations["activate"].set_return(None)
+    resp = test_client.post(
+        "/api/v1/portfolios/someone-elses-id/activate",
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    assert resp.status_code == 404
+    assert resp.json()["error"]["code"] == "portfolio_not_found"
+
+
+def test_activate_upstream_failure_is_server_error(
+    test_client, mint_token, fake_portfolio_mutations
+):
+    fake_portfolio_mutations["activate"].raise_with(RuntimeError("rpc down"))
+    resp = test_client.post(
+        "/api/v1/portfolios/p-1/activate",
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    assert resp.status_code == 500
+    assert "rpc down" not in resp.json()["error"]["message"]
 
 
 def test_delete_upstream_failure_is_server_error(test_client, mint_token, fake_portfolio_mutations):

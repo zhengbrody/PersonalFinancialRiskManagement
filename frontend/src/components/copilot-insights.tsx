@@ -14,9 +14,16 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { track } from "@/lib/analytics";
+import { usePortfolioContext } from "@/lib/portfolio-context";
 import { type CopilotInsight, useCopilotInsights } from "@/lib/queries";
 
-const DISMISSED_KEY = "mm:copilot:insights:dismissed";
+// Dismissals are PER-PORTFOLIO: the same insight kind on two books is a
+// different episode, so switching the active portfolio starts fresh (and never
+// hides another book's alert). The `mm:copilot:` prefix keeps it inside the
+// user-scoped-storage wipe on sign-out.
+const DISMISSED_KEY_BASE = "mm:copilot:insights:dismissed";
+const dismissedKey = (portfolioId: string | null) =>
+  `${DISMISSED_KEY_BASE}:${portfolioId ?? "none"}`;
 const MAX_REMEMBERED = 50;
 
 const SEVERITY_DOT: Record<string, string> = {
@@ -25,9 +32,9 @@ const SEVERITY_DOT: Record<string, string> = {
   info: "bg-sky-500",
 };
 
-function readDismissed(): string[] {
+function readDismissed(key: string): string[] {
   try {
-    const raw = window.localStorage.getItem(DISMISSED_KEY);
+    const raw = window.localStorage.getItem(key);
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
   } catch {
@@ -35,9 +42,9 @@ function readDismissed(): string[] {
   }
 }
 
-function writeDismissed(ids: string[]) {
+function writeDismissed(key: string, ids: string[]) {
   try {
-    window.localStorage.setItem(DISMISSED_KEY, JSON.stringify(ids.slice(-MAX_REMEMBERED)));
+    window.localStorage.setItem(key, JSON.stringify(ids.slice(-MAX_REMEMBERED)));
   } catch {
     /* storage unavailable — dismissal just won't persist */
   }
@@ -45,10 +52,14 @@ function writeDismissed(ids: string[]) {
 
 export function CopilotInsightsStrip() {
   const insights = useCopilotInsights();
+  const { activePortfolioId } = usePortfolioContext();
+  const key = dismissedKey(activePortfolioId);
   const [dismissed, setDismissed] = useState<string[]>([]);
+  // Re-read when the active portfolio changes — a switch must not carry the
+  // prior book's dismissals into the new one.
   useEffect(() => {
-    setDismissed(readDismissed());
-  }, []);
+    setDismissed(readDismissed(key));
+  }, [key]);
 
   if (insights.isLoading || insights.isError) return null;
   const data = insights.data;
@@ -59,7 +70,7 @@ export function CopilotInsightsStrip() {
   function dismiss(id: string, kind: string) {
     const next = [...dismissed, id];
     setDismissed(next);
-    writeDismissed(next);
+    writeDismissed(key, next);
     track("copilot_insight_dismissed", { kind }); // kind only — never content
   }
 

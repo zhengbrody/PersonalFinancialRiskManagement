@@ -36,6 +36,7 @@ const SAMPLE = {
 function mockAsk(overrides: Record<string, unknown>) {
   askMock.mockReturnValue({
     mutate: vi.fn(),
+    reset: vi.fn(),
     isPending: false,
     isError: false,
     error: null,

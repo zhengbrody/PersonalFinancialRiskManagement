@@ -7,6 +7,7 @@
  * for a retail user. Deterministic — no credits.
  */
 
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -19,6 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { HorizontalBarChart, type BarDatum } from "@/components/ui/bar-chart";
 import { DataProvenance } from "@/components/data-provenance";
 import { ApiError } from "@/lib/api";
+import { usePortfolioContext } from "@/lib/portfolio-context";
 import { useAttribution, type Attribution } from "@/lib/queries";
 
 function pct(v: number | null | undefined, digits = 2): string {
@@ -33,6 +35,12 @@ function num(v: number | null | undefined, digits = 2): string {
 export function QuantAttribution() {
   const attr = useAttribution();
   const err = attr.error as ApiError | null;
+  // On-demand result belongs to the active book — clear it on a switch.
+  const { activePortfolioId } = usePortfolioContext();
+  useEffect(() => {
+    attr.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePortfolioId]);
 
   return (
     <div className="space-y-6">

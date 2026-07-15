@@ -25,6 +25,7 @@ import { Markdown } from "@/components/markdown";
 import { ApiError } from "@/lib/api";
 import { BETA_LIMIT_MESSAGE, isBillingEnabled } from "@/lib/billing-flag";
 import { track } from "@/lib/analytics";
+import { usePortfolioContext } from "@/lib/portfolio-context";
 import { useSessionState } from "@/lib/use-session-state";
 import {
   type CopilotAnswer,
@@ -92,10 +93,19 @@ export function CopilotAsk({ initialQuestion }: { initialQuestion?: string } = {
   const pathname = usePathname();
   // Persist the last answer so switching screens/tabs and returning restores it
   // instead of an empty card (the mutation result itself is lost on unmount).
+  // Keyed PER-PORTFOLIO — the answer folds in the active book, so switching
+  // portfolios must not surface the prior book's answer.
+  const { activePortfolioId } = usePortfolioContext();
   const [savedAnswer, setSavedAnswer] = useSessionState<CopilotAnswer | null>(
-    "mm:copilot:ask:answer",
+    `mm:copilot:ask:answer:${activePortfolioId ?? "none"}`,
     null,
   );
+  // Clear the live mutation result on a portfolio switch — otherwise `ask.data`
+  // (the prior book's answer) would win over the freshly-reset savedAnswer.
+  useEffect(() => {
+    ask.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePortfolioId]);
   const answer = ask.data ?? savedAnswer;
   // Default English on the first render and switch post-mount when the
   // browser locale is Chinese (SSR-safe: never touch `navigator` in render).

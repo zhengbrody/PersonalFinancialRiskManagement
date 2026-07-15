@@ -134,12 +134,35 @@ def fake_portfolio_mutations(monkeypatch):
             raise delete.raise_on_call
         return None
 
+    activate = _MutStub()
+    ensure_active = _MutStub()
+
+    def _activate(portfolio_id, access_token=None):
+        activate.calls.append({"portfolio_id": portfolio_id, "access_token": access_token})
+        if activate.raise_on_call is not None:
+            raise activate.raise_on_call
+        return dict(activate.returns) if activate.returns else None
+
+    def _ensure_active(access_token=None):
+        ensure_active.calls.append({"access_token": access_token})
+        if ensure_active.raise_on_call is not None:
+            raise ensure_active.raise_on_call
+        return dict(ensure_active.returns) if ensure_active.returns else None
+
     import libs.auth.portfolios as _portfolios_mod
 
     monkeypatch.setattr(_portfolios_mod, "create_portfolio", _create)
     monkeypatch.setattr(_portfolios_mod, "update_portfolio", _update)
     monkeypatch.setattr(_portfolios_mod, "delete_portfolio", _delete)
-    return {"create": create, "update": update, "delete": delete}
+    monkeypatch.setattr(_portfolios_mod, "activate_portfolio", _activate)
+    monkeypatch.setattr(_portfolios_mod, "ensure_active_portfolio", _ensure_active)
+    return {
+        "create": create,
+        "update": update,
+        "delete": delete,
+        "activate": activate,
+        "ensure_active": ensure_active,
+    }
 
 
 @pytest.fixture

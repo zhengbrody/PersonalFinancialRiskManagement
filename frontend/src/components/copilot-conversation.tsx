@@ -37,6 +37,7 @@ import { BETA_LIMIT_MESSAGE, isBillingEnabled } from "@/lib/billing-flag";
 import { env } from "@/lib/env";
 import { useAuth } from "@/lib/auth-context";
 import { hasCjk } from "@/lib/lang";
+import { usePortfolioContext } from "@/lib/portfolio-context";
 import { readSession, writeSession } from "@/lib/use-session-state";
 
 type ChatMessage = {
@@ -118,15 +119,22 @@ export function CopilotConversation({
   // Cancel any in-flight stream when the component unmounts.
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  // Persist the conversation (keyed by variant) so switching screens/tabs and
-  // returning restores the thread instead of an empty chat. Hydrate once on
-  // mount; persist only COMPLETED turns (not every streaming delta — that would
-  // be O(n²) writes over a long answer).
-  const storeKey = `mm:copilot:chat:${variant}`;
+  // Persist the conversation (keyed by variant AND the active portfolio) so
+  // switching screens/tabs restores the thread — but switching the active BOOK
+  // starts its own thread (the chat is grounded in that portfolio, so the prior
+  // book's turns must not carry over). Persist only COMPLETED turns.
+  const { activePortfolioId } = usePortfolioContext();
+  const storeKey = `mm:copilot:chat:${variant}:${activePortfolioId ?? "none"}`;
   const hydratedRef = useRef(false);
   useEffect(() => {
-    const stored = readSession<ChatMessage[]>(storeKey);
-    if (stored) setMessages(stored);
+    // A portfolio switch changes storeKey. Abort any in-flight stream first —
+    // otherwise its deltas would append to the NEW book's (just-reset) thread.
+    // No-op on the initial mount (abortRef is null).
+    abortRef.current?.abort();
+    hydratedRef.current = false;
+    // Reset to the new key's thread (empty for a fresh book — never the prior
+    // book's messages, which `if (stored)` alone would have left in place).
+    setMessages(readSession<ChatMessage[]>(storeKey) ?? []);
     hydratedRef.current = true;
   }, [storeKey]);
   useEffect(() => {

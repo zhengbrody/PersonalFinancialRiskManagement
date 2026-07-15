@@ -49,6 +49,7 @@ def mock_supabase(fake_streamlit, supabase_env):
     sb.neq.return_value = sb
     sb.order.return_value = sb
     sb.limit.return_value = sb
+    sb.rpc.return_value = sb
 
     with patch("supabase.create_client", return_value=sb):
         yield sb
@@ -267,6 +268,80 @@ def test_delete_calls_supabase(mock_supabase):
 
     delete_portfolio("p1")
     mock_supabase.eq.assert_called_with("id", "p1")
+
+
+# ── activate_portfolio (RPC caller) ───────────────────────────────
+
+
+def test_activate_calls_rpc_and_returns_row(mock_supabase):
+    row = {"id": "p2", "name": "B", "is_default": True}
+    mock_supabase.execute.return_value = MagicMock(data=row)
+    from libs.auth.portfolios import activate_portfolio
+
+    result = activate_portfolio("p2")
+    assert result == row
+    mock_supabase.rpc.assert_called_with("activate_portfolio", {"p_id": "p2"})
+
+
+def test_activate_normalizes_list_shape(mock_supabase):
+    # PostgREST may return the composite wrapped in a list.
+    mock_supabase.execute.return_value = MagicMock(data=[{"id": "p2", "is_default": True}])
+    from libs.auth.portfolios import activate_portfolio
+
+    assert activate_portfolio("p2") == {"id": "p2", "is_default": True}
+
+
+def test_activate_returns_none_when_not_owned(mock_supabase):
+    # Ownership gate returned NULL → data is None (or empty list) → None.
+    from libs.auth.portfolios import activate_portfolio
+
+    mock_supabase.execute.return_value = MagicMock(data=None)
+    assert activate_portfolio("not-mine") is None
+    mock_supabase.execute.return_value = MagicMock(data=[])
+    assert activate_portfolio("not-mine") is None
+
+
+# ── ensure_active_portfolio (delete-fallback promotion) ────────────
+
+
+def test_ensure_active_keeps_existing_default(monkeypatch):
+    import libs.auth.portfolios as pmod
+
+    rows = [{"id": "p1", "is_default": True}, {"id": "p2", "is_default": False}]
+    monkeypatch.setattr(pmod, "list_portfolios", lambda access_token=None: rows)
+    called = []
+    monkeypatch.setattr(
+        pmod, "activate_portfolio", lambda pid, access_token=None: called.append(pid)
+    )
+    result = pmod.ensure_active_portfolio()
+    assert result == rows[0]
+    assert called == []  # already have an active — no promotion
+
+
+def test_ensure_active_promotes_most_recent_when_none_default(monkeypatch):
+    import libs.auth.portfolios as pmod
+
+    # list_portfolios sorts is_default DESC, created_at DESC — with no default,
+    # rows[0] is the most-recent, which is the one to promote.
+    rows = [{"id": "recent", "is_default": False}, {"id": "older", "is_default": False}]
+    monkeypatch.setattr(pmod, "list_portfolios", lambda access_token=None: rows)
+    calls = []
+
+    def _activate(pid, access_token=None):
+        calls.append((pid, access_token))
+        return {"id": pid, "is_default": True}
+
+    monkeypatch.setattr(pmod, "activate_portfolio", _activate)
+    result = pmod.ensure_active_portfolio(access_token="tok")
+    assert result == {"id": "recent", "is_default": True}
+    assert calls == [("recent", "tok")]
+
+
+def test_ensure_active_returns_none_when_no_portfolios(monkeypatch):
+    import libs.auth.portfolios as pmod
+
+    monkeypatch.setattr(pmod, "list_portfolios", lambda access_token=None: [])
+    assert pmod.ensure_active_portfolio() is None
 
 
 def test_upsert_holding_updates_one_position(mock_supabase):

@@ -36,7 +36,8 @@ import {
 } from "recharts";
 import { isNoPortfolioError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
-import { useRunOncePerUser } from "@/lib/use-run-once-per-user";
+import { usePortfolioContext } from "@/lib/portfolio-context";
+import { runKeyForActivePortfolio, useRunOncePerUser } from "@/lib/use-run-once-per-user";
 import {
   useEfficientFrontier,
   useHistoricalScenarios,
@@ -62,8 +63,13 @@ export default function ScenariosPage() {
     if (!authLoading && !user) router.replace("/login");
   }, [user, authLoading, configured, router]);
 
-  // Run the reads once per signed-in user (survives token refresh; see hook).
-  useRunOncePerUser(user?.id, () => {
+  // Run once per (user + ACTIVE portfolio) so a switch recomputes for the new
+  // book; reset() first so the prior book's sweeps don't linger (no stale flash).
+  const { activePortfolioId } = usePortfolioContext();
+  useRunOncePerUser(runKeyForActivePortfolio(user?.id, activePortfolioId), () => {
+    frontier.reset();
+    scenarios.reset();
+    historical.reset();
     frontier.mutate();
     scenarios.mutate();
     historical.mutate();

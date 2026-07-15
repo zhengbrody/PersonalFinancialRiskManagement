@@ -238,6 +238,8 @@ describe("insights strip", () => {
     render(<CopilotInsightsStrip />);
     fireEvent.click(screen.getByRole("button", { name: /Dismiss insight/ }));
     expect(screen.queryByText(/42\.0% of your book/)).not.toBeInTheDocument();
-    expect(store.get("mm:copilot:insights:dismissed")).toContain("concentration:NVDA");
+    // Dismissals are now PER-PORTFOLIO; with no provider mounted the active id
+    // is null → the ":none" partition.
+    expect(store.get("mm:copilot:insights:dismissed:none")).toContain("concentration:NVDA");
   });
 });

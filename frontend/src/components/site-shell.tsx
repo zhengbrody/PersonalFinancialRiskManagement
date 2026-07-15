@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { isBillingEnabled } from "@/lib/billing-flag";
@@ -10,6 +10,8 @@ import { useBillingMe } from "@/lib/queries";
 import { FloatingCopilot } from "@/components/floating-copilot";
 import { FeedbackWidget } from "@/components/feedback-widget";
 import { MarketStatusBar } from "@/components/market-status-bar";
+import { PortfolioContextBar } from "@/components/portfolio-context-bar";
+import { useDismiss } from "@/lib/use-dismiss";
 import { Logo } from "@/components/ui/logo";
 import { Badge } from "@/components/ui/badge";
 
@@ -125,6 +127,7 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
           <MobileNav />
         </div>
         <MarketStatusBar />
+        <PortfolioContextBar />
       </header>
       <main className="mx-auto max-w-6xl px-4 py-10">{children}</main>
       <FloatingCopilot />
@@ -133,30 +136,6 @@ export function SiteShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Close `open` when clicking outside `ref` or pressing Escape. The latest
- * `close` is read via a ref so the listeners subscribe once per open/close
- * (not on every re-render while open). */
-function useDismiss(open: boolean, close: () => void) {
-  const ref = useRef<HTMLDivElement>(null);
-  const closeRef = useRef(close);
-  closeRef.current = close;
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) closeRef.current();
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeRef.current();
-    };
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-  return ref;
-}
 
 function NavGroup({ label, items }: { label: string; items: NavItem[] }) {
   const [open, setOpen] = useState(false);

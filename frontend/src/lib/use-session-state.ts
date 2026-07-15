@@ -16,7 +16,7 @@
  * `undefined` and writes no-op — state degrades to plain in-memory.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export function readSession<T>(key: string): T | undefined {
   try {
@@ -40,11 +40,18 @@ export function useSessionState<T>(
   initial: T,
 ): [T, (value: T | ((prev: T) => T)) => void] {
   const [value, setValue] = useState<T>(initial);
+  // Capture the initial ONCE so a key change can reset to it without depending
+  // on `initial`'s identity (which may be a fresh literal each render).
+  const initialRef = useRef(initial);
 
-  // Hydrate once, after mount, to avoid an SSR/CSR mismatch.
+  // Hydrate on mount AND whenever the key changes — to the new partition's
+  // stored value, or back to `initial` when it's empty. The `?? initialRef`
+  // reset is load-bearing: without it, switching to a key with no stored value
+  // would keep the PREVIOUS key's state (e.g. the prior portfolio's Copilot
+  // answer bleeding into the newly-active book).
   useEffect(() => {
     const stored = readSession<T>(key);
-    if (stored !== undefined) setValue(stored);
+    setValue(stored ?? initialRef.current);
   }, [key]);
 
   const set = useCallback(

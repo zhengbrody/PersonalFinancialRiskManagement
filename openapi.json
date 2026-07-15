@@ -14998,6 +14998,49 @@
         ]
       }
     },
+    "/api/v1/portfolios/{portfolio_id}/activate": {
+      "post": {
+        "description": "Flip the active book in ONE atomic, RLS-scoped statement (migration 0011's\n``activate_portfolio`` RPC). A portfolio the caller doesn't own \u2014 or one that\ndoesn't exist \u2014 both return 404 identically (no existence leak). After this,\nevery ``*_from_active`` endpoint resolves THIS portfolio.",
+        "operationId": "activate_portfolio_endpoint_api_v1_portfolios__portfolio_id__activate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "portfolio_id",
+            "required": true,
+            "schema": {
+              "title": "Portfolio Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_PortfolioOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Atomically make this the caller's active (default) portfolio",
+        "tags": [
+          "portfolios"
+        ]
+      }
+    },
     "/api/v1/public/risk_check": {
       "post": {
         "operationId": "risk_check_api_v1_public_risk_check_post",

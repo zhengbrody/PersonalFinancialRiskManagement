@@ -24,3 +24,17 @@ export function useRunOncePerUser(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 }
+
+/**
+ * Composite run-once key for auto-run pages that analyze the ACTIVE portfolio
+ * (the /risk report, /scenarios sweeps): `${userId}:${activePortfolioId}`.
+ * Passing this to `useRunOncePerUser` re-fires the auto-run when the user
+ * switches the active book — not only on a user change. Returns `undefined`
+ * (skip) for anonymous visitors, matching the hook's null contract.
+ */
+export function runKeyForActivePortfolio(
+  userId: string | null | undefined,
+  activePortfolioId: string | null | undefined,
+): string | undefined {
+  return userId ? `${userId}:${activePortfolioId ?? "none"}` : undefined;
+}
