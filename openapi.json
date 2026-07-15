@@ -253,6 +253,116 @@
         "title": "AlertConcentration",
         "type": "object"
       },
+      "AlertStateList": {
+        "properties": {
+          "states": {
+            "items": {
+              "$ref": "#/components/schemas/AlertStateOut"
+            },
+            "title": "States",
+            "type": "array"
+          }
+        },
+        "title": "AlertStateList",
+        "type": "object"
+      },
+      "AlertStateOut": {
+        "properties": {
+          "alert_key": {
+            "title": "Alert Key",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "snooze_until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snooze Until"
+          },
+          "state": {
+            "enum": [
+              "new",
+              "seen",
+              "snoozed",
+              "resolved"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "portfolio_id",
+          "alert_key",
+          "state"
+        ],
+        "title": "AlertStateOut",
+        "type": "object"
+      },
+      "AlertStateUpsert": {
+        "additionalProperties": false,
+        "description": "Set the lifecycle state for one alert episode on one portfolio.",
+        "properties": {
+          "alert_key": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Alert Key",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "snooze_until": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snooze Until"
+          },
+          "state": {
+            "enum": [
+              "new",
+              "seen",
+              "snoozed",
+              "resolved"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "portfolio_id",
+          "alert_key",
+          "state"
+        ],
+        "title": "AlertStateUpsert",
+        "type": "object"
+      },
       "AlertStressLoss": {
         "properties": {
           "loss_pct": {
@@ -2760,6 +2870,72 @@
         "title": "Envelope[ActionSimulateOut]",
         "type": "object"
       },
+      "Envelope_AlertStateList_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AlertStateList"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[AlertStateList]",
+        "type": "object"
+      },
+      "Envelope_AlertStateOut_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AlertStateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[AlertStateOut]",
+        "type": "object"
+      },
       "Envelope_AttributionResponse_": {
         "additionalProperties": true,
         "properties": {
@@ -3187,6 +3363,39 @@
           "meta"
         ],
         "title": "Envelope[InstitutionDetailOut]",
+        "type": "object"
+      },
+      "Envelope_JourneyOut_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JourneyOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[JourneyOut]",
         "type": "object"
       },
       "Envelope_MLHealthOut_": {
@@ -3814,6 +4023,105 @@
           "meta"
         ],
         "title": "Envelope[RiskExplainOutput]",
+        "type": "object"
+      },
+      "Envelope_RiskPlanList_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RiskPlanList"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[RiskPlanList]",
+        "type": "object"
+      },
+      "Envelope_RiskPlanOut_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RiskPlanOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[RiskPlanOut]",
+        "type": "object"
+      },
+      "Envelope_RiskPlanReviewOut_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RiskPlanReviewOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[RiskPlanReviewOut]",
         "type": "object"
       },
       "Envelope_RiskReportOut_": {
@@ -6006,6 +6314,113 @@
           "cik"
         ],
         "title": "InstitutionRow",
+        "type": "object"
+      },
+      "JourneyOut": {
+        "properties": {
+          "first_driver_viewed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Driver Viewed At"
+          },
+          "first_plan_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Plan At"
+          },
+          "first_plan_reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Plan Reviewed At"
+          },
+          "first_portfolio_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Portfolio At"
+          },
+          "first_score_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Score At"
+          },
+          "first_stress_test_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Stress Test At"
+          },
+          "last_workspace_view": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Workspace View"
+          }
+        },
+        "title": "JourneyOut",
+        "type": "object"
+      },
+      "JourneyRecordRequest": {
+        "additionalProperties": false,
+        "description": "Record a milestone timestamp. `first_*` milestones are set ONCE (the\nfirst time); `last_workspace_view` always updates.",
+        "properties": {
+          "milestone": {
+            "enum": [
+              "first_portfolio_at",
+              "first_score_at",
+              "first_driver_viewed_at",
+              "first_stress_test_at",
+              "first_plan_at",
+              "first_plan_reviewed_at",
+              "last_workspace_view"
+            ],
+            "title": "Milestone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "milestone"
+        ],
+        "title": "JourneyRecordRequest",
         "type": "object"
       },
       "LiquidityRow": {
@@ -10660,6 +11075,470 @@
         "title": "RiskMetricsOut",
         "type": "object"
       },
+      "RiskPlanCreate": {
+        "additionalProperties": false,
+        "description": "Create a plan against a portfolio the caller owns (RLS enforces the\nownership on write; this only shape-checks the payload).",
+        "properties": {
+          "baseline": {
+            "additionalProperties": true,
+            "title": "Baseline",
+            "type": "object"
+          },
+          "data_confidence": {
+            "additionalProperties": true,
+            "title": "Data Confidence",
+            "type": "object"
+          },
+          "expected_impact": {
+            "additionalProperties": true,
+            "title": "Expected Impact",
+            "type": "object"
+          },
+          "hypothesis": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hypothesis"
+          },
+          "portfolio_id": {
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "proposed_changes": {
+            "additionalProperties": true,
+            "title": "Proposed Changes",
+            "type": "object"
+          },
+          "review_at": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review At"
+          },
+          "source": {
+            "enum": [
+              "score",
+              "risk",
+              "scenario",
+              "research",
+              "copilot"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "default": "draft",
+            "enum": [
+              "draft",
+              "active",
+              "resolved",
+              "archived"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "portfolio_id",
+          "title",
+          "source"
+        ],
+        "title": "RiskPlanCreate",
+        "type": "object"
+      },
+      "RiskPlanList": {
+        "properties": {
+          "plans": {
+            "items": {
+              "$ref": "#/components/schemas/RiskPlanOut"
+            },
+            "title": "Plans",
+            "type": "array"
+          }
+        },
+        "title": "RiskPlanList",
+        "type": "object"
+      },
+      "RiskPlanMetricDelta": {
+        "properties": {
+          "baseline": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline"
+          },
+          "current": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current"
+          },
+          "delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta"
+          },
+          "improved": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Improved"
+          },
+          "metric": {
+            "title": "Metric",
+            "type": "string"
+          }
+        },
+        "required": [
+          "metric"
+        ],
+        "title": "RiskPlanMetricDelta",
+        "type": "object"
+      },
+      "RiskPlanOut": {
+        "description": "A stored plan (the DB row, ISO timestamps as strings).",
+        "properties": {
+          "baseline": {
+            "additionalProperties": true,
+            "title": "Baseline",
+            "type": "object"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "data_confidence": {
+            "additionalProperties": true,
+            "title": "Data Confidence",
+            "type": "object"
+          },
+          "expected_impact": {
+            "additionalProperties": true,
+            "title": "Expected Impact",
+            "type": "object"
+          },
+          "hypothesis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hypothesis"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "portfolio_id": {
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "proposed_changes": {
+            "additionalProperties": true,
+            "title": "Proposed Changes",
+            "type": "object"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "review_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review At"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "source": {
+            "enum": [
+              "score",
+              "risk",
+              "scenario",
+              "research",
+              "copilot"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "active",
+              "resolved",
+              "archived"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "id",
+          "portfolio_id",
+          "title",
+          "status",
+          "source"
+        ],
+        "title": "RiskPlanOut",
+        "type": "object"
+      },
+      "RiskPlanPatch": {
+        "additionalProperties": false,
+        "description": "Partial update. Only status transitions + review/outcome bookkeeping and\nthe editable text/plan blobs \u2014 never portfolio_id or source (a plan's\nprovenance is immutable).",
+        "properties": {
+          "expected_impact": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Impact"
+          },
+          "hypothesis": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hypothesis"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "proposed_changes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposed Changes"
+          },
+          "review_at": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review At"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "draft",
+                  "active",
+                  "resolved",
+                  "archived"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "RiskPlanPatch",
+        "type": "object"
+      },
+      "RiskPlanReviewOut": {
+        "description": "A deterministic, advice-free comparison of the plan's baseline vs the\ncurrent metrics: which moved which way, and an overall verdict.",
+        "properties": {
+          "confidence": {
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Confidence",
+            "type": "string"
+          },
+          "disclaimer": {
+            "default": "Educational comparison of your own saved numbers \u2014 not financial advice.",
+            "title": "Disclaimer",
+            "type": "string"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/RiskPlanMetricDelta"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "missing_data": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Data",
+            "type": "array"
+          },
+          "verdict": {
+            "enum": [
+              "improved",
+              "worsened",
+              "inconclusive"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "verdict",
+          "confidence"
+        ],
+        "title": "RiskPlanReviewOut",
+        "type": "object"
+      },
+      "RiskPlanReviewRequest": {
+        "additionalProperties": false,
+        "description": "The caller passes the CURRENT metrics it already fetched (same pattern as\n/risk/explain, /risk/alerts) \u2014 the review compares them to the plan's stored\nbaseline. No recompute, no holdings mutation.",
+        "properties": {
+          "current": {
+            "additionalProperties": true,
+            "title": "Current",
+            "type": "object"
+          }
+        },
+        "title": "RiskPlanReviewRequest",
+        "type": "object"
+      },
       "RiskReportOut-Input": {
         "description": "JSON-safe projection of the engine's ``RiskReport`` dataclass.\n\nLarge matrices (cov, EWMA corr, MC simulation paths) are intentionally\nNOT shipped over the wire \u2014 they'd add tens of MB and the dashboard\ndoesn't render them anyway. (The plain corr matrix IS shipped since the\nRisk Desk round, as the capped 2-dp ``correlation`` summary below.)",
         "properties": {
@@ -14451,6 +15330,68 @@
         ]
       }
     },
+    "/api/v1/journey": {
+      "get": {
+        "operationId": "get_journey_endpoint_api_v1_journey_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_JourneyOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "The caller's journey milestones (timestamps only)",
+        "tags": [
+          "risk-ops"
+        ]
+      }
+    },
+    "/api/v1/journey/record": {
+      "post": {
+        "operationId": "record_journey_endpoint_api_v1_journey_record_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JourneyRecordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_JourneyOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record a journey milestone (first_* once; last_workspace_view always)",
+        "tags": [
+          "risk-ops"
+        ]
+      }
+    },
     "/api/v1/macro/movers": {
       "get": {
         "description": "Sector ETF performance + S&P-500 top gainers/losers/unusual-volume.\nPublic, free (yfinance). Fail-soft: any leg may be empty if its upstream is\ndown \u2014 always a 200, never blocks the /markets page.",
@@ -15833,6 +16774,87 @@
         ]
       }
     },
+    "/api/v1/risk/alert_states": {
+      "get": {
+        "operationId": "list_alert_states_endpoint_api_v1_risk_alert_states_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "portfolio_id",
+            "required": true,
+            "schema": {
+              "title": "Portfolio Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AlertStateList_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Alert lifecycle states for one portfolio",
+        "tags": [
+          "risk-ops"
+        ]
+      },
+      "put": {
+        "operationId": "upsert_alert_state_endpoint_api_v1_risk_alert_states_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertStateUpsert"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_AlertStateOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set the lifecycle state (seen / snoozed / resolved) for one alert",
+        "tags": [
+          "risk-ops"
+        ]
+      }
+    },
     "/api/v1/risk/alerts": {
       "post": {
         "description": "Build the top 1-N deterministic risk alerts from numbers the client\nalready fetched (score and/or report). Pure Python \u2014 never invents a figure,\nnever calls the LLM, never costs a credit. The frontend renders 1-2 of these\nas proactive 'Ask Copilot' cards.",
@@ -16051,6 +17073,278 @@
         "summary": "The prior-day portfolio snapshot, for the 'what changed' delta",
         "tags": [
           "risk"
+        ]
+      }
+    },
+    "/api/v1/risk/plans": {
+      "get": {
+        "operationId": "list_plans_endpoint_api_v1_risk_plans_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "portfolio_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Portfolio Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_RiskPlanList_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List the caller's saved risk plans (optionally for one portfolio)",
+        "tags": [
+          "risk-ops"
+        ]
+      },
+      "post": {
+        "operationId": "create_plan_endpoint_api_v1_risk_plans_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RiskPlanCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_RiskPlanOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save a risk plan (an analysis, never an order)",
+        "tags": [
+          "risk-ops"
+        ]
+      }
+    },
+    "/api/v1/risk/plans/{plan_id}": {
+      "delete": {
+        "operationId": "delete_plan_endpoint_api_v1_risk_plans__plan_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "title": "Plan Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_dict_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete one of the caller's risk plans",
+        "tags": [
+          "risk-ops"
+        ]
+      },
+      "get": {
+        "operationId": "get_plan_endpoint_api_v1_risk_plans__plan_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "title": "Plan Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_RiskPlanOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fetch one of the caller's risk plans",
+        "tags": [
+          "risk-ops"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_plan_endpoint_api_v1_risk_plans__plan_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "title": "Plan Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RiskPlanPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_RiskPlanOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update a risk plan (status / review / outcome / editable fields)",
+        "tags": [
+          "risk-ops"
+        ]
+      }
+    },
+    "/api/v1/risk/plans/{plan_id}/review": {
+      "post": {
+        "operationId": "review_plan_endpoint_api_v1_risk_plans__plan_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "title": "Plan Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RiskPlanReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_RiskPlanReviewOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compare a plan's baseline to current metrics (deterministic, no advice)",
+        "tags": [
+          "risk-ops"
         ]
       }
     },

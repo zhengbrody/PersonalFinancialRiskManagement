@@ -505,6 +505,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/journey": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The caller's journey milestones (timestamps only) */
+        get: operations["get_journey_endpoint_api_v1_journey_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/journey/record": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record a journey milestone (first_* once; last_workspace_view always) */
+        post: operations["record_journey_endpoint_api_v1_journey_record_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/macro/movers": {
         parameters: {
             query?: never;
@@ -1277,6 +1311,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/risk/alert_states": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Alert lifecycle states for one portfolio */
+        get: operations["list_alert_states_endpoint_api_v1_risk_alert_states_get"];
+        /** Set the lifecycle state (seen / snoozed / resolved) for one alert */
+        put: operations["upsert_alert_state_endpoint_api_v1_risk_alert_states_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/risk/alerts": {
         parameters: {
             query?: never;
@@ -1388,6 +1440,60 @@ export interface paths {
         get: operations["last_snapshot_endpoint_api_v1_risk_last_snapshot_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the caller's saved risk plans (optionally for one portfolio) */
+        get: operations["list_plans_endpoint_api_v1_risk_plans_get"];
+        put?: never;
+        /** Save a risk plan (an analysis, never an order) */
+        post: operations["create_plan_endpoint_api_v1_risk_plans_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/plans/{plan_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fetch one of the caller's risk plans */
+        get: operations["get_plan_endpoint_api_v1_risk_plans__plan_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete one of the caller's risk plans */
+        delete: operations["delete_plan_endpoint_api_v1_risk_plans__plan_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update a risk plan (status / review / outcome / editable fields) */
+        patch: operations["patch_plan_endpoint_api_v1_risk_plans__plan_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/risk/plans/{plan_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Compare a plan's baseline to current metrics (deterministic, no advice) */
+        post: operations["review_plan_endpoint_api_v1_risk_plans__plan_id__review_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1662,6 +1768,44 @@ export interface components {
             top_sector?: string | null;
             /** Top Sector Weight */
             top_sector_weight?: number | null;
+        };
+        /** AlertStateList */
+        AlertStateList: {
+            /** States */
+            states?: components["schemas"]["AlertStateOut"][];
+        };
+        /** AlertStateOut */
+        AlertStateOut: {
+            /** Alert Key */
+            alert_key: string;
+            /** Portfolio Id */
+            portfolio_id: string;
+            /** Snooze Until */
+            snooze_until?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "new" | "seen" | "snoozed" | "resolved";
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /**
+         * AlertStateUpsert
+         * @description Set the lifecycle state for one alert episode on one portfolio.
+         */
+        AlertStateUpsert: {
+            /** Alert Key */
+            alert_key: string;
+            /** Portfolio Id */
+            portfolio_id: string;
+            /** Snooze Until */
+            snooze_until?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "new" | "seen" | "snoozed" | "resolved";
         };
         /** AlertStressLoss */
         AlertStressLoss: {
@@ -2536,6 +2680,22 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** Envelope[AlertStateList] */
+        Envelope_AlertStateList_: {
+            data?: components["schemas"]["AlertStateList"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[AlertStateOut] */
+        Envelope_AlertStateOut_: {
+            data?: components["schemas"]["AlertStateOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
         /** Envelope[AttributionResponse] */
         Envelope_AttributionResponse_: {
             data?: components["schemas"]["AttributionResponse"] | null;
@@ -2635,6 +2795,14 @@ export interface components {
         /** Envelope[InstitutionDetailOut] */
         Envelope_InstitutionDetailOut_: {
             data?: components["schemas"]["InstitutionDetailOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[JourneyOut] */
+        Envelope_JourneyOut_: {
+            data?: components["schemas"]["JourneyOut"] | null;
             error?: components["schemas"]["ErrorOut"] | null;
             meta: components["schemas"]["MetaOut"];
         } & {
@@ -2787,6 +2955,30 @@ export interface components {
         /** Envelope[RiskExplainOutput] */
         Envelope_RiskExplainOutput_: {
             data?: components["schemas"]["RiskExplainOutput"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[RiskPlanList] */
+        Envelope_RiskPlanList_: {
+            data?: components["schemas"]["RiskPlanList"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[RiskPlanOut] */
+        Envelope_RiskPlanOut_: {
+            data?: components["schemas"]["RiskPlanOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[RiskPlanReviewOut] */
+        Envelope_RiskPlanReviewOut_: {
+            data?: components["schemas"]["RiskPlanReviewOut"] | null;
             error?: components["schemas"]["ErrorOut"] | null;
             meta: components["schemas"]["MetaOut"];
         } & {
@@ -3496,6 +3688,35 @@ export interface components {
             cik: string;
             /** Name */
             name: string;
+        };
+        /** JourneyOut */
+        JourneyOut: {
+            /** First Driver Viewed At */
+            first_driver_viewed_at?: string | null;
+            /** First Plan At */
+            first_plan_at?: string | null;
+            /** First Plan Reviewed At */
+            first_plan_reviewed_at?: string | null;
+            /** First Portfolio At */
+            first_portfolio_at?: string | null;
+            /** First Score At */
+            first_score_at?: string | null;
+            /** First Stress Test At */
+            first_stress_test_at?: string | null;
+            /** Last Workspace View */
+            last_workspace_view?: string | null;
+        };
+        /**
+         * JourneyRecordRequest
+         * @description Record a milestone timestamp. `first_*` milestones are set ONCE (the
+         *     first time); `last_workspace_view` always updates.
+         */
+        JourneyRecordRequest: {
+            /**
+             * Milestone
+             * @enum {string}
+             */
+            milestone: "first_portfolio_at" | "first_score_at" | "first_driver_viewed_at" | "first_stress_test_at" | "first_plan_at" | "first_plan_reviewed_at" | "last_workspace_view";
         };
         /** LiquidityRow */
         LiquidityRow: {
@@ -5068,6 +5289,186 @@ export interface components {
             total_value?: number | null;
             /** Var 95 1D */
             var_95_1d?: number | null;
+        };
+        /**
+         * RiskPlanCreate
+         * @description Create a plan against a portfolio the caller owns (RLS enforces the
+         *     ownership on write; this only shape-checks the payload).
+         */
+        RiskPlanCreate: {
+            /** Baseline */
+            baseline?: {
+                [key: string]: unknown;
+            };
+            /** Data Confidence */
+            data_confidence?: {
+                [key: string]: unknown;
+            };
+            /** Expected Impact */
+            expected_impact?: {
+                [key: string]: unknown;
+            };
+            /** Hypothesis */
+            hypothesis?: string | null;
+            /** Portfolio Id */
+            portfolio_id: string;
+            /** Proposed Changes */
+            proposed_changes?: {
+                [key: string]: unknown;
+            };
+            /** Review At */
+            review_at?: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "score" | "risk" | "scenario" | "research" | "copilot";
+            /**
+             * Status
+             * @default draft
+             * @enum {string}
+             */
+            status?: "draft" | "active" | "resolved" | "archived";
+            /** Title */
+            title: string;
+        };
+        /** RiskPlanList */
+        RiskPlanList: {
+            /** Plans */
+            plans?: components["schemas"]["RiskPlanOut"][];
+        };
+        /** RiskPlanMetricDelta */
+        RiskPlanMetricDelta: {
+            /** Baseline */
+            baseline?: number | null;
+            /** Current */
+            current?: number | null;
+            /** Delta */
+            delta?: number | null;
+            /** Improved */
+            improved?: boolean | null;
+            /** Metric */
+            metric: string;
+        };
+        /**
+         * RiskPlanOut
+         * @description A stored plan (the DB row, ISO timestamps as strings).
+         */
+        RiskPlanOut: {
+            /** Baseline */
+            baseline?: {
+                [key: string]: unknown;
+            };
+            /** Created At */
+            created_at?: string | null;
+            /** Data Confidence */
+            data_confidence?: {
+                [key: string]: unknown;
+            };
+            /** Expected Impact */
+            expected_impact?: {
+                [key: string]: unknown;
+            };
+            /** Hypothesis */
+            hypothesis?: string | null;
+            /** Id */
+            id: string;
+            /** Outcome */
+            outcome?: {
+                [key: string]: unknown;
+            } | null;
+            /** Portfolio Id */
+            portfolio_id: string;
+            /** Proposed Changes */
+            proposed_changes?: {
+                [key: string]: unknown;
+            };
+            /** Resolved At */
+            resolved_at?: string | null;
+            /** Review At */
+            review_at?: string | null;
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "score" | "risk" | "scenario" | "research" | "copilot";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "draft" | "active" | "resolved" | "archived";
+            /** Title */
+            title: string;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /**
+         * RiskPlanPatch
+         * @description Partial update. Only status transitions + review/outcome bookkeeping and
+         *     the editable text/plan blobs — never portfolio_id or source (a plan's
+         *     provenance is immutable).
+         */
+        RiskPlanPatch: {
+            /** Expected Impact */
+            expected_impact?: {
+                [key: string]: unknown;
+            } | null;
+            /** Hypothesis */
+            hypothesis?: string | null;
+            /** Outcome */
+            outcome?: {
+                [key: string]: unknown;
+            } | null;
+            /** Proposed Changes */
+            proposed_changes?: {
+                [key: string]: unknown;
+            } | null;
+            /** Review At */
+            review_at?: string | null;
+            /** Status */
+            status?: ("draft" | "active" | "resolved" | "archived") | null;
+            /** Title */
+            title?: string | null;
+        };
+        /**
+         * RiskPlanReviewOut
+         * @description A deterministic, advice-free comparison of the plan's baseline vs the
+         *     current metrics: which moved which way, and an overall verdict.
+         */
+        RiskPlanReviewOut: {
+            /**
+             * Confidence
+             * @enum {string}
+             */
+            confidence: "high" | "medium" | "low";
+            /**
+             * Disclaimer
+             * @default Educational comparison of your own saved numbers — not financial advice.
+             */
+            disclaimer?: string;
+            /** Metrics */
+            metrics?: components["schemas"]["RiskPlanMetricDelta"][];
+            /** Missing Data */
+            missing_data?: string[];
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "improved" | "worsened" | "inconclusive";
+        };
+        /**
+         * RiskPlanReviewRequest
+         * @description The caller passes the CURRENT metrics it already fetched (same pattern as
+         *     /risk/explain, /risk/alerts) — the review compares them to the plan's stored
+         *     baseline. No recompute, no holdings mutation.
+         */
+        RiskPlanReviewRequest: {
+            /** Current */
+            current?: {
+                [key: string]: unknown;
+            };
         };
         /**
          * RiskReportOut
@@ -6731,6 +7132,59 @@ export interface operations {
             };
         };
     };
+    get_journey_endpoint_api_v1_journey_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_JourneyOut_"];
+                };
+            };
+        };
+    };
+    record_journey_endpoint_api_v1_journey_record_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JourneyRecordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_JourneyOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_movers_endpoint_api_v1_macro_movers_get: {
         parameters: {
             query?: never;
@@ -7766,6 +8220,70 @@ export interface operations {
             };
         };
     };
+    list_alert_states_endpoint_api_v1_risk_alert_states_get: {
+        parameters: {
+            query: {
+                portfolio_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AlertStateList_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upsert_alert_state_endpoint_api_v1_risk_alert_states_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlertStateUpsert"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_AlertStateOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     risk_alerts_endpoint_api_v1_risk_alerts_post: {
         parameters: {
             query?: never;
@@ -7933,6 +8451,202 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+        };
+    };
+    list_plans_endpoint_api_v1_risk_plans_get: {
+        parameters: {
+            query?: {
+                portfolio_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_RiskPlanList_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_plan_endpoint_api_v1_risk_plans_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RiskPlanCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_RiskPlanOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_plan_endpoint_api_v1_risk_plans__plan_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_RiskPlanOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_plan_endpoint_api_v1_risk_plans__plan_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_plan_endpoint_api_v1_risk_plans__plan_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RiskPlanPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_RiskPlanOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_plan_endpoint_api_v1_risk_plans__plan_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RiskPlanReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_RiskPlanReviewOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
