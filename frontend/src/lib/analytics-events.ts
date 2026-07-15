@@ -54,6 +54,8 @@ export const ANALYTICS_EVENTS = {
   copilot_prefs_cleared: "copilot_prefs_cleared",
   sticky_cta_clicked: "sticky_cta_clicked",
   markets_sentiment_viewed: "markets_sentiment_viewed",
+  // ── portfolio operating system (value-free: no id/name/ticker/$) ─────────
+  portfolio_switched: "portfolio_switched",
 } as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[keyof typeof ANALYTICS_EVENTS];

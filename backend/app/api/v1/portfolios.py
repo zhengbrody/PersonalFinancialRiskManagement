@@ -135,6 +135,45 @@ def create_portfolio_endpoint(
     return ok(PortfolioOut(**row).model_dump(), request=request, started_at=started)
 
 
+# ── POST /{id}/activate — atomic active-portfolio switch ───────────
+
+
+@router.post(
+    "/{portfolio_id}/activate",
+    summary="Atomically make this the caller's active (default) portfolio",
+    response_model=Envelope[PortfolioOut],
+)
+def activate_portfolio_endpoint(
+    portfolio_id: str,
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    """Flip the active book in ONE atomic, RLS-scoped statement (migration 0011's
+    ``activate_portfolio`` RPC). A portfolio the caller doesn't own — or one that
+    doesn't exist — both return 404 identically (no existence leak). After this,
+    every ``*_from_active`` endpoint resolves THIS portfolio."""
+    started = time.perf_counter()
+    try:
+        from libs.auth.portfolios import activate_portfolio
+    except Exception as exc:  # pragma: no cover - import guard
+        raise server_error("Portfolios module unavailable.") from exc
+
+    try:
+        row = activate_portfolio(portfolio_id, access_token=user.access_token)
+    except Exception as exc:
+        _logger.warning(
+            "portfolios.activate_failed user=%s portfolio=%s err=%s",
+            user.id,
+            portfolio_id,
+            type(exc).__name__,
+        )
+        raise server_error("Portfolio activate failed.", reason=type(exc).__name__) from exc
+
+    if not row:
+        raise APIError(status=404, code="portfolio_not_found", message="Portfolio not found.")
+    return ok(PortfolioOut(**row).model_dump(), request=request, started_at=started)
+
+
 # ── PATCH /{id} — update ───────────────────────────────────────────
 
 
@@ -223,6 +262,26 @@ def delete_portfolio_endpoint(
         )
         raise server_error("Portfolio delete failed.", reason=type(exc).__name__) from exc
 
+    # Guarantee the "exactly one active" invariant: deleting the active book
+    # leaves zero is_default rows, so deterministically promote the most-recent
+    # remaining one. Fail-soft — a promotion hiccup never fails the delete (the
+    # read path still falls back to most-recent). The new active id rides the
+    # response so the client can update its portfolio context without a refetch.
+    next_active_id = None
+    try:
+        from libs.auth.portfolios import ensure_active_portfolio
+
+        active = ensure_active_portfolio(access_token=user.access_token)
+        next_active_id = active.get("id") if active else None
+    except Exception as exc:  # noqa: BLE001 - promotion is best-effort
+        _logger.warning(
+            "portfolios.ensure_active_failed user=%s err=%s", user.id, type(exc).__name__
+        )
+
     # 204 No Content would be conventional, but our envelope helpers
-    # expect a body, so return a tiny `{deleted: true}` payload at 200.
-    return ok({"deleted": True, "id": portfolio_id}, request=request, started_at=started)
+    # expect a body, so return a tiny payload at 200.
+    return ok(
+        {"deleted": True, "id": portfolio_id, "active_portfolio_id": next_active_id},
+        request=request,
+        started_at=started,
+    )

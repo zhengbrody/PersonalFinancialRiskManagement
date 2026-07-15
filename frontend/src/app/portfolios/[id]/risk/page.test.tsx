@@ -26,6 +26,16 @@ vi.mock("@/lib/auth-context", () => ({
   useAuth: () => useAuthMock(),
 }));
 
+const switchPortfolioMock = vi.fn();
+const portfolioCtx = {
+  activePortfolioId: "p-default" as string | null,
+  switchPortfolio: switchPortfolioMock,
+  switchingId: null as string | null,
+};
+vi.mock("@/lib/portfolio-context", () => ({
+  usePortfolioContext: () => portfolioCtx,
+}));
+
 import PortfolioRiskPage from "./page";
 
 function authed() {
@@ -218,6 +228,9 @@ function routedFetch() {
 afterEach(() => {
   vi.clearAllMocks();
   vi.restoreAllMocks();
+  // reset the portfolio-context mock to "this book is active"
+  portfolioCtx.activePortfolioId = "p-default";
+  portfolioCtx.switchingId = null;
 });
 
 describe("PortfolioRiskPage", () => {
@@ -235,31 +248,43 @@ describe("PortfolioRiskPage", () => {
     expect(replaceMock).toHaveBeenCalledWith("/login");
   });
 
-  it("renders idle state with a Run button after portfolios load", async () => {
+  it("when [id] is NOT active, shows a Switch CTA and runs no report", async () => {
     authed();
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      mockJson(PORTFOLIO_LIST),
-    );
+    portfolioCtx.activePortfolioId = "some-other-book"; // [id] p-default is inactive
+    const fetchSpy = routedFetch();
 
     renderWithQuery(<PortfolioRiskPage />);
 
-    expect(await screen.findByText(/no report yet/i)).toBeInTheDocument();
+    // The primary action switches; there is NO auto-run for an inactive book.
     expect(
-      screen.getByRole("button", { name: /^run report$/i }),
+      await screen.findByRole("button", { name: /switch to this portfolio & analyze/i }),
     ).toBeInTheDocument();
+    expect(screen.getByText(/isn.t your active portfolio/i)).toBeInTheDocument();
+    // Report was never fetched (we don't analyze a book that isn't active).
+    expect(
+      fetchSpy.mock.calls.filter((c) => String(c[0]).includes("report_from_active")).length,
+    ).toBe(0);
   });
 
-  it("renders the full report on a successful Run", async () => {
+  it("clicking Switch calls switchPortfolio with [id]", async () => {
+    authed();
+    portfolioCtx.activePortfolioId = "some-other-book";
+    routedFetch();
+    const user = userEvent.setup();
+    renderWithQuery(<PortfolioRiskPage />);
+    await user.click(
+      await screen.findByRole("button", { name: /switch to this portfolio & analyze/i }),
+    );
+    expect(switchPortfolioMock).toHaveBeenCalledWith("p-default");
+  });
+
+  it("auto-runs and renders the full report when [id] IS the active book", async () => {
     authed();
     const fetchSpy = routedFetch();
 
-    const user = userEvent.setup();
     renderWithQuery(<PortfolioRiskPage />);
 
-    await user.click(
-      await screen.findByRole("button", { name: /^run report$/i }),
-    );
-
+    // No click needed — an ACTIVE book auto-runs its report on mount.
     // KPI tiles: VaR / CVaR / Sharpe values.
     expect(await screen.findByText("1.20%")).toBeInTheDocument(); // var_95
     expect(screen.getByText("1.70%")).toBeInTheDocument(); // cvar_95
@@ -314,10 +339,7 @@ describe("PortfolioRiskPage", () => {
     const fetchSpy = routedFetch();
 
     const user = userEvent.setup();
-    renderWithQuery(<PortfolioRiskPage />);
-    await user.click(
-      await screen.findByRole("button", { name: /^run report$/i }),
-    );
+    renderWithQuery(<PortfolioRiskPage />); // active book → report auto-runs
 
     // Default −10% shock → its top-impacted holding shows.
     expect(await screen.findByText(/scenario explorer/i)).toBeInTheDocument();
@@ -340,31 +362,26 @@ describe("PortfolioRiskPage", () => {
 
   it("renders the no_active_portfolio specific copy", async () => {
     authed();
-    vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(mockJson(PORTFOLIO_LIST))
-      .mockResolvedValueOnce(
-        mockJson(
-          {
-            data: null,
-            error: {
-              code: "no_active_portfolio",
-              message: "No active portfolio.",
+    vi.spyOn(globalThis, "fetch").mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/portfolios/me")) return Promise.resolve(mockJson(PORTFOLIO_LIST));
+      if (url.includes("report_from_active"))
+        return Promise.resolve(
+          mockJson(
+            {
+              data: null,
+              error: { code: "no_active_portfolio", message: "No active portfolio." },
+              meta: { request_id: "r" },
             },
-            meta: { request_id: "r" },
-          },
-          { status: 422 },
-        ),
-      );
+            { status: 422 },
+          ),
+        );
+      return Promise.resolve(mockJson({ data: null, error: null, meta: {} }, { status: 500 }));
+    });
 
-    const user = userEvent.setup();
-    renderWithQuery(<PortfolioRiskPage />);
-    await user.click(
-      await screen.findByRole("button", { name: /^run report$/i }),
-    );
+    renderWithQuery(<PortfolioRiskPage />); // active book → report auto-runs, then errors
 
-    expect(
-      await screen.findByText(/no active portfolio/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/no active portfolio/i)).toBeInTheDocument();
     // The structured code shows in the small caption too.
     expect(screen.getByText(/no_active_portfolio/i)).toBeInTheDocument();
   });

@@ -42,6 +42,7 @@ import { QuantRegime } from "@/components/quant-regime";
 import { track } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { usePortfolioContext } from "@/lib/portfolio-context";
 import {
   useRunBacktest,
   type BacktestRequest,
@@ -96,6 +97,16 @@ export default function QuantPage() {
       router.replace("/login");
     }
   }, [user, authLoading, configured, router]);
+
+  // /quant runs on an explicit "Run backtest" click (no auto-run), so a
+  // portfolio switch must CLEAR any showing result — it belongs to the prior
+  // book. The next run analyzes the new active book.
+  const { activePortfolioId } = usePortfolioContext();
+  useEffect(() => {
+    backtest.reset();
+    setError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePortfolioId]);
 
   if (!configured) {
     return <PreviewBuildNotice />;

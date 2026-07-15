@@ -1,12 +1,14 @@
 "use client";
 
 /**
- * Detailed risk analysis for a specific portfolio.
+ * Detailed risk analysis for a SPECIFIC portfolio.
  *
- * The backend's /risk/report_from_active resolves the user's *active*
- * (default-flagged) portfolio from the JWT; if the user opened this for a
- * non-default portfolio we show a notice. The report rendering itself is
- * shared with the global /risk page via <ReportSections/>.
+ * The backend's /risk/report_from_active always scores the ACTIVE book. Rather
+ * than warn "this isn't the one we'll analyze" (the old behaviour), this page
+ * makes [id] the active portfolio first, then runs the report — so what you
+ * open is what you analyze, and the switch is reflected everywhere (the global
+ * PortfolioContextBar, /score, Copilot…). The report rendering is shared with
+ * the global /risk page via <ReportSections/>.
  */
 
 import { useEffect, useMemo } from "react";
@@ -27,6 +29,8 @@ import {
 } from "@/components/risk-report";
 import { OptionsAnalysis } from "@/components/options-analysis";
 import { useAuth } from "@/lib/auth-context";
+import { usePortfolioContext } from "@/lib/portfolio-context";
+import { runKeyForActivePortfolio, useRunOncePerUser } from "@/lib/use-run-once-per-user";
 import {
   activePortfolioOptionContracts,
   useMyPortfolios,
@@ -41,6 +45,7 @@ export default function PortfolioRiskPage() {
   const { user, loading: authLoading, configured } = useAuth();
   const portfoliosQuery = useMyPortfolios();
   const reportMutation = useRiskReport();
+  const { activePortfolioId, switchPortfolio, switchingId } = usePortfolioContext();
 
   useEffect(() => {
     if (!configured) return;
@@ -52,19 +57,22 @@ export default function PortfolioRiskPage() {
     [portfoliosQuery.data, portfolioId],
   );
 
-  // report_from_active scores the user's ACTIVE book: the default-flagged
-  // portfolio, or — when none is flagged — the most-recent one (the list is
-  // sorted is_default DESC, created_at DESC, so portfolios[0]). Only warn when
-  // running the report here would actually score a DIFFERENT portfolio; a user
-  // with a single (or most-recent) book gets scored as expected, no scary notice.
-  const isActivePortfolio = useMemo(() => {
-    const list = portfoliosQuery.data?.portfolios ?? [];
-    const activeId = list.find((p) => p.is_default)?.id ?? list[0]?.id;
-    return !!portfolio && portfolio.id === activeId;
-  }, [portfoliosQuery.data, portfolio]);
+  // Is THIS the book the backend would analyze? report_from_active always scores
+  // the active portfolio, so we only run the report once [id] IS active.
+  const isActive = Boolean(portfolio) && portfolio?.id === activePortfolioId;
+  const isSwitching = switchingId === portfolioId;
 
-  // The report is for the DEFAULT portfolio (report_from_active); feed the
-  // options cockpit from the same book so they're consistent.
+  // Auto-run the report ONLY when this portfolio is the active one — so a
+  // freshly-switched book analyzes itself. Keyed on the active id: undefined
+  // (skip) while [id] isn't active.
+  useRunOncePerUser(
+    isActive ? runKeyForActivePortfolio(user?.id, activePortfolioId) : undefined,
+    () => {
+      reportMutation.reset();
+      reportMutation.mutate();
+    },
+  );
+
   const optionContracts = useMemo(
     () => activePortfolioOptionContracts(portfoliosQuery.data),
     [portfoliosQuery.data],
@@ -89,7 +97,7 @@ export default function PortfolioRiskPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-start justify-between gap-4">
+      <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
           <p className="text-xs font-medium uppercase tracking-widest text-primary">
             Risk report
@@ -99,54 +107,62 @@ export default function PortfolioRiskPage() {
             <span className="font-medium">{portfolio.name}</span>
           </p>
         </div>
-        <Button
-          type="button"
-          size="lg"
-          onClick={() => reportMutation.mutate()}
-          disabled={reportMutation.isPending}
-        >
-          {reportMutation.isPending
-            ? "Computing…"
-            : reportMutation.data
-              ? "Re-run"
-              : "Run report"}
-        </Button>
+        {isActive ? (
+          <Button
+            type="button"
+            size="lg"
+            onClick={() => {
+              reportMutation.reset();
+              reportMutation.mutate();
+            }}
+            disabled={reportMutation.isPending}
+          >
+            {reportMutation.isPending
+              ? "Computing…"
+              : reportMutation.data
+                ? "Re-run"
+                : "Run report"}
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            size="lg"
+            onClick={() => void switchPortfolio(portfolioId)}
+            disabled={isSwitching}
+          >
+            {isSwitching ? "Switching…" : `Switch to this portfolio & analyze`}
+          </Button>
+        )}
       </header>
 
-      {!isActivePortfolio && (
+      {!isActive && (
         <Card className="border-warning/40">
           <CardHeader>
-            <CardTitle className="text-base">Heads up — this isn’t your default portfolio</CardTitle>
+            <CardTitle className="text-base">Analyze this portfolio</CardTitle>
             <CardDescription>
-              Running a report here scores your <strong>default</strong> portfolio,
-              not this one. To analyze this portfolio, set it as default from its
-              Edit page.
+              <span className="font-medium">{portfolio.name}</span> isn’t your active
+              portfolio. Switch to it to run the risk report on <strong>this</strong> book —
+              it becomes the active portfolio across your dashboard, Copilot and every
+              analysis surface.
             </CardDescription>
           </CardHeader>
         </Card>
       )}
 
-      {reportMutation.isPending && <ResultSkeleton />}
-      {reportMutation.isError && (
+      {isActive && reportMutation.isPending && <ResultSkeleton />}
+      {isActive && reportMutation.isError && (
         <RiskErrorPanel error={reportMutation.error as Error} />
       )}
-      {reportMutation.data && !reportMutation.isPending && (
+      {isActive && reportMutation.data && !reportMutation.isPending && (
         <>
           <ReportSections report={reportMutation.data} />
           <OptionsAnalysis contracts={optionContracts} />
         </>
       )}
-      {!reportMutation.data && !reportMutation.isPending && !reportMutation.isError && (
-        <Card>
-          <CardHeader>
-            <CardTitle>No report yet</CardTitle>
-            <CardDescription>
-              Click <span className="font-mono">Run report</span> — first run takes
-              a few seconds while the cache warms up.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      )}
+      {isActive &&
+        !reportMutation.data &&
+        !reportMutation.isPending &&
+        !reportMutation.isError && <ResultSkeleton />}
     </div>
   );
 }

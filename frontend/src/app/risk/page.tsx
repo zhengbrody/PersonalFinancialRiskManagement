@@ -26,6 +26,8 @@ import {
 } from "@/components/risk-report";
 import { OptionsAnalysis } from "@/components/options-analysis";
 import { useAuth } from "@/lib/auth-context";
+import { usePortfolioContext } from "@/lib/portfolio-context";
+import { runKeyForActivePortfolio } from "@/lib/use-run-once-per-user";
 import {
   activePortfolioOptionContracts,
   useMyPortfolios,
@@ -52,8 +54,14 @@ export default function RiskPage() {
     if (!authLoading && !user) router.replace("/login");
   }, [user, authLoading, configured, router]);
 
-  // Auto-run once per signed-in user (survives token refresh; see hook).
-  useRunOncePerUser(user?.id, () => report.mutate());
+  // Auto-run once per (user + ACTIVE portfolio): survives token refresh, but a
+  // portfolio switch re-fires with a fresh report. reset() first so the prior
+  // book's report doesn't linger while the new one computes (no stale flash).
+  const { activePortfolioId } = usePortfolioContext();
+  useRunOncePerUser(runKeyForActivePortfolio(user?.id, activePortfolioId), () => {
+    report.reset();
+    report.mutate();
+  });
 
   if (!configured || authLoading || !user) return <PageSkeleton />;
 

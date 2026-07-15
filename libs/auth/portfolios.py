@@ -293,6 +293,42 @@ def delete_portfolio(portfolio_id: str, access_token: Optional[str] = None) -> N
     sb.table("portfolios").delete().eq("id", portfolio_id).execute()
 
 
+def activate_portfolio(portfolio_id: str, access_token: Optional[str] = None) -> Optional[dict]:
+    """Atomically make ONE portfolio the caller's sole active book (is_default).
+
+    Calls the ``activate_portfolio`` SQL function (migration 0011) which does a
+    single-statement, RLS-scoped ``UPDATE is_default = (id = target)`` — exactly
+    one active, no transient 2-defaults window. Returns the activated row, or
+    ``None`` when the id isn't owned by the caller (non-owned and non-existent
+    are indistinguishable → the endpoint 404s without leaking existence).
+    """
+    sb = _authed_client(access_token_override=access_token)
+    resp = sb.rpc("activate_portfolio", {"p_id": portfolio_id}).execute()
+    data = getattr(resp, "data", None)
+    # PostgREST returns the composite row as an object, or null/[] when the
+    # ownership gate returned NULL. Normalise both shapes.
+    if isinstance(data, list):
+        data = data[0] if data else None
+    return data or None
+
+
+def ensure_active_portfolio(access_token: Optional[str] = None) -> Optional[dict]:
+    """Guarantee the "exactly one active" invariant, e.g. after a delete.
+
+    If the caller has portfolios but none is flagged ``is_default`` (deleting the
+    active book leaves zero), promote the most-recent one deterministically.
+    Returns the active row, or ``None`` when the caller has no portfolios.
+    RLS-scoped via ``access_token``.
+    """
+    rows = list_portfolios(access_token=access_token)  # is_default desc, created_at desc
+    if not rows:
+        return None
+    if rows[0].get("is_default"):
+        return rows[0]  # an active book already exists
+    # None flagged → rows[0] is the most-recent; make it the active book.
+    return activate_portfolio(rows[0]["id"], access_token=access_token) or rows[0]
+
+
 def upsert_holding(
     portfolio_id: str,
     ticker: str,
