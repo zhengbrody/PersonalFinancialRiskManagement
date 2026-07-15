@@ -39,6 +39,7 @@ from .api.v1 import (
     reports,
     research,
     risk,
+    risk_plans,
 )
 from .core.config import get_settings
 from .core.cors import cors_kwargs
@@ -174,6 +175,7 @@ def create_app() -> FastAPI:
     app.include_router(account.router)
     app.include_router(public_risk.router)
     app.include_router(risk.router)
+    app.include_router(risk_plans.router)
     app.include_router(portfolios.router)
     app.include_router(market.router)
     app.include_router(macro.router)
