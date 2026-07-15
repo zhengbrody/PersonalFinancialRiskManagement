@@ -56,6 +56,11 @@ class RiskAlertsInput(BaseModel):
 
 class RiskAlert(BaseModel):
     type: str  # concentration | sector | margin | stress | options | volatility | drawdown
+    # Stable episode id for lifecycle (seen/snooze/resolve). Encodes the SUBJECT
+    # (ticker / sector / option flag) so resolving one name's alert never hides a
+    # DIFFERENT name's alert of the same type/severity; includes severity so an
+    # escalation re-surfaces. Defaulted for back-compat; the builder always sets it.
+    key: str = ""
     severity: str  # low | moderate | elevated | high
     headline: str  # one short line
     detail: str  # one sentence of context

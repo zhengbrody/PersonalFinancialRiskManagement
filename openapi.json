@@ -10520,6 +10520,11 @@
             "title": "Headline",
             "type": "string"
           },
+          "key": {
+            "default": "",
+            "title": "Key",
+            "type": "string"
+          },
           "metric": {
             "title": "Metric",
             "type": "string"

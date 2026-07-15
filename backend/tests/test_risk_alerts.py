@@ -81,6 +81,32 @@ def test_below_threshold_is_quiet_and_ranking_caps():
     assert ranked[0].severity == "high"  # concentration ranked first
 
 
+def test_alert_key_encodes_subject_for_lifecycle():
+    # The lifecycle key must carry the SUBJECT so resolving one name/flag never
+    # hides a different one of the same type/severity (the masking bug).
+    conc = build_risk_alerts(
+        RiskAlertsInput(component_var_pct=[AlertComponentVar(ticker="NVDA", pct=0.55)])
+    )[0]
+    assert conc.key == "concentration:NVDA:high"
+
+    # Two DIFFERENT option flags → DIFFERENT keys (both are options:elevated
+    # by type/severity, which is exactly the collision the subject fixes).
+    k1 = build_risk_alerts(RiskAlertsInput(option_flags=["clustered_expiry"]))[0].key
+    k2 = build_risk_alerts(RiskAlertsInput(option_flags=["uncovered_short_call"]))[0].key
+    assert k1 != k2
+    assert k1 == "options:clustered_expiry:elevated"
+
+    # A different concentration subject is a different episode.
+    aapl = build_risk_alerts(
+        RiskAlertsInput(component_var_pct=[AlertComponentVar(ticker="AAPL", pct=0.6)])
+    )[0]
+    assert aapl.key != conc.key
+
+    # Singleton (whole-book) alerts carry no subject.
+    margin = next(a for a in build_risk_alerts(RiskAlertsInput(leverage=2.5)) if a.type == "margin")
+    assert margin.key == "margin:high"
+
+
 def test_endpoint_is_auth_gated_and_credit_free(client_factory=None):
     from fastapi.testclient import TestClient
 

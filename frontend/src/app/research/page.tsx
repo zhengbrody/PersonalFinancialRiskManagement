@@ -38,6 +38,8 @@ import { TickerNews } from "@/components/ticker-news";
 import { ResearchCoverageCard } from "@/components/research-coverage";
 import { LearnHint } from "@/components/learn-hint";
 import { ReportExportButton } from "@/components/report-export-button";
+import { ResearchTestDrawer } from "@/components/research-test-drawer";
+import { usePortfolioContext } from "@/lib/portfolio-context";
 import { ResearchFinancials } from "@/components/research-financials";
 import { ResearchCharts } from "@/components/research-charts";
 import { ValuationDcf } from "@/components/valuation-dcf";
@@ -134,6 +136,18 @@ function ResearchWorkbench() {
     setActiveTicker(ticker);
   }
 
+  // Honor a `?ticker=` deep-link (e.g. the Copilot "Research NVDA" action) ONCE
+  // on mount — an explicit intent wins over the persisted ticker. Read from
+  // window.location (client-only effect) so no Suspense boundary is needed.
+  const seededParam = useRef(false);
+  useEffect(() => {
+    if (seededParam.current) return;
+    seededParam.current = true;
+    const t = new URLSearchParams(window.location.search).get("ticker");
+    if (t && t.trim()) run(t.trim());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="space-y-6">
       <form
@@ -190,17 +204,33 @@ function ResearchReport({
   fp: FactPack;
   verdictM: ReturnType<typeof useResearchVerdict>;
 }) {
+  const { hasPortfolios } = usePortfolioContext();
+  const [testOpen, setTestOpen] = useState(false);
   return (
     <div className="space-y-6">
       <FactPackHeader fp={fp} />
       <TrustStrip b={b} />
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {hasPortfolios && (
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => {
+              setTestOpen(true);
+              track("research_test_started", {}); // value-free
+            }}
+          >
+            Test {fp.ticker} in my portfolio
+          </Button>
+        )}
         <ReportExportButton
           kind="ticker"
           payload={{ fact_pack: fp, verdict: verdictM.data?.verdict ?? null }}
           label="Export research report"
         />
       </div>
+      <ResearchTestDrawer ticker={fp.ticker} open={testOpen} onClose={() => setTestOpen(false)} />
+
 
       {/* AI summary (loads a beat after the data) + the deterministic debate */}
       <VerdictSection

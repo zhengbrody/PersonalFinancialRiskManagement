@@ -51,6 +51,28 @@ describe("PostHog wire boundary (Privacy Policy)", () => {
     expect(capture).toHaveBeenCalledWith("signup_completed", { source: "landing" });
   });
 
+  it("PR5 portfolio-OS events carry only value-free props even if handed a leak", async () => {
+    const a = await import("./analytics");
+    a.initAnalytics();
+    // alert lifecycle → state only (ticker/portfolio_id are deny-listed)
+    a.track("alert_lifecycle_changed", {
+      state: "resolved",
+      ticker: "NVDA",
+      portfolio_id: "p-9",
+    });
+    expect(capture).toHaveBeenLastCalledWith("alert_lifecycle_changed", { state: "resolved" });
+    // copilot navigation action → action label only
+    a.track("copilot_action_clicked", { action: "research", ticker: "NVDA", portfolio_id: "p-9" });
+    expect(capture).toHaveBeenLastCalledWith("copilot_action_clicked", { action: "research" });
+    // research test completion → fully value-free
+    a.track("research_test_completed", { ticker: "NVDA", amount_usd: 5000 });
+    expect(capture).toHaveBeenLastCalledWith("research_test_completed", {});
+    const wire = JSON.stringify(capture.mock.calls);
+    expect(wire).not.toContain("NVDA");
+    expect(wire).not.toContain("p-9");
+    expect(wire).not.toContain("5000");
+  });
+
   it("nothing sensitive appears in ANY payload that would hit the wire", async () => {
     const a = await import("./analytics");
     a.initAnalytics();

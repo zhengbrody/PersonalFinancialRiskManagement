@@ -5116,6 +5116,11 @@ export interface components {
             detail: string;
             /** Headline */
             headline: string;
+            /**
+             * Key
+             * @default
+             */
+            key?: string;
             /** Metric */
             metric: string;
             /** Severity */

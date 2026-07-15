@@ -44,6 +44,15 @@ def _pct(x: float) -> str:
     return f"{x * 100:.0f}%"
 
 
+def _key(type_: str, severity: str, subject: str = "") -> str:
+    """Stable episode id for the alert lifecycle. Includes the SUBJECT (ticker /
+    sector / option flag) so distinct subjects are distinct episodes, and the
+    severity so an escalation forms a new (unresolved) episode. Singleton alerts
+    (margin/stress/volatility/drawdown apply to the whole book) carry no subject."""
+    subj = (subject or "").strip()
+    return f"{type_}:{subj}:{severity}" if subj else f"{type_}:{severity}"
+
+
 def build_risk_alerts(inp: RiskAlertsInput, *, limit: int = 5) -> list[RiskAlert]:
     """Return the top-`limit` deterministic risk alerts, ranked by severity.
     At most one alert per type; only fires a type when its threshold is met."""
@@ -61,6 +70,7 @@ def build_risk_alerts(inp: RiskAlertsInput, *, limit: int = 5) -> list[RiskAlert
             alerts.append(
                 RiskAlert(
                     type="concentration",
+                    key=_key("concentration", sev, name),
                     severity=sev,
                     headline=f"{name} drives {_pct(weight)} of your risk",
                     detail=f"A single position concentrates much of your downside in {name}.",
@@ -77,6 +87,7 @@ def build_risk_alerts(inp: RiskAlertsInput, *, limit: int = 5) -> list[RiskAlert
             alerts.append(
                 RiskAlert(
                     type="sector",
+                    key=_key("sector", sev, conc.top_sector),
                     severity=sev,
                     headline=f"{_pct(w)} of your book is in {conc.top_sector}",
                     detail=f"One sector shock to {conc.top_sector} moves most of your portfolio at once.",
@@ -94,6 +105,7 @@ def build_risk_alerts(inp: RiskAlertsInput, *, limit: int = 5) -> list[RiskAlert
         alerts.append(
             RiskAlert(
                 type="margin",
+                key=_key("margin", sev),
                 severity=sev,
                 headline=f"You're running {lev:.1f}× leverage",
                 detail=f"Margin amplifies losses{cost_txt}; a drawdown hits your equity ~{lev:.1f}× harder.",
@@ -112,6 +124,7 @@ def build_risk_alerts(inp: RiskAlertsInput, *, limit: int = 5) -> list[RiskAlert
         alerts.append(
             RiskAlert(
                 type="stress",
+                key=_key("stress", sev),
                 severity=sev,
                 headline=f"{shock_txt} ≈ −{_pct(inp.stress_loss)} of your book",
                 detail=f"Your largest modelled stress loss is material.{worst_txt}",
@@ -127,6 +140,7 @@ def build_risk_alerts(inp: RiskAlertsInput, *, limit: int = 5) -> list[RiskAlert
         alerts.append(
             RiskAlert(
                 type="options",
+                key=_key("options", "elevated", flag),
                 severity="elevated",
                 headline=f"Options risk: {label}",
                 detail="Your option positions carry a flagged exposure worth inspecting before expiry.",
@@ -143,6 +157,7 @@ def build_risk_alerts(inp: RiskAlertsInput, *, limit: int = 5) -> list[RiskAlert
         alerts.append(
             RiskAlert(
                 type="volatility",
+                key=_key("volatility", sev),
                 severity=sev,
                 headline=f"High volatility — {_pct(inp.annual_volatility)}/yr",
                 detail="Annualized volatility is high for a core book; expect larger swings.",
@@ -155,6 +170,7 @@ def build_risk_alerts(inp: RiskAlertsInput, *, limit: int = 5) -> list[RiskAlert
         alerts.append(
             RiskAlert(
                 type="drawdown",
+                key=_key("drawdown", sev),
                 severity=sev,
                 headline=f"Deep drawdown risk — {_pct(inp.max_drawdown)}",
                 detail="The modelled max drawdown is large; a sustained selloff could be painful.",

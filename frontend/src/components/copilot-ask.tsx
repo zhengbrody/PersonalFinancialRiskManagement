@@ -95,7 +95,7 @@ export function CopilotAsk({ initialQuestion }: { initialQuestion?: string } = {
   // instead of an empty card (the mutation result itself is lost on unmount).
   // Keyed PER-PORTFOLIO — the answer folds in the active book, so switching
   // portfolios must not surface the prior book's answer.
-  const { activePortfolioId } = usePortfolioContext();
+  const { activePortfolioId, current } = usePortfolioContext();
   const [savedAnswer, setSavedAnswer] = useSessionState<CopilotAnswer | null>(
     `mm:copilot:ask:answer:${activePortfolioId ?? "none"}`,
     null,
@@ -145,6 +145,12 @@ export function CopilotAsk({ initialQuestion }: { initialQuestion?: string } = {
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Ask Copilot — structured answer</CardTitle>
+        {current?.name && (
+          <p className="text-xs text-muted-foreground">
+            Analyzing <span className="font-medium text-foreground">{current.name}</span> — switch
+            your active portfolio to ask about another book.
+          </p>
+        )}
       </CardHeader>
       <CardContent className="space-y-4">
         <form
@@ -264,6 +270,41 @@ function AnswerCard({ answer }: { answer: CopilotAnswer }) {
           )}
         </div>
       )}
+
+      <NextActions answer={answer} />
+    </div>
+  );
+}
+
+/**
+ * Deterministic next-actions — pure NAVIGATION deep-links derived from the
+ * answer's intent/tickers. The Copilot never executes a trade or edits
+ * holdings; these only route the user to a workspace that's already prefilled
+ * (Analyze tabs, a stress test, or the ticker's research). Kept value-free in
+ * analytics (action label only, never the ticker or any content).
+ */
+function NextActions({ answer }: { answer: CopilotAnswer }) {
+  const ticker = answer.tickers[0];
+  const actions: { key: string; label: string; href: string }[] = [
+    { key: "analyze", label: "Open Analyze", href: "/analyze" },
+    { key: "stress", label: "Run a stress test", href: "/analyze?view=stress" },
+    ...(ticker
+      ? [{ key: "research", label: `Research ${ticker}`, href: `/research?ticker=${encodeURIComponent(ticker)}` }]
+      : []),
+  ];
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+      <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Next steps</span>
+      {actions.map((a) => (
+        <Link
+          key={a.key}
+          href={a.href}
+          onClick={() => track("copilot_action_clicked", { action: a.key })}
+          className="rounded-md border border-border px-2 py-1 text-xs hover:bg-accent"
+        >
+          {a.label}
+        </Link>
+      ))}
     </div>
   );
 }
