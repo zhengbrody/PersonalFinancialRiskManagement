@@ -64,6 +64,10 @@ export const ANALYTICS_EVENTS = {
   risk_plan_resolved: "risk_plan_resolved",
   journey_step_completed: "journey_step_completed",
   today_primary_action: "today_primary_action",
+  research_test_started: "research_test_started",
+  research_test_completed: "research_test_completed",
+  alert_lifecycle_changed: "alert_lifecycle_changed",
+  copilot_action_clicked: "copilot_action_clicked",
 } as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[keyof typeof ANALYTICS_EVENTS];

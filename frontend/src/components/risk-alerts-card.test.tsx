@@ -1,11 +1,23 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 
-const useRiskAlertsMock = vi.fn();
+const { useRiskAlertsMock, useAlertStatesMock, upsertMock, trackMock, portfolioCtxMock } =
+  vi.hoisted(() => ({
+    useRiskAlertsMock: vi.fn(),
+    useAlertStatesMock: vi.fn(),
+    upsertMock: vi.fn(),
+    trackMock: vi.fn(),
+    portfolioCtxMock: vi.fn(),
+  }));
 vi.mock("@/lib/queries", () => ({
   useRiskAlerts: (input: unknown) => useRiskAlertsMock(input),
+  useAlertStates: (id: unknown) => useAlertStatesMock(id),
+  useUpsertAlertState: () => ({ mutate: upsertMock }),
 }));
-vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
+vi.mock("@/lib/analytics", () => ({ track: trackMock }));
+vi.mock("@/lib/portfolio-context", () => ({
+  usePortfolioContext: () => portfolioCtxMock(),
+}));
 
 import { RiskAlertsCard } from "./risk-alerts-card";
 
@@ -36,9 +48,20 @@ const ALERTS = [
   },
 ];
 
+function setup({
+  alerts = ALERTS as unknown,
+  isPending = false,
+  states = [] as unknown[],
+  portfolioId = "p1" as string | null,
+} = {}) {
+  useRiskAlertsMock.mockReturnValue({ data: alerts, isPending });
+  useAlertStatesMock.mockReturnValue({ data: { states } });
+  portfolioCtxMock.mockReturnValue({ activePortfolioId: portfolioId });
+}
+
 describe("RiskAlertsCard", () => {
   it("renders the top alerts (default limit 2) with severity + Ask Copilot deep link", () => {
-    useRiskAlertsMock.mockReturnValue({ data: ALERTS, isPending: false });
+    setup();
     render(<RiskAlertsCard input={{ leverage: 1.8 }} source="score" />);
 
     expect(screen.getByText("What to watch")).toBeInTheDocument();
@@ -55,16 +78,39 @@ describe("RiskAlertsCard", () => {
   });
 
   it("renders nothing when there are no alerts, no input, or still loading", () => {
-    useRiskAlertsMock.mockReturnValue({ data: [], isPending: false });
+    setup({ alerts: [] });
     const { container: a } = render(<RiskAlertsCard input={{ leverage: 1 }} source="score" />);
     expect(a.firstChild).toBeNull();
 
-    useRiskAlertsMock.mockReturnValue({ data: undefined, isPending: true });
+    setup({ alerts: undefined, isPending: true });
     const { container: b } = render(<RiskAlertsCard input={{}} source="score" />);
     expect(b.firstChild).toBeNull();
 
-    useRiskAlertsMock.mockReturnValue({ data: ALERTS, isPending: false });
+    setup();
     const { container: c } = render(<RiskAlertsCard input={null} source="score" />);
     expect(c.firstChild).toBeNull();
+  });
+
+  it("hides a resolved alert and resolving one persists state per portfolio", () => {
+    // The high concentration alert is already resolved → hidden; the next two show.
+    setup({ states: [{ portfolio_id: "p1", alert_key: "concentration:high", state: "resolved" }] });
+    render(<RiskAlertsCard input={{ leverage: 1.8 }} source="score" />);
+
+    expect(screen.queryByText("NVDA drives 55% of your risk")).not.toBeInTheDocument();
+    expect(screen.getByText("You're running 1.8× leverage")).toBeInTheDocument();
+
+    // Resolve the margin alert → upsert with its type:severity key, value-free track.
+    fireEvent.click(screen.getAllByRole("button", { name: /^resolve$/i })[0]);
+    expect(upsertMock).toHaveBeenCalledWith(
+      expect.objectContaining({ portfolio_id: "p1", alert_key: "margin:elevated", state: "resolved" }),
+    );
+    expect(trackMock).toHaveBeenCalledWith("alert_lifecycle_changed", { state: "resolved" });
+  });
+
+  it("shows no lifecycle buttons without an active portfolio", () => {
+    setup({ portfolioId: null });
+    render(<RiskAlertsCard input={{ leverage: 1.8 }} source="score" />);
+    expect(screen.getByText("NVDA drives 55% of your risk")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^resolve$/i })).not.toBeInTheDocument();
   });
 });

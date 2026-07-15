@@ -2563,6 +2563,9 @@ export type ReportResponse = z.infer<typeof reportResponseSchema>;
 // ── proactive risk alerts (deterministic, credit-free) ──────────────
 export const riskAlertSchema = z.looseObject({
   type: z.string(),
+  // Stable episode id for the lifecycle (subject + severity). Optional so
+  // pre-deploy cached alerts still validate; the card falls back to type:severity.
+  key: z.string().optional(),
   severity: z.string(), // low | moderate | elevated | high
   headline: z.string(),
   detail: z.string(),
