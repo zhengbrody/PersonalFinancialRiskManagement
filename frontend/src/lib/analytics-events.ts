@@ -63,6 +63,7 @@ export const ANALYTICS_EVENTS = {
   risk_plan_reviewed: "risk_plan_reviewed",
   risk_plan_resolved: "risk_plan_resolved",
   journey_step_completed: "journey_step_completed",
+  today_primary_action: "today_primary_action",
 } as const;
 
 export type AnalyticsEvent = (typeof ANALYTICS_EVENTS)[keyof typeof ANALYTICS_EVENTS];
