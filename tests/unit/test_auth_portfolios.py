@@ -301,6 +301,21 @@ def test_activate_returns_none_when_not_owned(mock_supabase):
     assert activate_portfolio("not-mine") is None
 
 
+def test_activate_treats_all_null_row_as_no_row(mock_supabase):
+    # PostgREST serialises the RPC's NULL composite as an ALL-NULL row object
+    # (verified in prod) — a null primary key must be treated as "no row", not a
+    # truthy dict (which would 500 in the endpoint's PortfolioOut validation).
+    from libs.auth.portfolios import activate_portfolio
+
+    mock_supabase.execute.return_value = MagicMock(
+        data={"id": None, "user_id": None, "name": None, "is_default": None}
+    )
+    assert activate_portfolio("not-mine") is None
+    # …and the list-wrapped variant of the same shape.
+    mock_supabase.execute.return_value = MagicMock(data=[{"id": None, "name": None}])
+    assert activate_portfolio("not-mine") is None
+
+
 # ── ensure_active_portfolio (delete-fallback promotion) ────────────
 
 

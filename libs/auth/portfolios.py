@@ -305,11 +305,17 @@ def activate_portfolio(portfolio_id: str, access_token: Optional[str] = None) ->
     sb = _authed_client(access_token_override=access_token)
     resp = sb.rpc("activate_portfolio", {"p_id": portfolio_id}).execute()
     data = getattr(resp, "data", None)
-    # PostgREST returns the composite row as an object, or null/[] when the
-    # ownership gate returned NULL. Normalise both shapes.
     if isinstance(data, list):
         data = data[0] if data else None
-    return data or None
+    # The RPC's ownership gate returns SQL NULL for a non-owned / non-existent
+    # id. For a function `RETURNS <composite>`, PostgREST serialises that NULL
+    # as an ALL-NULL ROW OBJECT ({"id": null, ...}), NOT JSON null — so a plain
+    # truthiness check would hand the endpoint a null-filled dict that fails
+    # PortfolioOut validation (500). Treat a NULL primary key as "no row" so the
+    # endpoint 404s cleanly (no owned-vs-missing distinction → no existence leak).
+    if not data or data.get("id") is None:
+        return None
+    return data
 
 
 def ensure_active_portfolio(access_token: Optional[str] = None) -> Optional[dict]:
