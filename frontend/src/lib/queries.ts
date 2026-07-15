@@ -3008,3 +3008,208 @@ export function useAttribution() {
       }),
   });
 }
+
+// ── PR2 risk-ops: plans · alert states · journey ─────────────────────
+
+export const riskPlanSchema = z.looseObject({
+  id: z.string(),
+  portfolio_id: z.string(),
+  title: z.string(),
+  status: z.enum(["draft", "active", "resolved", "archived"]),
+  source: z.enum(["score", "risk", "scenario", "research", "copilot"]),
+  hypothesis: z.string().nullish(),
+  baseline: z.record(z.string(), z.unknown()).default({}),
+  proposed_changes: z.record(z.string(), z.unknown()).default({}),
+  expected_impact: z.record(z.string(), z.unknown()).default({}),
+  data_confidence: z.record(z.string(), z.unknown()).default({}),
+  review_at: z.string().nullish(),
+  reviewed_at: z.string().nullish(),
+  resolved_at: z.string().nullish(),
+  outcome: z.record(z.string(), z.unknown()).nullish(),
+  created_at: z.string().nullish(),
+  updated_at: z.string().nullish(),
+});
+export type RiskPlan = z.infer<typeof riskPlanSchema>;
+const riskPlanListSchema = z.looseObject({ plans: z.array(riskPlanSchema).default([]) });
+
+export type RiskPlanCreateInput = {
+  portfolio_id: string;
+  title: string;
+  source: RiskPlan["source"];
+  status?: RiskPlan["status"];
+  hypothesis?: string | null;
+  baseline?: Record<string, unknown>;
+  proposed_changes?: Record<string, unknown>;
+  expected_impact?: Record<string, unknown>;
+  data_confidence?: Record<string, unknown>;
+  review_at?: string | null;
+};
+
+/** Saved risk plans (optionally scoped to one portfolio). Keyed on user +
+ * portfolio so a switch shows the right book's plans. */
+export function useRiskPlans(portfolioId: string | null) {
+  const { accessToken, user } = useAuth();
+  return useQuery<z.infer<typeof riskPlanListSchema>>({
+    queryKey: ["risk", "plans", user?.id ?? null, portfolioId ?? null],
+    enabled: Boolean(accessToken),
+    queryFn: () =>
+      apiFetch("/api/v1/risk/plans" + (portfolioId ? `?portfolio_id=${portfolioId}` : ""), {
+        authToken: accessToken!,
+        schema: riskPlanListSchema,
+      }),
+  });
+}
+
+export function useCreateRiskPlan() {
+  const { accessToken } = useAuth();
+  const qc = useQueryClient();
+  return useMutation<RiskPlan, Error, RiskPlanCreateInput>({
+    mutationFn: (body) =>
+      apiFetch<RiskPlan>("/api/v1/risk/plans", {
+        method: "POST",
+        body,
+        authToken: accessToken ?? undefined,
+        schema: riskPlanSchema,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["risk", "plans"] }),
+  });
+}
+
+export function useUpdateRiskPlan() {
+  const { accessToken } = useAuth();
+  const qc = useQueryClient();
+  return useMutation<RiskPlan, Error, { id: string; patch: Partial<RiskPlanCreateInput> & { status?: RiskPlan["status"]; outcome?: Record<string, unknown> | null } }>({
+    mutationFn: ({ id, patch }) =>
+      apiFetch<RiskPlan>(`/api/v1/risk/plans/${id}`, {
+        method: "PATCH",
+        body: patch,
+        authToken: accessToken ?? undefined,
+        schema: riskPlanSchema,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["risk", "plans"] }),
+  });
+}
+
+export function useDeleteRiskPlan() {
+  const { accessToken } = useAuth();
+  const qc = useQueryClient();
+  return useMutation<{ deleted: boolean; id: string }, Error, string>({
+    mutationFn: (id) =>
+      apiFetch(`/api/v1/risk/plans/${id}`, {
+        method: "DELETE",
+        authToken: accessToken ?? undefined,
+        schema: z.looseObject({ deleted: z.boolean(), id: z.string() }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["risk", "plans"] }),
+  });
+}
+
+export const planReviewSchema = z.looseObject({
+  verdict: z.enum(["improved", "worsened", "inconclusive"]),
+  confidence: z.enum(["high", "medium", "low"]),
+  metrics: z
+    .array(
+      z.looseObject({
+        metric: z.string(),
+        baseline: z.number().nullish(),
+        current: z.number().nullish(),
+        delta: z.number().nullish(),
+        improved: z.boolean().nullish(),
+      }),
+    )
+    .default([]),
+  missing_data: z.array(z.string()).default([]),
+  disclaimer: z.string().default(""),
+});
+export type PlanReview = z.infer<typeof planReviewSchema>;
+
+/** Compare a plan's baseline to the current metrics the caller already holds. */
+export function useReviewPlan() {
+  const { accessToken } = useAuth();
+  const qc = useQueryClient();
+  return useMutation<PlanReview, Error, { id: string; current: Record<string, unknown> }>({
+    mutationFn: ({ id, current }) =>
+      apiFetch<PlanReview>(`/api/v1/risk/plans/${id}/review`, {
+        method: "POST",
+        body: { current },
+        authToken: accessToken ?? undefined,
+        schema: planReviewSchema,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["risk", "plans"] }),
+  });
+}
+
+export const alertStateSchema = z.looseObject({
+  portfolio_id: z.string(),
+  alert_key: z.string(),
+  state: z.enum(["new", "seen", "snoozed", "resolved"]),
+  snooze_until: z.string().nullish(),
+  updated_at: z.string().nullish(),
+});
+export type AlertStateRow = z.infer<typeof alertStateSchema>;
+const alertStateListSchema = z.looseObject({ states: z.array(alertStateSchema).default([]) });
+
+export function useAlertStates(portfolioId: string | null) {
+  const { accessToken, user } = useAuth();
+  return useQuery<z.infer<typeof alertStateListSchema>>({
+    queryKey: ["risk", "alert_states", user?.id ?? null, portfolioId ?? null],
+    enabled: Boolean(accessToken) && Boolean(portfolioId),
+    queryFn: () =>
+      apiFetch(`/api/v1/risk/alert_states?portfolio_id=${portfolioId}`, {
+        authToken: accessToken!,
+        schema: alertStateListSchema,
+      }),
+  });
+}
+
+export function useUpsertAlertState() {
+  const { accessToken } = useAuth();
+  const qc = useQueryClient();
+  return useMutation<AlertStateRow, Error, { portfolio_id: string; alert_key: string; state: AlertStateRow["state"]; snooze_until?: string | null }>({
+    mutationFn: (body) =>
+      apiFetch<AlertStateRow>("/api/v1/risk/alert_states", {
+        method: "PUT",
+        body,
+        authToken: accessToken ?? undefined,
+        schema: alertStateSchema,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["risk", "alert_states"] }),
+  });
+}
+
+export const journeySchema = z.looseObject({
+  first_portfolio_at: z.string().nullish(),
+  first_score_at: z.string().nullish(),
+  first_driver_viewed_at: z.string().nullish(),
+  first_stress_test_at: z.string().nullish(),
+  first_plan_at: z.string().nullish(),
+  first_plan_reviewed_at: z.string().nullish(),
+  last_workspace_view: z.string().nullish(),
+});
+export type Journey = z.infer<typeof journeySchema>;
+export type JourneyMilestone = keyof Journey;
+
+export function useJourney() {
+  const { accessToken, user } = useAuth();
+  return useQuery<Journey>({
+    queryKey: ["journey", user?.id ?? null],
+    enabled: Boolean(accessToken),
+    queryFn: () =>
+      apiFetch<Journey>("/api/v1/journey", { authToken: accessToken!, schema: journeySchema }),
+  });
+}
+
+export function useRecordMilestone() {
+  const { accessToken } = useAuth();
+  const qc = useQueryClient();
+  return useMutation<Journey, Error, JourneyMilestone>({
+    mutationFn: (milestone) =>
+      apiFetch<Journey>("/api/v1/journey/record", {
+        method: "POST",
+        body: { milestone },
+        authToken: accessToken ?? undefined,
+        schema: journeySchema,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["journey"] }),
+  });
+}

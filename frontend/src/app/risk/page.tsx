@@ -70,6 +70,9 @@ export default function RiskPage() {
       <header className="flex items-start justify-between gap-4">
         <div className="space-y-1">
           <h1 className="text-3xl font-semibold tracking-tight">Risk report</h1>
+          <a href="/analyze?view=drivers" className="text-xs font-medium text-primary hover:underline">
+            Open in the Analyze workspace →
+          </a>
           <p className="text-sm text-muted-foreground">
             Full VaR / CVaR, factor exposures, stress test, and liquidity for
             your active portfolio.

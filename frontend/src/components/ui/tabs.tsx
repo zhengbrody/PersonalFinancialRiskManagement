@@ -11,18 +11,29 @@ import { cn } from "@/lib/utils";
 
 export type TabItem = { value: string; label: string };
 
+// Shared id helpers so a caller can wire aria-labelledby/aria-controls between
+// the Tabs and its own panels (the panels live outside this component).
+export const tabId = (base: string, value: string) => `${base}-tab-${value}`;
+export const tabPanelId = (base: string, value: string) => `${base}-panel-${value}`;
+
 export function Tabs({
   items,
   value,
   onValueChange,
   className,
+  idBase,
 }: {
   items: TabItem[];
   value: string;
   onValueChange: (v: string) => void;
   className?: string;
+  /** When set, tabs get stable ids + aria-controls so external panels can link
+   *  back with aria-labelledby (see tabId/tabPanelId). Falls back to a local
+   *  useId when omitted (existing callers unaffected). */
+  idBase?: string;
 }) {
-  const groupId = useId();
+  const localId = useId();
+  const base = idBase ?? localId;
   const idx = Math.max(0, items.findIndex((t) => t.value === value));
 
   function onKeyDown(e: React.KeyboardEvent) {
@@ -49,8 +60,9 @@ export function Tabs({
             key={t.value}
             type="button"
             role="tab"
-            id={`${groupId}-${t.value}`}
+            id={tabId(base, t.value)}
             aria-selected={active}
+            aria-controls={idBase ? tabPanelId(base, t.value) : undefined}
             tabIndex={active ? 0 : -1}
             onClick={() => onValueChange(t.value)}
             className={cn(

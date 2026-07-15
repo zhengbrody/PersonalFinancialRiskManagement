@@ -212,6 +212,22 @@ export async function mockBackend(page: Page): Promise<void> {
   await page.route("**/api/v1/risk/score_from_active", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: envelope(SCORE) }),
   );
+  // A default portfolio so the portfolio context + Analyze workspace resolve a book.
+  await page.route("**/api/v1/portfolios/me", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: envelope({
+        portfolios: [
+          { id: "pf1", name: "My Portfolio", holdings: { SPY: { shares: 10 } }, is_default: true },
+        ],
+      }),
+    }),
+  );
+  // Empty saved plans → the Action Plan stage shows its empty state, not an error.
+  await page.route("**/api/v1/risk/plans**", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: envelope({ plans: [] }) }),
+  );
   await page.route("**/api/v1/copilot/ask", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: envelope(COPILOT_ANSWER) }),
   );

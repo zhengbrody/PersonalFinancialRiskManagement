@@ -299,6 +299,14 @@ export default function ScorePage() {
         <h1 className="text-3xl font-semibold tracking-tight">
           {signedIn ? "Your portfolio health" : "Score any portfolio"}
         </h1>
+        {signedIn && (
+          <a
+            href="/analyze?view=overview"
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            Open in the Analyze workspace →
+          </a>
+        )}
         <p className="text-sm text-muted-foreground">
           {signedIn
             ? "A 0–1000 score across risk match, risk-adjusted return, and downside protection — with the drivers, what changed, and what to do."
