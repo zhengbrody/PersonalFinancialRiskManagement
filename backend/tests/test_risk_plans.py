@@ -242,3 +242,57 @@ def test_review_404_when_plan_missing(test_client, mint_token, fake_plans):
         f"/api/v1/risk/plans/{_UUID}/review", json={"current": {}}, headers=_auth(mint_token)
     )
     assert r.status_code == 404
+
+
+# ── server-side journey stamping at plan product events ────────────
+
+
+@pytest.fixture
+def capture_stamps(monkeypatch):
+    from backend.app.services import user_journey as svc
+
+    svc.reset_stamp_memo()
+    stamped: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        svc, "record_milestone", lambda t, u, m: stamped.append((u, m)) or {m: "now"}
+    )
+    return stamped
+
+
+def test_plan_create_stamps_first_plan_milestone(
+    test_client, mint_token, fake_plans, capture_stamps
+):
+    body = {
+        "portfolio_id": _UUID,
+        "title": "Trim tech concentration",
+        "source": "research",
+    }
+    r = test_client.post("/api/v1/risk/plans", json=body, headers=_auth(mint_token, sub="user-j1"))
+    assert r.status_code == 200
+    assert ("user-j1", "first_plan_at") in capture_stamps
+
+
+def test_plan_review_stamps_first_plan_reviewed_milestone(
+    test_client, mint_token, fake_plans, capture_stamps
+):
+    r = test_client.post(
+        f"/api/v1/risk/plans/{_UUID}/review",
+        json={"current": {"overall_score": 700.0}},
+        headers=_auth(mint_token, sub="user-j2"),
+    )
+    assert r.status_code == 200
+    assert ("user-j2", "first_plan_reviewed_at") in capture_stamps
+
+
+def test_plan_create_survives_stamp_failure(test_client, mint_token, fake_plans, monkeypatch):
+    from backend.app.services import user_journey as svc
+
+    svc.reset_stamp_memo()
+
+    def _boom(*a, **k):
+        raise RuntimeError("journey table missing")
+
+    monkeypatch.setattr(svc, "record_milestone", _boom)
+    body = {"portfolio_id": _UUID, "title": "Plan", "source": "research"}
+    r = test_client.post("/api/v1/risk/plans", json=body, headers=_auth(mint_token))
+    assert r.status_code == 200  # the product event succeeds regardless

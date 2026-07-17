@@ -928,6 +928,14 @@ def score_from_active_endpoint(
         option_penalty=option_penalty,
     )
 
+    # Journey: the first successful score of the user's OWN book is the
+    # "first analyze" product event (requires holdings + a completed analysis,
+    # never a mere pageview). Fail-soft bookkeeping; memoized in-process so the
+    # hot score path pays the round-trip only once.
+    from ...services import user_journey
+
+    user_journey.stamp_milestone_failsoft(user.access_token, user.id, "first_score_at")
+
     return ok(response.model_dump(), request=request, started_at=started)
 
 

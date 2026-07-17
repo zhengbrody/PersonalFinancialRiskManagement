@@ -70,9 +70,13 @@ export function Today() {
     typeof curScore === "number" &&
     curScore - prevScore <= -SCORE_DROP_PTS;
   const hasStressTest = Boolean(journey.data?.first_stress_test_at);
-  const hasPlan = Boolean(journey.data?.first_plan_at);
+  // Milestones are stamped server-side at the product event; the live plans
+  // list is the fallback for plans saved before stamping existed.
+  const hasPlan =
+    Boolean(journey.data?.first_plan_at) || (plans.data?.plans ?? []).length > 0;
   const hasScore = Boolean(journey.data?.first_score_at) || Boolean(score.data);
   const hasDriverView = Boolean(journey.data?.first_driver_viewed_at);
+  const hasPlanReviewed = Boolean(journey.data?.first_plan_reviewed_at);
 
   const inputs: TodayInputs = {
     hasPortfolio: hasPortfolios,
@@ -87,7 +91,7 @@ export function Today() {
   };
   const primary = computePrimaryAction(inputs);
   const secondary = computeSecondary(inputs, primary.kind);
-  const journeyState = journeySteps({ hasPortfolio: hasPortfolios, hasScore, hasDriverView, hasStressTest, hasPlan });
+  const journeyState = journeySteps({ hasPortfolio: hasPortfolios, hasScore, hasDriverView, hasStressTest, hasPlan, hasPlanReviewed });
   const continuePlan = (plans.data?.plans ?? []).find(
     (p) => p.status === "active" || p.status === "draft",
   );
@@ -206,6 +210,10 @@ export function Today() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Getting started</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Account-level milestones — the &quot;do this next&quot; card above always applies to
+              your active portfolio.
+            </p>
           </CardHeader>
           <CardContent>
             <ol className="space-y-1.5 text-sm">

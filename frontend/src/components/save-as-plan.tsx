@@ -57,6 +57,7 @@ export function SaveAsPlan({
       {
         onSuccess: (plan) => {
           track("risk_plan_saved", {}); // value-free
+          track("journey_step_completed", { step: "plan" }); // stage enum only
           onSaved?.(plan);
         },
       },

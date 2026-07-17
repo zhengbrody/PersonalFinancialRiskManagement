@@ -20,8 +20,15 @@ import userEvent from "@testing-library/user-event";
 import { renderWithQuery } from "@/test-utils";
 
 const replaceMock = vi.fn();
+// Controllable ?ticker= param — tests swap the holder value and rerender to
+// simulate an in-place query change / browser back/forward (Next re-renders
+// with a fresh useSearchParams() object on navigation).
+const { searchParamsHolder } = vi.hoisted(() => ({
+  searchParamsHolder: { value: new URLSearchParams() },
+}));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: replaceMock, push: vi.fn() }),
+  useSearchParams: () => searchParamsHolder.value,
 }));
 
 const useAuthMock = vi.fn();
@@ -179,8 +186,18 @@ const VERDICT = {
 function routeFetch(verdict: { body: unknown; status?: number }) {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
-    if (url.includes("/research/AAPL/bundle")) {
-      return envelope({ data: { bundle: BUNDLE }, error: null, meta: { request_id: "r-b" } });
+    const bundleMatch = url.match(/\/research\/([A-Z0-9.-]+)\/bundle/);
+    if (bundleMatch) {
+      const tk = bundleMatch[1];
+      const body =
+        tk === "AAPL"
+          ? BUNDLE
+          : {
+              ...BUNDLE,
+              ticker: tk,
+              fact_pack: { ...FACT_PACK, ticker: tk, name: `${tk} Corp` },
+            };
+      return envelope({ data: { bundle: body }, error: null, meta: { request_id: "r-b" } });
     }
     if (url.includes("/research/verdict")) {
       return envelope(verdict.body, verdict.status ?? 200);
@@ -191,6 +208,8 @@ function routeFetch(verdict: { body: unknown; status?: number }) {
 
 beforeEach(() => {
   authed();
+  searchParamsHolder.value = new URLSearchParams();
+  sessionStorage.clear(); // the persisted active ticker must not leak between tests
 });
 
 afterEach(() => {
@@ -256,5 +275,73 @@ describe("ResearchPage", () => {
     expect(await screen.findByText(/used your ai analysis quota/i)).toBeInTheDocument();
     const link = screen.getByRole("link", { name: /see plans/i });
     expect(link).toHaveAttribute("href", "/pricing");
+  });
+
+  it("normalizes a lowercase/whitespace ?ticker= deep-link on mount", async () => {
+    const fetchSpy = routeFetch({
+      body: { data: { verdict: VERDICT, fact_pack: FACT_PACK }, error: null, meta: { request_id: "r-v" } },
+    });
+    searchParamsHolder.value = new URLSearchParams("ticker=  nvda ");
+    renderWithQuery(<ResearchPage />);
+
+    expect((await screen.findAllByText(/NVDA Corp/i)).length).toBeGreaterThanOrEqual(1);
+    const bundleCalls = fetchSpy.mock.calls
+      .map((c) => String(c[0]))
+      .filter((u) => u.includes("/bundle"));
+    expect(bundleCalls.every((u) => u.includes("/research/NVDA/bundle"))).toBe(true);
+  });
+
+  it("reacts to an in-place ?ticker= change AND browser back/forward between two tickers", async () => {
+    const fetchSpy = routeFetch({
+      body: { data: { verdict: VERDICT, fact_pack: FACT_PACK }, error: null, meta: { request_id: "r-v" } },
+    });
+    searchParamsHolder.value = new URLSearchParams("ticker=NVDA");
+    const view = renderWithQuery(<ResearchPage />);
+    expect((await screen.findAllByText(/NVDA Corp/i)).length).toBeGreaterThanOrEqual(1);
+
+    // Copilot navigates to a SECOND ticker on the already-mounted page.
+    searchParamsHolder.value = new URLSearchParams("ticker=MSFT");
+    view.rerender(<ResearchPage />);
+    expect((await screen.findAllByText(/MSFT Corp/i)).length).toBeGreaterThanOrEqual(1);
+    expect(
+      fetchSpy.mock.calls.some((c) => String(c[0]).includes("/research/MSFT/bundle")),
+    ).toBe(true);
+
+    // Browser BACK → the first deep-link becomes active again (served from the
+    // query cache — no assertion on a re-fetch, only on the visible state).
+    searchParamsHolder.value = new URLSearchParams("ticker=NVDA");
+    view.rerender(<ResearchPage />);
+    expect((await screen.findAllByText(/NVDA Corp/i)).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("an unchanged ?ticker= never refires the credit-gated verdict", async () => {
+    const fetchSpy = routeFetch({
+      body: { data: { verdict: VERDICT, fact_pack: FACT_PACK }, error: null, meta: { request_id: "r-v" } },
+    });
+    searchParamsHolder.value = new URLSearchParams("ticker=NVDA");
+    const view = renderWithQuery(<ResearchPage />);
+    expect((await screen.findAllByText(/NVDA Corp/i)).length).toBeGreaterThanOrEqual(1);
+    await screen.findByText(/durable franchise at a fair multiple/i);
+    const verdictCalls = () =>
+      fetchSpy.mock.calls.filter((c) => String(c[0]).includes("/research/verdict")).length;
+    const before = verdictCalls();
+    expect(before).toBe(1);
+
+    // Re-render with the SAME param value (e.g. an unrelated state change).
+    searchParamsHolder.value = new URLSearchParams("ticker=NVDA");
+    view.rerender(<ResearchPage />);
+    // Give any (wrong) refire a chance to happen, then assert it didn't.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(verdictCalls()).toBe(before);
+  });
+
+  it("an empty ?ticker= never clears the persisted active ticker", async () => {
+    routeFetch({
+      body: { data: { verdict: VERDICT, fact_pack: FACT_PACK }, error: null, meta: { request_id: "r-v" } },
+    });
+    sessionStorage.setItem("mm:research:ticker", JSON.stringify("NVDA"));
+    searchParamsHolder.value = new URLSearchParams(); // plain /research
+    renderWithQuery(<ResearchPage />);
+    expect((await screen.findAllByText(/NVDA Corp/i)).length).toBeGreaterThanOrEqual(1);
   });
 });

@@ -102,6 +102,7 @@ function PlanCard({
         onSuccess: (r) => {
           setResult(r);
           track("risk_plan_reviewed", {}); // value-free
+          track("journey_step_completed", { step: "review" }); // stage enum only
         },
       },
     );

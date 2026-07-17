@@ -62,3 +62,37 @@ def record_milestone(access_token: Optional[str], user_id: str, milestone: str) 
     _client(access_token).table(_TABLE).upsert(payload, on_conflict="user_id").execute()
     current[milestone] = now
     return current
+
+
+# ── server-side product-event stamping ──────────────────────────────
+#
+# ``first_*`` milestones are stamped at the REAL product event (portfolio
+# created / book scored / plan saved / plan reviewed) on the server, so the
+# journey is authoritative regardless of which UI path triggered the event.
+# A ``first_*`` milestone is immutable once set, so a tiny in-process memo
+# skips the read+write round-trip on hot paths (e.g. every score request)
+# after the first successful stamp in this process.
+_stamped_memo: set[tuple[str, str]] = set()
+
+
+def stamp_milestone_failsoft(access_token: Optional[str], user_id: str, milestone: str) -> None:
+    """Best-effort stamp — NEVER raises. A journey bookkeeping failure (missing
+    table, RLS blip, network) must not fail the product endpoint it rides on."""
+    key = (user_id, milestone)
+    if milestone.startswith("first_") and key in _stamped_memo:
+        return
+    try:
+        record_milestone(access_token, user_id, milestone)
+        if milestone.startswith("first_"):
+            _stamped_memo.add(key)
+    except Exception as exc:  # noqa: BLE001 — bookkeeping only, by design
+        import logging
+
+        logging.getLogger("mindmarket.journey").warning(
+            "journey.stamp_failed milestone=%s err=%s", milestone, type(exc).__name__
+        )
+
+
+def reset_stamp_memo() -> None:
+    """Test hook — clear the in-process first-milestone memo."""
+    _stamped_memo.clear()

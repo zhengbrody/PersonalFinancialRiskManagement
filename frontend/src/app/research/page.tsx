@@ -18,9 +18,9 @@
  * /login when signed out).
  */
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { DataConfidence } from "@/components/data-confidence";
 import {
@@ -93,7 +93,11 @@ export default function ResearchPage() {
         </p>
       </header>
 
-      <ResearchWorkbench />
+      {/* useSearchParams (inside the workbench) requires a Suspense boundary
+          when the route is statically prerendered — same pattern as /copilot. */}
+      <Suspense fallback={<PageSkeleton />}>
+        <ResearchWorkbench />
+      </Suspense>
     </div>
   );
 }
@@ -136,17 +140,29 @@ function ResearchWorkbench() {
     setActiveTicker(ticker);
   }
 
-  // Honor a `?ticker=` deep-link (e.g. the Copilot "Research NVDA" action) ONCE
-  // on mount — an explicit intent wins over the persisted ticker. Read from
-  // window.location (client-only effect) so no Suspense boundary is needed.
-  const seededParam = useRef(false);
+  // Honor a `?ticker=` deep-link (e.g. the Copilot "Research NVDA" action) —
+  // REACTIVELY: a query change on the already-mounted page (Copilot navigating
+  // to a second ticker, browser back/forward between two deep-links) must
+  // update the loaded ticker too, not just the first mount. Guards:
+  //   * seededParam dedupes per URL VALUE — the same param never re-fires;
+  //   * norm === activeTicker skips run() — no duplicate bundle fetch and,
+  //     critically, no duplicate credit-gated verdict fire;
+  //   * an empty/absent param never clears the persisted ticker;
+  //   * input is normalized (trim/uppercase) and length-bounded to match the
+  //     backend's Path(max_length=20) — anything else flows through the same
+  //     run() path and surfaces the normal "couldn't find data" state.
+  const searchParams = useSearchParams();
+  const seededParam = useRef<string | null>(null);
   useEffect(() => {
-    if (seededParam.current) return;
-    seededParam.current = true;
-    const t = new URLSearchParams(window.location.search).get("ticker");
-    if (t && t.trim()) run(t.trim());
+    const raw = searchParams.get("ticker");
+    const norm = (raw ?? "").trim().toUpperCase();
+    if (!norm || norm.length > 20) return;
+    if (seededParam.current === norm) return; // this URL value was already honored
+    seededParam.current = norm;
+    if (norm === activeTicker) return; // already loaded — don't refire the verdict
+    run(norm);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [searchParams, activeTicker]);
 
   return (
     <div className="space-y-6">

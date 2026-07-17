@@ -80,7 +80,7 @@ def create_plan_endpoint(
     user: AuthedUser = Depends(require_user),
 ):
     started = time.perf_counter()
-    from ...services import risk_plans
+    from ...services import risk_plans, user_journey
 
     try:
         row = risk_plans.create_plan(user.access_token, user.id, body.model_dump())
@@ -94,6 +94,8 @@ def create_plan_endpoint(
             ) from None
         _log.warning("risk_plans.create_failed err=%s", type(exc).__name__)
         raise server_error("Could not save the plan.", reason=type(exc).__name__) from exc
+    # Journey: saving a plan IS the "first plan" product event (fail-soft).
+    user_journey.stamp_milestone_failsoft(user.access_token, user.id, "first_plan_at")
     return ok(RiskPlanOut(**row).model_dump(), request=request, started_at=started)
 
 
@@ -191,7 +193,7 @@ def review_plan_endpoint(
     user: AuthedUser = Depends(require_user),
 ):
     started = time.perf_counter()
-    from ...services import plan_review, risk_plans
+    from ...services import plan_review, risk_plans, user_journey
 
     try:
         plan = risk_plans.get_plan(user.access_token, user.id, plan_id)
@@ -210,6 +212,8 @@ def review_plan_endpoint(
         risk_plans.mark_reviewed(user.access_token, user.id, plan_id)
     except Exception as exc:  # noqa: BLE001
         _log.warning("risk_plans.mark_reviewed_failed err=%s", type(exc).__name__)
+    # Journey: a completed review IS the "first plan reviewed" product event.
+    user_journey.stamp_milestone_failsoft(user.access_token, user.id, "first_plan_reviewed_at")
     return ok(RiskPlanReviewOut(**review).model_dump(), request=request, started_at=started)
 
 

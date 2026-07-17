@@ -178,6 +178,7 @@ export function journeySteps(i: {
   hasDriverView: boolean;
   hasStressTest: boolean;
   hasPlan: boolean;
+  hasPlanReviewed: boolean;
 }): { steps: JourneyStep[]; nextIndex: number; allDone: boolean } {
   const steps: JourneyStep[] = [
     { key: "portfolio", label: "Add your portfolio", done: i.hasPortfolio, href: "/portfolios/new" },
@@ -187,6 +188,8 @@ export function journeySteps(i: {
     // A FIRST plan is saved from a what-if in the Stress stage (the Plan stage
     // only lists existing plans) — send the user where they can actually create one.
     { key: "plan", label: "Save a risk plan", done: i.hasPlan, href: "/analyze?view=stress" },
+    // The loop closes when a saved plan is REVIEWED against current metrics.
+    { key: "review", label: "Review a saved plan", done: i.hasPlanReviewed, href: "/analyze?view=plan" },
   ];
   const nextIndex = steps.findIndex((s) => !s.done);
   return { steps, nextIndex, allDone: nextIndex === -1 };

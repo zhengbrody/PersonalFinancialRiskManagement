@@ -122,12 +122,22 @@ export function AnalyzeWorkspace() {
       )}
       {visited.has("drivers") && (
         <StagePanel view="drivers" active={view === "drivers"}>
-          <DriversStage onFirstLoad={() => recordMilestone.mutate("first_driver_viewed_at")} />
+          <DriversStage
+            onFirstLoad={() => {
+              recordMilestone.mutate("first_driver_viewed_at");
+              track("journey_step_completed", { step: "drivers" }); // stage enum only
+            }}
+          />
         </StagePanel>
       )}
       {visited.has("stress") && (
         <StagePanel view="stress" active={view === "stress"}>
-          <StressStage onFirstRun={() => recordMilestone.mutate("first_stress_test_at")} />
+          <StressStage
+            onFirstRun={() => {
+              recordMilestone.mutate("first_stress_test_at");
+              track("journey_step_completed", { step: "stress" }); // stage enum only
+            }}
+          />
         </StagePanel>
       )}
       {visited.has("plan") && (
@@ -244,16 +254,21 @@ function StressStage({ onFirstRun }: { onFirstRun: () => void }) {
   const { user } = useAuth();
   const historical = useHistoricalScenarios();
   const firedRef = useRef(false);
+  // ONE first-run signal, whichever real stress computation completes first —
+  // the auto-run historical replay OR an explicit what-if re-score.
+  const fireOnce = () => {
+    if (!firedRef.current) {
+      firedRef.current = true;
+      onFirstRun();
+    }
+  };
 
   useRunOncePerUser(runKeyForActivePortfolio(user?.id, activePortfolioId), () => {
     track("stress_test_started", {});
     historical.reset();
     historical.mutate(undefined, {
       onSuccess: () => {
-        if (!firedRef.current) {
-          firedRef.current = true;
-          onFirstRun();
-        }
+        fireOnce();
         track("stress_test_completed", {});
       },
     });
@@ -273,6 +288,7 @@ function StressStage({ onFirstRun }: { onFirstRun: () => void }) {
           <WhatIfLab
             baseline={baseline}
             saveContext={{ portfolioId: activePortfolioId, source: "scenario" }}
+            onRunSuccess={fireOnce}
           />
         </CardContent>
       </Card>

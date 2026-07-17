@@ -132,6 +132,11 @@ def create_portfolio_endpoint(
             raise APIError(status=422, code="portfolio_create_failed", message=str(exc)) from exc
         raise server_error("Portfolio create failed.", reason=type(exc).__name__) from exc
 
+    # Journey: a successful create IS the "first portfolio" product event
+    # (covers the form AND the CSV-import path; fail-soft bookkeeping).
+    from ...services import user_journey
+
+    user_journey.stamp_milestone_failsoft(user.access_token, user.id, "first_portfolio_at")
     return ok(PortfolioOut(**row).model_dump(), request=request, started_at=started)
 
 

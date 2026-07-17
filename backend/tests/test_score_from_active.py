@@ -610,3 +610,43 @@ def test_simulate_actions_returns_levered_cards_with_expected_deltas(
 def test_simulate_actions_is_auth_gated(test_client):
     resp = test_client.post("/api/v1/risk/simulate_actions", json={})
     assert resp.status_code == 401
+
+
+def test_successful_score_stamps_first_score_journey_milestone(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_capital, monkeypatch
+):
+    """A completed analysis of the user's OWN book IS the 'first analyze' event."""
+    from backend.app.services import user_journey as uj
+
+    uj.reset_stamp_memo()
+    stamped: list[tuple[str, str]] = []
+    monkeypatch.setattr(uj, "record_milestone", lambda t, u, m: stamped.append((u, m)) or {})
+
+    fake_active_portfolio.set({"SPY": {"shares": 100, "avg_cost": 400.0}})
+    fake_price_history.set(_make_history(["SPY"]))
+    resp = test_client.post(
+        "/api/v1/risk/score_from_active",
+        json={"risk_preference": 3},
+        headers={"Authorization": f"Bearer {mint_token(sub='user-journey-score')}"},
+    )
+    assert resp.status_code == 200, resp.json()
+    assert ("user-journey-score", "first_score_at") in stamped
+
+
+def test_failed_score_never_stamps_the_milestone(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, monkeypatch
+):
+    from backend.app.services import user_journey as uj
+
+    uj.reset_stamp_memo()
+    stamped: list[tuple[str, str]] = []
+    monkeypatch.setattr(uj, "record_milestone", lambda t, u, m: stamped.append((u, m)) or {})
+
+    fake_active_portfolio.set({})  # no active holdings → 422
+    resp = test_client.post(
+        "/api/v1/risk/score_from_active",
+        json={"risk_preference": 3},
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    assert resp.status_code == 422
+    assert stamped == []

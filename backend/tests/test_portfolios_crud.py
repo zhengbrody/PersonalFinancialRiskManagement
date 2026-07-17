@@ -278,3 +278,43 @@ def test_delete_upstream_failure_is_server_error(test_client, mint_token, fake_p
     body = resp.json()
     assert body["error"]["code"] == "server_error"
     assert "supabase down" not in body["error"]["message"]
+
+
+def test_create_stamps_first_portfolio_journey_milestone(
+    test_client, mint_token, fake_portfolio_mutations, monkeypatch
+):
+    """A successful create IS the 'first portfolio' product event."""
+    from backend.app.services import user_journey as uj
+
+    uj.reset_stamp_memo()
+    stamped: list[tuple[str, str]] = []
+    monkeypatch.setattr(uj, "record_milestone", lambda t, u, m: stamped.append((u, m)) or {})
+
+    fake_portfolio_mutations["create"].set_return(_sample_row(name="New"))
+    resp = test_client.post(
+        "/api/v1/portfolios",
+        json={"name": "New", "holdings": {"SPY": {"shares": 100}}, "is_default": True},
+        headers={"Authorization": f"Bearer {mint_token(sub='user-journey')}"},
+    )
+    assert resp.status_code == 200
+    assert ("user-journey", "first_portfolio_at") in stamped
+
+
+def test_create_survives_journey_stamp_failure(
+    test_client, mint_token, fake_portfolio_mutations, monkeypatch
+):
+    from backend.app.services import user_journey as uj
+
+    uj.reset_stamp_memo()
+
+    def _boom(*a, **k):
+        raise RuntimeError("journey table missing")
+
+    monkeypatch.setattr(uj, "record_milestone", _boom)
+    fake_portfolio_mutations["create"].set_return(_sample_row(name="New"))
+    resp = test_client.post(
+        "/api/v1/portfolios",
+        json={"name": "New", "holdings": {"SPY": {"shares": 100}}},
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    assert resp.status_code == 200  # bookkeeping failure never fails the create
