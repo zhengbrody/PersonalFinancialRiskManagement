@@ -49,7 +49,9 @@ describe("<DataConfidence>", () => {
     expect(screen.getByText(/Low confidence/)).toBeInTheDocument();
     expect(screen.getByText(/Not enough data for a directional read/)).toBeInTheDocument();
     // the missing dataset + its typed reason are surfaced in plain English
-    expect(screen.getByText(/fundamentals \(no API key/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/fundamentals \(source credential unavailable/),
+    ).toBeInTheDocument();
     expect(screen.getByText(/Only 25% of critical inputs/)).toBeInTheDocument();
   });
 

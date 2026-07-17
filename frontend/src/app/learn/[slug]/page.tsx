@@ -12,8 +12,7 @@ import { LEARN_BY_SLUG, LEARN_SLUGS } from "@/lib/learn-content";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { C, display } from "@/components/marketing/theme";
 import { CTA, CTABox, Disclaimer } from "@/components/marketing/primitives";
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
+import { SITE_URL, pageMetadata } from "@/lib/site";
 
 export function generateStaticParams() {
   return LEARN_SLUGS.map((slug) => ({ slug }));
@@ -27,21 +26,11 @@ export async function generateMetadata({
   const { slug } = await params;
   const topic = LEARN_BY_SLUG[slug];
   if (!topic) return { title: "Learn" };
-  const url = `${SITE_URL}/learn/${topic.slug}`;
-  return {
+  return pageMetadata({
     title: topic.metaTitle,
     description: topic.description,
-    alternates: { canonical: `/learn/${topic.slug}` },
-    openGraph: {
-      type: "article",
-      title: topic.metaTitle,
-      description: topic.description,
-      url,
-      siteName: "mindmarket.app",
-      images: ["/og.jpg?v=3"],
-    },
-    twitter: { card: "summary_large_image", title: topic.metaTitle, description: topic.description },
-  };
+    path: `/learn/${topic.slug}`,
+  });
 }
 
 const linkStyle = { color: C.teal, textDecoration: "none" };
@@ -181,7 +170,7 @@ export default async function LearnTopicPage({
             <CTA href="/demo-risk-check" variant="ghost">
               Run a sample portfolio
             </CTA>
-            <CTA href="/signup">Create free account</CTA>
+            <CTA href="/signup">Create risk workspace</CTA>
           </CTABox>
         </div>
 

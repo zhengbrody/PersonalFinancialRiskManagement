@@ -33,17 +33,17 @@ beforeEach(() => {
 });
 
 describe("MarketingLandingV2", () => {
-  it("renders the full landing without throwing (hero, demo, pillars, footer)", () => {
+  it("renders the complete Portfolio Risk OS story", () => {
     render(<MarketingLandingV2 />);
-    expect(screen.getByText(/Know your portfolio/i)).toBeInTheDocument();
-    // Appears in both the hero gauge card and a feature pillar.
-    expect(screen.getAllByText(/Portfolio Health Score/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Know what changed/i)).toBeInTheDocument();
+    expect(screen.getByText(/What needs attention/i)).toBeInTheDocument();
     expect(screen.getByText(/Move the crash slider/i)).toBeInTheDocument();
-    expect(screen.getByText(/Real risk math/i)).toBeInTheDocument();
+    expect(screen.getByText(/repeatable decision loop/i)).toBeInTheDocument();
+    expect(screen.getByText(/From signal to saved decision/i)).toBeInTheDocument();
     expect(screen.getByTestId("macro")).toBeInTheDocument(); // embedded live macro
     expect(screen.getByTestId("tape")).toBeInTheDocument(); // movers tape present
     // CTAs point at real routes.
-    expect(screen.getAllByRole("link", { name: /score my portfolio/i })[0]).toHaveAttribute(
+    expect(screen.getAllByRole("link", { name: /create my risk workspace/i })[0]).toHaveAttribute(
       "href",
       "/signup",
     );
@@ -74,11 +74,10 @@ describe("MarketingLandingV2", () => {
     expect(screen.getByText(/US market closed/i)).toBeInTheDocument();
   });
 
-  it("the hero mock cockpit is clearly labelled as sample data", () => {
+  it("the hero workspace is clearly labelled as sample data and test-safe", () => {
     render(<MarketingLandingV2 />);
-    expect(screen.getByText("Sample")).toBeInTheDocument(); // card pill
-    expect(screen.getByText(/1000 · sample book/i)).toBeInTheDocument(); // gauge subline
-    expect(screen.getByText(/Sample · 1-day VaR 95%/i)).toBeInTheDocument(); // float chips
+    expect(screen.getByText(/Today · sample workspace/i)).toBeInTheDocument();
+    expect(screen.getByText(/0 holdings changed/i)).toBeInTheDocument();
   });
 
   it("the demo band links to the full /demo-risk-check cockpit", () => {
@@ -92,5 +91,11 @@ describe("MarketingLandingV2", () => {
     const text = (container.textContent ?? "").toLowerCase();
     expect(text).not.toMatch(/\bbuy this\b|\bsell this\b|guaranteed|\bbuy now\b/);
     expect(text).toContain("not provide investment"); // educational disclaimer present
+  });
+
+  it("does not advertise unavailable imports or commercial surfaces", () => {
+    const { container } = render(<MarketingLandingV2 />);
+    const text = (container.textContent ?? "").toLowerCase();
+    expect(text).not.toMatch(/import from your broker|pricing|stripe|credit card|credits|subscribe/);
   });
 });

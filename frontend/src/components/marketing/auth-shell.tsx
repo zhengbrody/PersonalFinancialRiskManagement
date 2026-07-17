@@ -11,11 +11,13 @@ import { C, display } from "./theme";
 export function AuthShell({
   title,
   subtitle,
+  highlights,
   footer,
   children,
 }: {
   title: string;
   subtitle?: ReactNode;
+  highlights?: readonly string[];
   footer?: ReactNode;
   children: ReactNode;
 }) {
@@ -48,6 +50,26 @@ export function AuthShell({
         >
           {children}
         </div>
+        {highlights && highlights.length > 0 && (
+          <div
+            style={{
+              display: "grid",
+              gap: 8,
+              marginTop: 18,
+              borderRadius: 14,
+              border: `1px solid ${C.hair}`,
+              background: C.surfaceFaint,
+              padding: "14px 16px",
+            }}
+          >
+            {highlights.map((item, index) => (
+              <div key={item} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                <span style={{ color: C.teal, fontSize: 12, marginTop: 2 }}>{index + 1}</span>
+                <span style={{ color: C.slate, fontSize: 13, lineHeight: 1.45 }}>{item}</span>
+              </div>
+            ))}
+          </div>
+        )}
         {footer && (
           <p style={{ textAlign: "center", marginTop: 18, fontSize: 14, color: C.slate }}>{footer}</p>
         )}

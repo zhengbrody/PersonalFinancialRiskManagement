@@ -63,7 +63,7 @@ describe("/legal/[doc]", () => {
 
   it("generateMetadata sets a per-doc title + canonical", async () => {
     const m = await generateMetadata({ params: Promise.resolve({ doc: "terms" }) });
-    expect(String(m.title)).toContain("Terms");
+    expect((m.title as { absolute?: string })?.absolute).toContain("Terms");
     expect(m.alternates?.canonical).toBe("/legal/terms");
   });
 });

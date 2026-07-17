@@ -23,8 +23,8 @@ describe("DemoRiskCheckPage", () => {
     const { container } = render(<DemoRiskCheckPage />);
     expect(container.querySelector("#sample-cockpit")).toBeTruthy();
     expect(screen.getByRole("heading", { name: /before you add more risk/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /analyze my portfolio/i })).toHaveAttribute("href", "/signup");
-    expect(screen.getByRole("link", { name: /research a stock/i })).toHaveAttribute("href", "/research");
+    expect(screen.getByRole("link", { name: /create my risk workspace/i })).toHaveAttribute("href", "/signup");
+    expect(screen.getByRole("link", { name: /see the full workflow/i })).toHaveAttribute("href", "/product#workflow");
   });
 
   it("fires demo_started with a SAFE payload (no ticker / no $ amounts)", () => {

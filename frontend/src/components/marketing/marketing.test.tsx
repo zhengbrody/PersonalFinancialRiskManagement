@@ -30,14 +30,14 @@ describe("MarketingShell", () => {
     expect(screen.getByText(/does not provide investment/i)).toBeInTheDocument();
   });
 
-  it("signed-in shows Open dashboard, not the anon CTAs", () => {
+  it("signed-in shows Open Today, not the anon CTAs", () => {
     authMock.mockReturnValue({ user: { id: "u1" }, configured: true, loading: false });
     render(
       <MarketingShell>
         <div>BODY</div>
       </MarketingShell>,
     );
-    expect(screen.getByRole("link", { name: "Open dashboard" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "Open Today" })).toHaveAttribute("href", "/");
     expect(screen.queryByRole("link", { name: "Get started" })).not.toBeInTheDocument();
   });
 
@@ -53,12 +53,12 @@ describe("MarketingShell", () => {
 });
 
 describe("Product page (restyled)", () => {
-  it("renders the hero lede, all four pillars, and the no-invention rule", () => {
+  it("renders the operating loop, connected surfaces, and safety boundary", () => {
     render(<ProductPage />);
-    expect(screen.getByText(/source-backed risk cockpit/i)).toBeInTheDocument();
-    expect(screen.getByText("Portfolio Health Score")).toBeInTheDocument();
-    expect(screen.getByText("AI Copilot")).toBeInTheDocument();
-    expect(screen.getByText(/never invent a figure/i)).toBeInTheDocument();
+    expect(screen.getByText(/starting point is Today/i)).toBeInTheDocument();
+    expect(screen.getByText("Unified Analyze workspace")).toBeInTheDocument();
+    expect(screen.getByText("Portfolio-aware Copilot")).toBeInTheDocument();
+    expect(screen.getByText(/never place a trade/i)).toBeInTheDocument();
   });
 });
 

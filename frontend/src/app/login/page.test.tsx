@@ -3,7 +3,7 @@
  *
  * Branches asserted:
  *   1. Supabase env unset → the form is hidden, setup notice shown.
- *   2. signIn() resolves → we navigate to /portfolios.
+ *   2. signIn() resolves → we navigate to Today (/).
  *   3. signIn() rejects → the error message renders in an alert.
  *   4. Google OAuth starts from the primary CTA.
  */
@@ -49,7 +49,7 @@ describe("LoginPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("calls signIn and redirects to /portfolios on success", async () => {
+  it("calls signIn and redirects to Today on success", async () => {
     const signIn = vi.fn().mockResolvedValue(undefined);
     useAuthMock.mockReturnValue({
       user: null,
@@ -69,7 +69,7 @@ describe("LoginPage", () => {
     await user.click(screen.getByRole("button", { name: /sign in/i }));
 
     expect(signIn).toHaveBeenCalledWith("owner@mindmarket.test", "hunter2");
-    expect(replaceMock).toHaveBeenCalledWith("/portfolios");
+    expect(replaceMock).toHaveBeenCalledWith("/");
   });
 
   it("surfaces the error message when signIn rejects", async () => {

@@ -9,7 +9,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: "*",
-        allow: ["/", "/pricing", "/score", "/markets"],
+        allow: ["/", "/product", "/learn", "/markets", "/risk-today", "/resources"],
         disallow: [
           "/api/",
           "/admin",
@@ -18,6 +18,7 @@ export default function robots(): MetadataRoute.Robots {
           "/legacy/",
           "/login",
           "/portfolios",
+          "/pricing",
           "/quant",
           "/research",
           "/risk",

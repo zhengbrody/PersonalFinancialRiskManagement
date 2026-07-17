@@ -15,16 +15,14 @@ type Freq = MetadataRoute.Sitemap[number]["changeFrequency"];
 
 // Non-SEO-landing Next routes (the 9 SEO landing pages come from SEO_PAGES).
 const NEXT_ROUTES: { path: string; changeFrequency: Freq; priority: number; lastmod: string }[] = [
-  { path: "/", changeFrequency: "weekly", priority: 1.0, lastmod: "2026-06-25" },
-  { path: "/demo-risk-check", changeFrequency: "weekly", priority: 0.95, lastmod: "2026-06-25" },
-  { path: "/score", changeFrequency: "weekly", priority: 0.85, lastmod: "2026-06-17" },
-  { path: "/markets", changeFrequency: "daily", priority: 0.8, lastmod: "2026-06-17" },
-  { path: "/risk-today", changeFrequency: "daily", priority: 0.85, lastmod: "2026-07-11" },
-  { path: "/pricing", changeFrequency: "monthly", priority: 0.7, lastmod: "2026-06-17" },
-  { path: "/product", changeFrequency: "monthly", priority: 0.9, lastmod: "2026-06-17" },
-  { path: "/learn", changeFrequency: "weekly", priority: 0.9, lastmod: "2026-06-25" },
-  { path: "/resources", changeFrequency: "monthly", priority: 0.7, lastmod: "2026-06-25" },
-  { path: "/about", changeFrequency: "monthly", priority: 0.8, lastmod: "2026-07-11" },
+  { path: "/", changeFrequency: "weekly", priority: 1.0, lastmod: "2026-07-15" },
+  { path: "/demo-risk-check", changeFrequency: "weekly", priority: 0.95, lastmod: "2026-07-15" },
+  { path: "/markets", changeFrequency: "daily", priority: 0.8, lastmod: "2026-07-15" },
+  { path: "/risk-today", changeFrequency: "daily", priority: 0.85, lastmod: "2026-07-15" },
+  { path: "/product", changeFrequency: "monthly", priority: 0.95, lastmod: "2026-07-15" },
+  { path: "/learn", changeFrequency: "weekly", priority: 0.9, lastmod: "2026-07-15" },
+  { path: "/resources", changeFrequency: "monthly", priority: 0.75, lastmod: "2026-07-15" },
+  { path: "/about", changeFrequency: "monthly", priority: 0.8, lastmod: "2026-07-15" },
   { path: "/methodology/health-score", changeFrequency: "monthly", priority: 0.75, lastmod: "2026-07-10" },
   { path: "/methodology/regime-model", changeFrequency: "monthly", priority: 0.7, lastmod: "2026-07-11" },
 ];

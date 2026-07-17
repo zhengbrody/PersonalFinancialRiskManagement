@@ -5,6 +5,8 @@ import "./globals.css";
 import { SiteShell } from "@/components/site-shell";
 import { MarketThemeSync } from "@/components/market-theme-sync";
 import { DAY_START_MINUTES, DAY_END_MINUTES } from "@/lib/market-hours";
+import { PRODUCT_POSITIONING } from "@/lib/product-story";
+import { SITE_URL } from "@/lib/site";
 import { Providers } from "./providers";
 
 /**
@@ -47,28 +49,26 @@ const instrumentSerif = Instrument_Serif({
   display: "swap",
 });
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
-
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   applicationName: "MindMarket",
   title: {
-    default: "MindMarket | AI Portfolio Risk Analytics",
+    default: "MindMarket | Portfolio Risk OS for Individual Investors",
     template: "%s | MindMarket",
   },
-  description:
-    "AI portfolio risk analytics for individual investors: portfolio health score, VaR, CVaR, stress tests, factor exposure, and live US rates data.",
+  description: PRODUCT_POSITIONING.description,
   keywords: [
     "MindMarket",
+    "portfolio risk operating system",
     "portfolio risk analytics",
-    "AI portfolio risk management",
+    "personal portfolio risk management",
     "portfolio health score",
     "VaR calculator",
     "CVaR",
     "stress testing portfolio",
     "factor exposure",
-    "US Treasury yield curve",
-    "FRED macro data",
+    "portfolio concentration risk",
+    "portfolio risk plan",
   ],
   alternates: {
     canonical: "/",
@@ -84,23 +84,21 @@ export const metadata: Metadata = {
     type: "website",
     url: "/",
     siteName: "mindmarket.app",
-    title: "MindMarket | AI Portfolio Risk Analytics",
-    description:
-      "Score your portfolio, inspect downside risk, and understand macro exposure with deterministic risk math plus AI explanations.",
+    title: "MindMarket | Portfolio Risk OS",
+    description: PRODUCT_POSITIONING.description,
     images: [
       {
         url: "/og.jpg?v=3",
         width: 1200,
         height: 630,
-        alt: "MindMarket AI — know your portfolio's risk before the market tests it",
+        alt: "MindMarket Portfolio Risk OS — Today, Analyze, Test, Plan, and Review",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "MindMarket | AI Portfolio Risk Analytics",
-    description:
-      "Portfolio health score, VaR/CVaR, stress tests, factor exposure, and live US rates data for individual investors.",
+    title: "MindMarket | Portfolio Risk OS",
+    description: PRODUCT_POSITIONING.description,
     images: ["/og.jpg?v=3"],
   },
   robots: {
@@ -130,16 +128,27 @@ const JSON_LD = JSON.stringify({
       logo: `${SITE_URL}/icons/icon-512.png`,
     },
     {
-      "@type": "SoftwareApplication",
+      "@type": "WebSite",
+      "@id": `${SITE_URL}/#website`,
+      name: "MindMarket",
+      alternateName: "MindMarket Portfolio Risk OS",
+      url: SITE_URL,
+      publisher: { "@id": `${SITE_URL}/#org` },
+    },
+    {
+      "@type": "WebApplication",
       name: "MindMarket AI",
       url: SITE_URL,
       applicationCategory: "FinanceApplication",
       operatingSystem: "Web",
-      description:
-        "AI portfolio risk analytics for individual investors: portfolio health score (0-1000), VaR/CVaR, stress tests, factor exposure, and an AI copilot grounded in deterministic risk math.",
-      // Free educational beta — no paid tiers advertised. (Priced offers
-      // return when monetization launches; gate alongside the billing flag.)
-      offers: [{ "@type": "Offer", price: "0", priceCurrency: "USD" }],
+      description: PRODUCT_POSITIONING.description,
+      featureList: [
+        "Today risk priority center",
+        "Unified portfolio Analyze workspace",
+        "Research-to-Test scenarios",
+        "Saved risk plans and alert review",
+        "Portfolio-aware evidence-grounded Copilot",
+      ],
       publisher: { "@id": `${SITE_URL}/#org` },
     },
   ],

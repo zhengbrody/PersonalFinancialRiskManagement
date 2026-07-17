@@ -1,9 +1,7 @@
 /**
- * Free-beta gating (NEXT_PUBLIC_BILLING_ENABLED=false): user-facing billing /
- * pricing / credits / upgrade UI is hidden, replaced with "Free Beta" copy;
- * quota errors become friendly beta-limit messages — never payment prompts.
- * Stripe stays in code, so the same surfaces render normally when enabled
- * (the existing pricing/settings tests cover the enabled path).
+ * Free-beta gating (NEXT_PUBLIC_BILLING_ENABLED=false): signed-in billing and
+ * quota surfaces stay hidden. The public pricing route is tested separately as
+ * a redirect to the product story.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,7 +17,6 @@ const useAuthMock = vi.fn();
 vi.mock("@/lib/auth-context", () => ({ useAuth: () => useAuthMock() }));
 
 import { isBillingEnabled } from "@/lib/billing-flag";
-import PricingPage from "@/app/pricing/page";
 import SettingsPage from "@/app/settings/page";
 import { CreditsBadge } from "@/components/credits-badge";
 
@@ -76,16 +73,6 @@ describe("isBillingEnabled", () => {
 
 describe("free beta — billing disabled", () => {
   beforeEach(() => vi.stubEnv("NEXT_PUBLIC_BILLING_ENABLED", "false"));
-
-  it("pricing page shows the Free Beta notice, no Subscribe", async () => {
-    renderWithQuery(<PricingPage />);
-    expect(await screen.findByText("Free Beta")).toBeInTheDocument();
-    expect(
-      screen.getByText(/All core features are currently open during beta/i),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/Subscribe/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/\$10/)).not.toBeInTheDocument();
-  });
 
   it("settings shows Free Beta copy and no upgrade / manage CTA", async () => {
     renderWithQuery(<SettingsPage />);

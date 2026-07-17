@@ -72,7 +72,7 @@ export function StickyMobileCTA() {
           textDecoration: "none",
         }}
       >
-        Try a free risk check
+        Open risk demo
       </Link>
       <Link
         href="/signup"
@@ -90,7 +90,7 @@ export function StickyMobileCTA() {
           textDecoration: "none",
         }}
       >
-        Sign up
+        Create workspace
       </Link>
     </div>
   );

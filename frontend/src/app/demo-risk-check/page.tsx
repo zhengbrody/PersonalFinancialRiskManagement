@@ -7,7 +7,6 @@
  * `demo_started` on mount.
  */
 
-import type { Metadata } from "next";
 import { SampleCockpit } from "@/components/sample-cockpit";
 import { PublicRiskCheck } from "@/components/public-risk-check";
 import { isPublicRiskCheckEnabled } from "@/lib/public-risk";
@@ -15,25 +14,15 @@ import { DemoStartedPing } from "@/components/demo-started-ping";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { C } from "@/components/marketing/theme";
 import { CTA, CTABox, Disclaimer, Em, MarketingHero } from "@/components/marketing/primitives";
+import { pageMetadata } from "@/lib/site";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
-
-export const metadata: Metadata = {
-  title: "Demo Risk Check — see your portfolio's hidden risk in 30 seconds",
+export const metadata = pageMetadata({
+  title: "Interactive Portfolio Risk Demo — Stress a Sample Book",
   description:
-    "Try MindMarket's risk cockpit free, no sign-in: score a balanced book, then one-click stress a high-growth portfolio to see concentration, volatility, and crash exposure. Every number is computed, nothing is invented.",
-  alternates: { canonical: "/demo-risk-check" },
-  openGraph: {
-    type: "website",
-    title: "MindMarket — Demo Risk Check",
-    description:
-      "Score a sample portfolio and stress a high-growth book in 30 seconds — no sign-in. Deterministic risk math, not AI guesswork.",
-    url: `${SITE_URL}/demo-risk-check`,
-    siteName: "mindmarket.app",
-    images: ["/og.jpg?v=3"],
-  },
-  twitter: { card: "summary_large_image" },
-};
+    "Explore a sample portfolio risk workflow without signing in: inspect the Health Score, concentration, volatility, and estimated stress losses. Every number is computed and clearly labeled.",
+  path: "/demo-risk-check",
+  ogType: "website",
+});
 
 export default function DemoRiskCheckPage() {
   return (
@@ -67,12 +56,12 @@ export default function DemoRiskCheckPage() {
 
       <div style={{ maxWidth: 920, margin: "0 auto", padding: "16px 24px 64px" }}>
         <CTABox
-          headline="Want this for your own portfolio?"
-          lede="Add your holdings (or import a CSV) and get a real Health Score, risk report, and AI copilot — free during beta."
+          headline="Turn a one-time check into an ongoing risk workflow."
+          lede="Add your holdings, open Today, trace the risk in Analyze, test a change, and save the decision for review."
         >
-          <CTA href="/signup">Analyze my portfolio</CTA>
-          <CTA href="/research" variant="ghost">
-            Research a stock
+          <CTA href="/signup">Create my risk workspace</CTA>
+          <CTA href="/product#workflow" variant="ghost">
+            See the full workflow
           </CTA>
         </CTABox>
         <div style={{ marginTop: 18 }}>

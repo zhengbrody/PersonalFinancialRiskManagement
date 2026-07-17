@@ -3,7 +3,7 @@
 /**
  * Google-first sign-in against Supabase, with email + password fallback.
  *
- * Behaviour on success: redirect to `/portfolios`. The auth context
+ * Behaviour on success: redirect to Today (`/`). The auth context
  * subscription will see the new session and surface the email in the
  * shell pill automatically.
  */
@@ -17,7 +17,7 @@ import { useAuth } from "@/lib/auth-context";
 import { AuthShell } from "@/components/marketing/auth-shell";
 import { C } from "@/components/marketing/theme";
 
-const POST_LOGIN_REDIRECT = "/portfolios";
+const POST_LOGIN_REDIRECT = "/";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -72,7 +72,12 @@ export default function LoginPage() {
   return (
     <AuthShell
       title="Welcome back"
-      subtitle="Sign in to your portfolio risk cockpit."
+      subtitle="Return to Today and continue the risk decisions already in motion."
+      highlights={[
+        "Review today's priorities for the active portfolio.",
+        "Continue an Analyze stage or saved risk plan.",
+        "Revisit alerts without losing the evidence behind them.",
+      ]}
       footer={
         <>
           New here?{" "}

@@ -42,14 +42,14 @@ const SOURCE_TYPE_TEXT: Record<string, string> = {
 
 // The typed missing-reason enum → plain English (rule #4 distinctions).
 const MISSING_REASON: Record<string, string> = {
-  no_key: "no API key — using free data",
+  no_key: "source credential unavailable — using public fallback data",
   provider_error: "provider error",
   rate_limited: "rate limited",
   insufficient_history: "not enough history",
   not_applicable: "not applicable",
   stale_fallback: "stale (served from cache)",
   synthetic_demo: "illustrative synthetic data — not market history",
-  unsupported: "not available on this plan",
+  unsupported: "not supported by the current source",
   empty: "no data returned",
 };
 

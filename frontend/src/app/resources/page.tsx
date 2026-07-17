@@ -1,35 +1,22 @@
 /**
- * /resources — an internal-linking hub that connects the educational guides
- * (/learn/*) AND the standalone keyword/solution pages (Caddy-served
- * assets/seo/*.html) under one discoverable index. Those static pages had no
- * inbound internal links, wasting their PageRank; this distributes it and gives
- * crawlers a single map of the content.
- *
- * SSR, server component. The guides are Next routes (plain <a> is fine + SSR);
- * the solution pages are Caddy-served, so they MUST be plain <a> (next/link would
- * client-side-404 on a non-Next route).
+ * /resources — crawlable hub for the product workflow, educational guides,
+ * methodology, and focused portfolio-risk pages.
  */
 
-import type { Metadata } from "next";
+import Link from "next/link";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { C, display, eyebrow } from "@/components/marketing/theme";
 import { LEARN_TOPICS } from "@/lib/learn-content";
+import { pageMetadata } from "@/lib/site";
 
-export const metadata: Metadata = {
-  title: "Resources — Portfolio Risk Guides & Tools",
+export const metadata = pageMetadata({
+  title: "Portfolio Risk Resources — Workflow, Guides & Methodology",
   description:
-    "Every MindMarket guide and tool in one place: plain-English explainers on VaR, drawdown, factor exposure, margin, and options, plus risk-analysis tools for your portfolio.",
-  alternates: { canonical: "/resources" },
-  openGraph: {
-    title: "Resources — Portfolio Risk Guides & Tools | MindMarket",
-    description:
-      "Plain-English risk guides plus portfolio risk-analysis tools — VaR, stress testing, concentration, margin, and more.",
-    url: "/resources",
-  },
-};
+    "Explore the MindMarket product workflow, risk methodology, and plain-English guides to VaR, stress testing, concentration, margin, factors, drawdown, and stock research.",
+  path: "/resources",
+  ogType: "website",
+});
 
-// Standalone keyword/solution pages served by Caddy (assets/seo/*.html). Plain
-// <a> only — these are NOT Next routes.
 const SOLUTION_PAGES: { href: string; title: string; blurb: string }[] = [
   {
     href: "/portfolio-risk-management",
@@ -78,9 +65,32 @@ const SOLUTION_PAGES: { href: string; title: string; blurb: string }[] = [
   },
 ];
 
+const START_HERE = [
+  {
+    href: "/product#workflow",
+    title: "See the operating workflow",
+    blurb: "Understand how Today, Analyze, Test, Plan, and Review fit together.",
+  },
+  {
+    href: "/demo-risk-check",
+    title: "Try a sample risk test",
+    blurb: "Move a market shock and inspect the holdings driving the estimated loss.",
+  },
+  {
+    href: "/methodology/health-score",
+    title: "Audit the Health Score",
+    blurb: "Read the exact inputs, weights, safeguards, data-quality rules, and limitations.",
+  },
+  {
+    href: "/risk-today",
+    title: "Read today's market risk",
+    blurb: "View the public elevated-risk probability with VIX, sentiment, and curve context.",
+  },
+] as const;
+
 function Card({ href, title, blurb }: { href: string; title: string; blurb: string }) {
   return (
-    <a
+    <Link
       href={href}
       className="mm-card"
       style={{
@@ -95,7 +105,7 @@ function Card({ href, title, blurb }: { href: string; title: string; blurb: stri
     >
       <h3 style={{ color: C.paper, fontSize: 17, fontWeight: 600, margin: "0 0 6px" }}>{title}</h3>
       <p style={{ color: C.slate, fontSize: 14, lineHeight: 1.55, margin: 0 }}>{blurb}</p>
-    </a>
+    </Link>
   );
 }
 
@@ -118,10 +128,21 @@ export default function ResourcesPage() {
             Guides &amp; tools for portfolio risk
           </h1>
           <p style={{ color: C.slate, fontSize: 18, lineHeight: 1.6, margin: 0 }}>
-            Everything in one place — plain-English explainers on the metrics that matter, and the
-            risk-analysis tools that put them to work on your own holdings. Educational only.
+            Start with the decision workflow, inspect the methodology, or learn one metric at a
+            time. Every path links the concept back to a practical portfolio question.
           </p>
         </header>
+
+        <section style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          <h2 style={{ ...display, color: C.paper, fontSize: 28, fontWeight: 400, margin: 0 }}>
+            Start here
+          </h2>
+          <div className="mm-resource-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16 }}>
+            {START_HERE.map((p) => (
+              <Card key={p.href} href={p.href} title={p.title} blurb={p.blurb} />
+            ))}
+          </div>
+        </section>
 
         {/* Guides */}
         <section style={{ display: "flex", flexDirection: "column", gap: 18 }}>

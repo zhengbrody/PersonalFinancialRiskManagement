@@ -28,13 +28,13 @@ describe("MobileNav", () => {
     fireEvent.click(screen.getByRole("button", { name: /open menu/i }));
     expect(screen.getByRole("link", { name: "Product" })).toHaveAttribute("href", "/product");
     expect(screen.getByRole("link", { name: "Markets" })).toHaveAttribute("href", "/markets");
-    expect(screen.getByRole("link", { name: /get started/i })).toHaveAttribute("href", "/signup");
+    expect(screen.getByRole("link", { name: /create risk workspace/i })).toHaveAttribute("href", "/signup");
   });
 
-  it("shows Open dashboard when signed in", () => {
+  it("shows Open Today when signed in", () => {
     render(<MobileNav signedIn />);
     fireEvent.click(screen.getByRole("button", { name: /open menu/i }));
-    expect(screen.getByRole("link", { name: /open dashboard/i })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: /open today/i })).toHaveAttribute("href", "/");
     expect(screen.queryByRole("link", { name: /get started/i })).not.toBeInTheDocument();
   });
 
@@ -67,21 +67,21 @@ describe("StickyMobileCTA", () => {
   it("reveals the demo + signup CTAs once scrolled past the hero", () => {
     setScrollY(2000); // hero well out of view
     render(<StickyMobileCTA />);
-    expect(screen.getByRole("link", { name: /free risk check/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /open risk demo/i })).toHaveAttribute(
       "href",
       "/demo-risk-check",
     );
-    expect(screen.getByRole("link", { name: /sign up/i })).toHaveAttribute("href", "/signup");
+    expect(screen.getByRole("link", { name: /create workspace/i })).toHaveAttribute("href", "/signup");
   });
 
   it("shows once a scroll event pushes past the threshold", () => {
     render(<StickyMobileCTA />);
-    expect(screen.queryByRole("link", { name: /free risk check/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /open risk demo/i })).not.toBeInTheDocument();
     act(() => {
       setScrollY(2000);
       window.dispatchEvent(new Event("scroll"));
     });
-    expect(screen.getByRole("link", { name: /free risk check/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /open risk demo/i })).toBeInTheDocument();
   });
 
   it("signed-in: renders nothing", () => {

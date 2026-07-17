@@ -38,30 +38,30 @@ const DEMO = "/demo-risk-check";
 export const SEO_PAGES: SeoPage[] = [
   {
     path: "/portfolio-risk-management",
-    title: "Personal Portfolio Risk Management Software | MindMarket AI",
+    title: "Portfolio Risk Management Software for Investors | MindMarket",
     description:
-      "MindMarket AI is portfolio risk management software for individual investors: measure VaR, CVaR, drawdown, factor exposure, stress testing, CSV holdings import, and AI risk summaries.",
+      "Portfolio risk management software for individual investors: prioritize risk, analyze VaR and drivers, run stress tests, save risk plans, and review changes over time.",
     eyebrow: "Portfolio risk management",
     h1: "Portfolio risk management software for individual investors",
     lead: [
-      "MindMarket AI helps investors move beyond simple gain and loss tracking. The platform measures portfolio risk with quantitative analytics such as VaR, CVaR, drawdown, stress testing, factor exposure, concentration risk, and AI-generated risk commentary.",
-      "Create a portfolio, import holdings from CSV, review risk metrics, and ask AI questions about portfolio exposure, downside scenarios, diversification, market conditions, and next research priorities.",
+      "MindMarket helps investors move beyond simple gain and loss tracking. It combines quantitative risk analytics with a repeatable workflow for deciding what to inspect, test, save, and review.",
+      "Create a portfolio, add holdings or import a supported CSV, review priorities in Today, move through Analyze, and ask grounded Copilot questions about exposure, downside scenarios, diversification, and next research steps.",
     ],
     sections: [
       {
         kind: "cards",
         cards: [
           {
-            title: "Risk dashboard",
-            body: "Track portfolio value, drawdown, volatility, VaR, CVaR, Sharpe ratio, and concentration risk in one workflow.",
+            title: "Today action center",
+            body: "Start with the portfolio risks, alerts, and saved decisions that deserve attention now.",
           },
           {
-            title: "Stress testing",
-            body: "Review how the portfolio may respond to market shocks, sector pressure, macro stress, and downside scenarios.",
+            title: "Unified Analyze workspace",
+            body: "Review Health Score, drivers, stress tests, an action plan, and history without switching among disconnected reports.",
           },
           {
-            title: "AI risk analysis",
-            body: "Use AI summaries to connect raw portfolio metrics with practical questions about exposure, risk, and research.",
+            title: "Research, tests, and plans",
+            body: "Turn a source-backed research question into a hypothetical test and save the decision for later review.",
           },
         ],
       },
@@ -93,18 +93,18 @@ export const SEO_PAGES: SeoPage[] = [
       "MindMarket AI is for education and research only. It does not provide investment, tax, legal, or financial advice.",
     priority: 0.9,
     changeFrequency: "monthly",
-    lastmod: "2026-07-11",
+    lastmod: "2026-07-15",
   },
   {
     path: "/ai-portfolio-analysis",
     title: "AI Portfolio Analysis for Investors | MindMarket AI",
     description:
-      "Use MindMarket AI to analyze portfolio risk, market context, ticker research, factor exposure, concentration, and downside scenarios with AI-assisted summaries.",
+      "Use portfolio-aware AI to explain risk drivers, market context, ticker exposure, concentration, score changes, and downside scenarios from traceable evidence.",
     eyebrow: "AI portfolio analysis",
     h1: "AI portfolio analysis grounded in risk metrics and market data",
     lead: [
-      "MindMarket AI combines portfolio analytics with AI summaries so investors can ask better questions about allocation, concentration, downside risk, hedging ideas, and market conditions.",
-      "Instead of relying only on generic chatbot answers, MindMarket AI uses the portfolio's holdings, weights, risk metrics, market context, and data-source status to generate more focused analysis.",
+      "MindMarket combines deterministic portfolio analytics with a Copilot so investors can ask better questions about allocation, concentration, downside risk, and market conditions.",
+      "Instead of returning a generic chatbot answer, the Copilot uses the active portfolio, computed metrics, market context, and data-confidence status; it cites tools and lowers conviction when critical evidence is missing.",
     ],
     sections: [
       {
@@ -114,7 +114,7 @@ export const SEO_PAGES: SeoPage[] = [
           "Which holdings contribute most to portfolio risk.",
           "Whether the portfolio is concentrated by ticker, sector, or factor exposure.",
           "How drawdown, VaR, CVaR, and stress tests change the risk picture.",
-          "Which data is available, cached, missing, or limited by premium endpoints.",
+          "Which data is available, current, stale, missing, or supplied by a fallback source.",
           "What research questions an investor may want to investigate next.",
         ],
       },
@@ -142,7 +142,7 @@ export const SEO_PAGES: SeoPage[] = [
     disclaimer: DISCLAIMER,
     priority: 0.85,
     changeFrequency: "monthly",
-    lastmod: "2026-06-17",
+    lastmod: "2026-07-15",
   },
   {
     path: "/portfolio-var-stress-testing",
@@ -185,7 +185,7 @@ export const SEO_PAGES: SeoPage[] = [
       "MindMarket AI is for educational and research use only and does not provide investment advice.",
     priority: 0.85,
     changeFrequency: "monthly",
-    lastmod: "2026-06-17",
+    lastmod: "2026-07-15",
   },
   {
     path: "/personal-portfolio-risk-analysis",
@@ -232,7 +232,7 @@ export const SEO_PAGES: SeoPage[] = [
     disclaimer: DISCLAIMER,
     priority: 0.85,
     changeFrequency: "monthly",
-    lastmod: "2026-06-17",
+    lastmod: "2026-07-15",
   },
   {
     path: "/margin-risk-calculator",
@@ -277,7 +277,7 @@ export const SEO_PAGES: SeoPage[] = [
     disclaimer: DISCLAIMER,
     priority: 0.85,
     changeFrequency: "monthly",
-    lastmod: "2026-06-17",
+    lastmod: "2026-07-15",
   },
   {
     path: "/portfolio-stress-test",
@@ -324,7 +324,7 @@ export const SEO_PAGES: SeoPage[] = [
     disclaimer: DISCLAIMER,
     priority: 0.85,
     changeFrequency: "monthly",
-    lastmod: "2026-06-17",
+    lastmod: "2026-07-15",
   },
   {
     path: "/stock-portfolio-concentration-risk",
@@ -368,7 +368,7 @@ export const SEO_PAGES: SeoPage[] = [
     disclaimer: DISCLAIMER,
     priority: 0.8,
     changeFrequency: "monthly",
-    lastmod: "2026-06-17",
+    lastmod: "2026-07-15",
   },
   {
     path: "/robinhood-margin-risk",
@@ -412,17 +412,17 @@ export const SEO_PAGES: SeoPage[] = [
     disclaimer: DISCLAIMER,
     priority: 0.8,
     changeFrequency: "monthly",
-    lastmod: "2026-06-17",
+    lastmod: "2026-07-15",
   },
   {
     path: "/sample-risk-report",
-    title: "Sample Portfolio Risk Report | MindMarket AI",
+    title: "Sample Portfolio Risk Workflow | MindMarket",
     description:
-      "View a sample MindMarket AI portfolio risk report with net equity, margin risk, VaR, CVaR, stress loss, concentration, and AI action cards.",
-    eyebrow: "Sample report",
-    h1: "Portfolio risk snapshot example",
+      "Follow a sample portfolio from risk snapshot to top drivers, stress loss, action cards, and a hypothetical test that can be saved for review.",
+    eyebrow: "Sample workflow",
+    h1: "Portfolio risk workflow example",
     lead: [
-      "This sample shows the kind of decision-ready report MindMarket AI can generate from a portfolio: capital base, buying power context, leverage, VaR, stress loss, top positions, and practical risk actions.",
+      "This sample starts with a risk snapshot, then shows how MindMarket turns capital base, leverage, VaR, stress loss, and top positions into a testable action and a decision that can be reviewed later.",
     ],
     sections: [
       {
@@ -474,11 +474,11 @@ export const SEO_PAGES: SeoPage[] = [
         ],
       },
     ],
-    cta: { label: "Create your own report", href: DEMO },
+    cta: { label: "Run the sample workflow", href: DEMO },
     disclaimer: "Educational and research use only. This sample is not investment advice.",
     priority: 0.8,
     changeFrequency: "monthly",
-    lastmod: "2026-06-17",
+    lastmod: "2026-07-15",
   },
 ];
 
