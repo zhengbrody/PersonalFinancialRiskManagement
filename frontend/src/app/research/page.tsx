@@ -55,6 +55,7 @@ import { track } from "@/lib/analytics";
 import {
   useBillingMe,
   useResearchBundle,
+  useResearchCoverage,
   useResearchVerdict,
   type FactPack,
   type ResearchVerdict,
@@ -225,7 +226,7 @@ function ResearchReport({
   return (
     <div className="space-y-6">
       <FactPackHeader fp={fp} />
-      <TrustStrip b={b} />
+      <ResearchTrustSummary ticker={fp.ticker} />
       <div className="flex flex-wrap items-center justify-end gap-2">
         {hasPortfolios && (
           <Button
@@ -303,43 +304,21 @@ function ResearchReport({
 }
 
 /**
- * Dense one-line trust strip: data-confidence (toned), the distinct data
- * sources, the as-of date, and the count of explicitly-missing fields. Every
- * value comes from the bundle; nothing is inferred.
+ * The ONE research-level trust summary — the unified <DataConfidence> block fed
+ * by the coverage endpoint (confidence label + coverage + freshness + fallback
+ * + cross-source agreement + critical-missing + conviction cap). Replaces the
+ * old hand-rolled TrustStrip AND the header DataQualityBadge, which repeated
+ * the same information in two more vocabularies. Uses the SAME query the
+ * coverage matrix uses (React Query dedupes it — one request per ticker).
  */
-function TrustStrip({ b }: { b: ResearchBundle }) {
-  const conf = b.data_confidence ?? null;
-  const label = b.confidence_label;
-  const sources = Array.from(
-    new Set((b.financials?.provenance ?? []).map((p) => p.source).filter(Boolean)),
-  ).map((s) => (s === "yfinance" ? "Yahoo (free)" : s === "fmp" ? "FMP" : s));
-  const missing = b.financials?.missing_data?.length ?? 0;
-  const tone =
-    conf == null
-      ? "text-muted-foreground"
-      : conf >= 0.66
-        ? "text-emerald-600 dark:text-emerald-400"
-        : conf >= 0.4
-          ? "text-amber-600 dark:text-amber-400"
-          : "text-red-600 dark:text-red-400";
-  return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs">
-      {label && conf != null && (
-        <span className={`font-medium ${tone}`}>
-          Confidence: {label.charAt(0).toUpperCase() + label.slice(1)} ({Math.round(conf * 100)}%)
-        </span>
-      )}
-      {sources.length > 0 && (
-        <span className="text-muted-foreground">· Sources: {sources.join(", ")}</span>
-      )}
-      {b.as_of && <span className="text-muted-foreground">· as of {formatAsOf(b.as_of)}</span>}
-      {missing > 0 && (
-        <span className="text-amber-600 dark:text-amber-400">
-          · {missing} field{missing === 1 ? "" : "s"} missing
-        </span>
-      )}
-    </div>
-  );
+function ResearchTrustSummary({ ticker }: { ticker: string }) {
+  const coverage = useResearchCoverage(ticker);
+  if (coverage.isLoading) {
+    return <Skeleton className="h-16 w-full" data-testid="trust-summary-skeleton" />;
+  }
+  const dc = coverage.data?.data_confidence;
+  if (!dc) return null; // the per-figure SourcesCard still discloses provenance
+  return <DataConfidence confidence={dc} title="Data confidence" />;
 }
 
 /** Per-field provenance table — every FactPack figure with its source + coverage. */
@@ -496,7 +475,6 @@ function FactPackHeader({ fp }: { fp: FactPack }) {
                 as of {formatAsOf(fp.as_of)}
               </span>
             )}
-            <DataQualityBadge fp={fp} />
           </div>
         </div>
       </CardHeader>
@@ -508,72 +486,6 @@ function FactPackHeader({ fp }: { fp: FactPack }) {
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-function DataQualityBadge({ fp }: { fp: FactPack }) {
-  const [open, setOpen] = useState(false);
-  const dq = fp.data_quality;
-  const coverage = dq?.coverage;
-  const sources = dq?.sources ?? [];
-  const warnings = dq?.warnings ?? [];
-  const usesPublicSources =
-    sources.some((s) => s.source === "yfinance") ||
-    warnings.includes("fmp_key_missing");
-  const tone =
-    coverage == null
-      ? "text-muted-foreground"
-      : coverage >= 0.75
-        ? "text-emerald-600 dark:text-emerald-400"
-        : coverage >= 0.4
-          ? "text-amber-600 dark:text-amber-400"
-          : "text-red-600 dark:text-red-400";
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={`rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium ${tone}`}
-        aria-expanded={open}
-        title="Data coverage — click for source breakdown"
-      >
-        {coverage != null ? `${Math.round(coverage * 100)}% coverage` : "coverage"}
-        {usesPublicSources && (
-          <span className="ml-1 text-muted-foreground">· public sources</span>
-        )}
-      </button>
-      {open && (
-        <div className="absolute right-0 z-20 mt-1 w-72 rounded-md border border-border bg-card p-3 text-xs shadow-md">
-          {warnings.length > 0 && (
-            <ul className="mb-2 space-y-1">
-              {warnings.map((w, i) => (
-                <li key={i} className="text-amber-600 dark:text-amber-400">
-                  {humanizeWarning(w)}
-                </li>
-              ))}
-            </ul>
-          )}
-          {sources.length === 0 ? (
-            <p className="text-muted-foreground">No source detail available.</p>
-          ) : (
-            <table className="w-full">
-              <tbody>
-                {sources.map((s) => (
-                  <tr key={s.field} className="border-b border-border/40">
-                    <td className="py-1 pr-2 text-muted-foreground">{s.field}</td>
-                    <td className="py-1 pr-2 capitalize">{s.source}</td>
-                    <td className="py-1 text-right tabular-nums text-muted-foreground">
-                      {s.coverage != null ? `${Math.round(s.coverage * 100)}%` : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -621,7 +533,10 @@ function VerdictSection({
           <p className="text-base leading-relaxed">{verdict.summary}</p>
         )}
 
-        <DataConfidence confidence={verdict.data_confidence} />
+        {/* Verdict-scoped confidence (the AI verdict's directional gate) —
+            titled differently from the page-level ResearchTrustSummary so the
+            two blocks are distinguishable to screen readers and users. */}
+        <DataConfidence confidence={verdict.data_confidence} title="Verdict confidence" />
 
         {verdict.dimensions.length > 0 && (
           <div className="space-y-3">

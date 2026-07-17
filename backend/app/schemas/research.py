@@ -14,7 +14,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from .confidence import DataConfidence
+from .confidence import DataConfidence, FieldAgreement
 
 
 class SourceRef(BaseModel):
@@ -124,6 +124,10 @@ class DataQuality(BaseModel):
     coverage: float = 0.0  # 0..1 overall
     sources: list[SourceRef] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    # Per-field cross-source agreement (computed ONLY when two genuinely
+    # independent sources reported the same field simultaneously — a fallback
+    # that filled a null is never a second source). Additive.
+    cross_checks: list["FieldAgreement"] = Field(default_factory=list)
 
 
 class CacheProvenance(BaseModel):

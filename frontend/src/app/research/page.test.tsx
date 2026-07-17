@@ -183,9 +183,57 @@ const VERDICT = {
   data_only: false,
 };
 
+const COVERAGE = {
+  ticker: "AAPL",
+  as_of: "2026-05-31",
+  generated_at: "2026-05-31T00:00:00+00:00",
+  fields: [],
+  missing: [],
+  data_confidence: {
+    label: "high",
+    confidence: 0.82,
+    overall_coverage: 0.9,
+    critical_coverage: 1.0,
+    as_of: "2026-05-31",
+    stale: false,
+    fallback_used: false,
+    cross_source_agreement: 0.5,
+    conviction_cap: "high",
+    directional_allowed: true,
+    sources: [],
+    missing: [],
+    reason_codes: [],
+    agreement_checks: [
+      {
+        field: "last_price",
+        status: "within_tolerance",
+        rel_tolerance: 0.01,
+        observed_rel_diff: 0.002,
+        observations: [
+          { source: "fmp", source_type: "primary", value: 200.5, unit: "usd" },
+          { source: "yfinance", source_type: "secondary", value: 200.9, unit: "usd" },
+        ],
+      },
+      {
+        field: "market_cap",
+        status: "disagreement",
+        rel_tolerance: 0.03,
+        observed_rel_diff: 0.12,
+        observations: [
+          { source: "fmp", source_type: "primary", value: 3.1e12, unit: "usd_total" },
+          { source: "yfinance", source_type: "secondary", value: 2.73e12, unit: "usd_total" },
+        ],
+      },
+    ],
+  },
+};
+
 function routeFetch(verdict: { body: unknown; status?: number }) {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
     const url = typeof input === "string" ? input : input.toString();
+    if (url.includes("/coverage")) {
+      return envelope({ data: COVERAGE, error: null, meta: { request_id: "r-cov" } });
+    }
     const bundleMatch = url.match(/\/research\/([A-Z0-9.-]+)\/bundle/);
     if (bundleMatch) {
       const tk = bundleMatch[1];
@@ -238,9 +286,21 @@ describe("ResearchPage", () => {
     await user.type(screen.getByRole("textbox", { name: /ticker symbol/i }), "aapl");
     await user.click(screen.getByRole("button", { name: /research/i }));
 
-    // Identity + trust strip + driver — all on one page, no tabs.
+    // Identity + the UNIFIED trust summary + driver — all on one page, no tabs.
     expect((await screen.findAllByText(/apple inc\./i)).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/Confidence: High \(82%\)/)).toBeInTheDocument();
+    // The unified <DataConfidence> replaces the old hand-rolled strip — exactly
+    // ONE research-level confidence block, fed by the coverage endpoint.
+    expect(await screen.findByText(/High confidence · 82%/)).toBeInTheDocument();
+    expect(screen.getAllByLabelText("Data confidence")).toHaveLength(1);
+    // Cross-source agreement renders BOTH raw values + the verdict per field.
+    const checks = await screen.findByTestId("agreement-checks");
+    expect(checks).toHaveTextContent("Last price");
+    expect(checks).toHaveTextContent("within tolerance");
+    expect(checks).toHaveTextContent("FMP $200.5 vs Yahoo $200.9");
+    expect(checks).toHaveTextContent("Market cap");
+    expect(checks).toHaveTextContent("sources disagree");
+    expect(checks).toHaveTextContent("$3.10T");
+    expect(checks).toHaveTextContent("$2.73T"); // both raw values preserved
     expect(screen.getByText(/high gross margins and durable franchise/i)).toBeInTheDocument();
     // Valuation band + dividend yield (always visible now).
     expect(screen.getByText(/^rich$/i)).toBeInTheDocument();

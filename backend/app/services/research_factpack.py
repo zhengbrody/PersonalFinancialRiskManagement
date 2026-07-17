@@ -222,6 +222,13 @@ def build_fact_pack(
     fp.data_quality = _data_quality(
         profile, fund, growth, analyst, peers, news, insider, used_yf=bool(yf)
     )
+    # Cross-source agreement — computed at the ONE point where both providers'
+    # raw values are simultaneously in scope, BEFORE the _pref merge discards
+    # the loser. Independence guard: the profile result is itself yfinance-
+    # backfilled when FMP was partial (source "fmp+yfinance"/"yfinance"), in
+    # which case per-field origin can't be attributed → only_one_source, never
+    # a fake self-agreement.
+    fp.data_quality.cross_checks = _cross_checks(profile, yf_mkt)
 
     # Momentum + ownership ride free yfinance scalars — record their provenance
     # so the frontend can source-badge those cards too.
@@ -234,6 +241,81 @@ def build_fact_pack(
     _yf_source("momentum", momentum.rsi_14, momentum.sma_50, momentum.fifty_two_week_high)
     _yf_source("ownership", ownership.institutional_pct)
     return fp
+
+
+def _cross_checks(profile, yf_mkt: dict) -> list:
+    """Per-field cross-source checks for last_price + market_cap.
+
+    Emitted ONLY when the FMP profile is PURE FMP (``source == "fmp"`` — the
+    yfinance profile-backfill was skipped, so every profile scalar is
+    FMP-reported) AND the independent yfinance enrichment also reported the
+    field. Anything else is honestly ``only_one_source``. A STALE-served
+    enrichment (cache stale-on-error) is a DIFFERENT observation time, not a
+    second opinion — those pairs are ``incomparable``, never a false
+    disagreement. Fail-soft: an unexpected shape returns [] rather than
+    breaking the FactPack."""
+    from ..schemas.confidence import FieldAgreement, SourceObservation
+    from .source_agreement import compare_field
+
+    try:
+        p = getattr(profile, "data", None)
+        pure_fmp = getattr(profile, "source", None) == "fmp" and p is not None
+        enrich_stale = bool(yf_mkt.get("_cache_stale"))
+        as_of = getattr(profile, "as_of", None)
+        checks = []
+        for field, fmp_val, yf_val, unit in (
+            ("last_price", getattr(p, "price", None), yf_mkt.get("current_price"), "usd"),
+            ("market_cap", getattr(p, "market_cap", None), yf_mkt.get("market_cap"), "usd_total"),
+        ):
+            fmp_ok = pure_fmp and fmp_val is not None
+            yf_ok = yf_val is not None
+            if fmp_ok and yf_ok:
+                a = SourceObservation(
+                    source="fmp",
+                    source_type="primary",
+                    value=float(fmp_val),
+                    unit=unit,
+                    as_of=as_of,
+                )
+                b = SourceObservation(
+                    source="yfinance",
+                    source_type="secondary",
+                    value=float(yf_val),
+                    unit=unit,
+                )
+                if enrich_stale:
+                    checks.append(
+                        FieldAgreement(
+                            field=field,
+                            status="incomparable",
+                            observations=[a, b],
+                            note=(
+                                "yfinance value served from a stale cache — "
+                                "observation times differ"
+                            ),
+                        )
+                    )
+                else:
+                    checks.append(compare_field(field, a, b))
+            elif fmp_ok or yf_ok:
+                one = (
+                    SourceObservation(
+                        source="fmp",
+                        source_type="primary",
+                        value=float(fmp_val),
+                        unit=unit,
+                        as_of=as_of,
+                    )
+                    if fmp_ok
+                    else SourceObservation(
+                        source="yfinance", source_type="secondary", value=float(yf_val), unit=unit
+                    )
+                )
+                checks.append(compare_field(field, one, None))
+        return checks
+    except Exception:  # noqa: BLE001 — agreement is an annotation, never a breaker
+        _log.warning("research.factpack.cross_checks_failed")
+        return []
 
 
 def _momentum_block(price: Optional[float], tech: dict) -> "R.MomentumBlock":
@@ -297,9 +379,16 @@ def _default_enricher(tk: str) -> dict:
 def _cached_enrich(tk: str) -> dict:
     """yfinance enrichment via the shared cache service. A fresh hit skips the
     network; if yfinance is down on a refresh, the last good enrichment is
-    served (stale) rather than dropping the fields it fills."""
+    served (stale) rather than dropping the fields it fills. A stale serve is
+    flagged on the market block (COPIED — never mutate the shared cached dict)
+    so cross-source checks can refuse to compare observations from different
+    times."""
     key = make_key("research:enrich", _ENRICH_VERSION, tk)
-    return get_cache().fetch(key, lambda: _default_enricher(tk), ttl=_ENRICH_TTL).value or {}
+    res = get_cache().fetch(key, lambda: _default_enricher(tk), ttl=_ENRICH_TTL)
+    d = res.value or {}
+    if res.stale and isinstance(d.get("market"), dict):
+        d = {**d, "market": {**d["market"], "_cache_stale": True}}
+    return d
 
 
 def build_fact_pack_cached(

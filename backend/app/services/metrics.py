@@ -32,6 +32,8 @@ _START = time.monotonic()
 _http: dict[str, dict] = {}
 # provider name ("fmp") -> counters
 _providers: dict[str, dict] = {}
+# research dataset ("factpack") -> outcome counters (aggregate only — NO ticker)
+_datasets: dict[str, dict] = {}
 
 # Cardinality guard: a scanner hitting random paths must not grow this map
 # unbounded. Past the cap, overflow rolls into a single "<other>" bucket.
@@ -41,6 +43,22 @@ _MAX_ROUTES = 200
 # = reached upstream but nothing useful, the rest are self-explanatory.
 PROVIDER_OUTCOMES = ("ok", "cache_hit", "empty", "error", "rate_limited", "no_key")
 
+# Research dataset health — aggregate per DATASET (never per ticker; no
+# question/holdings/response content). Distinguishes provider-reality gaps
+# (empty / rate_limited) from code faults (provider_error) and honesty states
+# (stale / fallback). ``requests`` counts every assembly attempt.
+DATASET_OUTCOMES = (
+    "present",  # usable data assembled
+    "empty",  # providers reachable, nothing usable (provider-reality gap)
+    "stale",  # served from a stale cache window
+    "fallback",  # the secondary (free) source stood in for the primary
+    "provider_error",  # the leg raised / upstream 5xx (code or provider fault)
+    "rate_limited",  # provider throttled the assembly
+)
+
+# Closed set — a typo'd dataset name must not grow the map.
+RESEARCH_DATASETS = ("factpack", "financials", "earnings", "dcf", "peers", "news", "thesis")
+
 
 def _new_http() -> dict:
     return {"count": 0, "errors": 0, "s2xx": 0, "s4xx": 0, "s5xx": 0, "lat_ms_sum": 0.0}
@@ -48,6 +66,10 @@ def _new_http() -> dict:
 
 def _new_provider() -> dict:
     return {"calls": 0, **{o: 0 for o in PROVIDER_OUTCOMES}}
+
+
+def _new_dataset() -> dict:
+    return {"requests": 0, **{o: 0 for o in DATASET_OUTCOMES}}
 
 
 def record_request(method: str, route: str, status: int, latency_ms: float) -> None:
@@ -93,6 +115,28 @@ def record_provider(name: str, outcome: str) -> None:
         pass
 
 
+def record_dataset(dataset: str, *outcomes: str) -> None:
+    """Record one research-dataset assembly: ONE ``requests`` bump plus every
+    applicable (non-exclusive) outcome — e.g. ``("present", "fallback",
+    "stale")``. AGGREGATE only — callers must never pass a ticker or content.
+    Unknown dataset names are dropped (closed set — no cardinality growth);
+    unknown outcomes are ignored while ``requests`` stays honest."""
+    try:
+        if dataset not in RESEARCH_DATASETS:
+            return
+        with _LOCK:
+            d = _datasets.get(dataset)
+            if d is None:
+                d = _new_dataset()
+                _datasets[dataset] = d
+            d["requests"] += 1
+            for outcome in outcomes:
+                if outcome in d and outcome != "requests":
+                    d[outcome] += 1
+    except Exception:  # noqa: BLE001 - metrics must never break a request
+        pass
+
+
 def snapshot() -> dict:
     """A cheap, JSON-ready point-in-time view. Routes + providers are sorted by
     volume so the busiest sit on top."""
@@ -114,17 +158,20 @@ def snapshot() -> dict:
                 }
             )
         providers = [{"name": name, **p} for name, p in _providers.items()]
+        datasets = [{"name": name, **d} for name, d in _datasets.items()]
         total_requests = sum(r["count"] for r in _http.values())
         total_errors = sum(r["errors"] for r in _http.values())
 
     routes.sort(key=lambda x: x["count"], reverse=True)
     providers.sort(key=lambda x: x["calls"], reverse=True)
+    datasets.sort(key=lambda x: x["requests"], reverse=True)
     return {
         "uptime_s": round(time.monotonic() - _START, 1),
         "total_requests": total_requests,
         "total_errors": total_errors,
         "routes": routes,
         "providers": providers,
+        "datasets": datasets,
     }
 
 
@@ -133,3 +180,4 @@ def reset() -> None:
     with _LOCK:
         _http.clear()
         _providers.clear()
+        _datasets.clear()

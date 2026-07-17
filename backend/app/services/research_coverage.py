@@ -61,6 +61,10 @@ def build_coverage(ticker: str) -> ResearchCoverageOut:
     crit_total = sum(1 for r in (*fields, *missing) if r.critical)
     crit_present = sum(1 for r in fields if r.critical)
     total = len(fields) + len(missing)
+    # Cross-source agreement rides the FactPack (computed at the merge point
+    # where both providers' raw values exist) — lift it into the unified block
+    # so a disagreement lowers confidence AND both raw values render.
+    checks = list(getattr(getattr(fp, "data_quality", None), "cross_checks", None) or [])
     dc = build_data_confidence(
         overall_coverage=(len(fields) / total) if total else 0.0,
         critical_coverage=(crit_present / crit_total) if crit_total else 0.0,
@@ -68,6 +72,7 @@ def build_coverage(ticker: str) -> ResearchCoverageOut:
         missing=missing,
         as_of=getattr(fp, "as_of", None) if fp is not None else None,
         base_conviction="high",
+        agreement_checks=checks,
     )
     return ResearchCoverageOut(
         ticker=tk,

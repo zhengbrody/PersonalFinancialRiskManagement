@@ -5,13 +5,13 @@
  * datasets back this analysis, how fresh is each, what's missing and how
  * does that affect the conclusions". Grouped, retail-worded rows; CORE
  * datasets carry a badge; absent datasets show an honest "Unavailable" with
- * the TYPED reason (never a fake 0 or placeholder value); the shared
- * <DataConfidence> block explains how gaps cap conviction. Hidden while
+ * the TYPED reason (never a fake 0 or placeholder value). The unified
+ * <DataConfidence> summary renders once at the top of the page
+ * (ResearchTrustSummary) — deliberately NOT repeated here. Hidden while
  * loading fails — the page keeps its per-figure SourcesCard regardless.
  */
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { DataConfidence } from "@/components/data-confidence";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   type CoverageField,
@@ -92,7 +92,9 @@ function CoverageBody({ data }: { data: ResearchCoverage }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <DataConfidence confidence={data.data_confidence} title="Coverage confidence" />
+        {/* The unified <DataConfidence> summary renders ONCE at the top of the
+            research page (ResearchTrustSummary) — this card keeps only the
+            dataset matrix so the same information never appears twice. */}
         <div className="space-y-3">
           {groups.map(([group, rows]) => (
             <div key={group}>

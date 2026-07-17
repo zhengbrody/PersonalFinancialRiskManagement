@@ -224,6 +224,10 @@ def research_bundle(
     def _dump(x):
         return x.model_dump() if x is not None else None
 
+    _record_bundle_dataset_health(
+        fp=fp, fin=fin, dcf=dcf, peers=peers, earn=earn, thesis=thesis, news=news
+    )
+
     bundle = {
         "ticker": tk,
         "generated_at": iso_now(),
@@ -239,6 +243,77 @@ def research_bundle(
         "news": news,
     }
     return ok({"bundle": bundle}, request=request, started_at=started)
+
+
+def _record_bundle_dataset_health(*, fp, fin, dcf, peers, earn, thesis, news) -> None:
+    """Aggregate per-DATASET health counters for the owner dashboard — request /
+    present / empty / stale / fallback / provider_error / rate_limited. NEVER
+    records the ticker, the user, or any content; distinguishes provider-reality
+    gaps (empty, rate_limited) from code faults (provider_error, i.e. the
+    ``safe()`` leg raised). Fail-soft: metrics must never break the bundle."""
+    from ...services import metrics
+
+    def _warnings_of(x) -> str:
+        try:
+            dq = getattr(x, "data_quality", None)
+            ws = list(getattr(dq, "warnings", None) or [])
+            ws += [getattr(m, "reason", "") or "" for m in (getattr(x, "missing_data", None) or [])]
+            return " ".join(str(w) for w in ws).lower()
+        except Exception:  # noqa: BLE001
+            return ""
+
+    def _classify(name: str, result, present: bool, *, stale=False, fallback=False) -> None:
+        if result is None:
+            # safe() swallowed an exception → the leg itself failed.
+            metrics.record_dataset(name, "provider_error")
+            return
+        outcomes = ["present" if present else "empty"]
+        blob = _warnings_of(result)
+        if "rate_limit" in blob or "429" in blob:
+            outcomes.append("rate_limited")
+        if stale:
+            outcomes.append("stale")
+        if fallback:
+            outcomes.append("fallback")
+        metrics.record_dataset(name, *outcomes)
+
+    try:
+        _classify(
+            "factpack",
+            fp,
+            fp is not None and getattr(fp, "price", None) is not None,
+            stale=bool(getattr(getattr(fp, "cache", None), "stale", False)),
+            fallback=any(
+                getattr(s, "source", "") == "yfinance"
+                for s in (getattr(getattr(fp, "data_quality", None), "sources", None) or [])
+            ),
+        )
+        _classify(
+            "financials",
+            fin,
+            bool(getattr(fin, "quarters", None) or getattr(fin, "annuals", None)),
+            fallback=any(
+                "yfinance" in str(getattr(p, "source", "")).lower()
+                for p in (getattr(fin, "provenance", None) or [])
+            ),
+        )
+        _classify("dcf", dcf, bool(getattr(dcf, "valid", False)))
+        # rows[0] is the subject itself — "present" means actual PEERS came back.
+        _classify("peers", peers, len(getattr(peers, "rows", None) or []) > 1)
+        _classify(
+            "earnings",
+            earn,
+            bool(getattr(earn, "quarters", None)),
+            fallback="yfinance" in str(getattr(earn, "source", "")).lower(),
+        )
+        _classify("thesis", thesis, thesis is not None)
+        _classify(
+            "news",
+            news,
+            bool((news or {}).get("items") if isinstance(news, dict) else False),
+        )
+    except Exception:  # noqa: BLE001 — health counters are an annotation
+        _log.warning("research.bundle.dataset_health_failed")
 
 
 @router.post(

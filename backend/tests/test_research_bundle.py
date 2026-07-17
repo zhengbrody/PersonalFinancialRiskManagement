@@ -67,3 +67,43 @@ def test_bundle_assembles_blocks_and_reuses_engines(monkeypatch, mint_token):
     assert captured.get("fp") is not None
     assert captured.get("dcf") is not None
     assert captured.get("earn") is not None
+
+
+def test_bundle_records_aggregate_dataset_health_without_ticker(monkeypatch, mint_token):
+    """The bundle bumps per-DATASET counters (present / provider_error / …) —
+    aggregate only, no ticker ever becomes a metrics bucket."""
+    from backend.app.services import metrics
+
+    metrics.reset()
+    monkeypatch.setattr(rmod.rf, "build_fact_pack_cached", lambda tk: _Stub(ticker=tk, price=100.0))
+    monkeypatch.setattr(
+        rmod.rfin,
+        "build_research_fact_pack",
+        lambda tk: _Stub(as_of="2024-12-28", quarters=[1], annuals=[], provenance=[]),
+    )
+    monkeypatch.setattr(rmod.rdcf, "build_dcf", lambda tk: _Stub(valid=True))
+
+    def _peers(tk):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(rmod.rpeers, "build_peer_comparison", _peers)
+    monkeypatch.setattr(rmod.rearn, "build_earnings_comparison", lambda tk: _Stub(quarters=[]))
+    monkeypatch.setattr(rmod.rthesis, "build_thesis", lambda tk, **kw: _Stub(bull_case=["x"]))
+    monkeypatch.setattr(rmod.news_svc, "get_ticker_news", lambda tk: {"items": []})
+
+    client = TestClient(create_app())
+    resp = client.get(
+        "/api/v1/research/NVDA/bundle", headers={"Authorization": f"Bearer {mint_token()}"}
+    )
+    assert resp.status_code == 200
+
+    snap = metrics.snapshot()["datasets"]
+    by = {d["name"]: d for d in snap}
+    assert by["factpack"]["present"] == 1
+    assert by["financials"]["present"] == 1
+    assert by["dcf"]["present"] == 1
+    assert by["peers"]["provider_error"] == 1  # the leg raised → code/provider fault
+    assert by["earnings"]["empty"] == 1  # reachable but nothing usable
+    assert by["news"]["empty"] == 1
+    # NO ticker leaks into the bucket names.
+    assert "NVDA" not in {d["name"] for d in snap}
