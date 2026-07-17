@@ -202,3 +202,48 @@ def test_record_unknown_milestone_raises(monkeypatch):
     _fake_client_capturing(monkeypatch, None)
     with pytest.raises(ValueError):
         svc.record_milestone("tok", "u1", "hax")
+
+
+# ── server-side milestone stamping (product events) ────────────────
+
+
+def test_stamp_milestone_failsoft_never_raises(monkeypatch):
+    from backend.app.services import user_journey as svc
+
+    svc.reset_stamp_memo()
+
+    def _boom(*a, **k):
+        raise RuntimeError("supabase down")
+
+    monkeypatch.setattr(svc, "record_milestone", _boom)
+    # Must not raise — journey bookkeeping never fails a product endpoint.
+    svc.stamp_milestone_failsoft("tok", "u1", "first_plan_at")
+
+
+def test_stamp_milestone_failsoft_memoizes_first_milestones(monkeypatch):
+    from backend.app.services import user_journey as svc
+
+    svc.reset_stamp_memo()
+    calls = []
+    monkeypatch.setattr(svc, "record_milestone", lambda t, u, m: calls.append((u, m)) or {})
+
+    svc.stamp_milestone_failsoft("tok", "u1", "first_score_at")
+    svc.stamp_milestone_failsoft("tok", "u1", "first_score_at")  # memo hit
+    assert calls == [("u1", "first_score_at")]
+
+    # A FAILED stamp is not memoized — the next event retries.
+    svc.reset_stamp_memo()
+    calls.clear()
+
+    def _fail_once(t, u, m):
+        calls.append((u, m))
+        if len(calls) == 1:
+            raise RuntimeError("blip")
+        return {}
+
+    monkeypatch.setattr(svc, "record_milestone", _fail_once)
+    svc.stamp_milestone_failsoft("tok", "u2", "first_plan_at")
+    svc.stamp_milestone_failsoft("tok", "u2", "first_plan_at")
+    assert len(calls) == 2  # retried after the failure
+    svc.stamp_milestone_failsoft("tok", "u2", "first_plan_at")
+    assert len(calls) == 2  # memoized after the success

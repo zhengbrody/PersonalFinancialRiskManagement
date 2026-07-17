@@ -3074,7 +3074,12 @@ export function useCreateRiskPlan() {
         authToken: accessToken ?? undefined,
         schema: riskPlanSchema,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["risk", "plans"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["risk", "plans"] });
+      // The server stamps first_plan_at on create — refresh the journey so the
+      // Getting-started checklist reflects it without a full reload.
+      qc.invalidateQueries({ queryKey: ["journey"] });
+    },
   });
 }
 
@@ -3138,7 +3143,11 @@ export function useReviewPlan() {
         authToken: accessToken ?? undefined,
         schema: planReviewSchema,
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["risk", "plans"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["risk", "plans"] });
+      // The server stamps first_plan_reviewed_at on review — refresh the journey.
+      qc.invalidateQueries({ queryKey: ["journey"] });
+    },
   });
 }
 

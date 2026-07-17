@@ -13,7 +13,7 @@ const ctx = {
 };
 const state = {
   score: { data: { overall_score: 782, metrics: { confidence: "high" }, data_confidence: null }, isLoading: false, isError: false },
-  journey: { data: { first_score_at: "x", first_stress_test_at: "x", first_plan_at: "x", first_driver_viewed_at: "x" } },
+  journey: { data: { first_score_at: "x", first_stress_test_at: "x", first_plan_at: "x", first_driver_viewed_at: "x", first_plan_reviewed_at: "x" } },
   plans: { data: { plans: [] } },
   insights: { data: { portfolio_available: true, insights: [] } },
   lastSnapshot: { data: { snapshot: { overall_score: 782 } } },
@@ -39,7 +39,7 @@ beforeEach(() => {
   ctx.current = { id: "pf1", name: "Book A", holdings: { SPY: { shares: 1 } } };
   ctx.activePortfolioId = "pf1";
   state.score = { data: { overall_score: 782, metrics: { confidence: "high" }, data_confidence: null }, isLoading: false, isError: false };
-  state.journey = { data: { first_score_at: "x", first_stress_test_at: "x", first_plan_at: "x", first_driver_viewed_at: "x" } };
+  state.journey = { data: { first_score_at: "x", first_stress_test_at: "x", first_plan_at: "x", first_driver_viewed_at: "x", first_plan_reviewed_at: "x" } };
   state.plans = { data: { plans: [] } };
   state.insights = { data: { portfolio_available: true, insights: [] } };
   state.lastSnapshot = { data: { snapshot: { overall_score: 782 } } };

@@ -22,6 +22,7 @@ import { track } from "@/lib/analytics";
 import { usePortfolioContext } from "@/lib/portfolio-context";
 import {
   equityTickersFromHoldings,
+  nonEquitySummary,
   rowsFromHoldingsAndPrices,
   scaleValue,
 } from "@/lib/whatif";
@@ -34,9 +35,13 @@ export function WhatIfLab({
   baseline,
   riskPreference = 3,
   saveContext,
+  onRunSuccess,
 }: {
   baseline: ScoreResponse | null;
   riskPreference?: number;
+  /** Fired after a sandbox re-score completes — a REAL stress interaction
+   *  (used by the Analyze workspace to stamp the journey milestone). */
+  onRunSuccess?: () => void;
   /** When present, offer "Save as risk plan" tied to the LIVE sandbox (the save
    *  form + its portfolio_id/source always match the sandbox on screen — no
    *  frozen prior-book snapshot can be persisted). */
@@ -60,6 +65,9 @@ export function WhatIfLab({
   );
   const bookPrices = useMarketPrices(equityTickers);
   const canLoad = equityTickers.length > 0 && Boolean(bookPrices.data);
+  // Name what the equity sandbox leaves untouched (cash / option legs) so a
+  // mixed book's before→after isn't read as a whole-portfolio restatement.
+  const excluded = useMemo(() => nonEquitySummary(activeBook?.holdings), [activeBook]);
 
   // Unsaved-analysis guard: a sandbox run that hasn't been saved is "dirty".
   useEffect(
@@ -112,6 +120,7 @@ export function WhatIfLab({
       setSandbox(data);
       setShowSave(false); // a new run dismisses any open save form (no stale save)
       track("whatif_run");
+      onRunSuccess?.();
     } catch (err) {
       setError(err instanceof ApiError ? err : new ApiError(0, "unknown", String(err)));
     } finally {
@@ -132,6 +141,21 @@ export function WhatIfLab({
           Simulation only · holdings unchanged
         </span>
       </div>
+
+      {excluded.hasNonEquity && (
+        <p className="text-[11px] text-muted-foreground">
+          This lab re-scores only the equity sleeve of your portfolio.{" "}
+          {[
+            excluded.optionCount > 0
+              ? `${excluded.optionCount} option position${excluded.optionCount === 1 ? "" : "s"}`
+              : null,
+            excluded.cashCount > 0 ? "your cash balance" : null,
+          ]
+            .filter(Boolean)
+            .join(" and ")}{" "}
+          stay unchanged — option Greeks and cash deployment are not modeled here.
+        </p>
+      )}
 
       {rows.length > 0 && (
         <div className="space-y-2">

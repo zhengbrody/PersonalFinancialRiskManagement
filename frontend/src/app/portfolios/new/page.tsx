@@ -129,6 +129,7 @@ export default function NewPortfolioPage() {
                   // dropped by the deny-list) — see analytics-funnel.md.
                   holdings_band: holdingsBand(Object.keys(created.holdings).length),
                 });
+                track("journey_step_completed", { step: "portfolio" }); // stage enum only
                 clearAnonHoldings(); // the handoff is complete
                 // Navigate from the AUTHORITATIVE create response, never the
                 // submitted form. The backend auto-promotes a user's FIRST

@@ -7,11 +7,16 @@
  * (WhatIfCompare / SaveAsPlan) and the shared whatif mappers are mocked.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const ctxMock = vi.fn();
 const apiFetchMock = vi.fn();
+const { rowsMock, holdingsHolder, saveAsPlanSpy } = vi.hoisted(() => ({
+  rowsMock: vi.fn(),
+  holdingsHolder: { value: {} as Record<string, unknown> },
+  saveAsPlanSpy: vi.fn(),
+}));
 vi.mock("@/lib/portfolio-context", () => ({ usePortfolioContext: () => ctxMock() }));
 vi.mock("@/lib/api", () => ({
   apiFetch: (...a: unknown[]) => apiFetchMock(...a),
@@ -21,21 +26,40 @@ vi.mock("@/lib/queries", () => ({
   useActiveScore: () => ({ data: { overall_score: 700 } }),
   useMarketPrices: () => ({ data: {} }),
   useMyPortfolios: () => ({
-    data: { portfolios: [{ id: "p1", name: "Main", holdings: {} }] },
+    data: { portfolios: [{ id: "p1", name: "Main", holdings: holdingsHolder.value }] },
   }),
 }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
-vi.mock("@/lib/whatif", () => ({
-  equityTickersFromHoldings: () => ["SPY", "MSFT"],
-  rowsFromHoldingsAndPrices: () => [
-    { ticker: "SPY", market_value: 10000 },
-    { ticker: "MSFT", market_value: 100 },
-  ],
-}));
+// The row/ticker MAPPERS are mocked (no price plumbing in this test); the
+// op math (applyTestOp) and the boundary summary (nonEquitySummary) run REAL —
+// they're exactly what these tests assert.
+vi.mock("@/lib/whatif", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/whatif")>();
+  return {
+    ...actual,
+    equityTickersFromHoldings: () => ["SPY", "MSFT"],
+    rowsFromHoldingsAndPrices: (...a: unknown[]) => rowsMock(...a),
+  };
+});
 vi.mock("@/components/whatif-compare", () => ({ WhatIfCompare: () => null }));
-vi.mock("@/components/save-as-plan", () => ({ SaveAsPlan: () => null }));
+vi.mock("@/components/save-as-plan", () => ({
+  SaveAsPlan: (props: Record<string, unknown>) => {
+    saveAsPlanSpy(props);
+    return null;
+  },
+}));
 
 import { ResearchTestDrawer } from "./research-test-drawer";
+
+beforeEach(() => {
+  apiFetchMock.mockReset();
+  saveAsPlanSpy.mockReset();
+  holdingsHolder.value = {};
+  rowsMock.mockReset().mockReturnValue([
+    { ticker: "SPY", market_value: 10000 },
+    { ticker: "MSFT", market_value: 100 },
+  ]);
+});
 
 describe("ResearchTestDrawer", () => {
   it("renders nothing when closed", () => {
@@ -91,5 +115,135 @@ describe("ResearchTestDrawer", () => {
     const nvda = body.holdings.find((h) => h.ticker === "NVDA");
     expect(nvda?.market_value).toBeCloseTo(100); // only the freed $100, NOT $5,000
     expect(body.holdings.find((h) => h.ticker === "MSFT")).toBeUndefined(); // fully freed → dropped
+  });
+
+  it("explains WHY only the freed amount was deployed and persists the ACTUAL amount to the plan", async () => {
+    ctxMock.mockReturnValue({ current: { id: "p1" }, activePortfolioId: "p1" });
+    apiFetchMock.mockResolvedValue({ overall_score: 690, data_confidence: { label: "medium" } });
+    render(<ResearchTestDrawer ticker="NVDA" open onClose={() => {}} />);
+
+    fireEvent.change(screen.getByRole("combobox", { name: /what to model/i }), {
+      target: { value: "replace" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: /replace which position/i }), {
+      target: { value: "MSFT" },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/\$ value/i), { target: { value: "5000" } });
+    fireEvent.click(screen.getByRole("button", { name: /see before . after/i }));
+
+    // The honest ledger: requested vs freed vs deployed vs residual + a reason.
+    const summary = await screen.findByTestId("replace-execution-summary");
+    expect(summary).toHaveTextContent("Requested");
+    expect(summary).toHaveTextContent("$5,000");
+    expect(summary).toHaveTextContent("Freed from MSFT");
+    expect(summary).toHaveTextContent("Deployed into NVDA");
+    expect(summary).toHaveTextContent("Not deployed");
+    expect(summary).toHaveTextContent("$4,900");
+    expect(summary).toHaveTextContent(/moved \$100 instead of the requested \$5,000/i);
+    expect(summary).toHaveTextContent(/never\s+creates exposure that isn't funded/i);
+
+    // Saving the plan records the ACTUAL $100 move (plus the requested amount),
+    // never a fabricated $5,000.
+    fireEvent.click(screen.getByRole("button", { name: /save as risk plan/i }));
+    await waitFor(() => expect(saveAsPlanSpy).toHaveBeenCalled());
+    const props = saveAsPlanSpy.mock.calls.at(-1)?.[0] as {
+      proposedChanges: { amount_usd: number; requested_usd?: number };
+    };
+    expect(props.proposedChanges.amount_usd).toBeCloseTo(100);
+    expect(props.proposedChanges.requested_usd).toBeCloseTo(5000);
+  });
+
+  it("replace with a SUFFICIENT funding leg shows zero residual and persists the full amount", async () => {
+    ctxMock.mockReturnValue({ current: { id: "p1" }, activePortfolioId: "p1" });
+    apiFetchMock.mockResolvedValue({ overall_score: 690, data_confidence: { label: "high" } });
+    render(<ResearchTestDrawer ticker="NVDA" open onClose={() => {}} />);
+
+    fireEvent.change(screen.getByRole("combobox", { name: /what to model/i }), {
+      target: { value: "replace" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: /replace which position/i }), {
+      target: { value: "SPY" },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/\$ value/i), { target: { value: "2000" } });
+    fireEvent.click(screen.getByRole("button", { name: /see before . after/i }));
+
+    const summary = await screen.findByTestId("replace-execution-summary");
+    expect(summary).toHaveTextContent("$0"); // Not deployed = $0
+    expect(summary).not.toHaveTextContent(/instead of the requested/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /save as risk plan/i }));
+    await waitFor(() => expect(saveAsPlanSpy).toHaveBeenCalled());
+    const props = saveAsPlanSpy.mock.calls.at(-1)?.[0] as {
+      proposedChanges: { amount_usd: number; requested_usd?: number };
+    };
+    expect(props.proposedChanges.amount_usd).toBeCloseTo(2000);
+    expect(props.proposedChanges.requested_usd).toBeUndefined();
+  });
+
+  it("the executed funding leg is FROZEN — changing the select after a run never relabels the summary or the saved plan", async () => {
+    ctxMock.mockReturnValue({ current: { id: "p1" }, activePortfolioId: "p1" });
+    apiFetchMock.mockResolvedValue({ overall_score: 690, data_confidence: { label: "high" } });
+    render(<ResearchTestDrawer ticker="NVDA" open onClose={() => {}} />);
+
+    fireEvent.change(screen.getByRole("combobox", { name: /what to model/i }), {
+      target: { value: "replace" },
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: /replace which position/i }), {
+      target: { value: "MSFT" },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/\$ value/i), { target: { value: "50" } });
+    fireEvent.click(screen.getByRole("button", { name: /see before . after/i }));
+    const summary = await screen.findByTestId("replace-execution-summary");
+    expect(summary).toHaveTextContent("Freed from MSFT");
+
+    // Drift the live select AFTER the run — the executed record must not move.
+    fireEvent.change(screen.getByRole("combobox", { name: /replace which position/i }), {
+      target: { value: "SPY" },
+    });
+    expect(screen.getByTestId("replace-execution-summary")).toHaveTextContent("Freed from MSFT");
+
+    fireEvent.click(screen.getByRole("button", { name: /save as risk plan/i }));
+    await waitFor(() => expect(saveAsPlanSpy).toHaveBeenCalled());
+    const props = saveAsPlanSpy.mock.calls.at(-1)?.[0] as {
+      proposedChanges: { from: string | null };
+    };
+    expect(props.proposedChanges.from).toBe("MSFT");
+  });
+
+  it("zero / invalid amounts are rejected with a message, no request fired", async () => {
+    ctxMock.mockReturnValue({ current: { id: "p1" }, activePortfolioId: "p1" });
+    render(<ResearchTestDrawer ticker="NVDA" open onClose={() => {}} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /see before . after/i }));
+    expect(await screen.findByText(/amount greater than zero/i)).toBeInTheDocument();
+    expect(apiFetchMock).not.toHaveBeenCalled();
+  });
+
+  it("names what a mixed book excludes (options + cash) instead of a vague caption", () => {
+    ctxMock.mockReturnValue({ current: { id: "p1" }, activePortfolioId: "p1" });
+    holdingsHolder.value = {
+      SPY: { shares: 10 },
+      CASH: { asset_type: "cash", shares: 1 },
+      AAPL260116C00150000: { asset_type: "option", shares: 2 },
+    };
+    render(<ResearchTestDrawer ticker="NVDA" open onClose={() => {}} />);
+    expect(screen.getByText(/1 option position and your cash balance/i)).toBeInTheDocument();
+    expect(screen.getByText(/option Greeks and cash deployment are not modeled/i)).toBeInTheDocument();
+    // Equity rows exist → the form is NOT blocked.
+    expect(screen.getByText("What to model")).toBeInTheDocument();
+  });
+
+  it("BLOCKS the sandbox for a cash/options-only book with a reason (never a misleading empty baseline)", () => {
+    ctxMock.mockReturnValue({ current: { id: "p1" }, activePortfolioId: "p1" });
+    holdingsHolder.value = {
+      CASH: { asset_type: "cash", shares: 1 },
+      AAPL260116C00150000: { asset_type: "option", shares: 2 },
+    };
+    rowsMock.mockReturnValue([]); // no priced equity rows
+    render(<ResearchTestDrawer ticker="NVDA" open onClose={() => {}} />);
+    expect(screen.getByText(/no priced equity positions/i)).toBeInTheDocument();
+    expect(screen.getByText(/would be misleading/i)).toBeInTheDocument();
+    expect(screen.queryByText("What to model")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /see before . after/i })).not.toBeInTheDocument();
   });
 });

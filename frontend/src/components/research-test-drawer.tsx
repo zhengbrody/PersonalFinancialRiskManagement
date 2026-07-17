@@ -17,11 +17,18 @@ import { SaveAsPlan } from "@/components/save-as-plan";
 import { apiFetch, ApiError } from "@/lib/api";
 import { track } from "@/lib/analytics";
 import { usePortfolioContext } from "@/lib/portfolio-context";
-import { equityTickersFromHoldings, rowsFromHoldingsAndPrices } from "@/lib/whatif";
+import {
+  applyTestOp,
+  equityTickersFromHoldings,
+  nonEquitySummary,
+  rowsFromHoldingsAndPrices,
+  type TestOp,
+  type TestOpExecution,
+} from "@/lib/whatif";
 import { type ScoreResponse, scoreResponseSchema } from "@/lib/schemas";
 import { useActiveScore, useMarketPrices, useMyPortfolios } from "@/lib/queries";
 
-type Op = "add" | "increase" | "reduce" | "replace" | "analysis_only";
+type Op = TestOp | "analysis_only";
 type Row = { ticker: string; market_value: number };
 
 const OP_LABEL: Record<Op, string> = {
@@ -70,6 +77,10 @@ export function ResearchTestDrawer({
   const [unit, setUnit] = useState<"usd" | "pct">("usd");
   const [fromTicker, setFromTicker] = useState("");
   const [sandbox, setSandbox] = useState<ScoreResponse | null>(null);
+  // The execution record is frozen AT RUN TIME (incl. which leg funded a
+  // replace) — the live form state can drift after the run, and the summary /
+  // saved plan must describe what was actually simulated, not the current form.
+  const [execution, setExecution] = useState<(TestOpExecution & { from: string }) | null>(null);
   const [showSave, setShowSave] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +89,7 @@ export function ResearchTestDrawer({
   // form inputs — a stale amount / funding leg / op must not carry across.
   useEffect(() => {
     setSandbox(null);
+    setExecution(null);
     setShowSave(false);
     setError(null);
     setAmount("");
@@ -88,54 +100,22 @@ export function ResearchTestDrawer({
 
   const dollars = unit === "pct" ? (Number(amount) / 100) * bookTotal : Number(amount) || 0;
   // The sandbox re-scores the priced EQUITY sleeve (the shared what-if mapping
-  // drops cash & option legs); surface that so the before→after isn't read as a
-  // whole-book restatement when the user holds cash or options.
-  const hasExcluded = useMemo(
-    () =>
-      Object.values(activeBook?.holdings ?? {}).some(
-        (h) =>
-          (h as { asset_type?: string })?.asset_type === "cash" ||
-          (h as { asset_type?: string })?.asset_type === "option",
-      ),
-    [activeBook],
-  );
-
-  function applyOp(): Row[] | null {
-    const rows = baseRows.map((r) => ({ ...r }));
-    const idx = rows.findIndex((r) => r.ticker === T);
-    if (op === "add") {
-      if (idx >= 0) rows[idx].market_value += dollars;
-      else rows.push({ ticker: T, market_value: dollars });
-    } else if (op === "increase") {
-      if (idx >= 0) rows[idx].market_value += dollars;
-      else rows.push({ ticker: T, market_value: dollars });
-    } else if (op === "reduce") {
-      if (idx < 0) return null;
-      rows[idx].market_value = Math.max(0, rows[idx].market_value - dollars);
-    } else if (op === "replace") {
-      const from = fromTicker.toUpperCase();
-      if (!from || from === T) return null; // must fund from a DIFFERENT position
-      const fi = rows.findIndex((r) => r.ticker === from);
-      if (fi < 0) return null;
-      // Conserve book value: only what's actually freed from the funding leg
-      // moves into the target — never fabricate exposure larger than the source.
-      const freed = Math.min(dollars, rows[fi].market_value);
-      rows[fi].market_value -= freed;
-      if (idx >= 0) rows[idx].market_value += freed;
-      else rows.push({ ticker: T, market_value: freed });
-    }
-    return rows.filter((r) => r.market_value > 0);
-  }
+  // drops cash & option legs); NAME what stays unchanged so the before→after
+  // isn't read as a whole-book restatement when the user holds cash or options.
+  const excluded = useMemo(() => nonEquitySummary(activeBook?.holdings), [activeBook]);
+  // A book with NO priced equity can't produce an honest before→after — the
+  // "before" would be an empty equity sleeve. Block instead of misleading.
+  const equityOnlyBlocked = excluded.hasNonEquity && baseRows.length === 0;
 
   async function run() {
     setError(null);
-    if (!(dollars > 0)) {
-      setError("Enter an amount first.");
+    const result = applyTestOp(baseRows, op as TestOp, T, dollars, fromTicker);
+    if (!result.ok) {
+      setError(result.error);
       return;
     }
-    const rows = applyOp();
-    if (!rows || rows.length === 0) {
-      setError("Pick a position and an amount first.");
+    if (result.rows.length === 0) {
+      setError("This change would leave the equity sleeve empty — nothing to score.");
       return;
     }
     setLoading(true);
@@ -143,7 +123,7 @@ export function ResearchTestDrawer({
       const data = await apiFetch<ScoreResponse>("/api/v1/risk/score", {
         method: "POST",
         body: {
-          holdings: rows.map((r) => ({
+          holdings: result.rows.map((r) => ({
             ticker: r.ticker,
             market_value: r.market_value,
             asset_type: "public_security" as const,
@@ -153,6 +133,7 @@ export function ResearchTestDrawer({
         schema: scoreResponseSchema,
       });
       setSandbox(data);
+      setExecution({ ...result.execution, from: fromTicker.trim().toUpperCase() });
       setShowSave(false);
       track("research_test_completed", {}); // value-free
     } catch (err) {
@@ -176,13 +157,39 @@ export function ResearchTestDrawer({
           <p className="text-xs text-muted-foreground">
             Simulation only · your holdings are never changed.
           </p>
-          {hasExcluded && (
+          {excluded.hasNonEquity && (
             <p className="text-[11px] text-muted-foreground">
-              Compares your priced equity positions — cash &amp; options are excluded from this
-              before → after.
+              This sandbox re-scores only the equity sleeve of your portfolio.{" "}
+              {[
+                excluded.optionCount > 0
+                  ? `${excluded.optionCount} option position${excluded.optionCount === 1 ? "" : "s"}`
+                  : null,
+                excluded.cashCount > 0 ? "your cash balance" : null,
+              ]
+                .filter(Boolean)
+                .join(" and ")}{" "}
+              stay unchanged — option Greeks and cash deployment are not modeled here. See the{" "}
+              <Link href="/risk" className="text-primary hover:underline">
+                Risk Report
+              </Link>{" "}
+              for full option analytics.
             </p>
           )}
+          {equityOnlyBlocked && (
+            <div className="space-y-2 rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+              <p>
+                Your active portfolio has no priced equity positions, so an equity-only before →
+                after would be misleading — the &quot;before&quot; side would be an empty book.
+                Add an equity holding to test {T} against your portfolio.
+              </p>
+              <Link href="/research" className="font-medium text-primary hover:underline">
+                Open the full research on {T} →
+              </Link>
+            </div>
+          )}
 
+          {!equityOnlyBlocked && (
+          <>
           <label className="block space-y-1">
             <span className="font-medium">What to model</span>
             <select
@@ -190,6 +197,7 @@ export function ResearchTestDrawer({
               onChange={(e) => {
                 setOp(e.target.value as Op);
                 setSandbox(null);
+                setExecution(null);
               }}
               className="w-full rounded border border-border bg-background px-2 py-1.5"
             >
@@ -273,6 +281,21 @@ export function ResearchTestDrawer({
                       {T}&apos;s data is incomplete — treat this comparison as low-confidence.
                     </p>
                   )}
+                  {execution && op === "replace" && (
+                    <ReplaceExecutionSummary
+                      execution={execution}
+                      target={T}
+                      from={execution.from}
+                    />
+                  )}
+                  {execution && op === "reduce" && execution.residual > 0 && (
+                    <p className="text-[11px] text-muted-foreground">
+                      You asked to reduce {T} by ${Math.round(execution.requested).toLocaleString()},
+                      but the position is only worth $
+                      {Math.round(execution.applied).toLocaleString()} — the simulation removed the
+                      full position and nothing more.
+                    </p>
+                  )}
                   <WhatIfCompare
                     baseline={base}
                     sandbox={sandbox}
@@ -299,7 +322,19 @@ export function ResearchTestDrawer({
                       source="research"
                       baseline={base}
                       sandbox={sandbox}
-                      proposedChanges={{ op, ticker: T, amount_usd: dollars, from: fromTicker || null }}
+                      proposedChanges={{
+                        op,
+                        ticker: T,
+                        // Persist what the simulation ACTUALLY moved — a plan
+                        // must never claim a bigger move than was funded.
+                        amount_usd: execution?.applied ?? dollars,
+                        ...(execution && execution.residual > 0
+                          ? { requested_usd: execution.requested }
+                          : {}),
+                        // The leg that funded the EXECUTED run — never the
+                        // live select (it can drift after the run).
+                        from: execution?.from || null,
+                      }}
                       onSaved={() => setShowSave(false)}
                       onCancel={() => setShowSave(false)}
                     />
@@ -308,8 +343,57 @@ export function ResearchTestDrawer({
               )}
             </>
           )}
+          </>
+          )}
         </div>
       )}
     </Sheet>
+  );
+}
+
+/** The honest ledger of a replace simulation: what was requested, what the
+ * funding leg could actually free, what was deployed into the target, and any
+ * residual that was NOT deployed — with a one-line English reason. */
+function ReplaceExecutionSummary({
+  execution,
+  target,
+  from,
+}: {
+  execution: TestOpExecution;
+  target: string;
+  from: string;
+}) {
+  const fmt = (n: number) => `$${Math.round(n).toLocaleString()}`;
+  const partial = execution.residual > 0;
+  return (
+    <div className="space-y-1.5 text-[11px]" data-testid="replace-execution-summary">
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-0.5 tabular-nums sm:grid-cols-4">
+        <div>
+          <dt className="text-muted-foreground">Requested</dt>
+          <dd className="font-medium">{fmt(execution.requested)}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Freed from {from}</dt>
+          <dd className="font-medium">{fmt(execution.applied)}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Deployed into {target}</dt>
+          <dd className="font-medium">{fmt(execution.applied)}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Not deployed</dt>
+          <dd className={partial ? "font-medium text-amber-600 dark:text-amber-400" : "font-medium"}>
+            {fmt(execution.residual)}
+          </dd>
+        </div>
+      </dl>
+      {partial && (
+        <p className="text-muted-foreground">
+          Your {from} position is worth only {fmt(execution.applied)}, so the simulation moved{" "}
+          {fmt(execution.applied)} instead of the requested {fmt(execution.requested)} — it never
+          creates exposure that isn&apos;t funded by the position you&apos;re replacing.
+        </p>
+      )}
+    </div>
   );
 }
