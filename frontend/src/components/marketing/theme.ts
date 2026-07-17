@@ -31,7 +31,6 @@ export const C = {
   // Surfaces / effects that must invert between light & dark:
   cardGrad: "var(--mm-card-grad)", // hairline card fill
   navBg: "var(--mm-nav-bg)", // scrolled fixed-nav backdrop
-  chipBg: "var(--mm-chip-bg)", // floating stat chip
   glowTeal: "var(--mm-glow-teal)", // hero radial glow
   glowGold: "var(--mm-glow-gold)",
   statGrad: "var(--mm-stat-grad)", // big gradient numerals

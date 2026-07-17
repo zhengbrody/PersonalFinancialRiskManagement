@@ -1,27 +1,25 @@
 /**
  * /risk-today — a public, SSR, daily-refreshing market risk read.
  *
- * Leads with the model's VALIDATED signal — the elevated-risk PROBABILITY — plus
- * live VIX/F&G/curve, rendered as real server HTML. It is a probability-ranking
+ * Leads with the model's VALIDATED signal — the elevated-risk PROBABILITY — and
+ * the market inputs that explain it, rendered as real server HTML. It is a
+ * probability-ranking
  * signal, NOT a 4-class verdict (on 4-class accuracy the model loses to a
  * persistence baseline), and NOT a price/return forecast. When the model tier is
  * inactive, data is stale, or drift is flagged, the backend degrades and the page
  * shows deterministic market context only. Numbers are deterministic from the
  * backend; the LLM is not involved. Context only — never advice.
  *
- * SSR prose (RegimeReadout) is crawlable; the live client desk (MarketRegime +
- * MacroSnapshot) refreshes on the client. The page never 500s.
+ * SSR prose (RegimeReadout) is crawlable. The full live market desk deliberately
+ * lives on /markets so this page has one clear job. The page never 500s.
  */
 
-import type { Metadata } from "next";
 import Link from "next/link";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
+import { MarketPageSwitcher } from "@/components/marketing/market-page-switcher";
 import { RegimeReadout, type RegimeSummary } from "@/components/regime-readout";
-import { MarketRegime } from "@/components/market-regime";
-import { MacroSnapshot } from "@/components/macro-snapshot";
 import { C, display, eyebrow } from "@/components/marketing/theme";
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
+import { SITE_URL, pageMetadata } from "@/lib/site";
 
 // Render on each request, NOT via ISR. The regime data isn't reachable at build
 // time (the backend isn't up during CI), so an ISR prerender would bake the
@@ -31,31 +29,21 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
 // SSR is cheap and the page always shows live data.
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = {
-  title: "Today’s Market Elevated-Risk Probability",
+export const metadata = pageMetadata({
+  title: "Near-Term Market Risk Signal — Risk Today",
   description:
-    "An experimental model estimate of the probability that US equities enter an elevated-volatility regime over the next ~2 weeks, with live VIX, Fear & Greed, and the Treasury yield curve. A probability-ranking signal — not a price or return forecast, and not advice.",
-  alternates: { canonical: "/risk-today" },
-  openGraph: {
-    type: "article",
-    title: "Today’s Market Elevated-Risk Probability | MindMarket",
-    description:
-      "An experimental probability-ranking signal for elevated market-risk pressure, with live VIX, Fear & Greed, and the yield curve. Not a price or return forecast.",
-    url: `${SITE_URL}/risk-today`,
-    siteName: "mindmarket.app",
-    images: ["/og.jpg?v=3"],
-  },
-  twitter: { card: "summary_large_image" },
-};
+    "An experimental model estimate of the probability that US equities enter an elevated-volatility regime over the next ~2 weeks, with drivers, data confidence, model health, and documented limits. A signal — not a live market desk, price forecast, or advice.",
+  path: "/risk-today",
+  ogType: "article",
+});
 
 const jsonLd = {
   "@context": "https://schema.org",
   "@type": "TechArticle",
   headline: "Market elevated-risk probability — today’s read",
   description:
-    "An experimental probability-ranking signal for elevated market-risk pressure over roughly the next two weeks, with live VIX, Fear & Greed, and the Treasury yield curve. Not a price or return forecast and not investment advice.",
+    "An experimental probability-ranking signal for elevated market-risk pressure over roughly the next two weeks, with model drivers, data confidence, health, and limitations. Not a price or return forecast and not investment advice.",
   url: `${SITE_URL}/risk-today`,
-  isAccessibleForFree: true,
   about: "US equity market volatility regime",
 };
 
@@ -103,7 +91,7 @@ export default async function RiskTodayPage() {
         <p
           style={{ ...eyebrow, margin: 0 }}
         >
-          Elevated-risk probability · updated through the trading day
+          Risk Today · model signal · next ~2 weeks
         </p>
 
         {summary ? (
@@ -128,7 +116,7 @@ export default async function RiskTodayPage() {
               textDecoration: "none",
             }}
           >
-            Check your portfolio against this regime
+            Test a portfolio against this regime
           </Link>
           {summary && (
             <a
@@ -151,16 +139,7 @@ export default async function RiskTodayPage() {
           )}
         </div>
 
-        {/* live client desk — refreshes on the client */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <h2 style={{ ...display, color: C.paper, fontSize: 26, fontWeight: 400, margin: 0 }}>
-            Live market desk
-          </h2>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16 }}>
-            <MarketRegime />
-            <MacroSnapshot />
-          </div>
-        </div>
+        <MarketPageSwitcher active="signal" />
 
         <p style={{ color: C.slateDim, fontSize: 12.5, lineHeight: 1.6, margin: 0 }}>
           Educational market context only — not a price forecast and not investment advice.

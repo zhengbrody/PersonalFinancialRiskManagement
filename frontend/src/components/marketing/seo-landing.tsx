@@ -10,8 +10,9 @@ import Link from "next/link";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { C, display } from "@/components/marketing/theme";
 import { CTA, Disclaimer } from "@/components/marketing/primitives";
+import { RiskWorkflow } from "@/components/marketing/risk-os-story";
 import { SEO_BY_PATH, type SeoPage, type SeoSection } from "@/lib/seo-content";
-import { pageMetadata } from "@/lib/site";
+import { SITE_URL, pageMetadata } from "@/lib/site";
 
 /** Build Next metadata for a migrated SEO page from its content entry. */
 export function seoMetadata(path: string): Metadata {
@@ -194,9 +195,41 @@ function Section({ s }: { s: SeoSection }) {
 }
 
 export function SeoLanding({ page }: { page: SeoPage }) {
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebPage",
+        "@id": `${SITE_URL}${page.path}#webpage`,
+        url: `${SITE_URL}${page.path}`,
+        name: page.title,
+        description: page.description,
+        isPartOf: { "@id": `${SITE_URL}/#website` },
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+          { "@type": "ListItem", position: 2, name: "Resources", item: `${SITE_URL}/resources` },
+          { "@type": "ListItem", position: 3, name: page.h1, item: `${SITE_URL}${page.path}` },
+        ],
+      },
+    ],
+  };
   return (
     <MarketingShell>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+      />
       <article style={{ maxWidth: 820, margin: "0 auto", padding: "120px 24px 56px" }}>
+        <nav aria-label="Breadcrumb" style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 22, fontSize: 12.5, color: C.slateDim }}>
+          <Link href="/" style={{ color: C.slate, textDecoration: "none" }}>Home</Link>
+          <span aria-hidden="true">/</span>
+          <Link href="/resources" style={{ color: C.slate, textDecoration: "none" }}>Resources</Link>
+          <span aria-hidden="true">/</span>
+          <span aria-current="page">{page.eyebrow}</span>
+        </nav>
         <p
           style={{
             fontSize: 12,
@@ -234,6 +267,16 @@ export function SeoLanding({ page }: { page: SeoPage }) {
           </div>
         )}
 
+        <section style={{ marginTop: 38 }}>
+          <h2 style={secTitle}>From this question to a decision you can review</h2>
+          <p style={{ fontSize: 15.5, lineHeight: 1.65, color: C.slate, margin: "0 0 18px" }}>
+            MindMarket keeps this analysis inside one portfolio workflow: prioritize the issue in
+            Today, inspect it in Analyze, test a hypothetical change, save the plan, and return when
+            the evidence or market context changes.
+          </p>
+          <RiskWorkflow compact />
+        </section>
+
         {page.sections.map((s, i) => (
           <Section key={i} s={s} />
         ))}
@@ -241,6 +284,9 @@ export function SeoLanding({ page }: { page: SeoPage }) {
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", margin: "40px 0 22px" }}>
           <CTA href={page.cta.href} lg>
             {page.cta.label}
+          </CTA>
+          <CTA href="/product#workflow" variant="ghost" lg>
+            See the full workflow
           </CTA>
         </div>
         <Disclaimer>{page.disclaimer}</Disclaimer>

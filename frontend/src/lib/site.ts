@@ -15,18 +15,28 @@ export function pageMetadata(opts: {
   ogType?: "website" | "article";
 }): Metadata {
   const { title, description, path, ogType = "article" } = opts;
+  const documentTitle = /\bMindMarket(?: AI)?\b/.test(title)
+    ? title
+    : `${title} | MindMarket`;
   return {
-    title,
+    // Use an absolute title here so pages whose editorial title already names
+    // MindMarket do not receive the root "| MindMarket" template twice.
+    title: { absolute: documentTitle },
     description,
     alternates: { canonical: path },
     openGraph: {
       type: ogType,
-      title,
+      title: documentTitle,
       description,
       url: `${SITE_URL}${path}`,
       siteName: "MindMarket",
       images: ["/og.jpg?v=3"],
     },
-    twitter: { card: "summary_large_image" },
+    twitter: {
+      card: "summary_large_image",
+      title: documentTitle,
+      description,
+      images: ["/og.jpg?v=3"],
+    },
   };
 }

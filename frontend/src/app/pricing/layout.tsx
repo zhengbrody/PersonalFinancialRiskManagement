@@ -1,30 +1,11 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Pricing",
-  description:
-    "MindMarket pricing for AI portfolio risk analytics, portfolio health scores, risk reports, Copilot analysis, and market data.",
-  alternates: {
-    canonical: "/pricing",
-  },
-  openGraph: {
-    title: "Pricing | MindMarket",
-    description:
-      "Choose a plan for AI portfolio risk analytics, Health Score, risk reports, and Copilot credits.",
-    url: "/pricing",
-    siteName: "mindmarket.app",
-    images: ["/og.jpg?v=3"],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Pricing | MindMarket",
-    description:
-      "Plans for AI portfolio risk analytics, Health Score, risk reports, and Copilot credits.",
-  },
+  title: "Product",
+  alternates: { canonical: "/product" },
+  robots: { index: false, follow: false },
 };
 
-export default function PricingLayout({
-  children,
-}: Readonly<{ children: React.ReactNode }>) {
+export default function RetiredPricingLayout({ children }: { children: React.ReactNode }) {
   return children;
 }

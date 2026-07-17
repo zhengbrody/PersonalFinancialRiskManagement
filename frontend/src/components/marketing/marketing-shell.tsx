@@ -13,7 +13,6 @@ import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Logo } from "@/components/ui/logo";
 import { useAuth } from "@/lib/auth-context";
-import { isBillingEnabled } from "@/lib/billing-flag";
 import { LEGAL_DOCS } from "@/lib/legal-content";
 import { C } from "./theme";
 import { CTA } from "./primitives";
@@ -123,7 +122,7 @@ function MarketingNav({ minimal }: { minimal: boolean }) {
             ))}
           </div>
           {signedIn ? (
-            <CTA href="/">Open dashboard</CTA>
+            <CTA href="/">Open Today</CTA>
           ) : (
             <>
               <CTA variant="ghost" href="/login">
@@ -144,14 +143,13 @@ function MarketingFooter({ minimal }: { minimal: boolean }) {
   // Explore links only — the nav owns the Sign in / Get started actions.
   const links: [string, string][] = [
     ["Product", "/product"],
+    ["Workflow", "/product#workflow"],
     ["Learn", "/learn"],
     ["Methodology", "/methodology/health-score"],
     ["Resources", "/resources"],
     ["Markets", "/markets"],
-    ["Risk Today", "/risk-today"],
+    ["Risk Signal", "/risk-today"],
     ["Demo", "/demo-risk-check"],
-    // Pricing only when billing is live (hidden during free beta, like the app nav).
-    ...(isBillingEnabled() ? ([["Pricing", "/pricing"]] as [string, string][]) : []),
   ];
   return (
     <footer style={{ padding: "48px 32px 60px", borderTop: `1px solid ${C.hair}` }}>
@@ -178,8 +176,8 @@ function MarketingFooter({ minimal }: { minimal: boolean }) {
         </div>
         <p style={{ fontSize: 12.5, color: C.slateDim, maxWidth: "60em", lineHeight: 1.5, margin: 0 }}>
           MindMarket provides educational portfolio analytics and software demonstrations. It does
-          not provide investment, tax, legal, or financial advice. Figures shown before sign-in use
-          fixed sample books, not live prices.
+          not provide investment, tax, legal, or financial advice. Interactive demos use clearly
+          labeled sample books; public market pages may use source-stamped live macro data.
         </p>
         <nav style={{ display: "flex", flexWrap: "wrap", gap: 16, fontSize: 12.5 }}>
           {LEGAL_DOCS.map((d) => (

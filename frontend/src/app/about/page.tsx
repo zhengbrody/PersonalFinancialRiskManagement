@@ -10,25 +10,15 @@ import Link from "next/link";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { C, display } from "@/components/marketing/theme";
 import { CTA, Disclaimer } from "@/components/marketing/primitives";
-import { SITE_URL, pageMetadata } from "@/lib/site";
+import { pageMetadata } from "@/lib/site";
 
 export const metadata = pageMetadata({
-  title: "About MindMarket — Portfolio Risk Analytics for Investors",
+  title: "About MindMarket — A Portfolio Risk OS for Investors",
   description:
-    "Why MindMarket exists, how the risk analytics work, its limitations, where the data comes from, how your data is kept private, and who operates it.",
+    "Why MindMarket turns portfolio analytics into a repeatable Today, Analyze, Test, Plan, and Review workflow — plus methodology, limits, data provenance, and privacy.",
   path: "/about",
   ogType: "website",
 });
-
-const organizationLd = {
-  "@context": "https://schema.org",
-  "@type": "Organization",
-  name: "MindMarket",
-  url: SITE_URL,
-  logo: `${SITE_URL}/icons/icon-512.png`,
-  description:
-    "AI-assisted portfolio risk analytics for individual investors — VaR, CVaR, stress testing, concentration, and market context.",
-};
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -44,40 +34,38 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export default function AboutPage() {
   return (
     <MarketingShell>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationLd) }}
-      />
       <article style={{ maxWidth: 820, margin: "0 auto", padding: "120px 24px 56px" }}>
         <p style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".12em", color: C.teal, margin: 0 }}>
           About
         </p>
         <h1 style={{ ...display, fontSize: 40, lineHeight: 1.1, margin: "8px 0 14px", color: C.paper }}>
-          Portfolio risk analytics for individual investors
+          A portfolio risk operating system for individual investors
         </h1>
         <p style={{ fontSize: 18, lineHeight: 1.65, color: C.slate, maxWidth: "44em" }}>
-          MindMarket turns a list of holdings into a clear risk picture — a 0–1000 Health Score,
-          VaR and CVaR, stress tests, concentration and factor exposure, and plain-language
-          explanations — for people managing their own money.
+          MindMarket turns holdings and market context into a repeatable decision loop: see what
+          changed, locate the risk, test a response, save a plan, and return when that decision
+          needs review.
         </p>
 
         <Section title="Why it exists">
           <p>
-            Brokerage apps are built to show performance and buying power, not risk. Most
+            Portfolio apps are usually built to show performance and buying power, not risk. Most
             individual investors have no easy way to answer basic questions: how much could this
             portfolio fall in a bad month, which few holdings drive that risk, and how much
-            leverage is really embedded in the account. MindMarket exists to make that kind of
-            institutional-style risk analysis readable and honest for individual investors.
+            leverage is really embedded in the account. Even when a risk report exists, it rarely
+            tells the investor what to inspect next or remembers the decision. MindMarket exists to
+            make the analysis readable, testable, and reviewable.
           </p>
         </Section>
 
         <Section title="How it works">
           <p>
-            Every figure — VaR, CVaR, drawdown, betas, scenario losses, the Health Score — is
-            computed deterministically in Python from market data. The AI is only allowed to
-            explain, rank, and summarize those numbers; it never invents a figure or a price
-            target, and where data is missing or stale the product says so. You can read the exact
-            rules on the{" "}
+            Today prioritizes the active portfolio. Analyze connects Overview, Drivers, Stress
+            Test, Action Plan, and History. Research ideas can open a hypothetical portfolio test;
+            useful tests can be saved as plans and reviewed through alerts. Every figure — VaR,
+            CVaR, drawdown, betas, scenario losses, and the Health Score — is computed
+            deterministically. The AI explains available evidence and admits when data is missing
+            or stale. You can read the exact rules on the{" "}
             <Link href="/methodology/health-score" style={{ color: C.teal, textDecoration: "none" }}>
               Health Score methodology
             </Link>{" "}
@@ -113,7 +101,7 @@ export default function AboutPage() {
             analyst data from Financial Modeling Prep, institutional filings from SEC EDGAR, and
             macro series from FRED and the US Treasury. Every external number is shown with its
             source and freshness. AI explanations are generated by large language models
-            (Anthropic Claude and others) over those already-computed numbers.
+            through a configured model provider over those already-computed numbers.
           </p>
         </Section>
 
@@ -146,7 +134,7 @@ export default function AboutPage() {
 
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", margin: "40px 0 22px" }}>
           <CTA href="/demo-risk-check" lg>
-            Try a free risk check
+            Explore the risk demo
           </CTA>
           <CTA href="/product" variant="ghost" lg>
             See the product

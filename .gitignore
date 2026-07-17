@@ -8,6 +8,9 @@ venv/
 env/
 .env
 
+# Root-level JavaScript tooling cache (the Next app has its own ignore too)
+/node_modules/
+
 # Environment / secrets
 .env
 *.env

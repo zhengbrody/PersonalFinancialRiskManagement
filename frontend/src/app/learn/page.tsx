@@ -4,30 +4,19 @@
  * the hub is crawlable.
  */
 
-import type { Metadata } from "next";
 import { LEARN_TOPICS } from "@/lib/learn-content";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { C } from "@/components/marketing/theme";
 import { Band, CTA, Disclaimer, Em, MarketingCard, MarketingHero, SecTitle } from "@/components/marketing/primitives";
+import { SITE_URL, pageMetadata } from "@/lib/site";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
-
-export const metadata: Metadata = {
-  title: "Learn portfolio risk — plain-English guides for individual investors",
+export const metadata = pageMetadata({
+  title: "Learn Portfolio Risk — Plain-English Investor Guides",
   description:
-    "Free, example-led guides to portfolio risk: VaR & CVaR, factor exposure, stress testing, margin risk, options Greeks, and risk-first stock research.",
-  alternates: { canonical: "/learn" },
-  openGraph: {
-    type: "website",
-    title: "Learn portfolio risk — MindMarket",
-    description:
-      "Free, example-led guides to portfolio risk for individual investors: VaR/CVaR, factor exposure, stress testing, margin, options, and stock research.",
-    url: `${SITE_URL}/learn`,
-    siteName: "mindmarket.app",
-    images: ["/og.jpg?v=3"],
-  },
-  twitter: { card: "summary_large_image" },
-};
+    "Example-led guides to VaR, CVaR, factor exposure, stress testing, margin risk, options Greeks, drawdown, diversification, and risk-first stock research.",
+  path: "/learn",
+  ogType: "website",
+});
 
 export default function LearnHubPage() {
   const itemListLd = {
@@ -55,7 +44,7 @@ export default function LearnHubPage() {
             Understand the risk you <Em>already own</Em>
           </>
         }
-        lede="Plain-English, example-led guides to portfolio risk — the same concepts the Health Score and Risk Report are built on. No jargon, no buy/sell calls."
+        lede="Plain-English, example-led guides to the concepts used inside Analyze, stress tests, and risk plans. Learn the metric, then see where it changes a portfolio decision."
       />
 
       <Band>
@@ -98,13 +87,13 @@ export default function LearnHubPage() {
         >
           <SecTitle>Ready to see it on a portfolio?</SecTitle>
           <p style={{ fontSize: 16, color: C.slate, margin: "12px auto 24px", maxWidth: "34em" }}>
-            Run a deterministic sample cockpit, or score your own holdings free.
+            Run a deterministic sample cockpit, or bring the concepts into a connected portfolio workflow.
           </p>
           <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
             <CTA href="/demo-risk-check" variant="ghost">
               Run a sample portfolio
             </CTA>
-            <CTA href="/signup">Create free account</CTA>
+            <CTA href="/signup">Create risk workspace</CTA>
           </div>
         </div>
         <div style={{ marginTop: 24 }}>

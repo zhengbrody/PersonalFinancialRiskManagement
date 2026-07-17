@@ -2,7 +2,7 @@
 
 /**
  * Macro-snapshot widget — landing-page above-the-fold proof that the
- * new backend is alive and pulling real, free data. No auth needed.
+ * new backend is alive and pulling source-stamped public data. No auth needed.
  *
  * Layout: 4 KPI tiles (Fed Funds, 10Y, CPI, Unemployment) + an inline
  * yield-curve mini-bar. Skeleton on load; a short notice card on
@@ -39,7 +39,7 @@ export function MacroSnapshot() {
       <div className="flex items-end justify-between">
         <div>
           <p className="text-xs font-medium uppercase tracking-widest text-primary">
-            Live macro · free data
+            Live macro · source-stamped data
           </p>
           <h2 className="text-2xl font-semibold tracking-tight">
             US rates &amp; macro

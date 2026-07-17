@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * /markets auth gate: anonymous visitors get a marketing-style intro (premium,
- * market-synced, with a LIVE public preview of the regime + macro and a sign-in
+ * /markets auth gate: anonymous visitors get a marketing-style intro
+ * with a LIVE public preview of current conditions and a sign-in
  * CTA) — consistent with the other pre-login pages; signed-in users get the full
  * live markets desk. While auth resolves we show the intro (the crawlable
  * default + a fine public state). SiteShell renders /markets full-bleed for the
@@ -10,6 +10,7 @@
  */
 
 import { useAuth } from "@/lib/auth-context";
+import Link from "next/link";
 import { MarketRegime } from "@/components/market-regime";
 import { RegimeContext } from "@/components/regime-context";
 import { MarketSeason } from "@/components/market-season";
@@ -18,6 +19,7 @@ import { MarketNews } from "@/components/market-news";
 import { PortfolioSentiment } from "@/components/portfolio-sentiment";
 import { MacroSnapshot } from "@/components/macro-snapshot";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
+import { MarketPageSwitcher } from "@/components/marketing/market-page-switcher";
 import { C } from "@/components/marketing/theme";
 import {
   Band,
@@ -40,12 +42,20 @@ export function MarketsGate() {
 function MarketsView() {
   return (
     <div className="space-y-10">
-      <header className="space-y-1">
-        <h1 className="text-3xl font-semibold tracking-tight">Markets</h1>
-        <p className="text-sm text-muted-foreground">
-          The risk climate at a glance — volatility, sentiment, the curve, and macro. All free,
-          public data.
-        </p>
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-semibold tracking-tight">Markets</h1>
+          <p className="text-sm text-muted-foreground">
+            What is moving now — volatility, sentiment, rates, sectors, macro, and headlines from
+            source-stamped public data.
+          </p>
+        </div>
+        <Link
+          href="/risk-today"
+          className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+        >
+          Open the near-term model signal →
+        </Link>
       </header>
 
       <MarketRegime />
@@ -62,8 +72,8 @@ function MarketsView() {
 const PILLARS: { icon: IconName; h: string; p: string }[] = [
   {
     icon: "trend-up",
-    h: "Market regime",
-    p: "VIX, the Fear & Greed gauge, and the yield-curve shape distilled into one risk-on / risk-off read of the day.",
+    h: "Live conditions",
+    p: "VIX, the Fear & Greed gauge, and the yield-curve shape describe the market state that exists now — not a forecast.",
   },
   {
     icon: "volatility",
@@ -82,17 +92,17 @@ function MarketsIntro() {
   return (
     <MarketingShell>
       <MarketingHero
-        eyebrow="Markets"
+        eyebrow="Markets · live conditions"
         title={
           <>
-            Read the risk climate — <Em>before</Em> you trade
+            See what is moving <Em>right now.</Em>
           </>
         }
-        lede="VIX, the Fear & Greed gauge, the US Treasury curve, and live macro — the regime that actually exists today. Free and public; sign in to sync it to your own portfolio."
+        lede="VIX, the Fear & Greed gauge, the US Treasury curve, sectors, and macro headlines — a descriptive market desk for the conditions that exist today. Use Risk Today separately for the near-term model signal."
       >
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 30 }}>
           <CTA href="/signup" lg>
-            Open the markets desk — free
+            Create risk workspace
           </CTA>
           <CTA href="/login" variant="ghost" lg>
             Sign in
@@ -101,7 +111,11 @@ function MarketsIntro() {
       </MarketingHero>
 
       <Band>
-        <Eyebrow>Live right now · public data</Eyebrow>
+        <MarketPageSwitcher active="desk" />
+      </Band>
+
+      <Band>
+        <Eyebrow>Current conditions · source-stamped public data</Eyebrow>
         <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 22 }}>
           <MarketRegime />
           <MacroSnapshot />
@@ -111,7 +125,7 @@ function MarketsIntro() {
       <Band>
         <Eyebrow>What the desk gives you</Eyebrow>
         <SecTitle>
-          Read the regime, <Em>not the noise.</Em>
+          Read what moved, <Em>then decide what to analyze.</Em>
         </SecTitle>
         <div
           className="mm-pillars"
@@ -140,12 +154,12 @@ function MarketsIntro() {
 
       <Band>
         <CTABox
-          headline="Want this synced to your portfolio?"
-          lede="Sign in to see how today's regime hits YOUR holdings — sector exposure, per-name sentiment, and stress scenarios."
+          headline="Connect the market regime to the portfolio you actually own."
+          lede="Use the same context inside Today and Analyze to understand which holdings, factors, and saved plans deserve review."
         >
-          <CTA href="/signup">Analyze my portfolio</CTA>
-          <CTA href="/research" variant="ghost">
-            Research a stock
+          <CTA href="/signup">Create risk workspace</CTA>
+          <CTA href="/product#workflow" variant="ghost">
+            See the workflow
           </CTA>
         </CTABox>
       </Band>

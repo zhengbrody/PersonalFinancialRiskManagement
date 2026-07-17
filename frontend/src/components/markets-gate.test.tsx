@@ -26,11 +26,17 @@ beforeEach(() => authMock.mockReturnValue({ user: null, configured: true, loadin
 describe("MarketsGate", () => {
   it("anonymous → marketing intro + live public preview + sign-in CTA (no app-only bits)", () => {
     render(<MarketsGate />);
-    expect(screen.getByText(/Read the risk climate/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /open the markets desk/i })).toHaveAttribute(
+    expect(screen.getByText(/See what is moving/i)).toBeInTheDocument();
+    expect(screen.getByText(/What is moving right now/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Risk Today/i })).toHaveAttribute(
       "href",
-      "/signup",
+      "/risk-today",
     );
+    expect(
+      screen
+        .getAllByRole("link", { name: /create risk workspace/i })
+        .some((link) => link.getAttribute("href") === "/signup"),
+    ).toBe(true);
     expect(screen.getByTestId("regime")).toBeInTheDocument(); // live preview
     expect(screen.getByTestId("macro")).toBeInTheDocument();
     // The auth-only desk bits are NOT in the intro:
@@ -42,6 +48,10 @@ describe("MarketsGate", () => {
     render(<MarketsGate />);
     expect(screen.getByRole("heading", { name: "Markets", level: 1 })).toBeInTheDocument();
     expect(screen.getByTestId("sentiment")).toBeInTheDocument();
-    expect(screen.queryByText(/Read the risk climate/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /near-term model signal/i })).toHaveAttribute(
+      "href",
+      "/risk-today",
+    );
+    expect(screen.queryByText(/See what is moving/i)).not.toBeInTheDocument();
   });
 });

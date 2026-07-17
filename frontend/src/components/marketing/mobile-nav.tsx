@@ -137,12 +137,12 @@ export function MobileNav({ signedIn }: { signedIn: boolean }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 24 }}>
             {signedIn ? (
               <Link href="/" onClick={() => setOpen(false)} style={primaryBtn}>
-                Open dashboard
+                Open Today
               </Link>
             ) : (
               <>
                 <Link href="/signup" onClick={() => setOpen(false)} style={primaryBtn}>
-                  Get started — free
+                  Create risk workspace
                 </Link>
                 <Link href="/login" onClick={() => setOpen(false)} style={ghostBtn}>
                   Sign in

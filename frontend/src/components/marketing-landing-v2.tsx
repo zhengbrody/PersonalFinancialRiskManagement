@@ -14,18 +14,24 @@
  * file is just the landing's body sections + its SEO JSON-LD.
  */
 
+import Link from "next/link";
 import { useEffect, useState, type CSSProperties } from "react";
-import { Icon, type IconName } from "@/components/ui/icon";
 import { isUsTradingHours } from "@/lib/market-hours";
 import { MacroSnapshot } from "@/components/macro-snapshot";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { C, display, mono, eyebrow, secTitle } from "@/components/marketing/theme";
-import { Reveal, useReveal, useCountUp } from "@/components/marketing/motion";
+import { Reveal, useReveal } from "@/components/marketing/motion";
 import { CTA, Band } from "@/components/marketing/primitives";
+import {
+  ProductSurfaceGrid,
+  RiskOsPreview,
+  RiskWorkflow,
+} from "@/components/marketing/risk-os-story";
 import { track } from "@/lib/analytics";
 import { ANALYTICS_EVENTS } from "@/lib/analytics-events";
 import { LiveTape } from "@/components/marketing/live-tape";
 import { StickyMobileCTA } from "@/components/marketing/sticky-mobile-cta";
+import { PRODUCT_FAQS } from "@/lib/product-story";
 
 /* SEO — the authoritative Organization + SoftwareApplication JSON-LD ships on
    every page from layout.tsx; the homepage adds only this FAQ rich result (no
@@ -33,24 +39,11 @@ import { StickyMobileCTA } from "@/components/marketing/sticky-mobile-cta";
 const FAQ_JSON_LD = {
   "@context": "https://schema.org",
   "@type": "FAQPage",
-  mainEntity: [
-    {
-      "@type": "Question",
-      name: "What does MindMarket measure?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "MindMarket measures portfolio health, volatility, Sharpe ratio, max drawdown, VaR, CVaR, factor exposure, stress-test losses, and live macro context.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "Does the AI invent portfolio risk numbers?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "No. Risk numbers are calculated by deterministic Python services. AI explanations only summarize already-computed metrics.",
-      },
-    },
-  ],
+  mainEntity: PRODUCT_FAQS.map((item) => ({
+    "@type": "Question",
+    name: item.question,
+    acceptedAnswer: { "@type": "Answer", text: item.answer },
+  })),
 };
 
 const LEARN_LINKS = [
@@ -94,8 +87,9 @@ export function MarketingLandingV2() {
       <MacroBand />
       <Stats />
       <Demo />
-      <Pillars />
+      <OperatingSystem />
       <Steps />
+      <Faq />
       <ClosingCTA />
       <LearnRow />
       <StickyMobileCTA />
@@ -105,11 +99,6 @@ export function MarketingLandingV2() {
 
 /* hero --------------------------------------------------------------------- */
 function Hero() {
-  const [started, setStarted] = useState(false);
-  useEffect(() => {
-    const id = setTimeout(() => setStarted(true), 350);
-    return () => clearTimeout(id);
-  }, []);
   // Honest session chip — same SSR-safe pattern as <MarketStatusBar>: null on
   // the server/prerender (neutral label), real open/closed state post-mount.
   const [marketOpen, setMarketOpen] = useState<boolean | null>(null);
@@ -119,12 +108,6 @@ function Hero() {
     const id = setInterval(tick, 60_000);
     return () => clearInterval(id);
   }, []);
-  const score = useCountUp(612, started, 1600);
-  const dims = [useCountUp(5.4, started, 1600), useCountUp(7.1, started, 1600), useCountUp(4.2, started, 1600)];
-
-  const R = 92, CX = 120, CY = 120, arc = Math.PI * R, frac = score / 1000;
-  const ang = Math.PI * (1 - frac);
-
   return (
     <header id="top" style={{ position: "relative", padding: "150px 32px 80px", maxWidth: 1200, margin: "0 auto" }}>
       <Glow style={{ width: 620, height: 620, top: -120, right: -160, background: `radial-gradient(circle, ${C.glowTeal}, transparent 65%)` }} />
@@ -143,12 +126,12 @@ function Hero() {
           </Reveal>
           <Reveal delay={0.08}>
             <h1 style={{ ...display, margin: "0 0 24px", fontWeight: 400, fontSize: "clamp(44px,5.6vw,78px)", lineHeight: 1.02, letterSpacing: "-0.01em" }}>
-              Know your portfolio&apos;s risk <em style={{ fontStyle: "italic", color: C.gold }}>before</em> the market tests it.
+              Know what changed. <em style={{ fontStyle: "italic", color: C.gold }}>Test</em> what matters. Keep a risk plan.
             </h1>
           </Reveal>
           <Reveal delay={0.16}>
             <p style={{ maxWidth: "30em", fontSize: "clamp(16px,1.5vw,19px)", lineHeight: 1.6, color: C.slate, margin: "0 0 32px" }}>
-              Paste your holdings — or import from your broker — and get a transparent risk X-ray in seconds: a 0–1000 Health Score, real VaR, stress tests, and concentration, explained in plain English. Free, no signup to try.
+              MindMarket is a Portfolio Risk OS for individual investors. Review today&apos;s priorities, trace risk in Analyze, test changes without touching real holdings, save a plan, and revisit it when conditions change.
             </p>
           </Reveal>
           <Reveal delay={0.24}>
@@ -158,7 +141,7 @@ function Hero() {
                 lg
                 onClick={() => track(ANALYTICS_EVENTS.hero_cta_clicked, { target: "demo" })}
               >
-                Try a free risk check
+                Explore the interactive demo
               </CTA>
               <CTA
                 href="/signup"
@@ -166,52 +149,16 @@ function Hero() {
                 lg
                 onClick={() => track(ANALYTICS_EVENTS.hero_cta_clicked, { target: "signup" })}
               >
-                Score my portfolio
+                Create my risk workspace
               </CTA>
             </div>
-            <p style={{ marginTop: 18, fontSize: 13, color: C.slateDim }}>No signup to try · no credit card · numbers are computed, never invented.</p>
+            <p style={{ marginTop: 18, fontSize: 13, color: C.slateDim }}>No sign-in for the demo · sample data is clearly labeled · risk numbers are computed, never invented.</p>
           </Reveal>
         </div>
 
-        <div style={{ position: "relative" }}>
-          <FloatChip style={{ top: 128, left: -42 }} label="Sample · 1-day VaR 95%" value="−2.52%" />
-          <FloatChip style={{ bottom: 92, right: -34 }} label="Sample · annualized vol" value="24.3%" />
-          <Reveal delay={0.08}>
-            <div style={{ borderRadius: 22, border: `1px solid ${C.hair}`, background: C.cardGrad, boxShadow: "0 40px 90px -40px rgba(0,0,0,.8)", padding: "26px 26px 22px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <span style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: ".15em", color: C.slate }}>Portfolio Health Score</span>
-                <span style={{ display: "inline-flex", gap: 6 }}>
-                  <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".08em", color: C.slate, border: `1px solid ${C.hair}`, padding: "4px 9px", borderRadius: 999 }}>Sample</span>
-                  <span style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".08em", color: C.gold, border: "1px solid rgba(224,174,42,.4)", background: "rgba(224,174,42,.1)", padding: "4px 9px", borderRadius: 999 }}>Watch</span>
-                </span>
-              </div>
-              <div style={{ position: "relative" }}>
-                <svg viewBox="0 0 240 138" style={{ display: "block", width: "100%", height: "auto" }}>
-                  <defs>
-                    <linearGradient id="mmArc" x1="0" y1="0" x2="1" y2="0">
-                      <stop offset="0" stopColor={C.down} /><stop offset="0.5" stopColor={C.gold} /><stop offset="1" stopColor={C.up} />
-                    </linearGradient>
-                  </defs>
-                  <path d="M28 120 A92 92 0 0 1 212 120" fill="none" stroke={C.track} strokeWidth={16} strokeLinecap="round" />
-                  <path d="M28 120 A92 92 0 0 1 212 120" fill="none" stroke="url(#mmArc)" strokeWidth={16} strokeLinecap="round" strokeDasharray={arc} strokeDashoffset={arc * (1 - frac)} />
-                  <circle r={9} fill={C.paper} stroke={C.ink} strokeWidth={3} cx={CX + R * Math.cos(ang)} cy={CY - R * Math.sin(ang)} />
-                </svg>
-                <div style={{ position: "absolute", insetInline: 0, bottom: 6, textAlign: "center" }}>
-                  <div style={{ ...mono, fontSize: 56, fontWeight: 600, lineHeight: 1, color: C.gold }}>{Math.round(score)}</div>
-                  <div style={{ fontSize: 14, color: C.slate, marginTop: 4 }}>/ 1000 · sample book</div>
-                </div>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10, marginTop: 12 }}>
-                {[["Risk match", dims[0]], ["Risk-adj. return", dims[1]], ["Downside prot.", dims[2]]].map(([l, v]) => (
-                  <div key={l as string} style={{ textAlign: "center", borderRadius: 12, background: C.surfaceFaint, border: `1px solid ${C.hair}`, padding: "10px 6px" }}>
-                    <div style={{ ...mono, fontSize: 19, fontWeight: 600 }}>{(v as number).toFixed(1)}</div>
-                    <div style={{ fontSize: 10.5, color: C.slate, marginTop: 2 }}>{l as string}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Reveal>
-        </div>
+        <Reveal delay={0.08}>
+          <RiskOsPreview />
+        </Reveal>
       </div>
     </header>
   );
@@ -220,15 +167,6 @@ function Hero() {
 function Glow({ style }: { style: CSSProperties }) {
   return <div aria-hidden style={{ position: "absolute", borderRadius: "50%", filter: "blur(80px)", pointerEvents: "none", zIndex: 0, ...style }} />;
 }
-function FloatChip({ style, label, value }: { style: CSSProperties; label: string; value: string }) {
-  return (
-    <div className="mm-float-chip" style={{ position: "absolute", zIndex: 2, borderRadius: 13, border: `1px solid ${C.hairStrong}`, background: C.chipBg, backdropFilter: "blur(8px)", padding: "11px 14px", boxShadow: "0 20px 40px -20px rgba(0,0,0,.9)", ...style }}>
-      <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".14em", color: C.slate }}>{label}</div>
-      <div style={{ ...mono, fontSize: 17, fontWeight: 600, marginTop: 2, color: C.gold }}>{value}</div>
-    </div>
-  );
-}
-
 /* live macro context (real data via MacroSnapshot) ------------------------- */
 function MacroBand() {
   return (
@@ -247,17 +185,15 @@ function MacroBand() {
 
 /* stats -------------------------------------------------------------------- */
 function Stats() {
-  const { ref, seen } = useReveal<HTMLDivElement>();
-  const vals = [useCountUp(1000, seen), useCountUp(10000, seen), useCountUp(6, seen), useCountUp(30, seen)];
-  const labels = ["Point Health Score scale", "Monte-Carlo paths per run", "Risk factors regressed", "To your first score"];
-  const suffix = ["", "", "", "s"];
+  const vals = [5, 10000, 6, 1];
+  const labels = ["Connected decision stages", "Monte-Carlo paths per run", "Factor groups measured", "Active portfolio context"];
   return (
     <Band>
-      <div ref={ref} style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 24 }} className="mm-pillars">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 24 }} className="mm-pillars">
         {vals.map((v, i) => (
           <div key={i}>
             <div style={{ ...mono, fontSize: "clamp(32px,3.4vw,46px)", fontWeight: 600, letterSpacing: "-0.02em", background: C.statGrad, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" }}>
-              {Math.round(v).toLocaleString("en-US")}{suffix[i]}
+              {v.toLocaleString("en-US")}
             </div>
             <div style={{ fontSize: 14, color: C.slate, marginTop: 6 }}>{labels[i]}</div>
           </div>
@@ -345,55 +281,44 @@ function BarRow({ t, pct, value, red, animate }: { t: string; pct: number; value
   );
 }
 
-/* pillars ------------------------------------------------------------------ */
-function Pillars() {
-  const cards: { ic: IconName; h: string; p: string; m: string }[] = [
-    { ic: "score-gauge", h: "Portfolio Health Score", p: "One 0–1000 number for how risk-appropriate your portfolio really is — across three dimensions you can act on.", m: "Risk Match · Risk-Adj. Return · Downside" },
-    { ic: "volatility", h: "Institutional-style risk metrics", p: "Monte-Carlo VaR & CVaR, six-factor betas, component VaR, stress tests and drawdown — deterministic, explainable risk math on your own account.", m: "VaR 95 / 99 · factor betas · stress" },
-    { ic: "trend-up", h: "Live market context", p: "Real Fed Funds, CPI, and the US Treasury curve, streamed live — so you score against the regime that actually exists today.", m: "FRED · US Treasury · hourly" },
-  ];
+/* operating surfaces ------------------------------------------------------- */
+function OperatingSystem() {
   return (
-    <Band id="why">
-      <Reveal><p style={eyebrow}>Why MindMarket</p></Reveal>
-      <Reveal delay={0.08}><h2 style={secTitle}>Real risk math — <em style={{ fontStyle: "italic", color: C.gold }}>not LLM guesswork.</em></h2></Reveal>
-      <div className="mm-pillars" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20, marginTop: 44 }}>
-        {cards.map((c, i) => (
-          <Reveal key={c.h} delay={i * 0.08}>
-            <div style={{ borderRadius: 18, border: `1px solid ${C.hair}`, background: C.cardGrad, padding: 26, height: "100%" }}>
-              <div style={{ width: 46, height: 46, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", background: `linear-gradient(135deg, ${C.teal}, ${C.tealDeep})`, marginBottom: 18, boxShadow: "0 8px 20px -8px rgba(47,167,188,.5)" }}>
-                <Icon name={c.ic} style={{ width: 23, height: 23, color: "#06151c" }} />
-              </div>
-              <h3 style={{ fontSize: 19, margin: "0 0 8px", letterSpacing: "-0.01em" }}>{c.h}</h3>
-              <p style={{ fontSize: 14.5, lineHeight: 1.6, color: C.slate, margin: "0 0 14px" }}>{c.p}</p>
-              <div style={{ ...mono, fontSize: 12, color: "rgba(170,180,194,.7)", paddingTop: 12, borderTop: `1px solid ${C.hair}` }}>{c.m}</div>
-            </div>
-          </Reveal>
-        ))}
-      </div>
+    <Band id="product">
+      <Reveal><p style={eyebrow}>One operating system</p></Reveal>
+      <Reveal delay={0.08}><h2 style={secTitle}>Analysis becomes a <em style={{ fontStyle: "italic", color: C.gold }}>repeatable decision loop.</em></h2></Reveal>
+      <Reveal delay={0.12}>
+        <p style={{ color: C.slate, fontSize: 16, lineHeight: 1.65, maxWidth: "44em", margin: "16px 0 36px" }}>
+          Today tells you where to start. Analyze keeps the quantitative work together. Research, tests, plans, alerts, and Copilot carry the same active-portfolio context forward.
+        </p>
+      </Reveal>
+      <ProductSurfaceGrid />
     </Band>
   );
 }
 
 /* steps -------------------------------------------------------------------- */
 function Steps() {
-  const steps = [
-    ["Add your holdings", "Tickers and shares — average cost optional for P&L. Edit any time. Takes about a minute."],
-    ["See your Health Score", "A 0–1000 score plus your single biggest risk, the moment your holdings are in."],
-    ["Ask your Copilot", "Plain-English answers about your risk — grounded in your real, computed numbers."],
-  ];
   return (
-    <Band id="how">
+    <Band id="workflow">
       <Reveal><p style={eyebrow}>How it works</p></Reveal>
-      <Reveal delay={0.08}><h2 style={secTitle}>Three minutes to your first score.</h2></Reveal>
-      <div className="mm-pillars" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20, marginTop: 44 }}>
-        {steps.map(([h, p], i) => (
-          <Reveal key={h} delay={i * 0.08}>
-            <div style={{ borderRadius: 16, border: `1px solid ${C.hair}`, padding: 26, height: "100%" }}>
-              <div style={{ ...mono, fontSize: 13, fontWeight: 600, color: "#0B0E11", background: C.gold, width: 30, height: 30, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>{i + 1}</div>
-              <h4 style={{ fontSize: 17, margin: "0 0 6px" }}>{h}</h4>
-              <p style={{ fontSize: 14, color: C.slate, lineHeight: 1.55, margin: 0 }}>{p}</p>
-            </div>
-          </Reveal>
+      <Reveal delay={0.08}><h2 style={secTitle}>From signal to saved decision — without changing a holding.</h2></Reveal>
+      <div style={{ marginTop: 40 }}><RiskWorkflow /></div>
+    </Band>
+  );
+}
+
+function Faq() {
+  return (
+    <Band id="questions">
+      <p style={eyebrow}>Questions</p>
+      <h2 style={secTitle}>Clear boundaries make better risk decisions.</h2>
+      <div style={{ display: "grid", gap: 12, marginTop: 34 }}>
+        {PRODUCT_FAQS.map((item) => (
+          <details key={item.question} style={{ borderRadius: 14, border: `1px solid ${C.hair}`, background: C.surfaceFaint, padding: "16px 18px" }}>
+            <summary style={{ color: C.paper, cursor: "pointer", fontWeight: 600 }}>{item.question}</summary>
+            <p style={{ color: C.slate, fontSize: 14.5, lineHeight: 1.65, margin: "12px 0 0" }}>{item.answer}</p>
+          </details>
         ))}
       </div>
     </Band>
@@ -412,10 +337,10 @@ function ClosingCTA() {
           </svg>
           <div style={{ position: "relative", zIndex: 1 }}>
             <h2 style={{ ...display, fontWeight: 400, fontSize: "clamp(32px,4.4vw,56px)", lineHeight: 1.05, margin: "0 0 18px" }}>
-              See what can hurt your portfolio <em style={{ fontStyle: "italic", color: C.gold }}>before</em> it does.
+              Turn portfolio analysis into a <em style={{ fontStyle: "italic", color: C.gold }}>habit you can review.</em>
             </h2>
-            <p style={{ color: C.slate, fontSize: 17, margin: "0 auto 30px", maxWidth: "34em" }}>Free during beta — all core features open, no credit card. Your first Health Score is 30 seconds away.</p>
-            <CTA href="/signup" lg>Score my portfolio — free</CTA>
+            <p style={{ color: C.slate, fontSize: 17, margin: "0 auto 30px", maxWidth: "36em" }}>Create a portfolio, open Today, and follow a connected path from priority to test to saved plan.</p>
+            <CTA href="/signup" lg>Create my risk workspace</CTA>
           </div>
         </div>
       </Reveal>
@@ -431,10 +356,9 @@ function LearnRow() {
       <ul style={{ listStyle: "none", padding: 0, margin: "16px 0 0", display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: "6px 28px" }} className="mm-pillars">
         {LEARN_LINKS.map((l) => (
           <li key={l.href}>
-            {/* Static Caddy-served SEO pages → plain <a>, not next/link. */}
-            <a href={l.href} style={{ color: C.slate, fontSize: 14, textDecoration: "none" }}>
+            <Link href={l.href} style={{ color: C.slate, fontSize: 14, textDecoration: "none" }}>
               {l.label}
-            </a>
+            </Link>
           </li>
         ))}
       </ul>

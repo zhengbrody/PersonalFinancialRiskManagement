@@ -501,7 +501,7 @@ function DataQualityBadge({ fp }: { fp: FactPack }) {
   const coverage = dq?.coverage;
   const sources = dq?.sources ?? [];
   const warnings = dq?.warnings ?? [];
-  const usesFree =
+  const usesPublicSources =
     sources.some((s) => s.source === "yfinance") ||
     warnings.includes("fmp_key_missing");
   const tone =
@@ -523,7 +523,9 @@ function DataQualityBadge({ fp }: { fp: FactPack }) {
         title="Data coverage — click for source breakdown"
       >
         {coverage != null ? `${Math.round(coverage * 100)}% coverage` : "coverage"}
-        {usesFree && <span className="ml-1 text-muted-foreground">· free data</span>}
+        {usesPublicSources && (
+          <span className="ml-1 text-muted-foreground">· public sources</span>
+        )}
       </button>
       {open && (
         <div className="absolute right-0 z-20 mt-1 w-72 rounded-md border border-border bg-card p-3 text-xs shadow-md">
@@ -1352,7 +1354,7 @@ function formatAsOf(iso: string): string {
 
 function humanizeWarning(w: string): string {
   if (w === "fmp_key_missing")
-    return "Premium fields unavailable — built from free data.";
+    return "Provider fields unavailable — built from public fallback sources.";
   return w.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 }
 

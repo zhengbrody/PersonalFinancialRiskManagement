@@ -1,8 +1,8 @@
 /**
  * /legal/[doc] — Terms of Service / Privacy Policy / Financial Disclaimer.
  * Server component (SSR): the full text is in the HTML for crawlers + reachable
- * without auth (required before charging real money). Content lives in
- * lib/legal-content.ts; this is the dark reading shell on <MarketingShell/>.
+ * without auth. Content lives in lib/legal-content.ts; this is the dark
+ * reading shell on <MarketingShell/>.
  */
 
 import type { Metadata } from "next";
@@ -11,8 +11,7 @@ import { notFound } from "next/navigation";
 import { LEGAL_BY_SLUG, LEGAL_DOCS, LEGAL_SLUGS } from "@/lib/legal-content";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { C, display } from "@/components/marketing/theme";
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://mindmarket.app";
+import { SITE_URL, pageMetadata } from "@/lib/site";
 
 export function generateStaticParams() {
   return LEGAL_SLUGS.map((doc) => ({ doc }));
@@ -26,21 +25,11 @@ export async function generateMetadata({
   const { doc } = await params;
   const d = LEGAL_BY_SLUG[doc];
   if (!d) return { title: "Legal" };
-  const url = `${SITE_URL}/legal/${d.slug}`;
-  return {
+  return pageMetadata({
     title: d.metaTitle,
     description: d.description,
-    alternates: { canonical: `/legal/${d.slug}` },
-    openGraph: {
-      type: "article",
-      title: d.metaTitle,
-      description: d.description,
-      url,
-      siteName: "mindmarket.app",
-      images: ["/og.jpg?v=3"],
-    },
-    twitter: { card: "summary_large_image", title: d.metaTitle, description: d.description },
-  };
+    path: `/legal/${d.slug}`,
+  });
 }
 
 const linkStyle = { color: C.teal, textDecoration: "none" };

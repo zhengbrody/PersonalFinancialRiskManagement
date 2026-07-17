@@ -92,7 +92,12 @@ export default function SignupPage() {
   return (
     <AuthShell
       title="Create your account"
-      subtitle="Free during beta — your first Health Score is a minute away."
+      subtitle="Create one portfolio, then move from today's priority to a testable risk plan."
+      highlights={[
+        "Add tickers and shares or import a supported CSV.",
+        "Open Today to see the highest-priority risk first.",
+        "Use Analyze to test a change without touching real holdings.",
+      ]}
       footer={
         <>
           Already have one?{" "}
