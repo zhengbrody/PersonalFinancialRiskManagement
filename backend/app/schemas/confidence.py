@@ -90,6 +90,49 @@ class ConfidenceReason(BaseModel):
     detail: str = ""
 
 
+# ── cross-source agreement (per-field) ────────────────────────────────────────
+
+# The five-way outcome of comparing INDEPENDENT sources on the same field.
+# `incomparable` (different units / different fiscal periods / different dates)
+# and `only_one_source` are honest non-answers — never coerced into agreement.
+AgreementStatus = Literal[
+    "exact",  # identical after unit normalization + display rounding
+    "within_tolerance",  # differ, but inside the field's tolerance band
+    "disagreement",  # differ beyond tolerance — lowers confidence
+    "incomparable",  # units/periods don't line up — no verdict either way
+    "only_one_source",  # a second independent source isn't available
+]
+
+
+class SourceObservation(BaseModel):
+    """One source's RAW reported value for a field — preserved verbatim so a
+    disagreement never overwrites either side's original number."""
+
+    model_config = ConfigDict(extra="allow")
+
+    source: str  # canonical registry id (fmp / yfinance / …)
+    source_type: SourceType
+    value: float
+    unit: Optional[str] = None  # "usd" | "usd_total" | "usd_per_share" | "ratio"
+    as_of: Optional[str] = None
+    fetched_at: Optional[str] = None
+
+
+class FieldAgreement(BaseModel):
+    """Cross-source agreement verdict for ONE field. Computed ONLY when two
+    genuinely independent sources report it (a fallback that merely filled a
+    null, a cached copy, or a derived figure is NOT a second source)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    field: str  # "last_price" | "market_cap" | "revenue" | "net_income" | "eps"
+    status: AgreementStatus
+    rel_tolerance: Optional[float] = None  # the band this field was judged with
+    observed_rel_diff: Optional[float] = None  # |a-b| / max(|a|,|b|)
+    observations: list[SourceObservation] = Field(default_factory=list)
+    note: Optional[str] = None  # e.g. why a pair was incomparable
+
+
 class DataConfidence(BaseModel):
     """The unified confidence + provenance block. Additive on every truth-bearing
     response; the frontend ``<DataConfidence>`` renders it identically everywhere."""
@@ -118,6 +161,10 @@ class DataConfidence(BaseModel):
     sources: list[FieldProvenance] = Field(default_factory=list)
     missing: list[FieldProvenance] = Field(default_factory=list)
     reason_codes: list[ConfidenceReason] = Field(default_factory=list)
+    # Per-field cross-source checks backing `cross_source_agreement` — raw
+    # values from BOTH sides preserved (additive; empty when no field has two
+    # independent sources).
+    agreement_checks: list[FieldAgreement] = Field(default_factory=list)
 
     @property
     def missing_critical(self) -> list[FieldProvenance]:

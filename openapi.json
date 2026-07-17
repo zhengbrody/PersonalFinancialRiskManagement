@@ -1608,7 +1608,7 @@
           "data_confidence": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/DataConfidence"
+                "$ref": "#/components/schemas/DataConfidence-Output"
               },
               {
                 "type": "null"
@@ -2478,10 +2478,139 @@
         "title": "DCFRequest",
         "type": "object"
       },
-      "DataConfidence": {
+      "DataConfidence-Input": {
         "additionalProperties": true,
         "description": "The unified confidence + provenance block. Additive on every truth-bearing\nresponse; the frontend ``<DataConfidence>`` renders it identically everywhere.",
         "properties": {
+          "agreement_checks": {
+            "items": {
+              "$ref": "#/components/schemas/FieldAgreement"
+            },
+            "title": "Agreement Checks",
+            "type": "array"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "conviction_cap": {
+            "default": "high",
+            "enum": [
+              "none",
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Conviction Cap",
+            "type": "string"
+          },
+          "critical_coverage": {
+            "title": "Critical Coverage",
+            "type": "number"
+          },
+          "cross_source_agreement": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cross Source Agreement"
+          },
+          "directional_allowed": {
+            "default": true,
+            "title": "Directional Allowed",
+            "type": "boolean"
+          },
+          "fallback_used": {
+            "default": false,
+            "title": "Fallback Used",
+            "type": "boolean"
+          },
+          "fetched_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fetched At"
+          },
+          "label": {
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Label",
+            "type": "string"
+          },
+          "missing": {
+            "items": {
+              "$ref": "#/components/schemas/FieldProvenance"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "overall_coverage": {
+            "title": "Overall Coverage",
+            "type": "number"
+          },
+          "reason_codes": {
+            "items": {
+              "$ref": "#/components/schemas/ConfidenceReason"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/FieldProvenance"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "label",
+          "confidence",
+          "overall_coverage",
+          "critical_coverage"
+        ],
+        "title": "DataConfidence",
+        "type": "object"
+      },
+      "DataConfidence-Output": {
+        "additionalProperties": true,
+        "description": "The unified confidence + provenance block. Additive on every truth-bearing\nresponse; the frontend ``<DataConfidence>`` renders it identically everywhere.",
+        "properties": {
+          "agreement_checks": {
+            "items": {
+              "$ref": "#/components/schemas/FieldAgreement"
+            },
+            "title": "Agreement Checks",
+            "type": "array"
+          },
           "as_of": {
             "anyOf": [
               {
@@ -2599,6 +2728,13 @@
             "default": 0.0,
             "title": "Coverage",
             "type": "number"
+          },
+          "cross_checks": {
+            "items": {
+              "$ref": "#/components/schemas/FieldAgreement"
+            },
+            "title": "Cross Checks",
+            "type": "array"
           },
           "sources": {
             "items": {
@@ -5280,6 +5416,73 @@
           "message"
         ],
         "title": "FeedbackIn",
+        "type": "object"
+      },
+      "FieldAgreement": {
+        "additionalProperties": true,
+        "description": "Cross-source agreement verdict for ONE field. Computed ONLY when two\ngenuinely independent sources report it (a fallback that merely filled a\nnull, a cached copy, or a derived figure is NOT a second source).",
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "observations": {
+            "items": {
+              "$ref": "#/components/schemas/SourceObservation"
+            },
+            "title": "Observations",
+            "type": "array"
+          },
+          "observed_rel_diff": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Rel Diff"
+          },
+          "rel_tolerance": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rel Tolerance"
+          },
+          "status": {
+            "enum": [
+              "exact",
+              "within_tolerance",
+              "disagreement",
+              "incomparable",
+              "only_one_source"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "status"
+        ],
+        "title": "FieldAgreement",
         "type": "object"
       },
       "FieldProvenance": {
@@ -10395,7 +10598,7 @@
             "title": "As Of"
           },
           "data_confidence": {
-            "$ref": "#/components/schemas/DataConfidence"
+            "$ref": "#/components/schemas/DataConfidence-Output"
           },
           "disclaimer": {
             "default": "Educational analysis, not financial advice.",
@@ -10457,7 +10660,7 @@
           "data_confidence": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/DataConfidence"
+                "$ref": "#/components/schemas/DataConfidence-Input"
               },
               {
                 "type": "null"
@@ -10845,7 +11048,7 @@
           "data_confidence": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/DataConfidence"
+                "$ref": "#/components/schemas/DataConfidence-Input"
               },
               {
                 "type": "null"
@@ -11668,7 +11871,7 @@
           "data_confidence": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/DataConfidence"
+                "$ref": "#/components/schemas/DataConfidence-Input"
               },
               {
                 "type": "null"
@@ -12019,7 +12222,7 @@
           "data_confidence": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/DataConfidence"
+                "$ref": "#/components/schemas/DataConfidence-Output"
               },
               {
                 "type": "null"
@@ -12977,7 +13180,7 @@
           "data_confidence": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/DataConfidence"
+                "$ref": "#/components/schemas/DataConfidence-Output"
               },
               {
                 "type": "null"
@@ -13417,6 +13620,69 @@
           "ticker"
         ],
         "title": "SmartMoneySignal",
+        "type": "object"
+      },
+      "SourceObservation": {
+        "additionalProperties": true,
+        "description": "One source's RAW reported value for a field \u2014 preserved verbatim so a\ndisagreement never overwrites either side's original number.",
+        "properties": {
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "fetched_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fetched At"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_type": {
+            "enum": [
+              "primary",
+              "secondary",
+              "derived"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "source",
+          "source_type",
+          "value"
+        ],
+        "title": "SourceObservation",
         "type": "object"
       },
       "SourceProvenance": {

@@ -127,3 +127,43 @@ def test_metrics_snapshot_for_owner(test_client, mint_token, as_owner):
     assert "routes" in data and isinstance(data["routes"], list)
     assert "providers" in data and isinstance(data["providers"], list)
     assert data["total_requests"] >= 1  # the warm-up health hit
+
+
+# ── research dataset health counters ───────────────────────────────
+
+
+def test_record_dataset_counts_requests_once_with_multiple_outcomes():
+    metrics.reset()
+    metrics.record_dataset("factpack", "present", "fallback", "stale")
+    metrics.record_dataset("factpack", "empty")
+    d = next(x for x in metrics.snapshot()["datasets"] if x["name"] == "factpack")
+    assert d["requests"] == 2
+    assert d["present"] == 1
+    assert d["fallback"] == 1
+    assert d["stale"] == 1
+    assert d["empty"] == 1
+    assert d["provider_error"] == 0
+
+
+def test_record_dataset_is_a_closed_set_no_cardinality_growth():
+    metrics.reset()
+    metrics.record_dataset("totally-made-up", "present")
+    metrics.record_dataset("AAPL", "present")  # a ticker must NEVER become a bucket
+    assert metrics.snapshot()["datasets"] == []
+
+
+def test_record_dataset_distinguishes_provider_reality_from_code_faults():
+    metrics.reset()
+    metrics.record_dataset("earnings", "empty")  # provider-reality gap
+    metrics.record_dataset("earnings", "rate_limited", "empty")
+    metrics.record_dataset("earnings", "provider_error")  # the leg raised
+    d = next(x for x in metrics.snapshot()["datasets"] if x["name"] == "earnings")
+    assert d["requests"] == 3
+    assert d["empty"] == 2
+    assert d["rate_limited"] == 1
+    assert d["provider_error"] == 1
+
+
+def test_record_dataset_never_raises_on_bad_input():
+    metrics.record_dataset("factpack", None)  # type: ignore[arg-type]
+    metrics.record_dataset(None, "present")  # type: ignore[arg-type]

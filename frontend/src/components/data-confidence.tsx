@@ -13,7 +13,7 @@
  */
 
 import { useState } from "react";
-import type { DataConfidence, FieldProvenance } from "@/lib/schemas";
+import type { DataConfidence, FieldAgreement, FieldProvenance } from "@/lib/schemas";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 
 const LABEL_TONE: Record<DataConfidence["label"], BadgeTone> = {
@@ -55,6 +55,40 @@ const MISSING_REASON: Record<string, string> = {
 
 const pct = (x: number | null | undefined) =>
   x == null ? "—" : `${Math.round(Math.max(0, Math.min(1, x)) * 100)}%`;
+
+const AGREEMENT_TONE: Record<string, BadgeTone> = {
+  exact: "success",
+  within_tolerance: "success",
+  disagreement: "danger",
+  incomparable: "neutral",
+  only_one_source: "neutral",
+};
+
+const AGREEMENT_TEXT: Record<string, string> = {
+  exact: "sources match",
+  within_tolerance: "within tolerance",
+  disagreement: "sources disagree",
+  incomparable: "not comparable",
+  only_one_source: "one source only",
+};
+
+const FIELD_LABEL: Record<string, string> = {
+  last_price: "Last price",
+  market_cap: "Market cap",
+  revenue: "Revenue",
+  net_income: "Net income",
+  eps: "EPS",
+};
+
+function fmtObsValue(field: string, v: number): string {
+  if (field === "market_cap" || field === "revenue" || field === "net_income") {
+    const abs = Math.abs(v);
+    if (abs >= 1e12) return `$${(v / 1e12).toFixed(2)}T`;
+    if (abs >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
+    if (abs >= 1e6) return `$${(v / 1e6).toFixed(1)}M`;
+  }
+  return `$${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
 
 function reasonLabel(m?: string | null): string {
   return (m && MISSING_REASON[m]) || m || "unavailable";
@@ -130,6 +164,34 @@ export function DataConfidence({
               <span>{r.detail}</span>
             </li>
           ))}
+        </ul>
+      ) : null}
+
+      {/* cross-source checks — per-field verdicts with BOTH raw values */}
+      {(dc.agreement_checks ?? []).filter((c) => c.status !== "only_one_source").length > 0 ? (
+        <ul className="mt-1.5 space-y-0.5" data-testid="agreement-checks">
+          {(dc.agreement_checks ?? [])
+            .filter((c) => c.status !== "only_one_source")
+            .slice(0, 5)
+            .map((c: FieldAgreement, i) => (
+              <li key={`${c.field}-${i}`} className="flex flex-wrap items-center gap-1.5">
+                <span className="text-muted-foreground">{FIELD_LABEL[c.field] ?? c.field}:</span>
+                <Badge tone={AGREEMENT_TONE[c.status] ?? "neutral"}>
+                  {AGREEMENT_TEXT[c.status] ?? c.status}
+                </Badge>
+                {(c.observations ?? []).length === 2 ? (
+                  <span className="tabular-nums text-muted-foreground">
+                    {(c.observations ?? [])
+                      .map((o) => `${o.source === "yfinance" ? "Yahoo" : o.source.toUpperCase()} ${fmtObsValue(c.field, o.value)}`)
+                      .join(" vs ")}
+                    {c.observed_rel_diff != null ? ` (Δ ${(c.observed_rel_diff * 100).toFixed(1)}%)` : ""}
+                  </span>
+                ) : null}
+                {c.status === "incomparable" && c.note ? (
+                  <span className="text-muted-foreground">— {c.note}</span>
+                ) : null}
+              </li>
+            ))}
         </ul>
       ) : null}
 

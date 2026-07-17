@@ -21,6 +21,7 @@ from ..schemas.confidence import (
     ConfidenceReason,
     Conviction,
     DataConfidence,
+    FieldAgreement,
     FieldProvenance,
     MissingReason,
     SourceType,
@@ -211,6 +212,12 @@ def default_confidence(
     return round(_clamp01(score), 3)
 
 
+# Confidence penalty per DISAGREEING field (capped) — a cross-source conflict
+# must lower trust in the conclusion, but it never overwrites either raw value.
+_DISAGREEMENT_PENALTY = 0.10
+_DISAGREEMENT_PENALTY_CAP = 0.20
+
+
 def build_data_confidence(
     *,
     overall_coverage: float,
@@ -224,12 +231,17 @@ def build_data_confidence(
     fetched_at: Optional[str] = None,
     cross_agreement: Optional[float] = None,
     extra_reasons: Optional[list[ConfidenceReason]] = None,
+    agreement_checks: Optional[list[FieldAgreement]] = None,
 ) -> DataConfidence:
     """Assemble the unified block. ``confidence`` is the surface's OWN float when
     it has one (score/research); else a default is derived. Pass ``label`` to use
     the surface's OWN high/med/low label (e.g. the engine's) instead of
     re-bucketing the float — keeps the score page's two badges consistent.
-    Applies the conviction cap so every surface enforces rule #3 identically."""
+    Applies the conviction cap so every surface enforces rule #3 identically.
+
+    ``agreement_checks`` (per-field cross-source verdicts) derive the
+    ``cross_source_agreement`` float when ``cross_agreement`` isn't passed, and
+    any ``disagreement`` lowers the confidence float (never the raw data)."""
     missing = list(missing or [])
     stale = any(s.stale for s in sources) or any(
         m.missing_reason == "stale_fallback" for m in missing
@@ -246,6 +258,21 @@ def build_data_confidence(
         )
     confidence = _clamp01(confidence)
 
+    # Cross-source agreement: derive the aggregate from the per-field checks
+    # (when not passed explicitly) and penalise the confidence float on any
+    # disagreement. The raw values are NEVER touched — only trust is reduced.
+    checks = list(agreement_checks or [])
+    disagreements: list[str] = []
+    if checks:
+        from .source_agreement import aggregate_agreement, disagreement_fields
+
+        if cross_agreement is None:
+            cross_agreement = aggregate_agreement(checks)
+        disagreements = disagreement_fields(checks)
+        if disagreements:
+            penalty = min(_DISAGREEMENT_PENALTY_CAP, _DISAGREEMENT_PENALTY * len(disagreements))
+            confidence = _clamp01(confidence - penalty)
+
     conviction, directional, cap_reasons = cap_conviction(
         base_conviction,
         critical_coverage,
@@ -254,6 +281,19 @@ def build_data_confidence(
     )
 
     reasons = list(extra_reasons or []) + cap_reasons
+    if disagreements:
+        reasons.append(
+            ConfidenceReason(
+                code="cross_source_disagreement",
+                severity="watch",
+                detail=(
+                    "Independent sources disagree on "
+                    + ", ".join(disagreements)
+                    + " beyond tolerance — confidence reduced; both reported "
+                    "values are shown unchanged."
+                ),
+            )
+        )
     return DataConfidence(
         label=label if label is not None else label_from(confidence),
         confidence=confidence,
@@ -269,6 +309,7 @@ def build_data_confidence(
         sources=sources,
         missing=missing,
         reason_codes=reasons,
+        agreement_checks=checks,
     )
 
 

@@ -548,16 +548,29 @@ const metricProviderSchema = z.looseObject({
   rate_limited: z.number().optional(),
   no_key: z.number().optional(),
 });
+const metricDatasetSchema = z.looseObject({
+  name: z.string(),
+  requests: z.number(),
+  present: z.number().nullish(),
+  empty: z.number().nullish(),
+  stale: z.number().nullish(),
+  fallback: z.number().nullish(),
+  provider_error: z.number().nullish(),
+  rate_limited: z.number().nullish(),
+});
+
 export const adminMetricsSchema = z.looseObject({
   uptime_s: z.number(),
   total_requests: z.number(),
   total_errors: z.number(),
   routes: z.array(metricRouteSchema),
   providers: z.array(metricProviderSchema),
+  datasets: z.array(metricDatasetSchema).nullish(),
 });
 export type AdminMetrics = z.infer<typeof adminMetricsSchema>;
 export type MetricRoute = z.infer<typeof metricRouteSchema>;
 export type MetricProvider = z.infer<typeof metricProviderSchema>;
+export type MetricDataset = z.infer<typeof metricDatasetSchema>;
 
 /** Owner-only LIVE in-process API activity. In-memory on the server (no DB
  * hit), so it's safe to poll every few seconds — the dashboard diffs

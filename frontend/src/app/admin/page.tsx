@@ -245,6 +245,27 @@ function LiveActivity({
               />
             </div>
 
+            {(data.datasets ?? []).length > 0 && (
+              <div>
+                <div className="mb-1 text-xs font-medium text-muted-foreground">
+                  Research datasets (aggregate — no tickers)
+                </div>
+                <Table
+                  head={["Dataset", "Req", "Present", "Empty", "Stale", "Fallback", "Errors", "Limited"]}
+                  rows={(data.datasets ?? []).map((d) => [
+                    d.name,
+                    d.requests.toLocaleString(),
+                    (d.present ?? 0).toLocaleString(),
+                    (d.empty ?? 0).toLocaleString(),
+                    (d.stale ?? 0).toLocaleString(),
+                    (d.fallback ?? 0).toLocaleString(),
+                    (d.provider_error ?? 0).toLocaleString(),
+                    (d.rate_limited ?? 0).toLocaleString(),
+                  ])}
+                />
+              </div>
+            )}
+
             <div>
               <div className="mb-1 text-xs font-medium text-muted-foreground">
                 Top endpoints

@@ -181,6 +181,34 @@ export const fieldProvenanceSchema = z.looseObject({
 });
 export type FieldProvenance = z.infer<typeof fieldProvenanceSchema>;
 
+// Per-field cross-source agreement: BOTH sides' raw values are preserved so a
+// disagreement can be shown without overwriting either source's number.
+export const sourceObservationSchema = z.looseObject({
+  source: z.string(),
+  source_type: z.enum(["primary", "secondary", "derived"]).nullish(),
+  value: z.number(),
+  unit: z.string().nullish(),
+  as_of: z.string().nullish(),
+  fetched_at: z.string().nullish(),
+});
+export type SourceObservation = z.infer<typeof sourceObservationSchema>;
+
+export const fieldAgreementSchema = z.looseObject({
+  field: z.string(),
+  status: z.enum([
+    "exact",
+    "within_tolerance",
+    "disagreement",
+    "incomparable",
+    "only_one_source",
+  ]),
+  rel_tolerance: z.number().nullish(),
+  observed_rel_diff: z.number().nullish(),
+  observations: z.array(sourceObservationSchema).nullish(),
+  note: z.string().nullish(),
+});
+export type FieldAgreement = z.infer<typeof fieldAgreementSchema>;
+
 export const dataConfidenceSchema = z.looseObject({
   label: z.enum(["high", "medium", "low"]),
   confidence: z.number(),
@@ -196,6 +224,7 @@ export const dataConfidenceSchema = z.looseObject({
   sources: z.array(fieldProvenanceSchema).nullish(),
   missing: z.array(fieldProvenanceSchema).nullish(),
   reason_codes: z.array(reasonCodeSchema).nullish(),
+  agreement_checks: z.array(fieldAgreementSchema).nullish(),
 });
 export type DataConfidence = z.infer<typeof dataConfidenceSchema>;
 

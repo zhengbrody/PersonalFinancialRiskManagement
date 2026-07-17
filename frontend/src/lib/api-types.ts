@@ -2265,7 +2265,7 @@ export interface components {
              * @default medium
              */
             conviction?: string;
-            data_confidence?: components["schemas"]["DataConfidence"] | null;
+            data_confidence?: components["schemas"]["DataConfidence-Output"] | null;
             /**
              * Data Only
              * @default false
@@ -2531,7 +2531,64 @@ export interface components {
          * @description The unified confidence + provenance block. Additive on every truth-bearing
          *     response; the frontend ``<DataConfidence>`` renders it identically everywhere.
          */
-        DataConfidence: {
+        "DataConfidence-Input": {
+            /** Agreement Checks */
+            agreement_checks?: components["schemas"]["FieldAgreement"][];
+            /** As Of */
+            as_of?: string | null;
+            /** Confidence */
+            confidence: number;
+            /**
+             * Conviction Cap
+             * @default high
+             * @enum {string}
+             */
+            conviction_cap?: "none" | "low" | "medium" | "high";
+            /** Critical Coverage */
+            critical_coverage: number;
+            /** Cross Source Agreement */
+            cross_source_agreement?: number | null;
+            /**
+             * Directional Allowed
+             * @default true
+             */
+            directional_allowed?: boolean;
+            /**
+             * Fallback Used
+             * @default false
+             */
+            fallback_used?: boolean;
+            /** Fetched At */
+            fetched_at?: string | null;
+            /**
+             * Label
+             * @enum {string}
+             */
+            label: "high" | "medium" | "low";
+            /** Missing */
+            missing?: components["schemas"]["FieldProvenance"][];
+            /** Overall Coverage */
+            overall_coverage: number;
+            /** Reason Codes */
+            reason_codes?: components["schemas"]["ConfidenceReason"][];
+            /** Sources */
+            sources?: components["schemas"]["FieldProvenance"][];
+            /**
+             * Stale
+             * @default false
+             */
+            stale?: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * DataConfidence
+         * @description The unified confidence + provenance block. Additive on every truth-bearing
+         *     response; the frontend ``<DataConfidence>`` renders it identically everywhere.
+         */
+        "DataConfidence-Output": {
+            /** Agreement Checks */
+            agreement_checks?: components["schemas"]["FieldAgreement"][];
             /** As Of */
             as_of?: string | null;
             /** Confidence */
@@ -2586,6 +2643,8 @@ export interface components {
              * @default 0
              */
             coverage?: number;
+            /** Cross Checks */
+            cross_checks?: components["schemas"]["FieldAgreement"][];
             /** Sources */
             sources?: components["schemas"]["SourceRef"][];
             /** Warnings */
@@ -3328,6 +3387,31 @@ export interface components {
             context?: string;
             /** Message */
             message: string;
+        };
+        /**
+         * FieldAgreement
+         * @description Cross-source agreement verdict for ONE field. Computed ONLY when two
+         *     genuinely independent sources report it (a fallback that merely filled a
+         *     null, a cached copy, or a derived figure is NOT a second source).
+         */
+        FieldAgreement: {
+            /** Field */
+            field: string;
+            /** Note */
+            note?: string | null;
+            /** Observations */
+            observations?: components["schemas"]["SourceObservation"][];
+            /** Observed Rel Diff */
+            observed_rel_diff?: number | null;
+            /** Rel Tolerance */
+            rel_tolerance?: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "exact" | "within_tolerance" | "disagreement" | "incomparable" | "only_one_source";
+        } & {
+            [key: string]: unknown;
         };
         /**
          * FieldProvenance
@@ -5063,7 +5147,7 @@ export interface components {
         ResearchCoverageOut: {
             /** As Of */
             as_of?: string | null;
-            data_confidence: components["schemas"]["DataConfidence"];
+            data_confidence: components["schemas"]["DataConfidence-Output"];
             /**
              * Disclaimer
              * @default Educational analysis, not financial advice.
@@ -5091,7 +5175,7 @@ export interface components {
              * @default medium
              */
             conviction?: string;
-            data_confidence?: components["schemas"]["DataConfidence"] | null;
+            data_confidence?: components["schemas"]["DataConfidence-Input"] | null;
             /**
              * Data Only
              * @default false
@@ -5222,7 +5306,7 @@ export interface components {
          *     side) and the Risk Report page (report side).
          */
         RiskExplainInput: {
-            data_confidence?: components["schemas"]["DataConfidence"] | null;
+            data_confidence?: components["schemas"]["DataConfidence-Input"] | null;
             /** Dimensions */
             dimensions?: {
                 [key: string]: components["schemas"]["ExplainDimension"];
@@ -5509,7 +5593,7 @@ export interface components {
             daily_pnl?: number | null;
             /** Daily Return */
             daily_return?: number | null;
-            data_confidence?: components["schemas"]["DataConfidence"] | null;
+            data_confidence?: components["schemas"]["DataConfidence-Input"] | null;
             /** Data Quality Notes */
             data_quality_notes?: string[];
             /** Dimensions */
@@ -5590,7 +5674,7 @@ export interface components {
             daily_pnl?: number | null;
             /** Daily Return */
             daily_return?: number | null;
-            data_confidence?: components["schemas"]["DataConfidence"] | null;
+            data_confidence?: components["schemas"]["DataConfidence-Output"] | null;
             /** Data Quality Notes */
             data_quality_notes?: string[];
             /** Dimensions */
@@ -5908,7 +5992,7 @@ export interface components {
             /** Base Overall */
             base_overall?: number | null;
             concentration?: components["schemas"]["backend__app__schemas__risk__ConcentrationOut"] | null;
-            data_confidence?: components["schemas"]["DataConfidence"] | null;
+            data_confidence?: components["schemas"]["DataConfidence-Output"] | null;
             /** Dimensions */
             dimensions: {
                 [key: string]: components["schemas"]["DimensionScoreOut"];
@@ -6091,6 +6175,30 @@ export interface components {
             ticker: string;
             /** Top Holders */
             top_holders?: string[];
+        };
+        /**
+         * SourceObservation
+         * @description One source's RAW reported value for a field — preserved verbatim so a
+         *     disagreement never overwrites either side's original number.
+         */
+        SourceObservation: {
+            /** As Of */
+            as_of?: string | null;
+            /** Fetched At */
+            fetched_at?: string | null;
+            /** Source */
+            source: string;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "primary" | "secondary" | "derived";
+            /** Unit */
+            unit?: string | null;
+            /** Value */
+            value: number;
+        } & {
+            [key: string]: unknown;
         };
         /** SourceProvenance */
         SourceProvenance: {

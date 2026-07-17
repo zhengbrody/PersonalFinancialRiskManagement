@@ -64,3 +64,78 @@ describe("<DataConfidence>", () => {
     expect(screen.getByText(/Conviction capped at/)).toBeInTheDocument();
   });
 });
+
+describe("cross-source agreement rendering", () => {
+  const base = {
+    label: "high" as const,
+    confidence: 0.85,
+    overall_coverage: 0.9,
+    critical_coverage: 1.0,
+  };
+
+  it("renders per-field verdicts with BOTH raw values; only_one_source rows stay hidden", () => {
+    render(
+      <DataConfidence
+        confidence={{
+          ...base,
+          agreement_checks: [
+            {
+              field: "last_price",
+              status: "disagreement",
+              observed_rel_diff: 0.07,
+              observations: [
+                { source: "fmp", source_type: "primary", value: 233.1, unit: "usd" },
+                { source: "yfinance", source_type: "secondary", value: 250.0, unit: "usd" },
+              ],
+            },
+            { field: "market_cap", status: "only_one_source", observations: [] },
+          ],
+        }}
+      />,
+    );
+    const checks = screen.getByTestId("agreement-checks");
+    expect(checks).toHaveTextContent("Last price");
+    expect(checks).toHaveTextContent("sources disagree");
+    // Both raw values shown unchanged — a conflict never rewrites either side.
+    expect(checks).toHaveTextContent("FMP $233.1 vs Yahoo $250");
+    expect(checks).toHaveTextContent("Δ 7.0%");
+    // A field with only one source is NOT rendered as a verdict.
+    expect(checks).not.toHaveTextContent("Market cap");
+  });
+
+  it("renders nothing when no field has two independent sources", () => {
+    render(
+      <DataConfidence
+        confidence={{
+          ...base,
+          agreement_checks: [{ field: "last_price", status: "only_one_source", observations: [] }],
+        }}
+      />,
+    );
+    expect(screen.queryByTestId("agreement-checks")).not.toBeInTheDocument();
+  });
+
+  it("explains WHY a pair was incomparable", () => {
+    render(
+      <DataConfidence
+        confidence={{
+          ...base,
+          agreement_checks: [
+            {
+              field: "revenue",
+              status: "incomparable",
+              note: "different fiscal periods (2026-03-31 vs 2025-12-31)",
+              observations: [
+                { source: "fmp", source_type: "primary", value: 1.19e11, unit: "usd_total" },
+                { source: "yfinance", source_type: "secondary", value: 1.24e11, unit: "usd_total" },
+              ],
+            },
+          ],
+        }}
+      />,
+    );
+    const checks = screen.getByTestId("agreement-checks");
+    expect(checks).toHaveTextContent("not comparable");
+    expect(checks).toHaveTextContent(/different fiscal periods/);
+  });
+});
