@@ -435,15 +435,12 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Liveness + import sanity
-         * @description Return a coarse health snapshot.
+         * Liveness + import sanity (+ ?deep=1 readiness)
+         * @description Return a coarse health snapshot; ``?deep=1`` adds readiness checks.
          *
-         *     Imports the load-bearing internal modules so a broken deploy
-         *     (missing dep, broken import path, syntax error in a transitive)
-         *     surfaces at ``/health`` instead of at the first real call.
-         *     The imports are intentionally re-done per call rather than at
-         *     module load — that way a hot patch + reload doesn't need a
-         *     process restart to be visible here.
+         *     Deep mode returns HTTP 503 when a REQUIRED check fails (degraded) so an
+         *     external monitor can alert on "healthy container, unusable product".
+         *     The shallow path keeps its original contract (always 200 + status field).
          */
         get: operations["health_api_v1_health_get"];
         put?: never;
@@ -7156,7 +7153,10 @@ export interface operations {
     };
     health_api_v1_health_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description 1 = add timeboxed dependency/config readiness checks */
+                deep?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -7170,6 +7170,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

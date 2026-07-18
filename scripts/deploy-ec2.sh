@@ -63,6 +63,16 @@ smoke() {
   return 1
 }
 smoke "/"
+smoke "/api/v1/health"
 smoke "/api/v1/macro/regime"
+# Deep readiness is reported but NON-FATAL here: a Supabase blip must not
+# fail an otherwise-good container swap. The GH deploy workflow's verify job
+# (and the external monitor) treat deep degradation as a real failure.
+deep_code=$(curl -s -o /dev/null -w "%{http_code}" -m 20 "https://${SITE}/api/v1/health?deep=1" || echo 000)
+if [ "$deep_code" = "200" ]; then
+  echo "GET /api/v1/health?deep=1 -> OK"
+else
+  echo "WARN: deep readiness returned ${deep_code} — product may be degraded (Supabase/config); investigate, deploy itself is complete."
+fi
 
 echo "Deploy OK (${MM_IMAGE_TAG})"

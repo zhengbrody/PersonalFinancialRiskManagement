@@ -415,6 +415,9 @@ Key files:
 | File | Purpose |
 | --- | --- |
 | `.github/workflows/build-images.yml` | Build and push GHCR images. |
+| `.github/workflows/deploy-ec2.yml` | Manual pinned-SHA deploy from GitHub (SSM; validates main ancestry + image existence, verifies pages + deep health after). |
+| `.github/workflows/ghcr-retention.yml` | Monthly registry cleanup — keeps the newest 30 image versions. |
+| `scripts/cloudwatch-alarms.sh` | Alarms-as-code for the box's CloudWatch metrics (disk/mem/system-status + SNS). |
 | `compose.split.yml` | Production app services (backend + frontend). |
 | `compose.aws.yml` | Caddy (TLS terminator / reverse proxy). |
 | `Caddyfile` | Production routing — the file actually mounted into Caddy; validated in CI. |

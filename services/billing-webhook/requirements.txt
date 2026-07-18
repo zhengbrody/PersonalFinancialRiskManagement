@@ -1,2 +1,0 @@
-stripe>=10.0
-supabase>=2.9

@@ -1,6 +1,14 @@
 """
 infra/api_stack.py
 
+⚠️ RETIRED (2026-07-17) — HISTORICAL RECORD ONLY, NOT SYNTHESIZABLE.
+The Lambda handler sources this stack builds (`services/*/Dockerfile`) were
+removed from the working tree when the Phase-2 Lambda experiment was retired
+(zero production consumers — see docs/archive/lambda-experiment.md).
+`cdk synth` of THIS stack now requires checking out a pre-retirement commit
+(e.g. `git show 3d5f9c2:services/`). The other stacks (foundation / data /
+compute) remain the historical record of how the LIVE EC2 was bootstrapped.
+
 REST API Gateway + 3 Lambda DockerImageFunctions + usage plan.
 
 Routes:

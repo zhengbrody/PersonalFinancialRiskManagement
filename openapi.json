@@ -15497,8 +15497,22 @@
     },
     "/api/v1/health": {
       "get": {
-        "description": "Return a coarse health snapshot.\n\nImports the load-bearing internal modules so a broken deploy\n(missing dep, broken import path, syntax error in a transitive)\nsurfaces at ``/health`` instead of at the first real call.\nThe imports are intentionally re-done per call rather than at\nmodule load \u2014 that way a hot patch + reload doesn't need a\nprocess restart to be visible here.",
+        "description": "Return a coarse health snapshot; ``?deep=1`` adds readiness checks.\n\nDeep mode returns HTTP 503 when a REQUIRED check fails (degraded) so an\nexternal monitor can alert on \"healthy container, unusable product\".\nThe shallow path keeps its original contract (always 200 + status field).",
         "operationId": "health_api_v1_health_get",
+        "parameters": [
+          {
+            "description": "1 = add timeboxed dependency/config readiness checks",
+            "in": "query",
+            "name": "deep",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "description": "1 = add timeboxed dependency/config readiness checks",
+              "title": "Deep",
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -15509,9 +15523,19 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
-        "summary": "Liveness + import sanity",
+        "summary": "Liveness + import sanity (+ ?deep=1 readiness)",
         "tags": [
           "health"
         ]
