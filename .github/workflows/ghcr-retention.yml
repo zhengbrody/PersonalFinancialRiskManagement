@@ -1,0 +1,46 @@
+# .github/workflows/ghcr-retention.yml
+#
+# GHCR image retention — sha tags accumulate unboundedly (build-images pushes
+# `latest` + `sha-<full40>` on every main push; nothing ever cleaned the
+# REGISTRY — the EC2-side `docker image prune` only cleans the box). Keeps the
+# most recent ~30 versions per image: months of pinned-sha rollback depth while
+# capping storage (hardening-backlog "GHCR retention" snippet, now code).
+#
+# Monthly cron + manual dispatch. NOTE: GitHub auto-disables cron workflows
+# after 60 days without repo activity — the monthly cadence plus normal
+# development keeps it alive; dispatch works regardless.
+#
+# GITHUB_TOKEN is sufficient: both packages are published BY this repo's
+# workflows (build-images.yml), which links them to the repo with Actions
+# access — `packages: write` lets the token delete old versions.
+
+name: GHCR retention (keep last 30)
+
+on:
+  schedule:
+    - cron: "0 6 1 * *" # 1st of the month, 06:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  packages: write
+
+concurrency:
+  group: ghcr-retention
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: [mindmarket-backend, mindmarket-frontend]
+    steps:
+      - name: Keep the newest 30 versions of ${{ matrix.package }}
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ matrix.package }}
+          package-type: container
+          min-versions-to-keep: 30
+          # Tagged versions ARE the rollback levers — delete strictly oldest-first
+          # beyond the keep window; never touch untagged-only filtering (a
+          # multi-arch manifest's layers can appear untagged).

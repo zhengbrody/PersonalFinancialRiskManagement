@@ -1,0 +1,160 @@
+# .github/workflows/deploy-ec2.yml
+#
+# Manual, pinned-SHA production deploy — the GitHub-side wrapper around the
+# guardrails already encoded in scripts/deploy-ec2.sh (pull-only, --no-build,
+# never touches caddy, never --remove-orphans). Deploys stop depending on one
+# human's terminal (hardening-backlog item #6).
+#
+#   Actions → "Deploy to EC2 (manual, pinned SHA)" → Run workflow → paste the
+#   FULL 40-char commit sha (must be ON main and have GHCR images built).
+#
+# Transport: AWS SSM SendCommand — no inbound SSH needed (the security group
+# only allows 22 from operator IPs; GitHub runners are NOT in it). The
+# instance already runs the SSM agent (Session Manager access predates this).
+#
+# Required repository secrets (workflow FAILS with the exact missing names —
+# it never fakes success):
+#   AWS_DEPLOY_ACCESS_KEY_ID / AWS_DEPLOY_SECRET_ACCESS_KEY
+#     — an IAM user/role limited to ssm:SendCommand + ssm:GetCommandInvocation
+#       on the MindMarket instance (the existing `mindmarket-deploy` IAM user
+#       can carry these permissions).
+# Optional repository variable:
+#   EC2_INSTANCE_ID — defaults to the known production instance.
+#
+# Failure policy: any stage failing FAILS the run with a clear message. NO
+# automatic rollback — rollback is a deliberate human action (re-run this
+# workflow with the previous sha; see docs/aws/ci-image-deploy.md).
+
+name: Deploy to EC2 (manual, pinned SHA)
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "FULL 40-char commit sha on main (build-images must have pushed sha-<sha> images)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+# One deploy at a time; never cancel a half-finished container swap.
+concurrency:
+  group: deploy-ec2
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate sha format
+        run: |
+          echo "${{ inputs.sha }}" | grep -Eq '^[0-9a-f]{40}$' \
+            || { echo "::error::sha must be the FULL 40-char lowercase commit sha"; exit 1; }
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history — ancestry check below needs it
+
+      - name: Commit must be reachable from main
+        run: |
+          git cat-file -e "${{ inputs.sha }}^{commit}" 2>/dev/null \
+            || { echo "::error::commit not found in this repository"; exit 1; }
+          git merge-base --is-ancestor "${{ inputs.sha }}" origin/main \
+            || { echo "::error::commit is not on main — only main commits deploy"; exit 1; }
+
+      - name: GHCR images must exist for this sha (both halves)
+        run: |
+          echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          for img in mindmarket-backend mindmarket-frontend; do
+            docker manifest inspect "ghcr.io/${{ github.repository_owner }}/${img}:sha-${{ inputs.sha }}" >/dev/null \
+              || { echo "::error::ghcr.io/.../${img}:sha-${{ inputs.sha }} does not exist — wait for build-images or pick a built sha"; exit 1; }
+          done
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gate on AWS secrets (precise missing-name report, never fake success)
+        env:
+          AK: ${{ secrets.AWS_DEPLOY_ACCESS_KEY_ID }}
+          SK: ${{ secrets.AWS_DEPLOY_SECRET_ACCESS_KEY }}
+        run: |
+          missing=""
+          [ -n "$AK" ] || missing="$missing AWS_DEPLOY_ACCESS_KEY_ID"
+          [ -n "$SK" ] || missing="$missing AWS_DEPLOY_SECRET_ACCESS_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secret(s):$missing — create them (IAM scoped to ssm:SendCommand/GetCommandInvocation on the instance) and re-run."
+            exit 1
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_DEPLOY_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_DEPLOY_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Run the pull-only deploy script on the box via SSM
+        run: |
+          INSTANCE_ID="${{ vars.EC2_INSTANCE_ID || 'i-027d42e3eb0338b9d' }}"
+          # The script itself enforces pull-only / --no-build / no caddy /
+          # no --remove-orphans and runs its own through-Cloudflare smoke.
+          CMD="sudo -iu ec2-user bash -lc 'cd ~/PersonalFinancialRiskManagement && ./scripts/deploy-ec2.sh sha-${{ inputs.sha }}'"
+          cmd_id=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name AWS-RunShellScript \
+            --comment "deploy sha-${{ inputs.sha }} via GH Actions" \
+            --parameters "commands=[\"$CMD\"],executionTimeout=[\"900\"]" \
+            --query 'Command.CommandId' --output text) \
+            || { echo "::error::ssm send-command failed — check the IAM policy + that the SSM agent is online"; exit 1; }
+          echo "SSM command: $cmd_id"
+
+          # Poll to completion (deploy takes ~1-5 min incl. smoke retries).
+          for i in $(seq 1 60); do
+            status=$(aws ssm get-command-invocation --command-id "$cmd_id" \
+              --instance-id "$INSTANCE_ID" --query Status --output text 2>/dev/null || echo Pending)
+            case "$status" in
+              Success) break ;;
+              Failed|Cancelled|TimedOut|Undeliverable|Terminated)
+                echo "::error::deploy script ended with status $status"; break ;;
+            esac
+            sleep 15
+          done
+
+          echo "== deploy script output (tail) =="
+          aws ssm get-command-invocation --command-id "$cmd_id" --instance-id "$INSTANCE_ID" \
+            --query StandardOutputContent --output text | tail -40 || true
+          aws ssm get-command-invocation --command-id "$cmd_id" --instance-id "$INSTANCE_ID" \
+            --query StandardErrorContent --output text | tail -20 || true
+
+          [ "$status" = "Success" ] || { echo "::error::deploy did NOT succeed (status: $status). NO automatic rollback — re-run with the previous sha to roll back."; exit 1; }
+
+  verify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post-deploy smoke (public, through Cloudflare)
+        run: |
+          fail=0
+          check() {
+            local path="$1"
+            code=$(curl -s -o /dev/null -w "%{http_code}" -m 20 "https://mindmarket.app$path")
+            echo "GET $path -> $code"
+            [ "$code" = "200" ] || { echo "::error::$path returned $code (expected 200)"; fail=1; }
+          }
+          check "/"
+          check "/api/v1/health"
+          check "/api/v1/health?deep=1"   # 503 here = product degraded (deep readiness)
+          check "/product"
+          check "/markets"
+          check "/risk-today"
+          if [ "$fail" = "1" ]; then
+            echo "::error::Post-deploy verification FAILED. The deploy is NOT rolled back automatically — investigate, then re-run this workflow with the previous sha if a rollback is warranted."
+            exit 1
+          fi
+          echo "All post-deploy checks passed."

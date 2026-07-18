@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import importlib.util
-import json
 import sys
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -233,92 +230,9 @@ def test_sync_subscription_uses_price_amount_before_price_id_mapping(monkeypatch
     assert result["plan"] == "basic"
 
 
-def _load_webhook_handler():
-    path = Path(__file__).resolve().parents[2] / "services" / "billing-webhook" / "handler.py"
-    spec = importlib.util.spec_from_file_location("billing_webhook_handler", path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    spec.loader.exec_module(module)
-    return module
-
-
-def test_webhook_handler_verifies_and_dispatches(monkeypatch):
-    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec")
-    handler = _load_webhook_handler()
-
-    fake_event = {
-        "type": "checkout.session.completed",
-        "data": {"object": {"client_reference_id": "user-1", "metadata": {"plan": "basic"}}},
-    }
-    fake_stripe = SimpleNamespace()
-    fake_stripe.Webhook = SimpleNamespace(construct_event=MagicMock(return_value=fake_event))
-    monkeypatch.setitem(sys.modules, "stripe", fake_stripe)
-    monkeypatch.setattr(handler, "handle_stripe_event", lambda event: {"synced": event["type"]})
-
-    resp = handler.lambda_handler(
-        {"body": json.dumps(fake_event), "headers": {"stripe-signature": "sig"}},
-        None,
-    )
-    assert resp["statusCode"] == 200
-    assert json.loads(resp["body"])["result"] == {"synced": "checkout.session.completed"}
-
-
-def test_webhook_handler_rejects_missing_signature(monkeypatch):
-    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec")
-    handler = _load_webhook_handler()
-
-    resp = handler.lambda_handler({"body": "{}", "headers": {}}, None)
-    assert resp["statusCode"] == 400
-
-
-def test_webhook_rejects_invalid_signature(monkeypatch):
-    """A forged/invalid signature must produce a 400 (NOT 200, NOT 500).
-
-    - 200 would be a silent accept — game over for billing integrity.
-    - 500 would tell Stripe the failure is transient and it would keep
-      replaying the same forged event, amplifying the attack.
-    Only 400 makes Stripe drop the delivery, which is the desired
-    behavior. The downstream `handle_stripe_event` must also NEVER be
-    invoked when the signature fails to verify.
-    """
-    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec")
-    handler = _load_webhook_handler()
-
-    # Fake stripe module whose construct_event raises a Stripe-shaped
-    # SignatureVerificationError. We don't depend on the real stripe
-    # package being installed; the handler only catches `Exception`.
-    class _SignatureVerificationError(Exception):
-        pass
-
-    def _raise(*_args, **_kwargs):
-        raise _SignatureVerificationError("No signatures found matching the expected signature")
-
-    fake_stripe = SimpleNamespace()
-    fake_stripe.Webhook = SimpleNamespace(construct_event=MagicMock(side_effect=_raise))
-    fake_stripe.error = SimpleNamespace(SignatureVerificationError=_SignatureVerificationError)
-    monkeypatch.setitem(sys.modules, "stripe", fake_stripe)
-
-    # If the handler ever calls handle_stripe_event after a bad sig,
-    # this spy will record it and the assert below will fail.
-    spy = MagicMock(return_value={"synced": "BOOM"})
-    monkeypatch.setattr(handler, "handle_stripe_event", spy)
-
-    resp = handler.lambda_handler(
-        {
-            "body": json.dumps({"type": "checkout.session.completed", "data": {}}),
-            "headers": {"stripe-signature": "t=1,v1=forged"},
-        },
-        None,
-    )
-
-    # 400 — Stripe will stop retrying. This is the critical assertion.
-    assert resp["statusCode"] == 400
-    body = json.loads(resp["body"])
-    assert "error" in body
-    # The error surface should mention the invalid webhook so operators
-    # can grep logs. Keep the assertion loose so message tweaks don't
-    # break the test.
-    assert "Invalid" in body["error"] or "signature" in body["error"].lower()
-
-    # Most important: the forged event must never reach the sync path.
-    spy.assert_not_called()
+# NOTE (2026-07-17): the webhook-handler tests that used to live here loaded
+# services/billing-webhook/handler.py (the retired Phase-2 Lambda experiment —
+# see docs/archive/lambda-experiment.md). They were removed with it: the LIVE
+# Stripe webhook is the Supabase Edge Function
+# (supabase/functions/stripe-webhook/index.ts), which does its own signature
+# verification. The checkout/portal/plan tests above cover libs/billing.

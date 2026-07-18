@@ -16,16 +16,25 @@ import { test, expect, type Page } from "@playwright/test";
 const EMAIL = process.env.E2E_REAL_EMAIL ?? "";
 const PASSWORD = process.env.E2E_REAL_PASSWORD ?? "";
 
-/** Real email/password sign-in; resolves once the protected /portfolios route
- * has loaded (proof the Supabase session is live). */
+/** Real email/password sign-in; resolves once the SIGNED-IN home (Today)
+ * renders — content an anonymous visitor never sees.
+ *
+ * History: this helper used to assert a redirect to /portfolios, which PR
+ * #216 (2026-07-16) retired — login now lands on Today (`/`). Since `/` is
+ * an auth-SWITCH (anon → marketing, signed-in → Today), the URL alone proves
+ * nothing; assert on Today's signed-in-only copy instead. That stale URL
+ * assertion burned the nightly red on 2026-07-17 — same failure class as the
+ * earlier /portfolios-email assertion (PR #170): smoke tests must assert a
+ * product SIGNAL, not an incidental route shape. */
 async function login(page: Page): Promise<void> {
   await page.goto("/login");
   await page.locator('input[type="email"]').fill(EMAIL);
   await page.locator('input[type="password"]').fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  // A successful real sign-in redirects to /portfolios — a protected route an
-  // anonymous visitor can't reach.
-  await expect(page).toHaveURL(/\/portfolios/, { timeout: 20_000 });
+  // Today's greeting subline renders only for a live Supabase session.
+  await expect(page.getByText("Here's what to look at today.")).toBeVisible({
+    timeout: 30_000,
+  });
 }
 
 test.describe("real auth smoke (live Supabase + backend)", () => {

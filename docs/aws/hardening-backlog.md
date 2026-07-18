@@ -33,16 +33,18 @@
    (expires 2041) live at `/srv/tls`, pinned in the Caddyfile, CI-validated
    with a dummy pair. The ~60-day LE renewal timer is gone; port 80 no longer
    needed for ACME (optional follow-up: drop :80 from the SG).
-5. **Deep readiness probe** *(small backend PR).* `GET /api/v1/health` is
-   import-sanity only — containers stay "healthy" while every authed route
-   401s or Supabase is down. Add `/api/v1/health?deep=1` (timeboxed ~2s
-   Supabase REST ping + config-presence booleans, never key values) and point
-   the external monitor's second check at it. Deliberately do NOT wire it into
-   the compose healthcheck — a Supabase blip must not restart-loop containers.
-6. **One-command remote deploy** *(~1 day).* `scripts/deploy-ec2.sh` (landed)
-   already de-fangs the SSH ritual; the next step is a GH Actions workflow
-   (SSM or SSH secret) running that script — deploys stop depending on one
-   human's terminal. Do this before deploy frequency rises.
+5. ~~**Deep readiness probe**~~ **DONE 2026-07-17** — `GET /api/v1/health?deep=1`
+   (timeboxed 2s Supabase REST ping + config-presence booleans + core-module
+   check; 503 when a REQUIRED check fails; never a key value). Deliberately
+   NOT in the compose healthcheck (a Supabase blip must not restart-loop
+   containers) — point the external monitor's second check at it.
+6. ~~**One-command remote deploy**~~ **DONE 2026-07-17 (activation owner-side)**
+   — `.github/workflows/deploy-ec2.yml`: dispatch with a full main sha →
+   validates ancestry + GHCR manifests → runs `scripts/deploy-ec2.sh` on the
+   box via SSM (no inbound SSH) → verifies 6 public URLs incl. deep health.
+   Fails with the exact missing secret names until the owner creates
+   `AWS_DEPLOY_ACCESS_KEY_ID` / `AWS_DEPLOY_SECRET_ACCESS_KEY` (IAM scoped to
+   ssm:SendCommand + ssm:GetCommandInvocation on the instance).
 
 ## Ready-to-apply snippets (deferred, deliberate)
 
@@ -62,15 +64,15 @@
   Note Docker does NOT restart merely-unhealthy containers; the external
   monitor (#1) is the real remediation trigger. Recreates the ingress
   container on next `up -d` — apply during a normal deploy window.
-- **CloudWatch alarms on already-shipped metrics** *(owner-side).* The CW
-  agent reports CPU/mem/disk to `MindMarket/EC2`, but the planned alarms were
-  never created. SNS email + alarms: `disk_used_percent > 90`,
-  `mem_used_percent > 90` (15m), `StatusCheckFailed_System` (+ auto-recover
-  action). Free tier covers it. Disk/RAM creep is this box's signature
-  failure mode — this is the pre-outage warning to #1's post-outage alert.
-- **GHCR retention** — sha tags accumulate unboundedly (two per push, no
-  cleanup workflow). Monthly `actions/delete-package-versions` keeping the
-  last ~30 sha tags per image.
+- **CloudWatch alarms** — now CODE: `scripts/cloudwatch-alarms.sh` (2026-07-17)
+  creates the SNS topic + the three alarms (`disk_used_percent > 90`,
+  `mem_used_percent > 90` 15m, `StatusCheckFailed_System` + auto-recover),
+  discovering the CW-agent's live dimension sets so a rebuilt host still
+  binds. *Owner runs it once* (`./scripts/cloudwatch-alarms.sh you@email`,
+  `mindmarket` profile) + confirms the SNS subscription email.
+- ~~**GHCR retention**~~ **DONE 2026-07-17** — `.github/workflows/
+  ghcr-retention.yml` (monthly + dispatch) keeps the newest 30 versions per
+  image via `actions/delete-package-versions`.
 
 ## Deliberately WAIT (≈0 traffic — revisit when it isn't)
 
@@ -92,10 +94,13 @@
 
 ## Open product-of-ops decisions
 
-- **Retire or activate the Lambda experiment** — `deploy-services.yml`
-  (deploy job `if: false` forever) + `services/` + `infra/` CDK. Either
-  activate via an OIDC role or retire the workflow and archive the code; the
-  interview/career story already lives in `docs/interview/`.
+- ~~**Retire or activate the Lambda experiment**~~ **RETIRED 2026-07-17** —
+  `deploy-services.yml` + `services/` + `libs/remote_compute.py` (+ its test)
+  deleted after a reference-graph audit confirmed zero production / recovery /
+  test consumers; story archived in `docs/archive/lambda-experiment.md`
+  (recoverable from git history). `infra/` CDK KEPT — `compute_stack.py`
+  bootstrapped the live EC2 and documents the CW-agent metric config the
+  alarms script binds to.
 
 ## Risk register (post-2026-07-01 state)
 
@@ -106,9 +111,9 @@
 | HIGH | On-box build → OOM | Guardrails procedural (`--no-build` in unit + script); structural fix impossible while `build:` blocks serve local dev |
 | MED | Instance loss MTTR | Mitigated: verbatim `deploy/mindmarket.service` (captured 2026-07-01) + `instance-rebuild.md` |
 | MED | LE cert ~60-day renewal behind proxy | **Closed 2026-07-02** — Origin CA (15yr) pinned in Caddy |
-| MED | Shallow healthchecks (healthy ≠ working) | Open → item #5 |
-| MED | Solo-owner deploy bus factor | Reduced by `deploy-ec2.sh`; automation is item #6 |
-| MED | No CloudWatch alarms | Open (snippet above) |
+| MED | Shallow healthchecks (healthy ≠ working) | **Closed 2026-07-17** — `?deep=1` readiness (503 on degraded); point the external monitor at it |
+| MED | Solo-owner deploy bus factor | **Closed 2026-07-17** — `deploy-ec2.yml` GH workflow (SSM); owner creates the AWS secrets to activate |
+| MED | No CloudWatch alarms | Script ready (`scripts/cloudwatch-alarms.sh`) — owner runs once + confirms SNS email |
 | LOW | Caddyfile drift outage | **Closed** — `validate-config` CI job |
 | LOW | `latest` tag race | **Closed** — build-images concurrency (serialized) |
 | LOW | Log-storm disk fill | **Closed** — json-file caps in compose.split.yml |
@@ -116,4 +121,4 @@
 | LOW | Caddy silent auto-upgrade | **Closed** — pinned `caddy:2.11-alpine` |
 | LOW | Backend sees CF IPs, not clients | Open (snippet above; no consumer today) |
 | LOW | Cron workflows auto-disable after 60d inactivity | Documented; mitigated by external monitor (#1) |
-| LOW | GHCR sha-tag accumulation | Open (snippet above) |
+| LOW | GHCR sha-tag accumulation | **Closed 2026-07-17** — monthly `ghcr-retention.yml` keeps newest 30/image |

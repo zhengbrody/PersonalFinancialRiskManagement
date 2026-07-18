@@ -105,7 +105,15 @@ jobs:
           # Hard assert: the data-critical tables must exist. NOTE: there is
           # NO `holdings` table — holdings live as a JSONB column on
           # `portfolios` (verified against supabase/migrations 2026-07-01).
-          for t in profiles portfolios portfolio_snapshots; do
+          # 2026-07-17: extended with the tables migrations 0009 (copilot_
+          # preferences) + 0012 (risk_plans / risk_alert_states /
+          # user_journey_state) created — all APPLIED to prod, so a backup
+          # missing them is a FAILED backup. digest_prefs/digest_sends (0007)
+          # are deliberately NOT asserted: 0007 was never applied to prod
+          # (weekly digest dormant by owner decision) — add them here when it
+          # is. ⚠️ Run against a backup taken AFTER the migrations landed
+          # (dispatch db-backup first if in doubt).
+          for t in profiles portfolios portfolio_snapshots copilot_preferences risk_plans risk_alert_states user_journey_state; do
             docker exec drill psql -U postgres -d postgres -Atc \
               "select 1 from pg_tables where schemaname='public' and tablename='$t'" \
               | grep -q 1 || { echo "MISSING TABLE: $t — drill FAILED"; exit 1; }
@@ -115,7 +123,7 @@ jobs:
             echo ""
             echo "| table | rows |"
             echo "|---|---|"
-            for t in profiles portfolios portfolio_snapshots saved_insights subscriptions usage_events; do
+            for t in profiles portfolios portfolio_snapshots saved_insights subscriptions usage_events copilot_preferences risk_plans risk_alert_states user_journey_state; do
               n=$(docker exec drill psql -U postgres -d postgres -Atc \
                   "select count(*) from \"$t\"" 2>/dev/null || echo "n/a")
               echo "| $t | $n |"
