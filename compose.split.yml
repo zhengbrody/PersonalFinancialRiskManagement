@@ -62,6 +62,9 @@ services:
       - SUPABASE_URL=${SUPABASE_URL:-}
       - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-}
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-}
+      # Independent HMAC key for coarse, expiring risk-card links (>=32 bytes).
+      # Blank fails closed: mint is unavailable and public resolution is 404.
+      - MINDMARKET_SHARE_SIGNING_SECRET=${MINDMARKET_SHARE_SIGNING_SECRET:-}
       # SUPABASE_SERVICE_KEY is the service-role key: server-only, used by
       # trusted owner/admin paths for platform-wide usage/cost visibility, and
       # must never be rendered in the UI. (It used to live on the retired
@@ -125,9 +128,10 @@ services:
         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
     expose:
       - "3000"
-    # No environment block — the frontend image carries everything
-    # public it needs from build args, and no server-side secret should
-    # ever land here. Resist the urge to add server secrets later.
+    environment:
+      # Server Components resolve public signed share cards directly against
+      # FastAPI. This internal URL is not a secret and never enters the browser.
+      - MINDMARKET_INTERNAL_API_BASE_URL=${MINDMARKET_INTERNAL_API_BASE_URL:-http://backend:8000}
     healthcheck:
       test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:3000/"]
       interval: 30s

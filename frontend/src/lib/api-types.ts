@@ -528,7 +528,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Record a journey milestone (first_* once; last_workspace_view always) */
+        /** Record an explicit stress-test completion or workspace visit */
         post: operations["record_journey_endpoint_api_v1_journey_record_post"];
         delete?: never;
         options?: never;
@@ -1689,6 +1689,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/share_cards/capability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Share Card Capability
+         * @description Expose only whether this deployment can mint links, never the secret.
+         */
+        get: operations["share_card_capability_api_v1_share_cards_capability_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/share_cards/mint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mint Share Card */
+        post: operations["mint_share_card_api_v1_share_cards_mint_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/share_cards/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve Share Card
+         * @description Return one indistinguishable 404 for malformed, tampered or expired tokens.
+         */
+        post: operations["resolve_share_card_api_v1_share_cards_resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2330,9 +2387,11 @@ export interface components {
         };
         /**
          * CopilotPreferencesIn
-         * @description The user's explicit confirmation payload. Every field optional — a user
-         *     may confirm only the dimensions they care about; bounds mirror the DB
-         *     CHECK constraints.
+         * @description The user's explicit Risk Fit confirmation payload.
+         *
+         *     Risk tolerance is the one required choice because it sets the target used
+         *     by the deterministic score. The remaining fields only tailor explanation
+         *     emphasis and remain optional. Bounds mirror the DB CHECK constraints.
          */
         CopilotPreferencesIn: {
             /** Concentration Limit */
@@ -2348,7 +2407,7 @@ export interface components {
                 [key: string]: unknown;
             };
             /** Risk Tolerance */
-            risk_tolerance?: number | null;
+            risk_tolerance: number;
         };
         /**
          * CopilotPreferencesOut
@@ -3088,6 +3147,30 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** Envelope[ShareCardCapabilityOut] */
+        Envelope_ShareCardCapabilityOut_: {
+            data?: components["schemas"]["ShareCardCapabilityOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[ShareCardMintOut] */
+        Envelope_ShareCardMintOut_: {
+            data?: components["schemas"]["ShareCardMintOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[ShareCardResolveOut] */
+        Envelope_ShareCardResolveOut_: {
+            data?: components["schemas"]["ShareCardResolveOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
         /** Envelope[SmartMoneyOut] */
         Envelope_SmartMoneyOut_: {
             data?: components["schemas"]["SmartMoneyOut"] | null;
@@ -3789,15 +3872,19 @@ export interface components {
         };
         /**
          * JourneyRecordRequest
-         * @description Record a milestone timestamp. `first_*` milestones are set ONCE (the
-         *     first time); `last_workspace_view` always updates.
+         * @description Record the two client-originated events.
+         *
+         *     ``first_score_at`` is sent only after the active-book Overview renders;
+         *     ``first_stress_test_at`` only after an explicit sandbox run succeeds;
+         *     ``last_workspace_view`` is navigation telemetry. Other milestones are
+         *     stamped by their authoritative backend product endpoint.
          */
         JourneyRecordRequest: {
             /**
              * Milestone
              * @enum {string}
              */
-            milestone: "first_portfolio_at" | "first_score_at" | "first_driver_viewed_at" | "first_stress_test_at" | "first_plan_at" | "first_plan_reviewed_at" | "last_workspace_view";
+            milestone: "first_score_at" | "first_stress_test_at" | "last_workspace_view";
         };
         /** LiquidityRow */
         LiquidityRow: {
@@ -5123,11 +5210,8 @@ export interface components {
              * @default 0.045
              */
             risk_free_rate?: number;
-            /**
-             * Risk Preference
-             * @default 3
-             */
-            risk_preference?: number;
+            /** Risk Preference */
+            risk_preference?: number | null;
         };
         /** ReportResponse */
         ReportResponse: {
@@ -5362,6 +5446,27 @@ export interface components {
             summary_bullets?: string[];
             /** Watch Items */
             watch_items?: string[];
+        };
+        /**
+         * RiskFitOut
+         * @description Preference-relative interpretation of the measured portfolio risk.
+         *
+         *     ``signed_gap`` is positive when measured risk is above the selected target,
+         *     negative when below it, and zero-ish when aligned.  It is intentionally
+         *     unavailable when the shared confidence gate disallows a directional claim.
+         */
+        RiskFitOut: {
+            /** Reason Codes */
+            reason_codes?: string[];
+            /** Signed Gap */
+            signed_gap?: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "above" | "aligned" | "below" | "unavailable";
+            /** Target Label */
+            target_label: string;
         };
         /** RiskMetricsOut */
         RiskMetricsOut: {
@@ -5617,6 +5722,17 @@ export interface components {
             price_provenance?: components["schemas"]["PriceProvenanceOut"] | null;
             /** Risk Free Rate */
             risk_free_rate?: number | null;
+            /**
+             * Risk Preference
+             * @default 3
+             */
+            risk_preference?: number;
+            /**
+             * Risk Preference Source
+             * @default neutral_baseline
+             * @enum {string}
+             */
+            risk_preference_source?: "confirmed" | "neutral_baseline" | "request_override";
             rolling_volatility?: components["schemas"]["RollingVolatilityOut"] | null;
             /** Sharpe Ratio */
             sharpe_ratio?: number | null;
@@ -5698,6 +5814,17 @@ export interface components {
             price_provenance?: components["schemas"]["PriceProvenanceOut"] | null;
             /** Risk Free Rate */
             risk_free_rate?: number | null;
+            /**
+             * Risk Preference
+             * @default 3
+             */
+            risk_preference?: number;
+            /**
+             * Risk Preference Source
+             * @default neutral_baseline
+             * @enum {string}
+             */
+            risk_preference_source?: "confirmed" | "neutral_baseline" | "request_override";
             rolling_volatility?: components["schemas"]["RollingVolatilityOut"] | null;
             /** Sharpe Ratio */
             sharpe_ratio?: number | null;
@@ -5829,6 +5956,8 @@ export interface components {
             comparable?: boolean;
             /** Component Deltas */
             component_deltas?: components["schemas"]["ComponentDelta"][];
+            /** Current Risk Preference */
+            current_risk_preference?: number | null;
             /** Current Score */
             current_score: number;
             /** Current Score Version */
@@ -5838,6 +5967,8 @@ export interface components {
             holdings_changes?: components["schemas"]["HoldingsChange"];
             /** Input Changes */
             input_changes?: components["schemas"]["InputChange"][];
+            /** Previous Risk Preference */
+            previous_risk_preference?: number | null;
             /** Previous Score */
             previous_score?: number | null;
             /** Previous Score Version */
@@ -5890,6 +6021,10 @@ export interface components {
             option_penalty?: number | null;
             /** Overall Score */
             overall_score: number;
+            /** Risk Preference */
+            risk_preference?: number | null;
+            /** Risk Preference Source */
+            risk_preference_source?: string | null;
             /** Top Positions */
             top_positions?: {
                 [key: string]: unknown;
@@ -5942,11 +6077,8 @@ export interface components {
              * @default 0.045
              */
             risk_free_rate?: number;
-            /**
-             * Risk Preference
-             * @default 3
-             */
-            risk_preference?: number;
+            /** Risk Preference */
+            risk_preference?: number | null;
         };
         /**
          * ScoreRequest
@@ -6003,8 +6135,15 @@ export interface components {
             price_provenance?: components["schemas"]["PriceProvenanceOut"] | null;
             /** Reason Codes */
             reason_codes?: components["schemas"]["ReasonCodeOut"][];
+            risk_fit?: components["schemas"]["RiskFitOut"] | null;
             /** Risk Preference */
             risk_preference: number;
+            /**
+             * Risk Preference Source
+             * @default neutral_baseline
+             * @enum {string}
+             */
+            risk_preference_source?: "confirmed" | "neutral_baseline" | "request_override";
             /** Risk Target */
             risk_target: {
                 [key: string]: unknown;
@@ -6123,6 +6262,67 @@ export interface components {
             points?: components["schemas"]["SeriesPointOut"][];
             /** Series Id */
             series_id: string;
+        };
+        /** ShareCardCapabilityOut */
+        ShareCardCapabilityOut: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /** ShareCardMintOut */
+        ShareCardMintOut: {
+            /** Expires At */
+            expires_at: number;
+            /** Share Path */
+            share_path: string;
+            /** Token */
+            token: string;
+        };
+        /**
+         * ShareCardPayload
+         * @description The complete signed payload. Never add identity, tickers or exact values.
+         */
+        ShareCardPayload: {
+            /** As Of */
+            as_of: string;
+            /**
+             * Confidence Label
+             * @enum {string}
+             */
+            confidence_label: "high" | "medium" | "low";
+            /** Exp */
+            exp: number;
+            /** Model Version */
+            model_version: string;
+            /**
+             * Risk Fit
+             * @enum {string}
+             */
+            risk_fit: "above" | "aligned" | "below" | "unavailable" | "not_confirmed";
+            /**
+             * Score Band
+             * @enum {string}
+             */
+            score_band: "poor" | "watch" | "healthy" | "strong";
+            /**
+             * Stress Band
+             * @enum {string}
+             */
+            stress_band: "under_5_pct" | "5_to_10_pct" | "10_to_20_pct" | "over_20_pct" | "unavailable";
+            /**
+             * Top Risk Category
+             * @enum {string}
+             */
+            top_risk_category: "data_quality" | "concentration" | "leverage" | "options" | "downside" | "volatility" | "market_sensitivity" | "overall_balance";
+            /**
+             * V
+             * @default 1
+             * @constant
+             */
+            v?: 1;
+        };
+        /** ShareCardResolveOut */
+        ShareCardResolveOut: {
+            card: components["schemas"]["ShareCardPayload"];
         };
         /**
          * SimulateHolding
@@ -9007,6 +9207,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_VarBacktestOut_"];
+                };
+            };
+        };
+    };
+    share_card_capability_api_v1_share_cards_capability_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ShareCardCapabilityOut_"];
+                };
+            };
+        };
+    };
+    mint_share_card_api_v1_share_cards_mint_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ShareCardMintOut_"];
+                };
+            };
+        };
+    };
+    resolve_share_card_api_v1_share_cards_resolve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Token */
+                    token: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ShareCardResolveOut_"];
                 };
             };
         };

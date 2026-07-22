@@ -16,6 +16,7 @@ def _req(**kw):
     base = dict(
         window="previous",
         overall_score=500,
+        risk_preference=3,
         base_overall=500,
         dimensions={"risk_match": 6.0, "risk_adjusted_return": 6.0, "downside_protection": 6.0},
         metrics={
@@ -38,6 +39,7 @@ def _req(**kw):
 def _snap(**rm):
     risk_metrics = dict(
         overall_score=500,
+        risk_preference=3,
         base_overall=500,
         dimensions={"risk_match": 6.0, "risk_adjusted_return": 6.0, "downside_protection": 6.0},
         annual_volatility=0.15,
@@ -65,6 +67,25 @@ def test_no_prior_snapshot_is_graceful():
     assert rep.available is False
     assert rep.score_delta is None
     assert "No earlier snapshot" in rep.summary
+
+
+def test_changed_risk_preference_starts_a_new_noncomparable_baseline():
+    rep = build_change_report(_req(risk_preference=4), _snap(risk_preference=3))
+    assert rep.available is True
+    assert rep.comparable is False
+    assert rep.score_delta is None
+    assert rep.current_risk_preference == 4
+    assert rep.previous_risk_preference == 3
+    assert "risk profile changed" in rep.summary.lower()
+
+
+def test_legacy_snapshot_without_preference_is_not_compared():
+    prev = _snap()
+    prev["risk_metrics"].pop("risk_preference")
+    rep = build_change_report(_req(risk_preference=3), prev)
+    assert rep.comparable is False
+    assert rep.previous_risk_preference is None
+    assert "new baseline" in rep.summary.lower()
 
 
 def test_component_deltas_decompose_the_score_move_exactly():

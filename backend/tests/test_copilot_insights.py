@@ -56,6 +56,8 @@ def _prev_snapshot(overall=760, dims=6.5, extra_metrics=None):
     rm = {
         "overall_score": overall,
         "base_overall": overall,
+        "risk_preference": 3,
+        "risk_preference_source": "neutral_baseline",
         "dimensions": {
             "risk_match": dims,
             "risk_adjusted_return": dims,

@@ -292,7 +292,7 @@ def get_journey_endpoint(request: Request, user: AuthedUser = Depends(require_us
 
 @router.post(
     "/journey/record",
-    summary="Record a journey milestone (first_* once; last_workspace_view always)",
+    summary="Record an explicit stress-test completion or workspace visit",
     response_model=Envelope[JourneyOut],
 )
 def record_journey_endpoint(

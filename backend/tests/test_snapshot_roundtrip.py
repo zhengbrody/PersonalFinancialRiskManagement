@@ -45,6 +45,10 @@ class _FakeTable:
         self._filters.append((col, ">=", val))
         return self
 
+    def eq(self, col, val):
+        self._filters.append((col, "=", val))
+        return self
+
     def lt(self, col, val):
         self._filters.append((col, "<", val))
         return self
@@ -79,6 +83,8 @@ class _FakeTable:
             if op == ">=" and not (v >= val):
                 return False
             if op == "<" and not (v < val):
+                return False
+            if op == "=" and v != val:
                 return False
         return True
 
@@ -118,7 +124,9 @@ def test_snapshot_record_then_window_then_change_report(monkeypatch):
     prev_score = _build_score(seed=1, drift=0.0006)  # healthier
     snapshots.record_snapshot(
         "tok",
+        portfolio_id="portfolio-a",
         score=prev_score,
+        risk_preference_source="confirmed",
         top_positions=[{"ticker": "AAA", "weight": 0.6}, {"ticker": "BBB", "weight": 0.4}],
     )
     # The richer payload is persisted (no migration — existing JSONB columns).
@@ -126,10 +134,12 @@ def test_snapshot_record_then_window_then_change_report(monkeypatch):
     stored = store["rows"][0]
     assert "dimensions" in stored["risk_metrics"]
     assert stored["risk_metrics"]["overall_score"] == prev_score.overall_score
+    assert stored["risk_metrics"]["risk_preference"] == 3
+    assert stored["risk_metrics"]["risk_preference_source"] == "confirmed"
     assert stored["data_quality"]["confidence"] in ("high", "medium", "low")
 
     # Windowed fetch returns the prior-day baseline.
-    prev = snapshots.get_snapshot_at_window("tok", "previous")
+    prev = snapshots.get_snapshot_at_window("tok", "previous", portfolio_id="portfolio-a")
     assert prev is not None
     assert prev["risk_metrics"]["overall_score"] == prev_score.overall_score
 
@@ -138,6 +148,7 @@ def test_snapshot_record_then_window_then_change_report(monkeypatch):
     req = ScoreChangeRequest(
         window="previous",
         overall_score=cur.overall_score,
+        risk_preference=cur.risk_preference,
         base_overall=cur.base_overall,
         dimensions={k: d.score for k, d in cur.dimensions.items()},
         metrics={
@@ -162,6 +173,41 @@ def test_snapshot_dedup_skips_a_recent_write(monkeypatch):
     store = {"rows": [], "now": now.isoformat()}  # "now" → inside the 20h gap
     monkeypatch.setattr(snapshots, "_client", lambda token: _FakeSB(store))
     s = _build_score(seed=3, drift=0.0004)
-    snapshots.record_snapshot("tok", score=s)
-    snapshots.record_snapshot("tok", score=s)  # deduped
+    snapshots.record_snapshot("tok", portfolio_id="portfolio-a", score=s)
+    snapshots.record_snapshot("tok", portfolio_id="portfolio-a", score=s)  # deduped
     assert len(store["rows"]) == 1
+
+
+def test_snapshot_dedup_and_history_are_scoped_per_portfolio(monkeypatch):
+    """Two books scored on the same day each retain an independent baseline."""
+    now = datetime.now(timezone.utc)
+    store = {"rows": [], "now": now.isoformat()}
+    monkeypatch.setattr(snapshots, "_client", lambda token: _FakeSB(store))
+    score = _build_score(seed=4, drift=0.0002)
+
+    snapshots.record_snapshot("tok", portfolio_id="portfolio-a", score=score)
+    snapshots.record_snapshot("tok", portfolio_id="portfolio-b", score=score)
+
+    assert {r["portfolio_id"] for r in store["rows"]} == {"portfolio-a", "portfolio-b"}
+    assert len(snapshots.get_snapshot_history("tok", portfolio_id="portfolio-a")) == 1
+    assert len(snapshots.get_snapshot_history("tok", portfolio_id="portfolio-b")) == 1
+
+
+def test_legacy_unscoped_snapshots_are_not_comparable(monkeypatch):
+    store = {
+        "rows": [
+            {
+                "portfolio_id": None,
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "risk_metrics": {"overall_score": 500},
+                "data_quality": {},
+                "top_positions": [],
+            }
+        ],
+        "now": datetime.now(timezone.utc).isoformat(),
+    }
+    monkeypatch.setattr(snapshots, "_client", lambda token: _FakeSB(store))
+
+    assert snapshots.get_previous_snapshot("tok", portfolio_id="portfolio-a") is None
+    assert snapshots.get_snapshot_at_window("tok", "previous", portfolio_id="portfolio-a") is None
+    assert snapshots.get_snapshot_history("tok", portfolio_id="portfolio-a") == []

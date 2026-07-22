@@ -23,24 +23,46 @@ import pandas as pd
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def neutral_confirmed_risk_profile(monkeypatch):
+    from backend.app.services import copilot_preferences
+
+    monkeypatch.setattr(
+        copilot_preferences,
+        "get_confirmed_strict",
+        lambda access_token, user_id: None,
+    )
+
+
 @pytest.fixture
 def fake_active_portfolio(monkeypatch):
     class _Stub:
         def __init__(self) -> None:
             self.holdings: dict[str, dict] = {}
             self.calls: list[str | None] = []
+            self.capital_state = {
+                "cash_balance": 0.0,
+                "margin_loan": 0.0,
+                "contributed_capital": 0.0,
+            }
 
         def set(self, holdings: dict[str, dict]) -> None:
             self.holdings = holdings
 
         def __call__(self, access_token=None):
+            from libs.auth.active_portfolio import ActivePortfolioContext
+
             self.calls.append(access_token)
-            return dict(self.holdings)
+            return ActivePortfolioContext(
+                portfolio_id="p1" if self.holdings else None,
+                holdings=dict(self.holdings),
+                **self.capital_state,
+            )
 
     stub = _Stub()
     import libs.auth.active_portfolio as ap
 
-    monkeypatch.setattr(ap, "get_active_holdings", stub)
+    monkeypatch.setattr(ap, "get_active_portfolio_context", stub)
     return stub
 
 
@@ -164,23 +186,9 @@ def fake_engine(monkeypatch):
 
 
 @pytest.fixture
-def fake_capital(monkeypatch):
-    """Token-scoped cash + margin getters; defaults to none (scale=1.0)."""
-    state = {"cash_balance": 0.0, "margin_loan": 0.0, "contributed_capital": 0.0}
-    import libs.auth.active_portfolio as ap
-
-    monkeypatch.setattr(
-        ap,
-        "get_active_capital_inputs",
-        lambda access_token=None: {
-            "cash_balance": state["cash_balance"],
-            "contributed_capital": state["contributed_capital"],
-        },
-    )
-    monkeypatch.setattr(
-        ap, "get_active_margin_loan", lambda access_token=None: state["margin_loan"]
-    )
-    return state
+def fake_capital(fake_active_portfolio):
+    """Drive the capital fields carried by the same atomic portfolio context."""
+    return fake_active_portfolio.capital_state
 
 
 def _make_history(tickers: list[str], days: int = 260) -> pd.DataFrame:

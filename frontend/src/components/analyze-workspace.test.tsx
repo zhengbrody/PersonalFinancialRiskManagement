@@ -3,7 +3,7 @@
  * isolates the workspace SHELL logic. */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const pushMock = vi.fn();
@@ -21,17 +21,22 @@ vi.mock("@/lib/portfolio-context", () => ({
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("@/lib/risk-explain-input", () => ({ explainInputFromScore: () => ({}) }));
 vi.mock("@/lib/use-run-once-per-user", () => ({
-  useRunOncePerUser: () => {},
+  useRunOncePerUser: (_key: string, run: () => void) => {
+    runOnceCallback = run;
+  },
   runKeyForActivePortfolio: () => "u1:pf1",
 }));
 
 const recordMutate = vi.fn();
+const historicalMutate = vi.fn();
+let runOnceCallback: (() => void) | null = null;
+let whatIfSuccess: (() => void) | undefined;
 vi.mock("@/lib/queries", () => ({
   useActiveScore: () => ({ data: { overall_score: 720, metrics: {}, data_confidence: null }, isLoading: false, isError: false }),
   useLastSnapshot: () => ({ data: undefined }),
   useRiskExplain: () => ({ data: undefined, isLoading: false }),
   useRiskReport: () => ({ data: undefined, isPending: false, isError: false, reset: vi.fn(), mutate: vi.fn() }),
-  useHistoricalScenarios: () => ({ data: undefined, isPending: false, isError: false, reset: vi.fn(), mutate: vi.fn() }),
+  useHistoricalScenarios: () => ({ data: undefined, isPending: false, isError: false, reset: vi.fn(), mutate: historicalMutate }),
   useRecordMilestone: () => ({ mutate: recordMutate }),
 }));
 
@@ -48,7 +53,12 @@ vi.mock("@/components/historical-scenarios", () => ({ HistoricalScenarios: () =>
 vi.mock("@/components/metric-trend", () => ({ MetricTrend: () => <div>metric-trend</div> }));
 vi.mock("@/components/score-change-report", () => ({ ScoreChangeReport: () => <div>score-change</div> }));
 vi.mock("@/components/action-simulate", () => ({ ActionSimulate: () => <div>action-simulate</div> }));
-vi.mock("@/components/whatif-lab", () => ({ WhatIfLab: () => <div>whatif-lab</div> }));
+vi.mock("@/components/whatif-lab", () => ({
+  WhatIfLab: ({ onRunSuccess }: { onRunSuccess?: () => void }) => {
+    whatIfSuccess = onRunSuccess;
+    return <div>whatif-lab</div>;
+  },
+}));
 vi.mock("@/components/save-as-plan", () => ({ SaveAsPlan: () => <div>save-as-plan</div> }));
 vi.mock("@/components/risk-plans-panel", () => ({ RiskPlansPanel: () => <div>risk-plans-panel</div> }));
 
@@ -57,6 +67,10 @@ import { AnalyzeWorkspace } from "./analyze-workspace";
 beforeEach(() => {
   searchState.view = "overview";
   pushMock.mockClear();
+  recordMutate.mockClear();
+  historicalMutate.mockClear();
+  runOnceCallback = null;
+  whatIfSuccess = undefined;
 });
 afterEach(() => vi.clearAllMocks());
 
@@ -75,6 +89,7 @@ describe("AnalyzeWorkspace", () => {
     expect(screen.getByText("score-gauge")).toBeInTheDocument();
     // Unvisited stages have NOT mounted yet (lazy).
     expect(screen.queryByText("report-sections")).not.toBeInTheDocument();
+    expect(recordMutate).toHaveBeenCalledWith("first_score_at");
   });
 
   it("switching a tab pushes the new view to the URL", async () => {
@@ -88,5 +103,20 @@ describe("AnalyzeWorkspace", () => {
     render(<AnalyzeWorkspace />);
     expect(screen.getByText("action-simulate")).toBeInTheDocument();
     expect(screen.getByText("risk-plans-panel")).toBeInTheDocument();
+  });
+
+  it("records stress only after an explicit what-if succeeds", () => {
+    searchState.view = "stress";
+    render(<AnalyzeWorkspace />);
+
+    act(() => runOnceCallback?.());
+    const options = historicalMutate.mock.calls[0]?.[1] as
+      | { onSuccess?: () => void }
+      | undefined;
+    act(() => options?.onSuccess?.());
+    expect(recordMutate).not.toHaveBeenCalledWith("first_stress_test_at");
+
+    act(() => whatIfSuccess?.());
+    expect(recordMutate).toHaveBeenCalledWith("first_stress_test_at");
   });
 });

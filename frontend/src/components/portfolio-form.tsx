@@ -10,7 +10,7 @@
  * never reports `NaN` during typing.
  */
 
-import { useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { track } from "@/lib/analytics";
@@ -338,6 +338,8 @@ export function PortfolioForm({
         </div>
         {csvNote && (
           <p
+            role="status"
+            aria-live="polite"
             className={`text-xs ${
               csvNote.ok ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
             }`}
@@ -569,12 +571,14 @@ function CapitalInput({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const inputId = useId();
   return (
     <div className="space-y-1">
-      <label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+      <label htmlFor={inputId} className="text-[10px] uppercase tracking-wide text-muted-foreground">
         {label}
       </label>
       <Input
+        id={inputId}
         type="number"
         step="any"
         min="0"

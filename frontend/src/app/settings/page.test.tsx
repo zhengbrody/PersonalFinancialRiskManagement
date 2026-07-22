@@ -88,7 +88,7 @@ describe("SettingsPage", () => {
       signOut: vi.fn(),
     });
     renderWithQuery(<SettingsPage />);
-    expect(replaceMock).toHaveBeenCalledWith("/login");
+    expect(replaceMock).toHaveBeenCalledWith("/login?next=%2Fsettings");
   });
 
   it("free user → shows upgrade CTA, no Portal button", async () => {

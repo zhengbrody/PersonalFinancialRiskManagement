@@ -21,43 +21,13 @@ import { track } from "@/lib/analytics";
 import { useScoreChanges } from "@/lib/queries";
 import type { ScoreChangeReport } from "@/lib/queries";
 import type { ScoreResponse } from "@/lib/schemas";
+import { scoreChangeInput } from "@/lib/score-change-input";
 
 const WINDOWS: { key: string; label: string }[] = [
   { key: "previous", label: "Since last" },
   { key: "7d", label: "7 days" },
   { key: "30d", label: "30 days" },
 ];
-
-function buildRequest(score: ScoreResponse, window: string): Record<string, unknown> {
-  const dimensions: Record<string, number> = {};
-  for (const [k, d] of Object.entries(score.dimensions ?? {})) {
-    if (d && typeof d.score === "number") dimensions[k] = d.score;
-  }
-  const m = score.metrics;
-  return {
-    window,
-    overall_score: score.overall_score,
-    base_overall: score.base_overall ?? score.overall_score,
-    dimensions,
-    metrics: {
-      annual_volatility: m.annual_volatility ?? null,
-      sharpe_ratio: m.sharpe_ratio ?? null,
-      max_drawdown: m.max_drawdown ?? null,
-      var_95_daily: m.var_95_daily ?? null,
-      beta_to_benchmark: m.beta_to_benchmark ?? null,
-      net_equity: m.net_equity ?? null,
-      leverage: m.leverage ?? null,
-    },
-    confidence: m.confidence ?? null,
-    data_quality: m.data_quality ?? null,
-    observations: m.observations ?? null,
-    data_coverage: m.data_coverage ?? null,
-    dropped_tickers: m.dropped_tickers ?? [],
-    // Lets the attribution peel an options-driven move out of the data-quality
-    // bucket (PR B). Absent → the backend folds it into data-quality safely.
-    option_penalty: score.options?.penalty ?? null,
-  };
-}
 
 function fmt(v: number | null | undefined, unit: string): string {
   if (v == null || Number.isNaN(v)) return "—";
@@ -87,7 +57,10 @@ function AttrItem({ label, pts }: { label: string; pts: number | null | undefine
 
 export function ScoreChangeReport({ score }: { score: ScoreResponse }) {
   const [window, setWindow] = useState("previous");
-  const body = useMemo(() => buildRequest(score, window), [score, window]);
+  const body = useMemo(
+    () => scoreChangeInput(score, window as "previous" | "7d" | "30d"),
+    [score, window],
+  );
   const q = useScoreChanges(body);
   const report = q.data;
 

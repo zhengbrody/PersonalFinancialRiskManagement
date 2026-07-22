@@ -8,7 +8,7 @@
  * market brief. Every CTA deep-links into the right Analyze stage / portfolio.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -27,11 +27,14 @@ import {
 } from "@/lib/today-priority";
 import {
   useActiveScore,
+  useCopilotPreferences,
   useCopilotInsights,
   useJourney,
-  useLastSnapshot,
   useRiskPlans,
+  useScoreChanges,
 } from "@/lib/queries";
+import type { ScoreChangeReport } from "@/lib/queries";
+import { scoreChangeInput } from "@/lib/score-change-input";
 
 const SCORE_DROP_PTS = 25;
 
@@ -48,7 +51,12 @@ export function Today() {
   const journey = useJourney();
   const plans = useRiskPlans(activePortfolioId);
   const insights = useCopilotInsights();
-  const lastSnapshot = useLastSnapshot();
+  const riskFit = useCopilotPreferences();
+  const changeBody = useMemo(
+    () => (score.data ? scoreChangeInput(score.data, "previous") : null),
+    [score.data],
+  );
+  const scoreChanges = useScoreChanges(changeBody);
 
   const greeting = user?.email ? user.email.split("@")[0] : "there";
 
@@ -63,20 +71,25 @@ export function Today() {
   const hasMaterialInsight =
     Boolean(insights.data?.portfolio_available) &&
     (insights.data?.insights ?? []).some((i) => i.severity === "high");
-  const prevScore = lastSnapshot.data?.snapshot?.overall_score;
-  const curScore = score.data?.overall_score;
+  const changeReport = scoreChanges.data;
   const scoreDropped =
-    typeof prevScore === "number" &&
-    typeof curScore === "number" &&
-    curScore - prevScore <= -SCORE_DROP_PTS;
+    changeReport?.available === true &&
+    changeReport.comparable !== false &&
+    typeof changeReport.score_delta === "number" &&
+    changeReport.score_delta <= -SCORE_DROP_PTS;
   const hasStressTest = Boolean(journey.data?.first_stress_test_at);
   // Milestones are stamped server-side at the product event; the live plans
   // list is the fallback for plans saved before stamping existed.
   const hasPlan =
     Boolean(journey.data?.first_plan_at) || (plans.data?.plans ?? []).length > 0;
-  const hasScore = Boolean(journey.data?.first_score_at) || Boolean(score.data);
+  // A calculated score is not the same as a score the user has reviewed.
+  // The Overview stage records this milestone only after it renders a real
+  // active-book score; Today's background query must not advance the journey.
+  const hasScore = Boolean(journey.data?.first_score_at);
   const hasDriverView = Boolean(journey.data?.first_driver_viewed_at);
   const hasPlanReviewed = Boolean(journey.data?.first_plan_reviewed_at);
+  const hasRiskFit =
+    Boolean(riskFit.data?.confirmed) && riskFit.data?.risk_tolerance != null;
 
   const inputs: TodayInputs = {
     hasPortfolio: hasPortfolios,
@@ -85,13 +98,24 @@ export function Today() {
     dueReviewCount,
     hasMaterialInsight,
     scoreDropped,
+    hasRiskFit,
+    hasScore,
+    hasDriverView,
     hasStressTest,
     hasPlan,
     activePortfolioId,
   };
   const primary = computePrimaryAction(inputs);
   const secondary = computeSecondary(inputs, primary.kind);
-  const journeyState = journeySteps({ hasPortfolio: hasPortfolios, hasScore, hasDriverView, hasStressTest, hasPlan, hasPlanReviewed });
+  const journeyState = journeySteps({
+    hasPortfolio: hasPortfolios,
+    hasRiskFit,
+    hasScore,
+    hasDriverView,
+    hasStressTest,
+    hasPlan,
+    hasPlanReviewed,
+  });
   const continuePlan = (plans.data?.plans ?? []).find(
     (p) => p.status === "active" || p.status === "draft",
   );
@@ -101,9 +125,11 @@ export function Today() {
   const inputsReady =
     !pfLoading &&
     !score.isLoading &&
+    !journey.isLoading &&
+    !riskFit.isLoading &&
     !plans.isLoading &&
     !insights.isLoading &&
-    !lastSnapshot.isLoading;
+    !scoreChanges.isLoading;
   const tracked = useRef<string | null>(null);
   useEffect(() => {
     if (inputsReady && tracked.current !== primary.kind) {
@@ -112,7 +138,7 @@ export function Today() {
     }
   }, [inputsReady, primary.kind]);
 
-  if (pfLoading || (hasPortfolios && score.isLoading)) {
+  if (pfLoading || (hasPortfolios && !inputsReady)) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-10 w-64" />
@@ -122,20 +148,96 @@ export function Today() {
     );
   }
 
+  // A score failure is blocking: without the current score, Today cannot
+  // truthfully prioritize data quality, changes or the next analysis step.
+  // Do not reinterpret it as an empty portfolio or manufacture a CTA.
+  if (hasPortfolios && score.isError) {
+    return (
+      <div className="space-y-6">
+        <TodayHeader greeting={greeting} />
+        <Card className="border-destructive/50" role="alert">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Today could not load your current score</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Nothing was changed in your portfolio, but we can&apos;t assess today&apos;s risk until
+              the score loads.
+            </p>
+            <Button type="button" variant="outline" onClick={() => void score.refetch()}>
+              Retry score
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const loadIssues: LoadIssue[] = [
+    ...(journey.isError
+      ? [{
+          label: "setup progress",
+          retry: () => {
+            void journey.refetch();
+          },
+        }]
+      : []),
+    ...(riskFit.isError
+      ? [{
+          label: "Risk Fit status",
+          retry: () => {
+            void riskFit.refetch();
+          },
+        }]
+      : []),
+    ...(plans.isError
+      ? [{
+          label: "saved plans",
+          retry: () => {
+            void plans.refetch();
+          },
+        }]
+      : []),
+    ...(insights.isError
+      ? [{
+          label: "portfolio insights",
+          retry: () => {
+            void insights.refetch();
+          },
+        }]
+      : []),
+    ...(scoreChanges.isError
+      ? [{
+          label: "score changes",
+          retry: () => {
+            void scoreChanges.refetch();
+          },
+        }]
+      : []),
+  ];
+
+  // Every one of these queries participates in the deterministic priority
+  // order. If any is unavailable, fail closed instead of treating unknown as
+  // empty and manufacturing a normal-looking recommendation.
+  if (hasPortfolios && loadIssues.length > 0) {
+    return (
+      <div className="space-y-6">
+        <TodayHeader greeting={greeting} />
+        <LoadStatus issues={loadIssues} blocking />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Hi, <span className="capitalize">{greeting}</span>
-        </h1>
-        <p className="text-sm text-muted-foreground">Here&apos;s what to look at today.</p>
-      </header>
+      <TodayHeader greeting={greeting} />
+
+      {loadIssues.length > 0 && <LoadStatus issues={loadIssues} />}
 
       {/* Since last visit — a one-line delta, only when we have both points AND
           the primary isn't already the "explain the drop" card (no double message). */}
       {primary.kind !== "explain_change" &&
-        typeof prevScore === "number" &&
-        typeof curScore === "number" && <SinceLastVisit prev={prevScore} cur={curScore} />}
+        changeReport?.available === true && <SinceLastVisit report={changeReport} />}
 
       {/* The ONE primary action. */}
       <Card className="border-primary/30">
@@ -206,7 +308,7 @@ export function Today() {
 
       {/* Onboarding journey — only while not complete; highlight the NEXT step,
           collapse the rest. No streaks/points/badges. */}
-      {!journeyState.allDone && (
+      {!journey.isError && !riskFit.isError && !journeyState.allDone && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Getting started</CardTitle>
@@ -216,7 +318,7 @@ export function Today() {
             </p>
           </CardHeader>
           <CardContent>
-            <ol className="space-y-1.5 text-sm">
+            <ol className="space-y-1.5 text-sm" aria-label="Getting started progress">
               {journeyState.steps.map((s, idx) => {
                 const isNext = idx === journeyState.nextIndex;
                 return (
@@ -232,6 +334,9 @@ export function Today() {
                       }`}
                     >
                       {s.done ? "✓" : idx + 1}
+                    </span>
+                    <span className="sr-only">
+                      {s.done ? "Completed: " : isNext ? "Next: " : "Not completed: "}
                     </span>
                     {isNext ? (
                       <Link href={s.href} className="font-medium text-primary hover:underline">
@@ -256,17 +361,77 @@ export function Today() {
   );
 }
 
-function SinceLastVisit({ prev, cur }: { prev: number; cur: number }) {
-  const delta = Math.round(cur - prev);
-  if (delta === 0) return null;
+function TodayHeader({ greeting }: { greeting: string }) {
+  return (
+    <header className="space-y-1">
+      <h1 className="text-2xl font-semibold tracking-tight">
+        Hi, <span className="capitalize">{greeting}</span>
+      </h1>
+      <p className="text-sm text-muted-foreground">Here&apos;s what to look at today.</p>
+    </header>
+  );
+}
+
+type LoadIssue = { label: string; retry: () => void };
+
+function LoadStatus({
+  issues,
+  blocking = false,
+}: {
+  issues: LoadIssue[];
+  blocking?: boolean;
+}) {
+  return (
+    <Card
+      className="border-amber-400/40"
+      role={blocking ? "alert" : "status"}
+      aria-live="polite"
+    >
+      <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3">
+        <p className="text-sm text-muted-foreground">
+          Today can&apos;t rank your next action because some context is unavailable (
+          {issues.map((i) => i.label).join(", ")}). Reload it before relying on a suggestion.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => issues.forEach((issue) => issue.retry())}
+        >
+          Reload Today context
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SinceLastVisit({ report }: { report: ScoreChangeReport }) {
+  const delta = report.score_delta == null ? null : Math.round(report.score_delta);
+  const driver =
+    delta != null && delta >= 0
+      ? report.top_positive_contributor
+      : report.top_negative_contributor;
+  if (!report.summary) return null;
+  if (report.comparable === false || delta == null) {
+    return (
+      <div className="text-sm text-muted-foreground" role="status">
+        {report.summary}{" "}
+        <Link href="/analyze?view=history" className="font-medium text-primary hover:underline">
+          Review history →
+        </Link>
+      </div>
+    );
+  }
+  if (delta === 0 && !driver) return null;
   const up = delta > 0;
   return (
-    <div className="flex items-center gap-2 text-sm">
+    <div className="flex flex-wrap items-center gap-2 text-sm" role="status">
       <Badge tone={up ? "success" : "danger"}>
         {up ? "▲" : "▼"} {Math.abs(delta)} pts
       </Badge>
       <span className="text-muted-foreground">
-        Your health score is {up ? "up" : "down"} since your last visit.{" "}
+        {report.summary}
+        {driver ? ` Top driver: ${driver.label}.` : ""}{" "}
         <Link href="/analyze?view=history" className="font-medium text-primary hover:underline">
           See what changed →
         </Link>

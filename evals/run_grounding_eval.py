@@ -221,7 +221,10 @@ def isolation_probe() -> dict:
     }
     original = snapshots.get_snapshot_at_window
     try:
-        snapshots.get_snapshot_at_window = lambda token, window: (seen.append(token), None)[1]
+        snapshots.get_snapshot_at_window = lambda token, window, **kwargs: (
+            seen.append(token),
+            None,
+        )[1]
         with patched_seams(fixture):
             cr.answer(
                 "why did my score fall",

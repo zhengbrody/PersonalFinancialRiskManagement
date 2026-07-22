@@ -164,6 +164,22 @@ def _methodology_changed_summary(prev_version: Any, as_of: Optional[str]) -> str
     )
 
 
+def _preference_changed_summary(
+    current: Optional[int], previous: Optional[int], as_of: Optional[str]
+) -> str:
+    when = f" (from {str(as_of)[:10]})" if as_of else ""
+    if current is None or previous is None:
+        return (
+            f"Your earlier score{when} does not record the same risk profile context, so the "
+            "two scores are not directly comparable. This score establishes a new baseline."
+        )
+    return (
+        f"Risk profile changed from {previous} to {current} since your earlier score{when}. "
+        "The scores are not directly comparable because the target changed, not necessarily "
+        "the portfolio."
+    )
+
+
 def _top_contributors(
     deltas: list[ComponentDelta],
 ) -> tuple[Optional[DriverChange], Optional[DriverChange]]:
@@ -287,6 +303,36 @@ def build_change_report(
             previous_score_version=str(prev_version) if prev_version else None,
             comparable=False,
             summary=_methodology_changed_summary(prev_version, as_of),
+        )
+
+    # ── Risk-profile gate ──
+    # The Risk Match dimension is preference-relative.  A different (or
+    # unstamped legacy) profile changes the target, so refuse to attribute the
+    # resulting delta to the market or the user's holdings.
+    current_preference = req.risk_preference
+    previous_preference = prev_rm.get("risk_preference")
+    try:
+        previous_preference = int(previous_preference) if previous_preference is not None else None
+    except (TypeError, ValueError):
+        previous_preference = None
+    if (
+        current_preference is None
+        or previous_preference is None
+        or int(current_preference) != previous_preference
+    ):
+        return ScoreChangeReport(
+            window=window,
+            available=True,
+            as_of_previous=as_of,
+            current_score=cur_overall,
+            previous_score=prev_overall,
+            score_delta=None,
+            current_score_version=SCORE_VERSION,
+            previous_score_version=str(prev_version) if prev_version else None,
+            comparable=False,
+            current_risk_preference=current_preference,
+            previous_risk_preference=previous_preference,
+            summary=_preference_changed_summary(current_preference, previous_preference, as_of),
         )
 
     score_delta = cur_overall - prev_overall
@@ -428,6 +474,8 @@ def build_change_report(
         current_score_version=SCORE_VERSION,
         previous_score_version=str(prev_version) if prev_version else None,
         comparable=True,
+        current_risk_preference=req.risk_preference,
+        previous_risk_preference=previous_preference,
     )
 
 
@@ -457,6 +505,7 @@ def request_from_score(score, positions=None, *, window: str = "previous") -> Sc
     return ScoreChangeRequest(
         window=window,
         overall_score=int(score.overall_score),
+        risk_preference=int(getattr(score, "risk_preference", 3) or 3),
         base_overall=int(getattr(score, "base_overall", None) or score.overall_score),
         dimensions=dims,
         top_positions=top_positions,

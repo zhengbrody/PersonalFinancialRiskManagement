@@ -101,3 +101,20 @@ def get_confirmed(access_token: Optional[str], user_id: Optional[str]) -> Option
     if not row or not row.get("confirmed_at"):
         return None
     return row
+
+
+def get_confirmed_strict(
+    access_token: Optional[str], user_id: Optional[str]
+) -> Optional[dict[str, Any]]:
+    """Confirmed row for score-critical paths; repository failures propagate.
+
+    Copilot prose can safely omit a preference during a transient outage, but
+    deterministic scoring must not silently change a user's confirmed target
+    to neutral and persist that result as a new snapshot.
+    """
+    if not user_id:
+        return None
+    row = get_row(access_token, user_id)
+    if not row or not row.get("confirmed_at"):
+        return None
+    return row

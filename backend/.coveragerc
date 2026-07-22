@@ -3,7 +3,7 @@
 # gets its OWN measurement here, run from the backend-tests CI job:
 #
 #   pytest backend/tests -o "addopts=" \
-#     --cov=backend/app --cov-config=backend/.coveragerc \
+#     --cov=backend.app --cov-config=backend/.coveragerc \
 #     --cov-report=term-missing --cov-fail-under=<baseline>
 [run]
 source = backend/app

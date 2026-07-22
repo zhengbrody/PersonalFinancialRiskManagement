@@ -32,6 +32,12 @@ H1_REORDERED = {
 }
 H_ADDED = {**H1, "NVDA": {"shares": 2, "avg_cost": 400.0, "asset_type": "equity"}}
 H_SHARES = {**H1, "AAPL": {"shares": 20, "avg_cost": 150.0, "asset_type": "equity"}}
+PCTX = {
+    "portfolio_id": "p1",
+    "cash_balance": 0.0,
+    "margin_loan": 0.0,
+    "contributed_capital": 10000.0,
+}
 
 
 def _mk_score(overall: int = 720) -> PortfolioScore:
@@ -123,15 +129,15 @@ def test_user_private_keys_require_user_id():
     with pytest.raises(ValueError):
         cc.risk_score_key("", "phash", "mhash")
     with pytest.raises(ValueError):
-        cc.copilot_context_key(None, "phash")
-    # scenario key is deliberately user-id-free
-    assert cc.scenario_key("phash", {"x": 1}).startswith("mm:risk:scenarios:")
+        cc.copilot_context_key(None, "phash", PCTX)
+    with pytest.raises(ValueError):
+        cc.scenario_key("", "phash", PCTX, {"x": 1})
 
 
 def test_risk_and_copilot_keys_isolate_users():
     p = ck.portfolio_hash(H1)
     assert cc.risk_score_key("u1", p, "m") != cc.risk_score_key("u2", p, "m")
-    assert cc.copilot_context_key("u1", p) != cc.copilot_context_key("u2", p)
+    assert cc.copilot_context_key("u1", p, PCTX) != cc.copilot_context_key("u2", p, PCTX)
 
 
 # ── score (de)serialization round-trip (de-risks the cached score path) ─────
@@ -198,15 +204,37 @@ def test_cached_scenarios_hit_and_holdings_change_invalidates():
         return {"scenarios": [{"shock_pct": -0.1, "pnl_pct": -0.12}], "run": calls["n"]}
 
     params = {"history_days": 365, "shocks": [-0.1, -0.2]}
-    r1 = cc.cached_scenarios(holdings=H1, scenario_params=params, producer=producer)
-    r2 = cc.cached_scenarios(holdings=H1_REORDERED, scenario_params=params, producer=producer)
+    r1 = cc.cached_scenarios(
+        user_id="u1",
+        holdings=H1,
+        portfolio_context=PCTX,
+        scenario_params=params,
+        producer=producer,
+    )
+    r2 = cc.cached_scenarios(
+        user_id="u1",
+        holdings=H1_REORDERED,
+        portfolio_context=PCTX,
+        scenario_params=params,
+        producer=producer,
+    )
     assert calls["n"] == 1 and r2.cache_hit is True and r1.value["run"] == 1  # same book → hit
 
-    cc.cached_scenarios(holdings=H_ADDED, scenario_params=params, producer=producer)
+    cc.cached_scenarios(
+        user_id="u1",
+        holdings=H_ADDED,
+        portfolio_context=PCTX,
+        scenario_params=params,
+        producer=producer,
+    )
     assert calls["n"] == 2  # holdings changed → recompute
 
     cc.cached_scenarios(
-        holdings=H1, scenario_params={**params, "history_days": 730}, producer=producer
+        user_id="u1",
+        holdings=H1,
+        portfolio_context=PCTX,
+        scenario_params={**params, "history_days": 730},
+        producer=producer,
     )
     assert calls["n"] == 3  # scenario params changed → recompute
 
@@ -226,14 +254,18 @@ def test_cached_copilot_context_hit_and_holdings_change_invalidates():
         ]
         return positions, _mk_score(700 + calls["n"])
 
-    pos1, sc1, r1 = cc.cached_copilot_context(user_id="u1", holdings=H1, producer=producer)
+    pos1, sc1, r1 = cc.cached_copilot_context(
+        user_id="u1", holdings=H1, portfolio_context=PCTX, producer=producer
+    )
     pos2, sc2, r2 = cc.cached_copilot_context(
-        user_id="u1", holdings=H1_REORDERED, producer=producer
+        user_id="u1", holdings=H1_REORDERED, portfolio_context=PCTX, producer=producer
     )
     assert calls["n"] == 1 and r2.cache_hit is True  # same book → hit
     assert sc2.overall_score == 701 and pos2[0].ticker == "AAPL"  # reconstructed faithfully
 
-    pos3, sc3, r3 = cc.cached_copilot_context(user_id="u1", holdings=H_ADDED, producer=producer)
+    pos3, sc3, r3 = cc.cached_copilot_context(
+        user_id="u1", holdings=H_ADDED, portfolio_context=PCTX, producer=producer
+    )
     assert calls["n"] == 2 and r3.cache_hit is False and sc3.overall_score == 702
 
 
@@ -251,9 +283,82 @@ def test_cached_copilot_context_keyed_by_user():
         calls["n"] += 1
         return producer()
 
-    cc.cached_copilot_context(user_id="u1", holdings=H1, producer=counting)
-    cc.cached_copilot_context(user_id="u2", holdings=H1, producer=counting)
+    cc.cached_copilot_context(user_id="u1", holdings=H1, portfolio_context=PCTX, producer=counting)
+    cc.cached_copilot_context(user_id="u2", holdings=H1, portfolio_context=PCTX, producer=counting)
     assert calls["n"] == 2  # same book, different user → separate cache entries
+
+
+def test_cached_copilot_context_invalidates_when_risk_profile_changes():
+    from libs.mindmarket_core.portfolio_scoring import AssetPosition
+
+    calls = {"n": 0}
+
+    def producer():
+        calls["n"] += 1
+        return [
+            AssetPosition(ticker="AAPL", name="Apple", asset_type="equity", market_value=1.0)
+        ], _mk_score()
+
+    cc.cached_copilot_context(
+        user_id="u1",
+        holdings=H1,
+        portfolio_context=PCTX,
+        risk_profile_key="confirmed:2:t1",
+        producer=producer,
+    )
+    cc.cached_copilot_context(
+        user_id="u1",
+        holdings=H1,
+        portfolio_context=PCTX,
+        risk_profile_key="confirmed:2:t1",
+        producer=producer,
+    )
+    cc.cached_copilot_context(
+        user_id="u1",
+        holdings=H1,
+        portfolio_context=PCTX,
+        risk_profile_key="confirmed:4:t2",
+        producer=producer,
+    )
+    assert calls["n"] == 2
+
+
+def test_private_context_caches_invalidate_on_portfolio_or_capital_change():
+    """Identical holdings still belong to a different analysis context when
+    the active portfolio or its cash/margin inputs change."""
+    from libs.mindmarket_core.portfolio_scoring import AssetPosition
+
+    scenario_calls = {"n": 0}
+    copilot_calls = {"n": 0}
+
+    def scenario_producer():
+        scenario_calls["n"] += 1
+        return {"run": scenario_calls["n"]}
+
+    def copilot_producer():
+        copilot_calls["n"] += 1
+        return [
+            AssetPosition(ticker="AAPL", name="Apple", asset_type="equity", market_value=1.0)
+        ], _mk_score()
+
+    changed_context = {**PCTX, "portfolio_id": "p2", "margin_loan": 500.0}
+    for context in (PCTX, changed_context):
+        cc.cached_scenarios(
+            user_id="u1",
+            holdings=H1,
+            portfolio_context=context,
+            scenario_params={"shock": -0.1},
+            producer=scenario_producer,
+        )
+        cc.cached_copilot_context(
+            user_id="u1",
+            holdings=H1,
+            portfolio_context=context,
+            producer=copilot_producer,
+        )
+
+    assert scenario_calls["n"] == 2
+    assert copilot_calls["n"] == 2
 
 
 # ── LLM-response guardrail: never cache without a context_hash ──────────────

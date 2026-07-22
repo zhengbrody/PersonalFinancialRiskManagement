@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,6 +48,7 @@ import {
 import { explainInputFromScore } from "@/lib/risk-explain-input";
 import { scoreResponseSchema } from "@/lib/schemas";
 import type { Holding, ScoreRequest, ScoreResponse } from "@/lib/schemas";
+import { ShareRiskCardButton } from "@/components/share-risk-card-button";
 
 const COCKPIT_TABS = [
   { value: "overview", label: "Overview" },
@@ -78,6 +79,12 @@ export default function ScorePage() {
   // and is served from cache on revisit, so it no longer recomputes + blanks
   // every time. Disabled for anon (no token).
   const active = useActiveScore();
+
+  useEffect(() => {
+    if (signedIn && active.data?.risk_preference != null && !result) {
+      setRiskPref(active.data.risk_preference);
+    }
+  }, [signedIn, active.data?.risk_preference, result]);
 
   // What-if lab plumbing (signed-in only): the saved book + latest closes so
   // "load my holdings" can prefill the sandbox with shares × price. Both are
@@ -242,14 +249,19 @@ export default function ScorePage() {
           onChange={(e) => setRiskPref(Number(e.target.value) || 3)}
           className="w-20 font-mono"
         />
-        {signedIn && riskPref !== 3 && (
+        {signedIn && active.data && riskPref !== active.data.risk_preference && (
           <span className="text-xs text-muted-foreground">
-            The baseline is scored at preference 3 — changing this value will itself show up in the comparison.
+            Your active baseline uses preference {active.data.risk_preference}; this sandbox override
+            changes the scoring target and will appear in the comparison.
           </span>
         )}
       </div>
 
-      <Button type="submit" disabled={loading} className="w-full">
+      <Button
+        type="submit"
+        disabled={loading || (signedIn && active.isLoading)}
+        className="w-full"
+      >
         {loading ? "Scoring…" : "Run score"}
       </Button>
     </form>
@@ -274,7 +286,9 @@ export default function ScorePage() {
       )}
       {showLoading && <ResultSkeleton />}
       {showError && !showLoading && <ScoreError error={showError} />}
-      {shown && !showLoading && <ResultPanel result={shown} />}
+      {shown && !showLoading && (
+        <ResultPanel result={shown} canShare={Boolean(signedIn && !result && active.data)} />
+      )}
       {!showLoading && !showError && !shown && (
         <Card>
           <CardHeader>
@@ -408,7 +422,7 @@ function ErrorPanel({ error }: { error: ApiError }) {
   );
 }
 
-function ResultPanel({ result }: { result: ScoreResponse }) {
+function ResultPanel({ result, canShare }: { result: ScoreResponse; canShare: boolean }) {
   const [tab, setTab] = useState("overview");
   const lastSnapshot = useLastSnapshot();
   const snapshot = lastSnapshot.data?.snapshot ?? null;
@@ -479,6 +493,7 @@ function ResultPanel({ result }: { result: ScoreResponse }) {
           <ScoreGauge score={result.overall_score} />
           <HeroMeta metrics={result.metrics} />
           <DataConfidence confidence={result.data_confidence} className="mt-1" />
+          {canShare && !syntheticDemo && <ShareRiskCardButton />}
           <RegimeContextLine />
         </CardContent>
       </Card>

@@ -62,7 +62,7 @@ describe("PortfoliosPage", () => {
     });
 
     renderWithQuery(<PortfoliosPage />);
-    expect(replaceMock).toHaveBeenCalledWith("/login");
+    expect(replaceMock).toHaveBeenCalledWith("/login?next=%2Fportfolios");
   });
 
   it("renders the empty-state CTA when the user has no portfolios", async () => {

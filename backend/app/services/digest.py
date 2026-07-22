@@ -98,12 +98,55 @@ def mark_sent(user_id: str) -> None:
         _log.warning("digest.mark_sent_failed", exc_info=True)
 
 
-def latest_snapshots(user_id: str, limit: int = 2) -> list[dict[str, Any]]:
+def active_portfolio_id(user_id: str) -> Optional[str]:
+    """Resolve the recipient's active portfolio in one service-role read.
+
+    The digest cron has no user JWT, so it cannot reuse the RLS-scoped web
+    resolver.  Fetching the recipient's rows in one statement and applying the
+    product's default-first / newest-fallback rule locally gives the batch a
+    stable portfolio id without ever considering another user's row.  Missing
+    portfolios and repository failures both fail soft to ``None``.
+    """
+    try:
+        rows = (
+            _admin()
+            .table("portfolios")
+            .select("id,is_default,created_at")
+            .eq("user_id", user_id)
+            .execute()
+            .data
+            or []
+        )
+    except Exception as exc:  # noqa: BLE001 - one recipient must not sink the batch
+        _log.warning("digest.active_portfolio_failed reason=%s", type(exc).__name__)
+        return None
+    candidates = [row for row in rows if row.get("id")]
+    if not candidates:
+        return None
+    candidates.sort(
+        key=lambda row: (bool(row.get("is_default")), str(row.get("created_at") or "")),
+        reverse=True,
+    )
+    return str(candidates[0]["id"])
+
+
+def latest_snapshots(
+    user_id: str, portfolio_id: Optional[str], limit: int = 2
+) -> list[dict[str, Any]]:
+    """Latest snapshots for exactly one resolved portfolio.
+
+    The admin client bypasses RLS, therefore both predicates are mandatory.
+    A missing active id must never fall back to user-wide history: that could
+    compare two different books and manufacture a weekly score delta.
+    """
+    if not portfolio_id:
+        return []
     rows = (
         _admin()
         .table("portfolio_snapshots")
-        .select("created_at,net_equity,risk_metrics,score_version")
+        .select("portfolio_id,created_at,net_equity,risk_metrics,score_version")
         .eq("user_id", user_id)
+        .eq("portfolio_id", portfolio_id)
         .order("created_at", desc=True)
         .limit(limit)
         .execute()
@@ -220,14 +263,31 @@ def build_digest(
 
     score = rm.get("overall_score")
     prev_score = prev_rm.get("overall_score")
-    # Only express a delta when both snapshots used the SAME methodology version.
-    # A cross-version move isn't a market/holdings change, so we suppress it.
+    # Only express a delta when BOTH score methodology and risk-profile target
+    # are comparable. Risk Match is preference-relative, so equal score versions
+    # alone are insufficient: a changed/missing preference starts a new baseline.
     latest_version = latest.get("score_version")
     prev_version = (prev or {}).get("score_version")
     methodology_changed = prev is not None and not is_comparable(prev_version, latest_version)
+
+    def _risk_preference(metrics: dict[str, Any]) -> Optional[int]:
+        try:
+            value = int(metrics.get("risk_preference"))
+        except (TypeError, ValueError):
+            return None
+        return value if 1 <= value <= 5 else None
+
+    latest_preference = _risk_preference(rm)
+    previous_preference = _risk_preference(prev_rm)
+    preference_changed = prev is not None and (
+        latest_preference is None
+        or previous_preference is None
+        or latest_preference != previous_preference
+    )
+    comparison_blocked = methodology_changed or preference_changed
     score_delta = (
         float(score) - float(prev_score)
-        if score is not None and prev_score is not None and not methodology_changed
+        if score is not None and prev_score is not None and not comparison_blocked
         else None
     )
     vol = rm.get("annual_volatility")
@@ -290,12 +350,29 @@ def build_digest(
             else "We updated how the Health Score is calculated, so this week&#39;s score "
             "isn&#39;t directly comparable to your last one."
         )
-        methodology_note = (
+        comparison_note = (
             '<p style="margin:14px 0;padding:10px 14px;background:#FFF6E5;border:1px solid #F0D9A8;'
-            f'border-radius:8px;color:#7A5B12;font-size:14px;">{note_text}</p>'
+            f'border-radius:8px;color:#7A5B12;font-size:14px;">{note_text} '
+            "This score starts a new comparison baseline.</p>"
+        )
+    elif preference_changed:
+        if latest_preference is not None and previous_preference is not None:
+            note_text = (
+                "Your risk profile changed since the earlier score, so the two scores "
+                "aren&#39;t directly comparable."
+            )
+        else:
+            note_text = (
+                "One of these saved scores doesn&#39;t record the risk profile used for its "
+                "target, so the two scores aren&#39;t directly comparable."
+            )
+        comparison_note = (
+            '<p style="margin:14px 0;padding:10px 14px;background:#FFF6E5;border:1px solid #F0D9A8;'
+            f'border-radius:8px;color:#7A5B12;font-size:14px;">{note_text} '
+            "This score starts a new comparison baseline.</p>"
         )
     else:
-        methodology_note = ""
+        comparison_note = ""
 
     html_body = f"""
 <div style="max-width:560px;margin:0 auto;padding:28px 20px;background:{_PAPER};
@@ -305,7 +382,7 @@ def build_digest(
   <h1 style="margin:10px 0 2px;font-size:22px;">Your portfolio, this week at a glance</h1>
   <p style="margin:0 0 16px;color:{_SLATE};font-size:13px;">As of your latest score on {_html.escape(as_of)} · every figure is deterministically computed, no AI-generated numbers</p>
   {stale_note}
-  {methodology_note}
+  {comparison_note}
   <table role="presentation" cellspacing="6" cellpadding="0" style="border-collapse:separate;width:100%;">
     <tr>
       {_stat_cell("Health Score", score_txt, _delta_chip(score_delta))}
@@ -431,7 +508,8 @@ def _run_weekly_locked(*, force: bool, limit: int) -> dict[str, Any]:
             if not force and recently_sent(uid):
                 skipped_recent += 1
                 continue
-            snaps = latest_snapshots(uid)
+            portfolio_id = active_portfolio_id(uid)
+            snaps = latest_snapshots(uid, portfolio_id)
             digest = build_digest(r["email"], uid, snaps, regime_line)
             if digest is None:
                 skipped_no_snapshot += 1

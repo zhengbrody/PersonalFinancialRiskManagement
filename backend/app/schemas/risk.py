@@ -274,6 +274,13 @@ class RiskReportOut(BaseModel):
 
     # Price-data provenance for the report's 'data quality' area.
     price_provenance: Optional[PriceProvenanceOut] = None
+    # The profile used to interpret this report.  The report's raw risk math is
+    # preference-independent, but exposing the resolved value keeps every
+    # signed-in risk surface on the same user-confirmed baseline.
+    risk_preference: int = Field(default=3, ge=1, le=5)
+    risk_preference_source: Literal["confirmed", "neutral_baseline", "request_override"] = (
+        "neutral_baseline"
+    )
 
     # KPIs — scalars, NaN-scrubbed at the envelope layer.
     annual_return: Optional[float] = None
@@ -395,7 +402,7 @@ class ReportFromActiveRequest(BaseModel):
     the score frequently while the report takes seconds.
     """
 
-    risk_preference: int = Field(default=3, ge=1, le=5)
+    risk_preference: Optional[int] = Field(default=None, ge=1, le=5)
     risk_free_rate: float = Field(default=0.045, ge=0.0, le=0.20)
     # Aligned with ScoreFromActiveRequest (365) so the Health Score and Risk
     # Report read the SAME 1-year window — the only avoidable source of
@@ -420,7 +427,7 @@ class ScoreFromActiveRequest(BaseModel):
     override the defaults baked into the score for that one call.
     """
 
-    risk_preference: int = Field(default=3, ge=1, le=5)
+    risk_preference: Optional[int] = Field(default=None, ge=1, le=5)
     risk_free_rate: float = Field(default=0.045, ge=0.0, le=0.20)
     history_days: int = Field(
         default=365,
@@ -545,9 +552,27 @@ class ReasonCodeOut(BaseModel):
     detail: str = ""
 
 
+class RiskFitOut(BaseModel):
+    """Preference-relative interpretation of the measured portfolio risk.
+
+    ``signed_gap`` is positive when measured risk is above the selected target,
+    negative when below it, and zero-ish when aligned.  It is intentionally
+    unavailable when the shared confidence gate disallows a directional claim.
+    """
+
+    status: Literal["above", "aligned", "below", "unavailable"]
+    signed_gap: Optional[float] = None
+    target_label: str
+    reason_codes: list[str] = Field(default_factory=list)
+
+
 class ScoreResponse(BaseModel):
     overall_score: int
     risk_preference: int
+    risk_preference_source: Literal["confirmed", "neutral_baseline", "request_override"] = (
+        "neutral_baseline"
+    )
+    risk_fit: Optional[RiskFitOut] = None
     risk_target: dict
     metrics: PortfolioMetricsOut
     dimensions: dict[str, DimensionScoreOut]

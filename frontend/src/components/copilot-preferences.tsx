@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -59,6 +60,7 @@ export function CopilotPreferencesCard() {
   const clear = useClearCopilotPreferences();
   const [form, setForm] = useState<FormState>(formFrom(undefined));
   const [confirmClear, setConfirmClear] = useState(false);
+  const [showScoreCta, setShowScoreCta] = useState(false);
 
   useEffect(() => {
     if (prefs.data) setForm(formFrom(prefs.data));
@@ -74,9 +76,9 @@ export function CopilotPreferencesCard() {
     e.preventDefault();
     // The Confirm button is disabled while saving, but pressing Enter in a
     // number input still fires onSubmit — guard so a save can't double-fire.
-    if (save.isPending) return;
+    if (save.isPending || !form.risk_tolerance) return;
     const body = {
-      risk_tolerance: form.risk_tolerance ? Number(form.risk_tolerance) : null,
+      risk_tolerance: Number(form.risk_tolerance),
       investment_horizon: form.investment_horizon || null,
       liquidity_need: form.liquidity_need || null,
       concentration_limit: form.concentration_limit
@@ -86,7 +88,10 @@ export function CopilotPreferencesCard() {
     };
     save.mutate(body, {
       // Privacy: the event carries NO preference values.
-      onSuccess: () => track("copilot_prefs_confirmed", {}),
+      onSuccess: () => {
+        setShowScoreCta(true);
+        track("copilot_prefs_confirmed", {});
+      },
     });
   }
 
@@ -95,21 +100,23 @@ export function CopilotPreferencesCard() {
       onSuccess: () => {
         setForm(formFrom(undefined));
         setConfirmClear(false);
+        setShowScoreCta(false);
         track("copilot_prefs_cleared", {});
       },
     });
   }
 
   return (
-    <Card>
+    <Card id="risk-fit" className="scroll-mt-24">
       <CardHeader>
-        <CardTitle className="text-base">Copilot preferences (optional)</CardTitle>
+        <CardTitle className="text-base">Risk Fit</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-xs text-muted-foreground">
-          Saved only when you press Confirm — never inferred from your chats or
-          holdings. They tailor which risks the Copilot emphasises; they never
-          change your data, scores or confidence gates.
+          Choose a risk tolerance to set the target used by Health Score and
+          simulations. The other preferences are optional. Nothing is inferred
+          from your chats or holdings, and preferences never change holdings,
+          observed market data or confidence gates.
         </p>
 
         {prefs.isLoading ? (
@@ -132,6 +139,7 @@ export function CopilotPreferencesCard() {
                   value={form.risk_tolerance}
                   onChange={(e) => set("risk_tolerance")(e.target.value)}
                   aria-label="Risk tolerance"
+                  required
                 >
                   <option value="">Not set</option>
                   {[1, 2, 3, 4, 5].map((n) => (
@@ -209,8 +217,33 @@ export function CopilotPreferencesCard() {
               </p>
             )}
 
+            {!form.risk_tolerance && (
+              <p className="text-xs text-muted-foreground">
+                Risk tolerance is required. Choose 3 for an explicit neutral baseline.
+              </p>
+            )}
+
+            {showScoreCta && (
+              <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3" role="status">
+                <p className="text-sm font-medium">Risk Fit confirmed.</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Review the recalculated score against your chosen target.
+                </p>
+                <Link
+                  href="/analyze?view=overview"
+                  className="mt-2 inline-flex text-sm font-medium text-primary hover:underline"
+                >
+                  Review updated Health Score →
+                </Link>
+              </div>
+            )}
+
             <div className="flex flex-wrap items-center gap-2">
-              <Button type="submit" size="sm" disabled={save.isPending}>
+              <Button
+                type="submit"
+                size="sm"
+                disabled={save.isPending || !form.risk_tolerance}
+              >
                 {save.isPending ? "Saving…" : "Confirm preferences"}
               </Button>
               {prefs.data?.confirmed &&

@@ -26,6 +26,8 @@ import LoginPage from "./page";
 
 afterEach(() => {
   vi.clearAllMocks();
+  window.history.replaceState({}, "", "/login");
+  window.sessionStorage.clear();
 });
 
 describe("LoginPage", () => {
@@ -111,6 +113,28 @@ describe("LoginPage", () => {
     render(<LoginPage />);
     await user.click(screen.getByRole("button", { name: /continue with google/i }));
 
-    expect(signInWithGoogle).toHaveBeenCalledOnce();
+    expect(signInWithGoogle).toHaveBeenCalledWith("/");
+  });
+
+  it("continues a safe portfolio handoff after email confirmation", async () => {
+    window.history.replaceState({}, "", "/login?next=%2Fportfolios%2Fnew");
+    const signIn = vi.fn().mockResolvedValue(undefined);
+    useAuthMock.mockReturnValue({
+      user: null,
+      accessToken: null,
+      loading: false,
+      configured: true,
+      signIn,
+      signInWithGoogle: vi.fn(),
+      signOut: vi.fn(),
+    });
+
+    render(<LoginPage />);
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/email/i), "owner@mindmarket.test");
+    await user.type(screen.getByLabelText(/password/i), "hunter2");
+    await user.click(screen.getByRole("button", { name: /^sign in$/i }));
+
+    expect(replaceMock).toHaveBeenCalledWith("/portfolios/new");
   });
 });

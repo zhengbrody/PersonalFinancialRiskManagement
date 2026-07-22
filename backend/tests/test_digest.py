@@ -52,6 +52,7 @@ class _FakeAdmin:
     def __init__(self):
         self.tables: dict[str, list[dict]] = {
             "profiles": [],
+            "portfolios": [],
             "digest_prefs": [],
             "digest_sends": [],
             "portfolio_snapshots": [],
@@ -118,15 +119,19 @@ def _snap(
     vol: float = 0.18,
     net: float = 50_000.0,
     score_version: str = SCORE_VERSION,
+    risk_preference: int | None = 3,
+    portfolio_id: str = "p1",
 ):
     return {
         "user_id": "u1",
+        "portfolio_id": portfolio_id,
         "created_at": created,
         "net_equity": net,
         "score_version": score_version,
         "risk_metrics": {
             "overall_score": score,
             "annual_volatility": vol,
+            "risk_preference": risk_preference,
             "concentration": {"top_holding_ticker": "NVDA", "top_holding_weight": 0.31},
         },
     }
@@ -187,6 +192,71 @@ def test_build_digest_stale_snapshot_gets_comeback_variant(digest_env):
 
 def test_build_digest_none_without_snapshots(digest_env):
     assert dg.build_digest("a@b.co", "u1", [], "line") is None
+
+
+@pytest.mark.parametrize(
+    ("previous_version", "previous_preference", "expected_copy"),
+    [
+        ("risk-score-old", 3, "starts a new comparison baseline"),
+        (SCORE_VERSION, 5, "Your risk profile changed"),
+        (SCORE_VERSION, None, "doesn&#39;t record the risk profile"),
+    ],
+)
+def test_build_digest_resets_incomparable_baseline(
+    digest_env, previous_version, previous_preference, expected_copy
+):
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    snaps = [
+        _snap(now.isoformat(), 712.0, risk_preference=3),
+        _snap(
+            (now - timedelta(days=7)).isoformat(),
+            612.0,
+            score_version=previous_version,
+            risk_preference=previous_preference,
+        ),
+    ]
+    result = dg.build_digest("a@b.co", "u1", snaps, "line")
+    assert result is not None
+    assert "+100" not in result["subject"]
+    assert "+100" not in result["html"]
+    assert expected_copy in result["html"]
+    assert "starts a new comparison baseline" in result["html"]
+
+
+def test_active_portfolio_and_snapshot_reads_are_portfolio_scoped(fake_admin):
+    fake_admin.tables["portfolios"] = [
+        {"id": "old-default", "user_id": "u1", "is_default": True, "created_at": "2026-01-01"},
+        {
+            "id": "newer-nondefault",
+            "user_id": "u1",
+            "is_default": False,
+            "created_at": "2026-07-01",
+        },
+        {"id": "other-user", "user_id": "u2", "is_default": True, "created_at": "2026-07-20"},
+    ]
+    fake_admin.tables["portfolio_snapshots"] = [
+        _snap("2026-07-20", 700, portfolio_id="old-default"),
+        _snap("2026-07-19", 100, portfolio_id="newer-nondefault"),
+        {**_snap("2026-07-21", 999, portfolio_id="old-default"), "user_id": "u2"},
+    ]
+
+    portfolio_id = dg.active_portfolio_id("u1")
+    snapshots = dg.latest_snapshots("u1", portfolio_id)
+
+    assert portfolio_id == "old-default"
+    assert [row["risk_metrics"]["overall_score"] for row in snapshots] == [700]
+    assert all(row["portfolio_id"] == "old-default" for row in snapshots)
+
+
+def test_active_portfolio_uses_newest_when_no_default(fake_admin):
+    fake_admin.tables["portfolios"] = [
+        {"id": "older", "user_id": "u1", "is_default": False, "created_at": "2026-01-01"},
+        {"id": "newer", "user_id": "u1", "is_default": False, "created_at": "2026-07-01"},
+    ]
+    assert dg.active_portfolio_id("u1") == "newer"
+    assert dg.latest_snapshots("u1", None) == []
 
 
 def test_build_digest_escapes_html(digest_env):
@@ -272,6 +342,11 @@ def test_run_weekly_filters_and_sends(digest_env, fake_admin, sent_emails, monke
     fake_admin.tables["digest_sends"] = [
         {"user_id": "u4", "sent_at": (now - timedelta(days=2)).isoformat()}
     ]
+    fake_admin.tables["portfolios"] = [
+        {"id": "p1", "user_id": "u1", "is_default": True, "created_at": now.isoformat()},
+        {"id": "p3", "user_id": "u3", "is_default": True, "created_at": now.isoformat()},
+        {"id": "p4", "user_id": "u4", "is_default": True, "created_at": now.isoformat()},
+    ]
     fake_admin.tables["portfolio_snapshots"] = [
         _snap(now.isoformat(), 712.0),
         {**_snap((now - timedelta(days=1)).isoformat(), 640.0), "user_id": "u4"},
@@ -298,7 +373,12 @@ def test_run_weekly_force_ignores_dedupe(digest_env, fake_admin, sent_emails, mo
     fake_admin.tables["digest_sends"] = [
         {"user_id": "u4", "sent_at": (now - timedelta(days=2)).isoformat()}
     ]
-    fake_admin.tables["portfolio_snapshots"] = [{**_snap(now.isoformat(), 700.0), "user_id": "u4"}]
+    fake_admin.tables["portfolios"] = [
+        {"id": "p4", "user_id": "u4", "is_default": True, "created_at": now.isoformat()}
+    ]
+    fake_admin.tables["portfolio_snapshots"] = [
+        {**_snap(now.isoformat(), 700.0, portfolio_id="p4"), "user_id": "u4"}
+    ]
     monkeypatch.setattr(dg, "_regime_line", lambda: "x")
 
     out = dg.run_weekly(force=True)

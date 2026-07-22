@@ -407,6 +407,100 @@ def test_remove_holding_keeps_portfolio_non_empty(mock_supabase):
 # ── active_portfolio resolver ────────────────────────────────────
 
 
+def test_active_context_explicit_token_reads_one_coherent_portfolio_snapshot(monkeypatch):
+    """Backend callers must not assemble one request from separate DB reads."""
+    from libs.auth import active_portfolio as ap
+    from libs.auth import portfolios as portfolio_repo
+
+    calls = []
+    selected = {
+        "id": "selected-p1",
+        "name": "Selected",
+        "holdings": {"AAPL": {"shares": 7, "avg_cost": 123.45}},
+        "cash_balance": 321.0,
+        "margin_loan": 654.0,
+        "contributed_capital": 9876.0,
+        "is_default": True,
+    }
+    # Distinct values make a second/read-drifted row immediately observable.
+    later_row = {
+        "id": "later-p2",
+        "name": "Later",
+        "holdings": {"MSFT": {"shares": 99}},
+        "cash_balance": 1.0,
+        "margin_loan": 2.0,
+        "contributed_capital": 3.0,
+        "is_default": False,
+    }
+
+    def _list_once(access_token=None):
+        calls.append(access_token)
+        return [selected, later_row]
+
+    monkeypatch.setattr(portfolio_repo, "list_portfolios", _list_once)
+
+    context = ap.get_active_portfolio_context(access_token="explicit-jwt")
+
+    assert calls == ["explicit-jwt"]
+    assert context.portfolio_id == "selected-p1"
+    assert set(context.holdings) == {"AAPL"}
+    assert context.holdings["AAPL"]["shares"] == 7.0
+    assert context.cash_balance == 321.0
+    assert context.margin_loan == 654.0
+    assert context.contributed_capital == 9876.0
+
+
+def test_active_context_explicit_token_db_failure_never_owner_falls_back(monkeypatch):
+    """A verified backend request fails closed even if owner demo data exists."""
+    from libs.auth import active_portfolio as ap
+    from libs.auth import portfolios as portfolio_repo
+
+    def _db_failure(access_token=None):
+        raise RuntimeError("database unavailable")
+
+    def _owner_demo_must_not_run():
+        raise AssertionError("explicit-token request leaked into owner demo fallback")
+
+    monkeypatch.setattr(portfolio_repo, "list_portfolios", _db_failure)
+    monkeypatch.setattr(ap, "_hardcoded_fallback", _owner_demo_must_not_run)
+
+    context = ap.get_active_portfolio_context(access_token="explicit-jwt")
+
+    assert context.portfolio_id is None
+    assert context.holdings == {}
+    assert context.cash_balance == 0.0
+    assert context.margin_loan == 0.0
+    assert context.contributed_capital == 0.0
+
+
+def test_active_context_scrubs_nonfinite_capital_from_selected_row(monkeypatch):
+    """Persisted NaN/Inf account values cannot contaminate risk calculations."""
+    from libs.auth import active_portfolio as ap
+    from libs.auth import portfolios as portfolio_repo
+
+    monkeypatch.setattr(
+        portfolio_repo,
+        "list_portfolios",
+        lambda access_token=None: [
+            {
+                "id": "p-nonfinite",
+                "holdings": {"AAPL": {"shares": 1}},
+                "cash_balance": float("nan"),
+                "margin_loan": float("inf"),
+                "contributed_capital": float("-inf"),
+                "is_default": True,
+            }
+        ],
+    )
+
+    context = ap.get_active_portfolio_context(access_token="explicit-jwt")
+
+    assert context.portfolio_id == "p-nonfinite"
+    assert context.cash_balance == 0.0
+    assert context.margin_loan == 0.0
+    assert context.contributed_capital == 0.0
+
+
 def test_active_falls_back_to_hardcoded_when_unauth(monkeypatch):
     """No auth → hardcoded portfolio_config returned verbatim."""
     fake_st = MagicMock()

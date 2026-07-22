@@ -20,6 +20,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { authHref } from "@/lib/auth-redirect";
 import {
   useMyPortfolios,
   useUpdatePortfolio,
@@ -43,7 +44,9 @@ export default function EditPortfolioPage() {
 
   useEffect(() => {
     if (!configured) return;
-    if (!authLoading && !user) router.replace("/login");
+    if (!authLoading && !user) {
+      router.replace(authHref("/login", "/portfolios"));
+    }
   }, [user, authLoading, configured, router]);
 
   const portfolio: PortfolioRow | undefined = useMemo(

@@ -125,6 +125,15 @@ def test_journey_record_bad_milestone_422(test_client, mint_token, fake_journey)
     assert r.status_code == 422
 
 
+def test_journey_cannot_client_claim_server_owned_milestone(test_client, mint_token, fake_journey):
+    r = test_client.post(
+        "/api/v1/journey/record",
+        json={"milestone": "first_driver_viewed_at"},
+        headers=_auth(mint_token),
+    )
+    assert r.status_code == 422
+
+
 # ── journey first-once vs last-always logic (service unit) ──────────
 
 

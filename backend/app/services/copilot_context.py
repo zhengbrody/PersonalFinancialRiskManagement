@@ -18,15 +18,42 @@ unlevered, cash-free book rather than failing the chat.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Optional
+
 from ..core.deps_auth import AuthedUser
 from ..core.responses import APIError, server_error
+
+
+@dataclass(frozen=True)
+class LoadedCopilotContext:
+    """A score and the exact portfolio row that produced it.
+
+    Iteration intentionally yields only ``positions, score`` so every existing
+    caller can continue tuple-unpacking while evidence/snapshot consumers can
+    reuse ``active_context`` instead of performing a second portfolio lookup.
+    """
+
+    positions: list
+    score: object
+    active_context: object
+
+    def __iter__(self):
+        yield self.positions
+        yield self.score
+
+    def __len__(self) -> int:
+        return 2
+
+    def __getitem__(self, index: int):
+        return (self.positions, self.score)[index]
 
 
 def load_positions_and_score(
     user: AuthedUser,
     *,
     history_days: int = 365,
-    risk_preference: int = 3,
+    risk_preference: Optional[int] = None,
     risk_free_rate: float = 0.045,
 ):
     """Resolve the caller's active portfolio and compute its score.
@@ -40,19 +67,23 @@ def load_positions_and_score(
       * 422 ``no_priced_holdings``   — holdings exist but none priceable.
       * 500 ``server_error``         — market fetch / engine import blew up.
     """
-    # Resolve the active portfolio (RLS-filtered via the caller's JWT;
-    # never owner-fallback for token callers).
+    from . import risk_profile
+
+    resolved_profile = risk_profile.resolve_risk_preference(user, risk_preference)
+
+    # Resolve the active portfolio (RLS-filtered via the caller's JWT) once.
+    # Holdings and capital must come from the same selected row.
     try:
-        from libs.auth.active_portfolio import get_active_holdings
+        from libs.auth.active_portfolio import get_active_portfolio_context
     except Exception as exc:  # pragma: no cover - import guard
         raise server_error("active_portfolio module unavailable.", reason=str(exc)) from exc
 
     try:
-        holdings = get_active_holdings(access_token=user.access_token)
+        active_context = get_active_portfolio_context(access_token=user.access_token)
     except Exception as exc:
         raise server_error("Could not load active portfolio.", reason=type(exc).__name__) from exc
 
-    holdings = holdings or {}
+    holdings = active_context.holdings or {}
     if not holdings:
         raise APIError(
             status=422,
@@ -99,7 +130,8 @@ def load_positions_and_score(
         from libs.mindmarket_core.portfolio_scoring import AssetPosition, score_portfolio
 
         equity_value = float(sum(p.market_value for p in positions))
-        cash_balance, margin_loan = _resolve_cash_and_margin(user)
+        cash_balance = active_context.cash_balance
+        margin_loan = active_context.margin_loan
         if cash_balance > 0:
             positions = [
                 *positions,
@@ -122,7 +154,7 @@ def load_positions_and_score(
         score = score_portfolio(
             positions,
             returns,
-            risk_preference=risk_preference,
+            risk_preference=resolved_profile.value,
             risk_free_rate=risk_free_rate,
             leverage=leverage,
         )
@@ -137,32 +169,27 @@ def load_positions_and_score(
     from . import context_cache as cc
 
     positions, score, _res = cc.cached_copilot_context(
-        user_id=user.id, holdings=holdings, producer=_compute
+        user_id=user.id,
+        holdings=holdings,
+        portfolio_context={
+            "portfolio_id": active_context.portfolio_id,
+            "cash": active_context.cash_balance,
+            "margin": active_context.margin_loan,
+            "contributed": active_context.contributed_capital,
+        },
+        risk_profile_key=resolved_profile.cache_key,
+        producer=_compute,
     )
-    return positions, score
+    return LoadedCopilotContext(
+        positions=list(positions),
+        score=score,
+        active_context=active_context,
+    )
 
 
 # Mirror of risk.py's helpers (kept local so this service doesn't import from
 # the API layer). Cap leverage well above any realistic retail margin account.
 _MAX_LEVERAGE = 10.0
-
-
-def _resolve_cash_and_margin(user: AuthedUser) -> tuple[float, float]:
-    """Return ``(cash_balance, margin_loan)`` for the caller's active
-    portfolio (token-scoped). Fail-soft to ``(0.0, 0.0)`` — a Supabase blip
-    must degrade to the prior unlevered book, never 500 the chat."""
-    try:
-        from libs.auth.active_portfolio import (
-            get_active_capital_inputs,
-            get_active_margin_loan,
-        )
-
-        cap = get_active_capital_inputs(access_token=user.access_token) or {}
-        cash = float(cap.get("cash_balance") or 0.0)
-        margin = float(get_active_margin_loan(access_token=user.access_token) or 0.0)
-        return max(0.0, cash), max(0.0, margin)
-    except Exception:
-        return 0.0, 0.0
 
 
 def _leverage_factor(*, gross_assets: float, margin_loan: float) -> float:

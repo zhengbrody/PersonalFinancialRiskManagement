@@ -1,6 +1,5 @@
 /**
- * Shareable "risk-score card" — the single source of truth for the public
- * /share/risk-card page AND its /share/risk-card/opengraph-image route.
+ * Shareable risk cards — the single source of truth for the public page and OG route.
  *
  * Framework-free + pure (no React, no client imports) so the server OG route can
  * import it safely. The card's SCORE comes from a constant keyed by `book`,
@@ -8,6 +7,8 @@
  * number on this public, un-authed, cache-poisonable surface. That keeps the
  * product-wide "never invent a number" invariant on the shareable artifact.
  *
+ * Real portfolios use a backend-signed, coarse-band token; the token never
+ * contains identity, positions, tickers, exact scores or dollar values.
  * SHARE_BOOKS mirrors the BALANCED/GROWTH demo books in
  * components/sample-cockpit.tsx; share-card.test.ts asserts they stay in sync
  * (score + band) so they can't silently drift.
@@ -16,6 +17,7 @@
 // Type-only import (erased at build — no runtime/client code pulled in, so the
 // server OG route can still import this module safely).
 import type { ScoreBand } from "@/components/score-gauge";
+import { z } from "zod";
 
 export type ShareBookId = "balanced" | "growth";
 // Reuse the canonical 0–1000 band union from the score gauge (type-only import,
@@ -95,4 +97,63 @@ export function linkedInIntentUrl(book: ShareBook, origin: string = SHARE_SITE_U
   const u = new URL("https://www.linkedin.com/sharing/share-offsite/");
   u.searchParams.set("url", buildShareUrl(book.id, origin));
   return u.toString();
+}
+
+export const realShareCardSchema = z.strictObject({
+  card: z.strictObject({
+    v: z.literal(1),
+    score_band: z.enum(["poor", "watch", "healthy", "strong"]),
+    risk_fit: z.enum(["above", "aligned", "below", "unavailable", "not_confirmed"]),
+    top_risk_category: z.enum([
+      "data_quality", "concentration", "leverage", "options", "downside",
+      "volatility", "market_sensitivity", "overall_balance",
+    ]),
+    stress_band: z.enum([
+      "under_5_pct", "5_to_10_pct", "10_to_20_pct", "over_20_pct", "unavailable",
+    ]),
+    confidence_label: z.enum(["high", "medium", "low"]),
+    as_of: z.string(),
+    model_version: z.string(),
+    exp: z.number().int(),
+  }),
+});
+
+export type RealShareCard = z.infer<typeof realShareCardSchema>["card"];
+
+export function buildTokenShareUrl(token: string, origin: string = SHARE_SITE_URL): string {
+  return `${origin.replace(/\/$/, "")}/share/risk-card?token=${encodeURIComponent(token)}`;
+}
+
+export function tokenXIntentUrl(card: RealShareCard, token: string): string {
+  const u = new URL("https://twitter.com/intent/tweet");
+  u.searchParams.set(
+    "text",
+    `My portfolio risk profile is ${titleCase(card.score_band)} on MindMarket — shared without positions or exact values.`,
+  );
+  u.searchParams.set("url", buildTokenShareUrl(token));
+  return u.toString();
+}
+
+export function tokenLinkedInIntentUrl(token: string): string {
+  const u = new URL("https://www.linkedin.com/sharing/share-offsite/");
+  u.searchParams.set("url", buildTokenShareUrl(token));
+  return u.toString();
+}
+
+export function titleCase(value: string): string {
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+export function riskFitLabel(value: RealShareCard["risk_fit"]): string {
+  return value === "not_confirmed" ? "Preference not confirmed" : titleCase(value);
+}
+
+export function stressBandLabel(value: RealShareCard["stress_band"]): string {
+  return {
+    under_5_pct: "Under 5% impact",
+    "5_to_10_pct": "5–10% impact",
+    "10_to_20_pct": "10–20% impact",
+    over_20_pct: "Over 20% impact",
+    unavailable: "Unavailable",
+  }[value];
 }

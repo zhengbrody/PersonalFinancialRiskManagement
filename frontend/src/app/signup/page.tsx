@@ -21,6 +21,12 @@ import { ANALYTICS_EVENTS } from "@/lib/analytics-events";
 import { useAuth } from "@/lib/auth-context";
 import { AuthShell } from "@/components/marketing/auth-shell";
 import { C } from "@/components/marketing/theme";
+import {
+  authHref,
+  consumeAuthRedirect,
+  readAuthRedirect,
+  rememberAuthRedirect,
+} from "@/lib/auth-redirect";
 
 const POST_SIGNUP_REDIRECT = "/portfolios/new"; // new users go straight to guided creation
 
@@ -39,13 +45,21 @@ export default function SignupPage() {
   const [submitting, setSubmitting] = useState(false);
   const [oauthSubmitting, setOauthSubmitting] = useState(false);
   const [confirmationSent, setConfirmationSent] = useState(false);
+  const [redirectPath, setRedirectPath] = useState(POST_SIGNUP_REDIRECT);
+  const [redirectReady, setRedirectReady] = useState(false);
+
+  useEffect(() => {
+    const next = readAuthRedirect(POST_SIGNUP_REDIRECT);
+    setRedirectPath(rememberAuthRedirect(next, POST_SIGNUP_REDIRECT));
+    setRedirectReady(true);
+  }, []);
 
   useEffect(() => {
     // Already signed in? Bounce; signup is irrelevant.
-    if (!authLoading && user) {
-      router.replace(POST_SIGNUP_REDIRECT);
+    if (redirectReady && !authLoading && user) {
+      router.replace(consumeAuthRedirect(POST_SIGNUP_REDIRECT));
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading, redirectReady, router]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -54,7 +68,7 @@ export default function SignupPage() {
     setSubmitting(true);
     track(ANALYTICS_EVENTS.signup_started, { method: "email" });
     try {
-      const { needsConfirmation } = await signUp(email, password);
+      const { needsConfirmation } = await signUp(email, password, redirectPath);
       track(ANALYTICS_EVENTS.signup_completed, {
         method: "email",
         needs_confirmation: needsConfirmation,
@@ -64,7 +78,7 @@ export default function SignupPage() {
         setConfirmationSent(true);
         return;
       }
-      router.replace(POST_SIGNUP_REDIRECT);
+      router.replace(consumeAuthRedirect(POST_SIGNUP_REDIRECT));
     } catch (err) {
       // Record only the error CATEGORY — never the message (may echo input).
       track(ANALYTICS_EVENTS.signup_failed, { method: "email", error_category: signupErrorCategory(err) });
@@ -81,7 +95,7 @@ export default function SignupPage() {
     track(ANALYTICS_EVENTS.signup_started, { method: "google" });
     try {
       track(ANALYTICS_EVENTS.signup_oauth_started, { provider: "google" });
-      await signInWithGoogle();
+      await signInWithGoogle(redirectPath);
     } catch (err) {
       track(ANALYTICS_EVENTS.signup_failed, { method: "google", error_category: "oauth" });
       setError(err instanceof Error ? err.message : "Google sign-up failed.");
@@ -101,7 +115,7 @@ export default function SignupPage() {
       footer={
         <>
           Already have one?{" "}
-          <Link href="/login" style={{ color: C.teal, textDecoration: "none" }}>
+          <Link href={authHref("/login", redirectPath)} style={{ color: C.teal, textDecoration: "none" }}>
             Sign in
           </Link>
           .
@@ -119,11 +133,12 @@ export default function SignupPage() {
               <p className="font-medium text-primary">Check your email.</p>
               <p className="mt-2 text-muted-foreground">
                 We sent a confirmation link to{" "}
-                <span className="font-mono">{email}</span>. Click it, then{" "}
-                <Link href="/login" className="text-primary hover:underline">
+                <span className="font-mono">{email}</span>. Open it, then return to this original
+                tab and{" "}
+                <Link href={authHref("/login", redirectPath)} className="text-primary hover:underline">
                   sign in
                 </Link>
-                .
+                . This keeps your private portfolio handoff in this tab.
               </p>
             </div>
           ) : (

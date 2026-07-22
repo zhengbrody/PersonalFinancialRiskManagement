@@ -380,6 +380,35 @@ def test_option_evidence_skips_non_option_question(monkeypatch):
     assert called["n"] == 0
 
 
+def test_option_evidence_reuses_resolved_holdings(monkeypatch):
+    """Production can pass the exact score-producing book; no second active
+    portfolio read is allowed during the same answer."""
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(
+        "libs.auth.active_portfolio.get_active_holdings",
+        lambda **_: (_ for _ in ()).throw(AssertionError("unexpected second lookup")),
+    )
+    monkeypatch.setattr(
+        "backend.app.services.options_analytics.analyze_contracts",
+        lambda specs, **_: {"results": []},
+    )
+    explicit = {
+        "AAPL260116C00150000": {
+            "shares": 1,
+            "asset_type": "option",
+            "option_type": "call",
+            "underlying": "AAPL",
+            "strike": 150,
+            "expiry": "2027-01-16",
+        }
+    }
+    evidence = cr._option_evidence(
+        "show my option risk", SimpleNamespace(access_token="jwt"), holdings=explicit
+    )
+    assert any(item.label == "Option contracts" for item in evidence)
+
+
 # ── source citation (data-intelligence commit 5) ─────────────────────────────
 
 
@@ -464,6 +493,8 @@ class _Dim:
 class _ScoreFull:
     overall_score = 720
     base_overall = 720
+    risk_preference = 3
+    risk_preference_source = "neutral_baseline"
     metrics = _Metrics()
     dimensions = {
         "risk_match": _Dim(6.0),
@@ -476,6 +507,8 @@ def _prev_snapshot(**rm):
     risk_metrics = {
         "overall_score": 760,
         "base_overall": 760,
+        "risk_preference": 3,
+        "risk_preference_source": "neutral_baseline",
         "dimensions": {
             "risk_match": 6.5,
             "risk_adjusted_return": 6.5,
@@ -497,7 +530,11 @@ def test_score_change_evidence_emits_attribution(monkeypatch):
     (reuses build_change_report) and source-attributed."""
     from backend.app.services import snapshots
 
-    monkeypatch.setattr(snapshots, "get_snapshot_at_window", lambda token, window: _prev_snapshot())
+    monkeypatch.setattr(
+        snapshots,
+        "get_snapshot_at_window",
+        lambda token, window, **kwargs: _prev_snapshot(),
+    )
     user = SimpleNamespace(access_token="jwt", id="u-1")
     # positions match the prior snapshot's top_positions → no trade → market move
     positions = [
@@ -513,7 +550,7 @@ def test_score_change_evidence_emits_attribution(monkeypatch):
 def test_score_change_evidence_no_prior_snapshot(monkeypatch):
     from backend.app.services import snapshots
 
-    monkeypatch.setattr(snapshots, "get_snapshot_at_window", lambda token, window: None)
+    monkeypatch.setattr(snapshots, "get_snapshot_at_window", lambda token, window, **kwargs: None)
     ev = cr._score_change_evidence(SimpleNamespace(access_token="jwt"), _ScoreFull())
     assert ev == []
 
@@ -525,7 +562,7 @@ def test_score_change_uses_each_callers_rls_token(monkeypatch):
 
     seen = []
 
-    def capture(token, window):
+    def capture(token, window, **kwargs):
         seen.append((token, window))
         return None
 
@@ -535,12 +572,36 @@ def test_score_change_uses_each_callers_rls_token(monkeypatch):
     assert seen == [("jwt-user-a", "previous"), ("jwt-user-b", "previous")]
 
 
+def test_score_change_reuses_resolved_portfolio_id(monkeypatch):
+    from backend.app.services import snapshots
+
+    monkeypatch.setattr(
+        "libs.auth.active_portfolio.get_active_portfolio_id",
+        lambda **_: (_ for _ in ()).throw(AssertionError("unexpected second lookup")),
+    )
+    seen = []
+    monkeypatch.setattr(
+        snapshots,
+        "get_snapshot_at_window",
+        lambda token, window, **kwargs: seen.append(kwargs["portfolio_id"]) or None,
+    )
+    assert (
+        cr._score_change_evidence(
+            SimpleNamespace(access_token="jwt"),
+            _ScoreFull(),
+            portfolio_id="portfolio-a",
+        )
+        == []
+    )
+    assert seen == ["portfolio-a"]
+
+
 def test_score_change_surfaces_methodology_mismatch(monkeypatch):
     from backend.app.services import snapshots
 
     prior = _prev_snapshot()
     prior["score_version"] = "mindmarket-score-v0.9.0"
-    monkeypatch.setattr(snapshots, "get_snapshot_at_window", lambda token, window: prior)
+    monkeypatch.setattr(snapshots, "get_snapshot_at_window", lambda token, window, **kwargs: prior)
     ev = cr._score_change_evidence(SimpleNamespace(access_token="jwt"), _ScoreFull())
     assert len(ev) == 1
     assert ev[0].label == "Score change"
@@ -642,7 +703,11 @@ def test_answer_pulls_score_change_when_asked_about_change(monkeypatch):
     from backend.app.services import snapshots
 
     monkeypatch.setattr(cr, "_load_score_positions", lambda user: ([], _ScoreFull()))
-    monkeypatch.setattr(snapshots, "get_snapshot_at_window", lambda token, window: _prev_snapshot())
+    monkeypatch.setattr(
+        snapshots,
+        "get_snapshot_at_window",
+        lambda token, window, **kwargs: _prev_snapshot(),
+    )
     ans = cr.answer(
         "why did my score fall", user=SimpleNamespace(access_token="jwt"), llm_callable=None
     )
@@ -762,7 +827,7 @@ def test_f4_score_version_mismatch_is_explicit_limitation(monkeypatch):
         "data_quality": {"confidence": "high"},
         "top_positions": [],
     }
-    monkeypatch.setattr(snapshots, "get_snapshot_at_window", lambda t, w: legacy_prev)
+    monkeypatch.setattr(snapshots, "get_snapshot_at_window", lambda t, w, **kwargs: legacy_prev)
     ev = cr._score_change_evidence(SimpleNamespace(access_token="jwt"), _ScoreFull())
     # NOT empty (silent), NOT a fabricated delta — an explicit methodology notice
     assert len(ev) == 1 and ev[0].label == "Score change"
@@ -779,7 +844,7 @@ def test_f3_cross_user_isolation_forwards_only_caller_token(monkeypatch):
     monkeypatch.setattr(
         snapshots,
         "get_snapshot_at_window",
-        lambda token, window: (seen.append(token), _prev_snapshot())[1],
+        lambda token, window, **kwargs: (seen.append(token), _prev_snapshot())[1],
     )
     positions = [
         SimpleNamespace(ticker="AAA", market_value=5000.0),

@@ -637,18 +637,21 @@ def _option_specs(holdings: dict) -> list:
     return specs
 
 
-def _option_evidence(message: str, user) -> list[EvidenceItem]:
+def _option_evidence(message: str, user, *, holdings=None) -> list[EvidenceItem]:
     """Deterministic option-exposure evidence (net Greeks + risk flags) for the
     active book — only when the question is option-related AND the book holds
     options. Lets the Copilot answer 'am I short gamma?', 'net delta?', 'biggest
     option risk?' citing computed numbers only."""
     if not _mentions_options(message):
         return []
-    from libs.auth.active_portfolio import get_active_holdings
-
     from . import options_analytics, options_exposure
 
-    holdings = get_active_holdings(access_token=user.access_token) or {}
+    if holdings is None:
+        # Backward-compatible seam for isolated tool calls/tests. Production
+        # answer() supplies the already-resolved request context below.
+        from libs.auth.active_portfolio import get_active_holdings
+
+        holdings = get_active_holdings(access_token=user.access_token) or {}
     specs = _option_specs(holdings)
     if not specs:
         return []
@@ -754,7 +757,12 @@ def _asks_portfolio_relative(message: str) -> bool:
     return any(t in m for t in _PORTFOLIO_REL_TERMS)
 
 
-def _score_change_evidence(user, score, positions=None) -> list[EvidenceItem]:
+_PORTFOLIO_ID_UNSET = object()
+
+
+def _score_change_evidence(
+    user, score, positions=None, *, portfolio_id=_PORTFOLIO_ID_UNSET
+) -> list[EvidenceItem]:
     """Deterministic 'why did my score change?' evidence: the move vs the user's
     OWN prior snapshot, decomposed into market / holdings / data-quality (reuses
     ``score_changes.build_change_report`` from the cockpit). Light — a snapshot
@@ -764,7 +772,18 @@ def _score_change_evidence(user, score, positions=None) -> list[EvidenceItem]:
     from . import snapshots
     from .score_changes import build_change_report, request_from_score
 
-    prev = snapshots.get_snapshot_at_window(user.access_token, "previous")
+    if portfolio_id is _PORTFOLIO_ID_UNSET:
+        # Backward-compatible seam for direct tool calls. Production reuses the
+        # id carried by LoadedCopilotContext and never selects twice.
+        from libs.auth.active_portfolio import get_active_portfolio_id
+
+        portfolio_id = get_active_portfolio_id(access_token=user.access_token)
+
+    prev = snapshots.get_snapshot_at_window(
+        user.access_token,
+        "previous",
+        portfolio_id=portfolio_id,
+    )
     if not prev:
         return []
     rep = build_change_report(request_from_score(score, positions), prev)
@@ -954,8 +973,20 @@ def _gather(intent: str, message: str, tickers: list[str], *, user):
     if score_positions is None:
         return [], None
     positions, score = score_positions
+    active_context = getattr(score_positions, "active_context", None)
     ev = _stamp(_score_evidence(score), "portfolio_score")
-    ev += _stamp(safe("options", lambda: _option_evidence(message, user)) or [], "options_exposure")
+    ev += _stamp(
+        safe(
+            "options",
+            lambda: _option_evidence(
+                message,
+                user,
+                holdings=(active_context.holdings if active_context is not None else None),
+            ),
+        )
+        or [],
+        "options_exposure",
+    )
     ev += _stamp(
         safe("risk_reference", lambda: _risk_reference_evidence(score, positions)) or [],
         "risk_reference",
@@ -968,7 +999,20 @@ def _gather(intent: str, message: str, tickers: list[str], *, user):
     dropped = _dropped_tickers(score)
     if _asks_about_change(message):
         ev += _stamp(
-            safe("score_change", lambda: _score_change_evidence(user, score, positions)) or [],
+            safe(
+                "score_change",
+                lambda: _score_change_evidence(
+                    user,
+                    score,
+                    positions,
+                    **(
+                        {"portfolio_id": active_context.portfolio_id}
+                        if active_context is not None
+                        else {}
+                    ),
+                ),
+            )
+            or [],
             "score_change",
         )
     if tickers:
@@ -1076,8 +1120,11 @@ def _load_score(user):
 def _load_score_positions(user):
     from .copilot_context import load_positions_and_score
 
-    positions, score = load_positions_and_score(user)
-    return list(positions), score
+    loaded = load_positions_and_score(user)
+    positions, score = loaded
+    # LoadedCopilotContext remains 2-value iterable for old callers/tests while
+    # carrying the exact row identity/holdings used for this computation.
+    return loaded if hasattr(loaded, "active_context") else (list(positions), score)
 
 
 def _optimizer_scans(score, positions) -> dict[str, str]:

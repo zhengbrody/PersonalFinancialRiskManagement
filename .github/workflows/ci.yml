@@ -84,7 +84,7 @@ jobs:
       # pyproject omits backend/*). Baseline 87.3% → floor 85% (docs/ci-hardening.md).
       run: |
         pytest backend/tests -q -o "addopts=" \
-          --cov=backend/app --cov-config=backend/.coveragerc \
+          --cov=backend.app --cov-config=backend/.coveragerc \
           --cov-report=term-missing:skip-covered --cov-fail-under=85
 
     - name: Type check — backend trust boundary (blocking)

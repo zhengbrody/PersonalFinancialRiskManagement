@@ -1,10 +1,10 @@
 /**
  * /portfolios/new contract.
  *
- *   1. Redirect to /login when signed out.
+ *   1. Redirect to /login with the safe create-flow intent when signed out.
  *   2. Submit → POST /api/v1/portfolios with the entered values.
  *   3. Post-create navigation is driven by the create RESPONSE, not the form:
- *        - is_default:true  (first/only book, or explicit default) → /score
+ *        - is_default:true  (first/only book, or explicit default) → Today
  *        - is_default:false (existing user's extra book)           → /portfolios
  *      so a second non-default book never lands on the OLD default's score.
  *   4. Cancel is context-aware: onboarding (0 portfolios) → /, existing → /portfolios.
@@ -131,7 +131,7 @@ describe("NewPortfolioPage", () => {
       signOut: vi.fn(),
     });
     renderNew();
-    expect(replaceMock).toHaveBeenCalledWith("/login");
+    expect(replaceMock).toHaveBeenCalledWith("/login?next=%2Fportfolios%2Fnew");
   });
 
   it("posts to /api/v1/portfolios with the form values + bearer token", async () => {
@@ -156,14 +156,14 @@ describe("NewPortfolioPage", () => {
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer jwt-here");
   });
 
-  it("first portfolio (auto-promoted to default) → /score", async () => {
+  it("first portfolio (auto-promoted to default) → Today", async () => {
     authed();
     // Backend auto-promotes a user's first portfolio → the response is default.
     routeFetch({ body: createdRow(true) }, []);
     const user = userEvent.setup();
     renderNew([]); // no existing portfolios
     await fillAndSubmit(user);
-    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/score"));
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/"));
   });
 
   it("second non-default portfolio → /portfolios, never the previous default's score", async () => {
@@ -176,13 +176,13 @@ describe("NewPortfolioPage", () => {
     expect(replaceMock).not.toHaveBeenCalledWith("/score");
   });
 
-  it("portfolio created explicitly as default → /score", async () => {
+  it("portfolio created explicitly as default → Today", async () => {
     authed();
     routeFetch({ body: createdRow(true) }, [{ id: "p-old" }]);
     const user = userEvent.setup();
     renderNew([{ id: "p-old" }]);
     await fillAndSubmit(user);
-    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/score"));
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/"));
     expect(replaceMock).not.toHaveBeenCalledWith("/portfolios");
   });
 

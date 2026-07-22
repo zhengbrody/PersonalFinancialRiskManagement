@@ -81,6 +81,7 @@ def build_insights(user) -> InsightsOut:
             missing_data=["no active portfolio (or the portfolio could not be scored)"],
         )
     positions, score = sp
+    active_context = getattr(sp, "active_context", None)
     m = score.metrics
     quality = _finite(getattr(m, "data_quality", None))
     confidence = getattr(m, "confidence", None)
@@ -96,7 +97,11 @@ def build_insights(user) -> InsightsOut:
     insights: list[InsightOut] = []
     prev = safe(
         "insights.prev_snapshot",
-        lambda: _snapshot(user, "previous"),
+        lambda: _snapshot(
+            user,
+            "previous",
+            **({"portfolio_id": active_context.portfolio_id} if active_context is not None else {}),
+        ),
     )
     rep = safe("insights.change_report", lambda: _change_report(score, positions, prev))
 
@@ -130,14 +135,27 @@ def build_insights(user) -> InsightsOut:
 def _load(user):
     from .copilot_context import load_positions_and_score
 
-    positions, score = load_positions_and_score(user)
-    return list(positions), score
+    loaded = load_positions_and_score(user)
+    positions, score = loaded
+    return loaded if hasattr(loaded, "active_context") else (list(positions), score)
 
 
-def _snapshot(user, window: str) -> Optional[dict]:
+_PORTFOLIO_ID_UNSET = object()
+
+
+def _snapshot(user, window: str, *, portfolio_id=_PORTFOLIO_ID_UNSET) -> Optional[dict]:
     from . import snapshots
 
-    return snapshots.get_snapshot_at_window(getattr(user, "access_token", None), window)
+    token = getattr(user, "access_token", None)
+    if portfolio_id is _PORTFOLIO_ID_UNSET:
+        from libs.auth.active_portfolio import get_active_portfolio_id
+
+        portfolio_id = get_active_portfolio_id(access_token=token)
+    return snapshots.get_snapshot_at_window(
+        token,
+        window,
+        portfolio_id=portfolio_id,
+    )
 
 
 def _change_report(score, positions, prev):

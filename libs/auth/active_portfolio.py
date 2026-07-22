@@ -30,11 +30,28 @@ Caller pattern (in app.py / pages):
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 import portfolio_config as _pc
 
 from .session import is_authenticated
+
+
+@dataclass(frozen=True)
+class ActivePortfolioContext:
+    """One immutable view of the portfolio selected for a request.
+
+    Keeping identity, holdings, and account capital together prevents a
+    portfolio switch between independent reads from producing a mixed-book
+    score (for example, holdings from portfolio A with cash from portfolio B).
+    """
+
+    portfolio_id: Optional[str]
+    holdings: Dict[str, Dict[str, Any]]
+    cash_balance: float
+    margin_loan: float
+    contributed_capital: float
 
 
 def _hardcoded_fallback() -> tuple[Dict[str, Dict[str, Any]], float]:
@@ -68,14 +85,23 @@ def get_active_holdings(
     callers pass the verified JWT and the resolver skips the session
     check — the token IS the proof of identity.
     """
-    holdings, _ = _resolve(access_token=access_token)
-    return holdings
+    return get_active_portfolio_context(access_token=access_token).holdings
+
+
+def get_active_portfolio_id(access_token: Optional[str] = None) -> Optional[str]:
+    """Return the active portfolio's stable id, or ``None`` when unavailable.
+
+    Snapshot/history consumers need the identity as well as the holdings.  Keep
+    the selection rule here so they cannot drift from ``get_active_holdings``
+    (default first, most-recent fallback).  Backend callers pass the verified
+    JWT; failures remain fail-soft and never fall back to the owner's demo.
+    """
+    return get_active_portfolio_context(access_token=access_token).portfolio_id
 
 
 def get_active_margin_loan(access_token: Optional[str] = None) -> float:
     """Return margin loan dollar amount for the active portfolio."""
-    _, margin = _resolve(access_token=access_token)
-    return margin
+    return get_active_portfolio_context(access_token=access_token).margin_loan
 
 
 def get_active_capital_inputs(
@@ -93,33 +119,78 @@ def get_active_capital_inputs(
     ``_resolve``'s backend branch), so one user never sees another's
     capital figures.
     """
-    if access_token is not None:
-        portfolio = _fetch_db_portfolio(access_token=access_token)
-        if portfolio is None or not (portfolio.get("holdings") or {}):
-            return {"contributed_capital": 0.0, "cash_balance": 0.0}
-        return {
-            "contributed_capital": float(portfolio.get("contributed_capital") or 0.0),
-            "cash_balance": float(portfolio.get("cash_balance") or 0.0),
-        }
+    context = get_active_portfolio_context(access_token=access_token)
+    return {
+        "contributed_capital": context.contributed_capital,
+        "cash_balance": context.cash_balance,
+    }
 
-    if not is_authenticated():
-        return _hardcoded_capital()
 
-    portfolio = _fetch_db_portfolio()
-    if portfolio is None or not (portfolio.get("holdings") or {}):
-        return (
-            _hardcoded_capital()
-            if _is_owner_session()
-            else {
-                "contributed_capital": 0.0,
-                "cash_balance": 0.0,
-            }
+def get_active_portfolio_context(
+    access_token: Optional[str] = None,
+) -> ActivePortfolioContext:
+    """Resolve the active portfolio exactly once and return one coherent view.
+
+    FastAPI callers pass a verified JWT and never receive the owner/demo
+    fallback. Streamlit and anonymous behavior remains identical to the legacy
+    getters. All five fields are derived from the same fetched row.
+    """
+    if access_token is None and not is_authenticated():
+        holdings, margin = _hardcoded_fallback()
+        capital = _hardcoded_capital()
+        return ActivePortfolioContext(
+            portfolio_id=None,
+            holdings=holdings,
+            cash_balance=float(capital["cash_balance"]),
+            margin_loan=margin,
+            contributed_capital=float(capital["contributed_capital"]),
         )
 
-    return {
-        "contributed_capital": float(portfolio.get("contributed_capital") or 0.0),
-        "cash_balance": float(portfolio.get("cash_balance") or 0.0),
-    }
+    portfolio = _fetch_db_portfolio(access_token=access_token)
+    raw_holdings = (portfolio or {}).get("holdings") or {}
+    if raw_holdings:
+        holdings, margin = _normalise_portfolio_row(portfolio)
+        raw_id = portfolio.get("id")
+        return ActivePortfolioContext(
+            portfolio_id=str(raw_id) if raw_id else None,
+            holdings=holdings,
+            cash_balance=_safe_capital_value(portfolio.get("cash_balance")),
+            margin_loan=max(0.0, _safe_capital_value(margin)),
+            contributed_capital=_safe_capital_value(portfolio.get("contributed_capital")),
+        )
+
+    # The owner-only fallback exists solely in the session-bound Streamlit
+    # path. An explicit backend token always fails closed to an empty book.
+    if access_token is None and _is_owner_session():
+        holdings, margin = _hardcoded_fallback()
+        capital = _hardcoded_capital()
+        return ActivePortfolioContext(
+            portfolio_id=None,
+            holdings=holdings,
+            cash_balance=float(capital["cash_balance"]),
+            margin_loan=margin,
+            contributed_capital=float(capital["contributed_capital"]),
+        )
+
+    raw_id = (portfolio or {}).get("id")
+    return ActivePortfolioContext(
+        portfolio_id=str(raw_id) if raw_id else None,
+        holdings={},
+        cash_balance=0.0,
+        margin_loan=0.0,
+        contributed_capital=0.0,
+    )
+
+
+def _safe_capital_value(value: Any) -> float:
+    """Coerce persisted capital to a finite, non-negative float."""
+    try:
+        number = float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+    if number != number or number in (float("inf"), float("-inf")):
+        return 0.0
+    return max(0.0, number)
 
 
 def _is_owner_session() -> bool:
@@ -205,33 +276,8 @@ def _resolve(
     in that path — backend callers can't be the "Streamlit owner"
     session because there isn't one to compare against.
     """
-    if access_token is None:
-        if not is_authenticated():
-            return _hardcoded_fallback()
-        portfolio = _fetch_db_portfolio()
-    else:
-        portfolio = _fetch_db_portfolio(access_token=access_token)
-        # Empty DB → backend caller gets an empty portfolio (the route
-        # converts that into a 422 ``no_active_portfolio``). NEVER
-        # owner-fallback here.
-        if portfolio is None or not (portfolio.get("holdings") or {}):
-            return ({}, 0.0)
-        # Skip the rest of the legacy branching — we have a real row.
-        return _normalise_portfolio_row(portfolio)
-    if portfolio is None:
-        # Owner with no DB portfolio yet → see the dev portfolio_config
-        # holdings (their own data). Any other authed user → empty.
-        if _is_owner_session():
-            return _hardcoded_fallback()
-        return ({}, 0.0)
-
-    raw_holdings = portfolio.get("holdings") or {}
-    if not raw_holdings:
-        if _is_owner_session():
-            return _hardcoded_fallback()
-        return ({}, 0.0)
-
-    return _normalise_portfolio_row(portfolio)
+    context = get_active_portfolio_context(access_token=access_token)
+    return context.holdings, context.margin_loan
 
 
 def _normalise_portfolio_row(
@@ -271,20 +317,20 @@ def _normalise_portfolio_row(
 def _fetch_db_portfolio(access_token: Optional[str] = None):
     """Return the user's default portfolio dict, or None on any error.
 
-    Errors are swallowed to "fail open" — if Supabase is down the user
-    still gets the hardcoded fallback rather than a broken dashboard.
+    Errors are converted to ``None`` for the resolver to handle. A verified
+    FastAPI request then fails closed with an empty user context; only the
+    legacy session-bound owner path may use its explicitly scoped fallback.
 
     Passing ``access_token`` routes the underlying Supabase reads
     through the FastAPI per-call client; omitting it uses the
     Streamlit session-bound singleton.
     """
     try:
-        from .portfolios import get_default_portfolio, list_portfolios
+        from .portfolios import list_portfolios
 
-        portfolio = get_default_portfolio(access_token=access_token)
-        if portfolio is not None:
-            return portfolio
-        # No default flagged → use most-recent (list_portfolios sorts is_default DESC, created_at DESC)
+        # list_portfolios already orders default first, then newest. One query
+        # gives the resolver a single database snapshot instead of probing the
+        # default and then issuing a second list read during a portfolio switch.
         all_pf = list_portfolios(access_token=access_token)
         return all_pf[0] if all_pf else None
     except Exception:

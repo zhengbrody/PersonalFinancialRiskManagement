@@ -1,14 +1,14 @@
 /**
  * Public (no-signup) portfolio risk check — flag, API client, and the
- * localStorage bridge that carries anonymous holdings into signup.
+ * short-lived sessionStorage bridge that carries anonymous holdings into signup.
  *
  * FEATURE-FLAGGED, DEFAULT OFF: enabling anonymous arbitrary-ticker analysis
  * is a data-licensing decision (see backend/app/api/v1/public_risk.py).
  * `NEXT_PUBLIC_PUBLIC_RISK_CHECK === "true"` turns the UI on; the backend has
  * its own PUBLIC_RISK_CHECK_ENABLED gate.
  *
- * Privacy: holdings live ONLY in the browser (component state + localStorage
- * for the signup handoff) and in the single stateless POST — never Supabase,
+ * Privacy: holdings live ONLY in the browser (component state + a 24-hour,
+ * tab-scoped sessionStorage handoff) and in the single stateless POST — never Supabase,
  * never analytics (events carry step + holdings_count only).
  */
 
@@ -24,36 +24,63 @@ export const MAX_PUBLIC_HOLDINGS = 10;
 
 export type AnonHolding = { ticker: string; shares: string };
 
-const STORAGE_KEY = "mm-anon-risk-check-holdings";
+export const ANON_HANDOFF_STORAGE_KEY = "mm-anon-risk-check-holdings";
+export const ANON_HANDOFF_TTL_MS = 24 * 60 * 60 * 1000;
 
-export function saveAnonHoldings(rows: AnonHolding[]): void {
+type AnonHandoffEnvelope = {
+  v: 1;
+  expires_at: number;
+  rows: AnonHolding[];
+};
+
+export function saveAnonHoldings(rows: AnonHolding[], now = Date.now()): void {
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(rows.slice(0, MAX_PUBLIC_HOLDINGS)));
+    const envelope: AnonHandoffEnvelope = {
+      v: 1,
+      expires_at: now + ANON_HANDOFF_TTL_MS,
+      rows: rows.slice(0, MAX_PUBLIC_HOLDINGS),
+    };
+    window.sessionStorage.setItem(ANON_HANDOFF_STORAGE_KEY, JSON.stringify(envelope));
+    window.localStorage.removeItem(ANON_HANDOFF_STORAGE_KEY);
   } catch {
     /* storage unavailable → the handoff simply doesn't happen */
   }
 }
 
-export function loadAnonHoldings(): AnonHolding[] {
+export function loadAnonHoldings(now = Date.now()): AnonHolding[] {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    // One-time privacy cleanup for browsers that used the older indefinite
+    // localStorage bridge.  We intentionally do not import that value into the
+    // new flow; it is stale and has no trustworthy creation timestamp.
+    window.localStorage.removeItem(ANON_HANDOFF_STORAGE_KEY);
+    const raw = window.sessionStorage.getItem(ANON_HANDOFF_STORAGE_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
+    const parsed = JSON.parse(raw) as Partial<AnonHandoffEnvelope>;
+    if (
+      parsed.v !== 1 ||
+      typeof parsed.expires_at !== "number" ||
+      parsed.expires_at <= now ||
+      !Array.isArray(parsed.rows)
+    ) {
+      clearAnonHoldings();
+      return [];
+    }
+    return parsed.rows
       .filter(
         (r): r is AnonHolding =>
           !!r && typeof r.ticker === "string" && typeof r.shares === "string",
       )
       .slice(0, MAX_PUBLIC_HOLDINGS);
   } catch {
+    clearAnonHoldings();
     return [];
   }
 }
 
 export function clearAnonHoldings(): void {
   try {
-    window.localStorage.removeItem(STORAGE_KEY);
+    window.sessionStorage.removeItem(ANON_HANDOFF_STORAGE_KEY);
+    window.localStorage.removeItem(ANON_HANDOFF_STORAGE_KEY);
   } catch {
     /* ignore */
   }

@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { InstitutionDeepDive, SmartMoneySignals } from "@/components/smart-money";
 import { useAuth } from "@/lib/auth-context";
+import { authHref } from "@/lib/auth-redirect";
 
 export default function InstitutionsPage() {
   const router = useRouter();
@@ -18,7 +19,9 @@ export default function InstitutionsPage() {
 
   useEffect(() => {
     if (!configured) return;
-    if (!loading && !user) router.replace("/login");
+    if (!loading && !user) {
+      router.replace(authHref("/login", "/institutions"));
+    }
   }, [user, loading, configured, router]);
 
   if (!configured || loading || !user) {
