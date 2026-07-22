@@ -23,7 +23,10 @@ describe("DemoRiskCheckPage", () => {
     const { container } = render(<DemoRiskCheckPage />);
     expect(container.querySelector("#sample-cockpit")).toBeTruthy();
     expect(screen.getByRole("heading", { name: /before you add more risk/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /create my risk workspace/i })).toHaveAttribute("href", "/signup");
+    expect(screen.getByRole("link", { name: /create my risk workspace/i })).toHaveAttribute(
+      "href",
+      "/signup?next=%2Fportfolios%2Fnew",
+    );
     expect(screen.getByRole("link", { name: /see the full workflow/i })).toHaveAttribute("href", "/product#workflow");
   });
 

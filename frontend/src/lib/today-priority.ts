@@ -16,6 +16,12 @@ export type TodayInputs = {
   hasMaterialInsight: boolean;
   /** Health score dropped meaningfully since the last snapshot. */
   scoreDropped: boolean;
+  /** An explicitly confirmed Risk Fit profile exists. */
+  hasRiskFit: boolean;
+  /** The first score has completed successfully. */
+  hasScore: boolean;
+  /** The user has successfully loaded the deterministic driver report. */
+  hasDriverView: boolean;
   /** journey.first_stress_test_at is set. */
   hasStressTest: boolean;
   /** journey.first_plan_at is set. */
@@ -28,6 +34,9 @@ export type TodayActionKind =
   | "create_portfolio"
   | "add_holdings"
   | "fix_data"
+  | "confirm_risk_fit"
+  | "review_score"
+  | "first_driver_view"
   | "review_plan"
   | "investigate_insight"
   | "explain_change"
@@ -71,6 +80,36 @@ export function computePrimaryAction(i: TodayInputs): TodayAction {
         "Some prices are missing or the history is thin, so the metrics can't be trusted yet. Check what's missing.",
       href: "/analyze?view=overview",
       cta: "Review data coverage",
+    };
+  }
+  if (!i.hasRiskFit) {
+    return {
+      kind: "confirm_risk_fit",
+      title: "Set your Risk Fit",
+      description:
+        "Confirm your horizon, liquidity needs, and risk limits before interpreting the score.",
+      // Phase 0A owns the profile UI. This stable anchor is the integration
+      // contract; the existing preferences card remains a safe fallback.
+      href: "/copilot#risk-fit",
+      cta: "Set Risk Fit",
+    };
+  }
+  if (!i.hasScore) {
+    return {
+      kind: "review_score",
+      title: "Review your Health Score",
+      description: "Start with the overall signal and check whether the underlying data is complete.",
+      href: "/analyze?view=overview",
+      cta: "Open overview",
+    };
+  }
+  if (!i.hasDriverView) {
+    return {
+      kind: "first_driver_view",
+      title: "See what drives your risk",
+      description: "Trace the score to concentration, losses, factors, and other measurable drivers.",
+      href: "/analyze?view=drivers",
+      cta: "See risk drivers",
     };
   }
   if (i.dueReviewCount > 0) {
@@ -174,6 +213,7 @@ export type JourneyStep = { key: string; label: string; done: boolean; href: str
 
 export function journeySteps(i: {
   hasPortfolio: boolean;
+  hasRiskFit: boolean;
   hasScore: boolean;
   hasDriverView: boolean;
   hasStressTest: boolean;
@@ -182,6 +222,12 @@ export function journeySteps(i: {
 }): { steps: JourneyStep[]; nextIndex: number; allDone: boolean } {
   const steps: JourneyStep[] = [
     { key: "portfolio", label: "Add your portfolio", done: i.hasPortfolio, href: "/portfolios/new" },
+    {
+      key: "risk-fit",
+      label: "Confirm your Risk Fit",
+      done: i.hasRiskFit,
+      href: "/copilot#risk-fit",
+    },
     { key: "score", label: "Get your health score", done: i.hasScore, href: "/analyze?view=overview" },
     { key: "drivers", label: "See your risk drivers", done: i.hasDriverView, href: "/analyze?view=drivers" },
     { key: "stress", label: "Run a stress test", done: i.hasStressTest, href: "/analyze?view=stress" },

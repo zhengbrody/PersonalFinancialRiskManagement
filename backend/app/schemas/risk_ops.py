@@ -45,19 +45,23 @@ class AlertStateList(BaseModel):
 # ── journey ───────────────────────────────────────────────────────────
 
 JourneyMilestone = Literal[
-    "first_portfolio_at",
+    # Product events with authoritative backend handlers (portfolio created,
+    # score/report completed, plan saved/reviewed) are stamped by those handlers
+    # and cannot be claimed through this generic client endpoint.
     "first_score_at",
-    "first_driver_viewed_at",
     "first_stress_test_at",
-    "first_plan_at",
-    "first_plan_reviewed_at",
     "last_workspace_view",
 ]
 
 
 class JourneyRecordRequest(BaseModel):
-    """Record a milestone timestamp. `first_*` milestones are set ONCE (the
-    first time); `last_workspace_view` always updates."""
+    """Record the two client-originated events.
+
+    ``first_score_at`` is sent only after the active-book Overview renders;
+    ``first_stress_test_at`` only after an explicit sandbox run succeeds;
+    ``last_workspace_view`` is navigation telemetry. Other milestones are
+    stamped by their authoritative backend product endpoint.
+    """
 
     model_config = {"extra": "forbid"}
 

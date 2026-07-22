@@ -20,51 +20,60 @@ import pandas as pd
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def neutral_confirmed_risk_profile(monkeypatch):
+    """Keep route tests offline unless a case explicitly overrides memory."""
+    from backend.app.services import copilot_preferences
+
+    monkeypatch.setattr(
+        copilot_preferences,
+        "get_confirmed_strict",
+        lambda access_token, user_id: None,
+    )
+
+
 @pytest.fixture
 def fake_active_portfolio(monkeypatch):
-    """Patch ``libs.auth.active_portfolio.get_active_holdings`` so
+    """Patch the atomic active context so
     score_from_active doesn't hit Supabase."""
 
     class _Stub:
         def __init__(self) -> None:
             self.holdings: dict[str, dict] = {}
             self.calls: list[str | None] = []
+            self.capital_state = {
+                "cash_balance": 0.0,
+                "margin_loan": 0.0,
+                "contributed_capital": 0.0,
+            }
 
         def set(self, holdings: dict[str, dict]) -> None:
             self.holdings = holdings
 
         def __call__(self, access_token=None):
+            from libs.auth.active_portfolio import ActivePortfolioContext
+
             self.calls.append(access_token)
-            return dict(self.holdings)
+            return ActivePortfolioContext(
+                portfolio_id="p1" if self.holdings else None,
+                holdings=dict(self.holdings),
+                **self.capital_state,
+            )
 
     stub = _Stub()
     import libs.auth.active_portfolio as ap
 
-    monkeypatch.setattr(ap, "get_active_holdings", stub)
+    monkeypatch.setattr(ap, "get_active_portfolio_context", stub)
     return stub
 
 
 @pytest.fixture
-def fake_capital(monkeypatch):
+def fake_capital(fake_active_portfolio):
     """Patch the token-scoped cash + margin getters so we can drive the
     leverage/cash math without a real Supabase row. Defaults to a
     no-margin, no-cash account (scale = 1.0)."""
 
-    state = {"cash_balance": 0.0, "margin_loan": 0.0, "contributed_capital": 0.0}
-    import libs.auth.active_portfolio as ap
-
-    monkeypatch.setattr(
-        ap,
-        "get_active_capital_inputs",
-        lambda access_token=None: {
-            "cash_balance": state["cash_balance"],
-            "contributed_capital": state["contributed_capital"],
-        },
-    )
-    monkeypatch.setattr(
-        ap, "get_active_margin_loan", lambda access_token=None: state["margin_loan"]
-    )
-    return state
+    return fake_active_portfolio.capital_state
 
 
 @pytest.fixture
@@ -215,6 +224,34 @@ def test_legacy_asset_type_does_not_500(
     assert isinstance(resp.json()["data"]["overall_score"], int)
 
 
+def test_omitted_preference_uses_confirmed_profile(
+    test_client,
+    mint_token,
+    fake_active_portfolio,
+    fake_price_history,
+    monkeypatch,
+):
+    from backend.app.services import copilot_preferences
+
+    monkeypatch.setattr(
+        copilot_preferences,
+        "get_confirmed_strict",
+        lambda *_: {"risk_tolerance": 2, "confirmed_at": "2026-07-21T00:00:00Z"},
+    )
+    fake_active_portfolio.set({"SPY": {"shares": 100, "avg_cost": 400.0}})
+    fake_price_history.set(_make_history(["SPY"]))
+
+    resp = test_client.post(
+        "/api/v1/risk/score_from_active",
+        json={},
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    assert resp.status_code == 200, resp.json()
+    data = resp.json()["data"]
+    assert data["risk_preference"] == 2
+    assert data["risk_preference_source"] == "confirmed"
+
+
 def test_happy_path_returns_complete_score_envelope(
     test_client, mint_token, fake_active_portfolio, fake_price_history, fake_capital
 ):
@@ -239,6 +276,8 @@ def test_happy_path_returns_complete_score_envelope(
     data = resp.json()["data"]
     assert isinstance(data["overall_score"], int)
     assert 0 <= data["overall_score"] <= 1000
+    assert data["risk_preference_source"] == "request_override"
+    assert data["risk_fit"]["status"] in {"above", "aligned", "below", "unavailable"}
     assert set(data["dimensions"].keys()) == {
         "risk_match",
         "risk_adjusted_return",
@@ -612,10 +651,10 @@ def test_simulate_actions_is_auth_gated(test_client):
     assert resp.status_code == 401
 
 
-def test_successful_score_stamps_first_score_journey_milestone(
+def test_successful_score_does_not_claim_the_score_was_reviewed(
     test_client, mint_token, fake_active_portfolio, fake_price_history, fake_capital, monkeypatch
 ):
-    """A completed analysis of the user's OWN book IS the 'first analyze' event."""
+    """Background calculation is not the user-review milestone."""
     from backend.app.services import user_journey as uj
 
     uj.reset_stamp_memo()
@@ -630,7 +669,7 @@ def test_successful_score_stamps_first_score_journey_milestone(
         headers={"Authorization": f"Bearer {mint_token(sub='user-journey-score')}"},
     )
     assert resp.status_code == 200, resp.json()
-    assert ("user-journey-score", "first_score_at") in stamped
+    assert ("user-journey-score", "first_score_at") not in stamped
 
 
 def test_failed_score_never_stamps_the_milestone(

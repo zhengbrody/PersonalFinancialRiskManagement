@@ -11,7 +11,7 @@ def fake_prev(monkeypatch):
 
     state = {"row": None}
 
-    def _get(access_token=None):
+    def _get(access_token=None, **kwargs):
         return state["row"]
 
     monkeypatch.setattr(snaps, "get_previous_snapshot", _get)

@@ -122,6 +122,13 @@ class Settings:
     # We surface it here so the same Settings object is reusable.
     supabase_anon_key: str = field(default_factory=lambda: _env_str("SUPABASE_ANON_KEY"))
 
+    # HMAC key for stateless, privacy-preserving risk-card share tokens. This
+    # must be independent from Supabase/JWT credentials and at least 32 bytes;
+    # the share service fails closed when it is absent or too short.
+    share_signing_secret: str = field(
+        default_factory=lambda: _env_str("MINDMARKET_SHARE_SIGNING_SECRET")
+    )
+
     # AI provider for Copilot / AI-backed explanations. DeepSeek is the default
     # because Anthropic quota can be exhausted independently of beta demand.
     llm_provider: LLMProvider = field(default_factory=_detect_llm_provider)

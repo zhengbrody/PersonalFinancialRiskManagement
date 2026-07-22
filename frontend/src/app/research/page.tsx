@@ -50,6 +50,7 @@ import { AnalystReportView } from "@/components/analyst-report";
 import { ApiError } from "@/lib/api";
 import { BETA_LIMIT_MESSAGE, isBillingEnabled } from "@/lib/billing-flag";
 import { useAuth } from "@/lib/auth-context";
+import { authHref } from "@/lib/auth-redirect";
 import { useSessionState } from "@/lib/use-session-state";
 import { track } from "@/lib/analytics";
 import {
@@ -69,7 +70,9 @@ export default function ResearchPage() {
 
   useEffect(() => {
     if (!configured) return;
-    if (!authLoading && !user) router.replace("/login");
+    if (!authLoading && !user) {
+      router.replace(authHref("/login", "/research"));
+    }
   }, [user, authLoading, configured, router]);
 
   if (!configured) return <ConfigureNotice />;

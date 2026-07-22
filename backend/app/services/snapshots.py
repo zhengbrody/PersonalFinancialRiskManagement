@@ -1,6 +1,6 @@
 """Portfolio snapshots — the "what changed since last visit" memory.
 
-Writes at most one snapshot per ~day per user (deduped) when the active
+Writes at most one snapshot per ~day per user AND portfolio (deduped) when the active
 portfolio is scored, so the dashboard can show a day-over-day delta
 ("health 612 → 598 since May 28"). RLS-scoped via the caller's JWT — the
 ``portfolio_snapshots`` table defaults ``user_id`` to ``auth.uid()`` and only
@@ -47,6 +47,7 @@ def _finite(v: Any) -> Optional[float]:
 def record_snapshot(
     access_token: Optional[str],
     *,
+    portfolio_id: Optional[str] = None,
     score: Any,
     cash_balance: float = 0.0,
     margin_loan: float = 0.0,
@@ -56,6 +57,8 @@ def record_snapshot(
     concentration: Optional[Any] = None,
     overall_override: Optional[int] = None,
     option_penalty: Optional[int] = None,
+    risk_preference: Optional[int] = None,
+    risk_preference_source: Optional[str] = None,
     source: str = "score",
 ) -> None:
     """Insert a daily snapshot of the active portfolio (deduped). Never raises.
@@ -64,7 +67,9 @@ def record_snapshot(
     compact concentration summary alongside the headline metrics — so the
     "what changed?" engine can attribute a score move to its components against
     the user's OWN prior snapshot (not a generic benchmark)."""
-    if not access_token:
+    # Legacy rows without portfolio_id cannot be safely compared after a user
+    # switches books.  Fail soft instead of creating another ambiguous row.
+    if not access_token or not portfolio_id:
         return
     try:
         sb = _client(access_token)
@@ -72,6 +77,7 @@ def record_snapshot(
         recent = (
             sb.table("portfolio_snapshots")
             .select("id")
+            .eq("portfolio_id", portfolio_id)
             .gte("created_at", _iso_hours_ago(_SNAPSHOT_MIN_GAP_HOURS))
             .limit(1)
             .execute()
@@ -114,6 +120,13 @@ def record_snapshot(
                 for k, d in (getattr(score, "dimensions", {}) or {}).items()
             },
         }
+        resolved_preference = risk_preference
+        if resolved_preference is None:
+            resolved_preference = getattr(score, "risk_preference", None)
+        if resolved_preference is not None:
+            risk_metrics["risk_preference"] = int(resolved_preference)
+        if risk_preference_source:
+            risk_metrics["risk_preference_source"] = str(risk_preference_source)
         for key in (
             "daily_pnl",
             "daily_return",
@@ -157,6 +170,7 @@ def record_snapshot(
 
         sb.table("portfolio_snapshots").insert(
             {
+                "portfolio_id": portfolio_id,
                 "source": source,
                 # The methodology version that produced this score — stamped so a
                 # later trend comparison can refuse to diff across versions.
@@ -176,17 +190,20 @@ def record_snapshot(
         _log.warning("snapshot.record_failed reason=%s", type(exc).__name__)
 
 
-def get_previous_snapshot(access_token: Optional[str]) -> Optional[dict]:
+def get_previous_snapshot(
+    access_token: Optional[str], portfolio_id: Optional[str] = None
+) -> Optional[dict]:
     """The most recent snapshot OLDER than the gap window — the prior-day
     baseline to diff today's score against. None if there isn't one. Never
     raises."""
-    if not access_token:
+    if not access_token or not portfolio_id:
         return None
     try:
         sb = _client(access_token)
         resp = (
             sb.table("portfolio_snapshots")
             .select("created_at,risk_metrics,net_equity,leverage,contributed_capital")
+            .eq("portfolio_id", portfolio_id)
             .lt("created_at", _iso_hours_ago(_SNAPSHOT_MIN_GAP_HOURS))
             .order("created_at", desc=True)
             .limit(1)
@@ -206,12 +223,14 @@ _WINDOW_HOURS = {
 }
 
 
-def get_snapshot_at_window(access_token: Optional[str], window: str = "previous") -> Optional[dict]:
+def get_snapshot_at_window(
+    access_token: Optional[str], window: str = "previous", portfolio_id: Optional[str] = None
+) -> Optional[dict]:
     """The most recent snapshot OLDER than the window's lower bound — i.e. the
     user's own prior state ~1 day / ~7 days / ~30 days ago. Returns the full row
     (risk_metrics + data_quality + top_positions) for change attribution, or None
     if there is no snapshot that old. Never raises."""
-    if not access_token:
+    if not access_token or not portfolio_id:
         return None
     hours = _WINDOW_HOURS.get(window, _SNAPSHOT_MIN_GAP_HOURS)
     try:
@@ -222,6 +241,7 @@ def get_snapshot_at_window(access_token: Optional[str], window: str = "previous"
                 "created_at,score_version,risk_metrics,data_quality,top_positions,"
                 "net_equity,leverage,contributed_capital"
             )
+            .eq("portfolio_id", portfolio_id)
             .lt("created_at", _iso_hours_ago(hours))
             .order("created_at", desc=True)
             .limit(1)
@@ -234,17 +254,20 @@ def get_snapshot_at_window(access_token: Optional[str], window: str = "previous"
         return None
 
 
-def get_snapshot_history(access_token: Optional[str], *, limit: int = 90) -> list[dict]:
+def get_snapshot_history(
+    access_token: Optional[str], *, portfolio_id: Optional[str] = None, limit: int = 90
+) -> list[dict]:
     """Recent snapshots oldest→newest, flattened to a chartable shape:
     ``[{as_of, overall_score, annual_volatility, var_95_daily, sharpe_ratio,
     max_drawdown, net_equity}]``. Fail-soft to ``[]``; never raises."""
-    if not access_token:
+    if not access_token or not portfolio_id:
         return []
     try:
         sb = _client(access_token)
         resp = (
             sb.table("portfolio_snapshots")
             .select("created_at,risk_metrics,net_equity,contributed_capital,leverage")
+            .eq("portfolio_id", portfolio_id)
             .order("created_at", desc=True)
             .limit(max(1, min(limit, 365)))
             .execute()

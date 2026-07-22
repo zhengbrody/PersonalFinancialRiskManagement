@@ -103,6 +103,9 @@ class _CaptureTable:
     def gte(self, *a):
         return self
 
+    def eq(self, *a):
+        return self
+
     def lt(self, *a):
         return self
 
@@ -130,7 +133,7 @@ class _CaptureSB:
 def test_snapshot_persists_the_version(monkeypatch):
     captured: dict = {}
     monkeypatch.setattr(snapshots, "_client", lambda tok: _CaptureSB(captured))
-    snapshots.record_snapshot("tok", score=_score())
+    snapshots.record_snapshot("tok", portfolio_id="portfolio-a", score=_score())
     assert captured.get("score_version") == SCORE_VERSION
 
 
@@ -141,6 +144,7 @@ def _req(overall: int, dims: dict) -> ScoreChangeRequest:
     return ScoreChangeRequest(
         window="previous",
         overall_score=overall,
+        risk_preference=3,
         base_overall=overall,
         dimensions=dims,
         metrics={"annual_volatility": 0.15, "sharpe_ratio": 0.8},
@@ -151,7 +155,12 @@ def _req(overall: int, dims: dict) -> ScoreChangeRequest:
 def _prev(overall: int, dims: dict, version) -> dict:
     row = {
         "created_at": "2026-06-13T00:00:00+00:00",
-        "risk_metrics": {"overall_score": overall, "base_overall": overall, "dimensions": dims},
+        "risk_metrics": {
+            "overall_score": overall,
+            "base_overall": overall,
+            "risk_preference": 3,
+            "dimensions": dims,
+        },
         "data_quality": {"confidence": "high"},
         "top_positions": [],
     }

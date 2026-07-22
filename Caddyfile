@@ -40,7 +40,14 @@
 	encode gzip
 	log {
 		output stdout
-		format json
+		# Signed share-card tokens are bearer URLs. Keep them out of the
+		# CloudWatch access-log URI while retaining the route and query key.
+		format filter {
+			request>uri query {
+				replace token REDACTED
+			}
+			wrap json
+		}
 	}
 
 	# Redirect www → apex (unchanged from Caddyfile).

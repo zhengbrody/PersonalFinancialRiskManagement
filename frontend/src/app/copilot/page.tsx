@@ -31,6 +31,7 @@ import { CopilotPreferencesCard } from "@/components/copilot-preferences";
 import { CreditsBadge } from "@/components/credits-badge";
 import { isBillingEnabled } from "@/lib/billing-flag";
 import { useAuth } from "@/lib/auth-context";
+import { authHref } from "@/lib/auth-redirect";
 import { useBillingMe } from "@/lib/queries";
 
 export default function CopilotPage() {
@@ -41,7 +42,7 @@ export default function CopilotPage() {
   useEffect(() => {
     if (!configured) return;
     if (!authLoading && !user) {
-      router.replace("/login");
+      router.replace(authHref("/login", "/copilot"));
     }
   }, [user, authLoading, configured, router]);
 

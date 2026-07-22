@@ -245,7 +245,7 @@ describe("PortfolioRiskPage", () => {
       signOut: vi.fn(),
     });
     renderWithQuery(<PortfolioRiskPage />);
-    expect(replaceMock).toHaveBeenCalledWith("/login");
+    expect(replaceMock).toHaveBeenCalledWith("/login?next=%2Fportfolios");
   });
 
   it("when [id] is NOT active, shows a Switch CTA and runs no report", async () => {

@@ -16,7 +16,8 @@
  */
 
 import { ImageResponse } from "next/og";
-import { parseShareBook, type ShareBand } from "@/lib/share-card";
+import { parseShareBook, riskFitLabel, stressBandLabel, titleCase, type ShareBand } from "@/lib/share-card";
+import { resolveShareToken } from "@/lib/share-card-server";
 
 // Dynamic by `?book=` (reads the request URL), but only ~2 variants exist and
 // the long Cache-Control below lets Cloudflare cache each at the edge.
@@ -38,8 +39,31 @@ function bandColor(band: ShareBand): string {
   return GREEN; // Healthy / Strong
 }
 
-export function GET(req: Request): ImageResponse {
+export async function GET(req: Request): Promise<Response> {
   const { searchParams } = new URL(req.url);
+  const token = searchParams.get("token");
+  if (token) {
+    try {
+      const card = await resolveShareToken(token);
+      const maxAge = Math.max(0, Math.min(3600, card.exp - Math.floor(Date.now() / 1000)));
+      return new ImageResponse(
+        <div style={{ width: "1200px", height: "630px", display: "flex", flexDirection: "column", justifyContent: "space-between", background: INK, backgroundImage: `linear-gradient(135deg, ${PANEL} 0%, ${INK} 55%)`, padding: "64px 72px", fontFamily: "sans-serif" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", color: TEXT, fontSize: "30px", fontWeight: 700 }}><span>MindMarket</span><span style={{ color: TEAL, fontSize: "20px", letterSpacing: "0.16em" }}>PORTFOLIO RISK PROFILE</span></div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "22px" }}>
+            <span style={{ color: DIM, fontSize: "24px" }}>Privacy-preserving share card</span>
+            <span style={{ color: TEXT, fontSize: "82px", fontWeight: 800 }}>{titleCase(card.score_band)}</span>
+            <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+              {[`Risk fit · ${riskFitLabel(card.risk_fit)}`, `Primary risk · ${titleCase(card.top_risk_category)}`, `Stress · ${stressBandLabel(card.stress_band)}`, `Confidence · ${titleCase(card.confidence_label)}`].map((value) => <span key={value} style={{ display: "flex", padding: "10px 18px", borderRadius: "10px", background: PANEL, border: `1px solid ${HAIR}`, color: TEXT, fontSize: "22px" }}>{value}</span>)}
+            </div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", borderTop: `1px solid ${HAIR}`, paddingTop: "26px", color: DIM, fontSize: "22px" }}><span>No positions · no identity · no exact values</span><span>mindmarket.app</span></div>
+        </div>,
+        { width: 1200, height: 630, headers: { "Cache-Control": `public, max-age=${maxAge}, s-maxage=${maxAge}, must-revalidate`, "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex, nofollow" } },
+      );
+    } catch {
+      return new Response("Not found", { status: 404, headers: { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow", "Referrer-Policy": "no-referrer" } });
+    }
+  }
   const book = parseShareBook(searchParams.get("book") ?? undefined);
   const accent = bandColor(book.band);
   const markerPct = Math.max(0, Math.min(100, (book.score / 1000) * 100));

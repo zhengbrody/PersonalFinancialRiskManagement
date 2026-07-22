@@ -186,6 +186,17 @@ def test_preferences_roundtrip(test_client, mint_token, fake_store):
     assert after.json()["data"]["confirmed"] is False  # completely erased
 
 
+def test_preferences_confirmation_requires_an_explicit_risk_tolerance(
+    test_client, mint_token, fake_store
+):
+    response = test_client.put(
+        "/api/v1/copilot/preferences",
+        json={"investment_horizon": "long"},
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    assert response.status_code == 422
+
+
 @pytest.mark.parametrize(
     "body",
     [
@@ -210,7 +221,7 @@ def test_preferences_put_rejects_out_of_bounds(test_client, mint_token, fake_sto
 def test_preferences_metadata_size_capped(test_client, mint_token, fake_store):
     resp = test_client.put(
         "/api/v1/copilot/preferences",
-        json={"metadata": {"note": "x" * 5000}},
+        json={"risk_tolerance": 3, "metadata": {"note": "x" * 5000}},
         headers={"Authorization": f"Bearer {mint_token()}"},
     )
     assert resp.status_code == 422

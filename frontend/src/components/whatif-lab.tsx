@@ -27,13 +27,18 @@ import {
   scaleValue,
 } from "@/lib/whatif";
 import { type ScoreResponse, scoreResponseSchema } from "@/lib/schemas";
-import { type RiskPlan, useMarketPrices, useMyPortfolios } from "@/lib/queries";
+import {
+  type RiskPlan,
+  useCopilotPreferences,
+  useMarketPrices,
+  useMyPortfolios,
+} from "@/lib/queries";
 
 type HoldingRow = { ticker: string; market_value: string };
 
 export function WhatIfLab({
   baseline,
-  riskPreference = 3,
+  riskPreference,
   saveContext,
   onRunSuccess,
 }: {
@@ -55,6 +60,17 @@ export function WhatIfLab({
   const [error, setError] = useState<ApiError | null>(null);
 
   const myPortfolios = useMyPortfolios();
+  const preferences = useCopilotPreferences();
+  const riskProfileReady =
+    riskPreference != null ||
+    baseline?.risk_preference != null ||
+    (!preferences.isLoading && !preferences.isError);
+  const effectiveRiskPreference =
+    riskPreference ??
+    baseline?.risk_preference ??
+    (preferences.data?.confirmed && preferences.data.risk_tolerance
+      ? preferences.data.risk_tolerance
+      : 3);
   const activeBook = useMemo(
     () => myPortfolios.data?.portfolios.find((p) => p.id === current?.id) ?? current ?? undefined,
     [myPortfolios.data, current],
@@ -102,6 +118,7 @@ export function WhatIfLab({
   }
 
   async function run() {
+    if (!riskProfileReady) return;
     setError(null);
     setLoading(true);
     try {
@@ -114,7 +131,7 @@ export function WhatIfLab({
         }));
       const data = await apiFetch<ScoreResponse>("/api/v1/risk/score", {
         method: "POST",
-        body: { holdings, risk_preference: riskPreference },
+        body: { holdings, risk_preference: effectiveRiskPreference },
         schema: scoreResponseSchema,
       });
       setSandbox(data);
@@ -192,8 +209,12 @@ export function WhatIfLab({
               </button>
             </div>
           ))}
-          <Button type="button" size="sm" disabled={loading} onClick={run}>
-            {loading ? "Scoring…" : "Run what-if"}
+          <Button type="button" size="sm" disabled={loading || !riskProfileReady} onClick={run}>
+            {loading
+              ? "Scoring…"
+              : riskProfileReady
+                ? "Run what-if"
+                : "Loading Risk Fit…"}
           </Button>
         </div>
       )}

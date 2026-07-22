@@ -12,11 +12,12 @@ const ctx = {
   isLoading: false,
 };
 const state = {
-  score: { data: { overall_score: 782, metrics: { confidence: "high" }, data_confidence: null }, isLoading: false, isError: false },
-  journey: { data: { first_score_at: "x", first_stress_test_at: "x", first_plan_at: "x", first_driver_viewed_at: "x", first_plan_reviewed_at: "x" } },
-  plans: { data: { plans: [] } },
-  insights: { data: { portfolio_available: true, insights: [] } },
-  lastSnapshot: { data: { snapshot: { overall_score: 782 } } },
+  score: { data: { overall_score: 782, metrics: { confidence: "high" }, data_confidence: null }, isLoading: false, isError: false, refetch: vi.fn() },
+  journey: { data: { first_score_at: "x", first_stress_test_at: "x", first_plan_at: "x", first_driver_viewed_at: "x", first_plan_reviewed_at: "x" }, isLoading: false, isError: false, refetch: vi.fn() },
+  plans: { data: { plans: [] }, isLoading: false, isError: false, refetch: vi.fn() },
+  insights: { data: { portfolio_available: true, insights: [] }, isLoading: false, isError: false, refetch: vi.fn() },
+  riskFit: { data: { confirmed: true, risk_tolerance: 3 }, isLoading: false, isError: false, refetch: vi.fn() },
+  scoreChanges: { data: { available: false }, isLoading: false, isError: false, refetch: vi.fn() },
 };
 
 vi.mock("@/lib/auth-context", () => ({ useAuth: () => ({ user: { id: "u1", email: "a@b.c" } }) }));
@@ -29,7 +30,8 @@ vi.mock("@/lib/queries", () => ({
   useJourney: () => state.journey,
   useRiskPlans: () => state.plans,
   useCopilotInsights: () => state.insights,
-  useLastSnapshot: () => state.lastSnapshot,
+  useCopilotPreferences: () => state.riskFit,
+  useScoreChanges: () => state.scoreChanges,
 }));
 
 import { Today } from "./today";
@@ -38,11 +40,12 @@ beforeEach(() => {
   ctx.hasPortfolios = true;
   ctx.current = { id: "pf1", name: "Book A", holdings: { SPY: { shares: 1 } } };
   ctx.activePortfolioId = "pf1";
-  state.score = { data: { overall_score: 782, metrics: { confidence: "high" }, data_confidence: null }, isLoading: false, isError: false };
-  state.journey = { data: { first_score_at: "x", first_stress_test_at: "x", first_plan_at: "x", first_driver_viewed_at: "x", first_plan_reviewed_at: "x" } };
-  state.plans = { data: { plans: [] } };
-  state.insights = { data: { portfolio_available: true, insights: [] } };
-  state.lastSnapshot = { data: { snapshot: { overall_score: 782 } } };
+  state.score = { data: { overall_score: 782, metrics: { confidence: "high" }, data_confidence: null }, isLoading: false, isError: false, refetch: vi.fn() };
+  state.journey = { data: { first_score_at: "x", first_stress_test_at: "x", first_plan_at: "x", first_driver_viewed_at: "x", first_plan_reviewed_at: "x" }, isLoading: false, isError: false, refetch: vi.fn() };
+  state.plans = { data: { plans: [] }, isLoading: false, isError: false, refetch: vi.fn() };
+  state.insights = { data: { portfolio_available: true, insights: [] }, isLoading: false, isError: false, refetch: vi.fn() };
+  state.riskFit = { data: { confirmed: true, risk_tolerance: 3 }, isLoading: false, isError: false, refetch: vi.fn() };
+  state.scoreChanges = { data: { available: false }, isLoading: false, isError: false, refetch: vi.fn() };
 });
 afterEach(() => vi.clearAllMocks());
 
@@ -51,7 +54,7 @@ describe("Today", () => {
     ctx.hasPortfolios = false;
     ctx.current = null as never;
     ctx.activePortfolioId = null;
-    state.score = { data: null, isLoading: false, isError: true } as never;
+    state.score = { data: null, isLoading: false, isError: true, refetch: vi.fn() } as never;
     render(<Today />);
     expect(screen.getByText("Add your first portfolio")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Create a portfolio" })).toHaveAttribute("href", "/portfolios/new");
@@ -76,7 +79,12 @@ describe("Today", () => {
   });
 
   it("a score drop becomes the primary 'explain the change' action (strip suppressed)", () => {
-    state.lastSnapshot = { data: { snapshot: { overall_score: 850 } } }; // was 850, now 782 → down 68
+    state.scoreChanges = {
+      data: { available: true, comparable: true, score_delta: -68, summary: "Concentration weakened the score.", top_negative_contributor: { label: "Concentration", points: -68 } },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as never;
     render(<Today />);
     // The primary explains the drop; the redundant since-last-visit strip is hidden.
     expect(screen.getByText("Your health score dropped")).toBeInTheDocument();
@@ -84,9 +92,43 @@ describe("Today", () => {
   });
 
   it("a small non-drop change shows the since-last-visit strip (no primary drop)", () => {
-    state.lastSnapshot = { data: { snapshot: { overall_score: 770 } } }; // was 770, now 782 → up 12
+    state.scoreChanges = {
+      data: { available: true, comparable: true, score_delta: 12, summary: "Diversification improved the score.", top_positive_contributor: { label: "Diversification", points: 12 } },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    } as never;
     render(<Today />);
-    expect(screen.getByText(/health score is up/)).toBeInTheDocument();
+    expect(screen.getByText(/Diversification improved/)).toBeInTheDocument();
+    expect(screen.getByText(/Top driver: Diversification/)).toBeInTheDocument();
     expect(screen.getByText(/12 pts/)).toBeInTheDocument();
+  });
+
+  it("blocks invented guidance when the active score fails", () => {
+    state.score = { data: null, isLoading: false, isError: true, refetch: vi.fn() } as never;
+    render(<Today />);
+    expect(screen.getByRole("alert")).toHaveTextContent(/could not load your current score/i);
+    expect(screen.queryByText("Review what changed")).not.toBeInTheDocument();
+  });
+
+  it("blocks query failures instead of treating unknown state as empty", () => {
+    state.plans = { data: undefined, isLoading: false, isError: true, refetch: vi.fn() } as never;
+    render(<Today />);
+    expect(screen.getByRole("alert")).toHaveTextContent(/saved plans/i);
+    expect(screen.getByRole("button", { name: /reload today context/i })).toBeInTheDocument();
+    expect(screen.queryByText("Review what changed")).not.toBeInTheDocument();
+  });
+
+  it("waits for every priority input before rendering a recommendation", () => {
+    state.insights = { ...state.insights, isLoading: true };
+    render(<Today />);
+    expect(screen.queryByText("Review what changed")).not.toBeInTheDocument();
+  });
+
+  it("does not accept an empty confirmed preference as completed Risk Fit", () => {
+    state.riskFit = { data: { confirmed: true, risk_tolerance: null }, isLoading: false, isError: false, refetch: vi.fn() } as never;
+    state.journey = { data: { ...state.journey.data, first_score_at: null }, isLoading: false, isError: false, refetch: vi.fn() } as never;
+    render(<Today />);
+    expect(screen.getByText("Set your Risk Fit")).toBeInTheDocument();
   });
 });

@@ -16,6 +16,12 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth-context";
 import { AuthShell } from "@/components/marketing/auth-shell";
 import { C } from "@/components/marketing/theme";
+import {
+  authHref,
+  consumeAuthRedirect,
+  readAuthRedirect,
+  rememberAuthRedirect,
+} from "@/lib/auth-redirect";
 
 const POST_LOGIN_REDIRECT = "/";
 
@@ -33,14 +39,22 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [oauthSubmitting, setOauthSubmitting] = useState(false);
+  const [redirectPath, setRedirectPath] = useState(POST_LOGIN_REDIRECT);
+  const [redirectReady, setRedirectReady] = useState(false);
+
+  useEffect(() => {
+    const next = readAuthRedirect(POST_LOGIN_REDIRECT);
+    setRedirectPath(rememberAuthRedirect(next, POST_LOGIN_REDIRECT));
+    setRedirectReady(true);
+  }, []);
 
   // Already signed in? Bounce. Avoids showing the form to an authed user
   // who navigated here by accident (e.g. bookmark).
   useEffect(() => {
-    if (!authLoading && user) {
-      router.replace(POST_LOGIN_REDIRECT);
+    if (redirectReady && !authLoading && user) {
+      router.replace(consumeAuthRedirect(POST_LOGIN_REDIRECT));
     }
-  }, [user, authLoading, router]);
+  }, [user, authLoading, redirectReady, router]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -49,7 +63,7 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await signIn(email, password);
-      router.replace(POST_LOGIN_REDIRECT);
+      router.replace(consumeAuthRedirect(POST_LOGIN_REDIRECT));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-in failed.");
     } finally {
@@ -62,7 +76,7 @@ export default function LoginPage() {
     setError(null);
     setOauthSubmitting(true);
     try {
-      await signInWithGoogle();
+      await signInWithGoogle(redirectPath);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Google sign-in failed.");
       setOauthSubmitting(false);
@@ -81,7 +95,7 @@ export default function LoginPage() {
       footer={
         <>
           New here?{" "}
-          <Link href="/signup" style={{ color: C.teal, textDecoration: "none" }}>
+          <Link href={authHref("/signup", redirectPath)} style={{ color: C.teal, textDecoration: "none" }}>
             Create an account
           </Link>
           .

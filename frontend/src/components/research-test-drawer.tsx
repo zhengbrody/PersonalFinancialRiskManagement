@@ -26,7 +26,12 @@ import {
   type TestOpExecution,
 } from "@/lib/whatif";
 import { type ScoreResponse, scoreResponseSchema } from "@/lib/schemas";
-import { useActiveScore, useMarketPrices, useMyPortfolios } from "@/lib/queries";
+import {
+  useActiveScore,
+  useCopilotPreferences,
+  useMarketPrices,
+  useMyPortfolios,
+} from "@/lib/queries";
 
 type Op = TestOp | "analysis_only";
 type Row = { ticker: string; market_value: number };
@@ -50,6 +55,7 @@ export function ResearchTestDrawer({
 }) {
   const { current, activePortfolioId } = usePortfolioContext();
   const baseline = useActiveScore();
+  const preferences = useCopilotPreferences();
   const myPortfolios = useMyPortfolios();
   const activeBook = useMemo(
     () => myPortfolios.data?.portfolios.find((p) => p.id === current?.id) ?? current ?? undefined,
@@ -69,6 +75,14 @@ export function ResearchTestDrawer({
     [activeBook, prices.data],
   );
   const bookTotal = useMemo(() => baseRows.reduce((s, r) => s + r.market_value, 0), [baseRows]);
+  const effectiveRiskPreference =
+    baseline.data?.risk_preference ??
+    (preferences.data?.confirmed && preferences.data.risk_tolerance
+      ? preferences.data.risk_tolerance
+      : 3);
+  const riskProfileReady =
+    baseline.data?.risk_preference != null ||
+    (!preferences.isLoading && !preferences.isError);
 
   const T = ticker.toUpperCase();
   const heldTicker = baseRows.some((r) => r.ticker === T);
@@ -108,6 +122,7 @@ export function ResearchTestDrawer({
   const equityOnlyBlocked = excluded.hasNonEquity && baseRows.length === 0;
 
   async function run() {
+    if (!riskProfileReady || !baseline.data) return;
     setError(null);
     const result = applyTestOp(baseRows, op as TestOp, T, dollars, fromTicker);
     if (!result.ok) {
@@ -128,7 +143,7 @@ export function ResearchTestDrawer({
             market_value: r.market_value,
             asset_type: "public_security" as const,
           })),
-          risk_preference: 3,
+          risk_preference: effectiveRiskPreference,
         },
         schema: scoreResponseSchema,
       });
@@ -269,8 +284,17 @@ export function ResearchTestDrawer({
                 </p>
               )}
 
-              <Button type="button" size="sm" disabled={loading} onClick={run}>
-                {loading ? "Scoring…" : "See before → after"}
+              <Button
+                type="button"
+                size="sm"
+                disabled={loading || !riskProfileReady || !baseline.data}
+                onClick={run}
+              >
+                {loading
+                  ? "Scoring…"
+                  : riskProfileReady && baseline.data
+                    ? "See before → after"
+                    : "Loading portfolio baseline…"}
               </Button>
               {error && <p className="text-destructive">{error}</p>}
 

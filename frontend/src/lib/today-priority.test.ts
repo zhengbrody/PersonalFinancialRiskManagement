@@ -8,6 +8,9 @@ const base: TodayInputs = {
   dueReviewCount: 0,
   hasMaterialInsight: false,
   scoreDropped: false,
+  hasRiskFit: true,
+  hasScore: true,
+  hasDriverView: true,
   hasStressTest: true,
   hasPlan: true,
   activePortfolioId: "pf1",
@@ -24,6 +27,13 @@ describe("computePrimaryAction — fixed priority order", () => {
   });
   it("stale data outranks a due review", () => {
     expect(computePrimaryAction({ ...base, dataStale: true, dueReviewCount: 3 }).kind).toBe("fix_data");
+  });
+  it("Risk Fit, score and drivers follow the activation order", () => {
+    expect(computePrimaryAction({ ...base, hasRiskFit: false }).kind).toBe("confirm_risk_fit");
+    expect(computePrimaryAction({ ...base, hasScore: false }).kind).toBe("review_score");
+    expect(computePrimaryAction({ ...base, hasDriverView: false }).kind).toBe(
+      "first_driver_view",
+    );
   });
   it("due review outranks a material insight", () => {
     expect(
@@ -64,20 +74,20 @@ describe("computeSecondary", () => {
 
 describe("journeySteps", () => {
   it("marks the next incomplete step and reports allDone", () => {
-    const r = journeySteps({ hasPortfolio: true, hasScore: true, hasDriverView: false, hasStressTest: false, hasPlan: false, hasPlanReviewed: false });
-    expect(r.steps[2].done).toBe(false);
-    expect(r.nextIndex).toBe(2);
+    const r = journeySteps({ hasPortfolio: true, hasRiskFit: true, hasScore: true, hasDriverView: false, hasStressTest: false, hasPlan: false, hasPlanReviewed: false });
+    expect(r.steps[3].done).toBe(false);
+    expect(r.nextIndex).toBe(3);
     expect(r.allDone).toBe(false);
   });
-  it("has six steps ending with 'Review a saved plan'", () => {
-    const r = journeySteps({ hasPortfolio: true, hasScore: true, hasDriverView: true, hasStressTest: true, hasPlan: true, hasPlanReviewed: false });
-    expect(r.steps).toHaveLength(6);
-    expect(r.steps[5]).toMatchObject({ key: "review", done: false, href: "/analyze?view=plan" });
-    expect(r.nextIndex).toBe(5);
+  it("has seven steps ending with 'Review a saved plan'", () => {
+    const r = journeySteps({ hasPortfolio: true, hasRiskFit: true, hasScore: true, hasDriverView: true, hasStressTest: true, hasPlan: true, hasPlanReviewed: false });
+    expect(r.steps).toHaveLength(7);
+    expect(r.steps[6]).toMatchObject({ key: "review", done: false, href: "/analyze?view=plan" });
+    expect(r.nextIndex).toBe(6);
     expect(r.allDone).toBe(false);
   });
   it("allDone when every step is complete", () => {
-    const r = journeySteps({ hasPortfolio: true, hasScore: true, hasDriverView: true, hasStressTest: true, hasPlan: true, hasPlanReviewed: true });
+    const r = journeySteps({ hasPortfolio: true, hasRiskFit: true, hasScore: true, hasDriverView: true, hasStressTest: true, hasPlan: true, hasPlanReviewed: true });
     expect(r.allDone).toBe(true);
     expect(r.nextIndex).toBe(-1);
   });

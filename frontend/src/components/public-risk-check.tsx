@@ -21,6 +21,7 @@ import { holdingsBand } from "@/lib/analytics-events";
 import { parseHoldingsCsv } from "@/lib/parse-holdings-csv";
 import {
   MAX_PUBLIC_HOLDINGS,
+  clearAnonHoldings,
   runPublicRiskCheck,
   saveAnonHoldings,
   type AnonHolding,
@@ -58,13 +59,21 @@ export function PublicRiskCheck() {
     }
   }
 
+  function invalidateResult() {
+    setResult(null);
+    setError(null);
+    clearAnonHoldings();
+  }
+
   function setRow(i: number, patch: Partial<AnonHolding>) {
     markStarted();
+    invalidateResult();
     setRows((prev) => prev.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   }
 
   async function onCsvFile(file: File) {
     markStarted();
+    invalidateResult();
     const text = await file.text();
     const { rows: parsed, warning } = parseHoldingsCsv(text);
     // Deliberately keep ONLY ticker + shares — the public check never
@@ -87,6 +96,7 @@ export function PublicRiskCheck() {
   }
 
   async function run() {
+    invalidateResult();
     setError(null);
     const holdings = filled.map((r) => ({
       ticker: r.ticker.trim().toUpperCase(),
@@ -120,8 +130,8 @@ export function PublicRiskCheck() {
       <div className="space-y-1">
         <h2 className="text-lg font-semibold">Check your own portfolio — no signup</h2>
         <p className="text-sm text-muted-foreground">
-          Up to {MAX_PUBLIC_HOLDINGS} stock or ETF holdings: ticker + share count. Nothing is
-          stored, nothing connects to your brokerage, and no email is asked for.
+          Up to {MAX_PUBLIC_HOLDINGS} stock or ETF holdings: ticker + share count. Nothing
+          connects to your brokerage and no email is asked for.
         </p>
       </div>
 
@@ -149,7 +159,10 @@ export function PublicRiskCheck() {
                 type="button"
                 className="rounded-md border border-border px-3 text-sm text-muted-foreground"
                 aria-label={`Remove row ${i + 1}`}
-                onClick={() => setRows((prev) => prev.filter((_, j) => j !== i))}
+                onClick={() => {
+                  invalidateResult();
+                  setRows((prev) => prev.filter((_, j) => j !== i));
+                }}
               >
                 ×
               </button>
@@ -163,7 +176,10 @@ export function PublicRiskCheck() {
           <button
             type="button"
             className="rounded-md border border-border px-3 py-2 text-sm"
-            onClick={() => setRows((prev) => [...prev, { ticker: "", shares: "" }])}
+            onClick={() => {
+              invalidateResult();
+              setRows((prev) => [...prev, { ticker: "", shares: "" }]);
+            }}
           >
             + Add holding
           </button>
@@ -200,10 +216,19 @@ export function PublicRiskCheck() {
         A CSV you exported from your broker — we read the file locally; nothing connects to a
         brokerage account.
       </p>
-      {csvNote && <p className="text-xs text-muted-foreground">{csvNote}</p>}
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {csvNote && <p className="text-xs text-muted-foreground" role="status">{csvNote}</p>}
+      {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
 
-      {result && <ResultPanel result={result} holdingsCount={filled.length} />}
+      {result && (
+        <ResultPanel
+          result={result}
+          holdingsCount={filled.length}
+          onDiscard={() => {
+            clearAnonHoldings();
+            setResult(null);
+          }}
+        />
+      )}
     </section>
   );
 }
@@ -211,9 +236,11 @@ export function PublicRiskCheck() {
 function ResultPanel({
   result,
   holdingsCount,
+  onDiscard,
 }: {
   result: PublicRiskCheckResult;
   holdingsCount: number;
+  onDiscard: () => void;
 }) {
   const c = result.concentration;
   const m = result.metrics;
@@ -237,21 +264,25 @@ function ResultPanel({
 
       <div>
         <h3 className="text-sm font-medium">If the market drops…</h3>
-        <table className="mt-1 w-full text-sm">
-          <tbody>
-            {result.stress.map((s) => (
-              <tr key={s.market_shock_pct} className="border-t border-border/60">
-                <td className="py-1.5 text-muted-foreground">
-                  Market {pct(s.market_shock_pct, 0)}
-                </td>
-                <td className="py-1.5 text-right font-mono">
-                  {pct(s.est_portfolio_impact_pct)}
-                </td>
-                <td className="py-1.5 text-right font-mono">{usd(s.est_portfolio_impact_usd)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="mt-1 overflow-x-auto">
+          <table className="w-full min-w-[22rem] text-sm">
+            <tbody>
+              {result.stress.map((s) => (
+                <tr key={s.market_shock_pct} className="border-t border-border/60">
+                  <td className="py-1.5 text-muted-foreground">
+                    Market {pct(s.market_shock_pct, 0)}
+                  </td>
+                  <td className="py-1.5 text-right font-mono">
+                    {pct(s.est_portfolio_impact_pct)}
+                  </td>
+                  <td className="py-1.5 text-right font-mono">
+                    {usd(s.est_portfolio_impact_usd)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         <p className="mt-1 text-xs text-muted-foreground">
           First-order estimate from your portfolio&apos;s market beta
           {m.beta_to_market != null ? ` (${m.beta_to_market.toFixed(2)})` : ""}.
@@ -276,15 +307,25 @@ function ResultPanel({
         <p className="text-sm font-medium">Save this portfolio and unlock the full risk desk</p>
         <p className="mt-1 text-xs text-muted-foreground">
           Health Score, full VaR/stress report, factor exposure, and what-if analysis — your
-          holdings carry over automatically after signup, and are saved only when you confirm.
+          holdings are kept in this browser tab for up to 24 hours so they can carry into signup.
+          They are saved to your account only when you confirm.
         </p>
-        <Link
-          href="/signup"
-          className="mt-2 inline-block rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-          onClick={() => track("public_check_signup_cta", { holdings_band: holdingsBand(holdingsCount) })}
-        >
-          Create a free account
-        </Link>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Link
+            href="/signup?next=%2Fportfolios%2Fnew"
+            className="inline-block rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+            onClick={() => track("public_check_signup_cta", { holdings_band: holdingsBand(holdingsCount) })}
+          >
+            Create a free account
+          </Link>
+          <button
+            type="button"
+            className="rounded-md border border-border px-4 py-2 text-sm text-muted-foreground"
+            onClick={onDiscard}
+          >
+            Discard browser handoff
+          </button>
+        </div>
       </div>
     </div>
   );

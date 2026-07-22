@@ -3,7 +3,7 @@
  *
  *   1. Setup-needed notice when Supabase env unset.
  *   2. signUp() resolving with needsConfirmation=true → "check email" UI.
- *   3. signUp() resolving with needsConfirmation=false → redirect /portfolios.
+ *   3. signUp() resolving with needsConfirmation=false → guided portfolio creation.
  *   4. signUp() rejecting → error rendered.
  *   5. Google OAuth starts from the primary CTA.
  */
@@ -26,6 +26,8 @@ import SignupPage from "./page";
 
 afterEach(() => {
   vi.clearAllMocks();
+  window.history.replaceState({}, "", "/signup");
+  window.sessionStorage.clear();
 });
 
 describe("SignupPage", () => {
@@ -71,12 +73,21 @@ describe("SignupPage", () => {
     await user.type(screen.getByLabelText(/password/i), "longpassword");
     await user.click(screen.getByRole("button", { name: /create account/i }));
 
-    expect(signUp).toHaveBeenCalledWith("new@mindmarket.test", "longpassword");
+    expect(signUp).toHaveBeenCalledWith(
+      "new@mindmarket.test",
+      "longpassword",
+      "/portfolios/new",
+    );
     expect(
       await screen.findByText(/check your email/i),
     ).toBeInTheDocument();
     // No redirect when confirmation is pending.
     expect(replaceMock).not.toHaveBeenCalled();
+    expect(
+      screen
+        .getAllByRole("link", { name: /sign in/i })
+        .every((link) => link.getAttribute("href") === "/login?next=%2Fportfolios%2Fnew"),
+    ).toBe(true);
   });
 
   it("redirects to /portfolios when session is immediate", async () => {
@@ -174,6 +185,25 @@ describe("SignupPage", () => {
     render(<SignupPage />);
     await user.click(screen.getByRole("button", { name: /continue with google/i }));
 
-    expect(signInWithGoogle).toHaveBeenCalledOnce();
+    expect(signInWithGoogle).toHaveBeenCalledWith("/portfolios/new");
+  });
+
+  it("rejects an external next target and keeps the guided internal handoff", async () => {
+    window.history.replaceState({}, "", "/signup?next=https%3A%2F%2Fevil.example");
+    const signInWithGoogle = vi.fn().mockResolvedValue(undefined);
+    useAuthMock.mockReturnValue({
+      user: null,
+      accessToken: null,
+      loading: false,
+      configured: true,
+      signIn: vi.fn(),
+      signUp: vi.fn(),
+      signInWithGoogle,
+      signOut: vi.fn(),
+    });
+
+    render(<SignupPage />);
+    await userEvent.click(screen.getByRole("button", { name: /continue with google/i }));
+    expect(signInWithGoogle).toHaveBeenCalledWith("/portfolios/new");
   });
 });

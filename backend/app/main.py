@@ -40,6 +40,7 @@ from .api.v1 import (
     research,
     risk,
     risk_plans,
+    share_cards,
 )
 from .core.config import get_settings
 from .core.cors import cors_kwargs
@@ -127,6 +128,8 @@ def _maybe_init_sentry(settings) -> None:
     try:
         import sentry_sdk
 
+        from .services.sentry_scrub import before_send
+
         sentry_sdk.init(
             dsn=settings.sentry_dsn,
             environment=settings.environment,
@@ -137,6 +140,7 @@ def _maybe_init_sentry(settings) -> None:
             # metadata, NEVER request bodies (a failing POST /copilot/chat
             # would otherwise attach the user's prompt text).
             max_request_body_size="never",
+            before_send=before_send,
         )
     except Exception:  # noqa: BLE001 - monitoring must never break boot
         pass
@@ -176,6 +180,7 @@ def create_app() -> FastAPI:
     app.include_router(public_risk.router)
     app.include_router(risk.router)
     app.include_router(risk_plans.router)
+    app.include_router(share_cards.router)
     app.include_router(portfolios.router)
     app.include_router(market.router)
     app.include_router(macro.router)

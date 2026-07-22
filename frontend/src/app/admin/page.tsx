@@ -22,6 +22,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { authHref } from "@/lib/auth-redirect";
 import { ApiBalanceCard } from "@/components/api-balance-card";
 import {
   useAdminBalances,
@@ -47,7 +48,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!configured) return;
-    if (!authLoading && !user) router.replace("/login");
+    if (!authLoading && !user) router.replace(authHref("/login", "/admin"));
   }, [user, authLoading, configured, router]);
 
   if (!configured || authLoading || !user) return <PageSkeleton />;

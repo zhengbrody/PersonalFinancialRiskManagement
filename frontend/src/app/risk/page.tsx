@@ -26,6 +26,7 @@ import {
 } from "@/components/risk-report";
 import { OptionsAnalysis } from "@/components/options-analysis";
 import { useAuth } from "@/lib/auth-context";
+import { authHref } from "@/lib/auth-redirect";
 import { usePortfolioContext } from "@/lib/portfolio-context";
 import { runKeyForActivePortfolio } from "@/lib/use-run-once-per-user";
 import {
@@ -51,7 +52,7 @@ export default function RiskPage() {
 
   useEffect(() => {
     if (!configured) return;
-    if (!authLoading && !user) router.replace("/login");
+    if (!authLoading && !user) router.replace(authHref("/login", "/risk"));
   }, [user, authLoading, configured, router]);
 
   // Auto-run once per (user + ACTIVE portfolio): survives token refresh, but a

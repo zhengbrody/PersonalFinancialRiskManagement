@@ -6,7 +6,7 @@
  * panel only. Used by the Health Score cockpit + the Risk Report.
  */
 
-import { useId } from "react";
+import { useId, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 export type TabItem = { value: string; label: string };
@@ -34,26 +34,33 @@ export function Tabs({
 }) {
   const localId = useId();
   const base = idBase ?? localId;
-  const idx = Math.max(0, items.findIndex((t) => t.value === value));
+  const tablistRef = useRef<HTMLDivElement>(null);
 
-  function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+  function onKeyDown(e: React.KeyboardEvent<HTMLButtonElement>, currentIndex: number) {
+    let next = currentIndex;
+    if (e.key === "ArrowRight") next = (currentIndex + 1) % items.length;
+    else if (e.key === "ArrowLeft") next = (currentIndex - 1 + items.length) % items.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = items.length - 1;
+    else return;
     e.preventDefault();
-    const next = e.key === "ArrowRight" ? (idx + 1) % items.length : (idx - 1 + items.length) % items.length;
     onValueChange(items[next].value);
+    const tabs = tablistRef.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+    tabs?.[next]?.focus();
   }
 
   return (
     <div
       role="tablist"
       aria-label="View"
-      onKeyDown={onKeyDown}
+      aria-orientation="horizontal"
+      ref={tablistRef}
       className={cn(
         "inline-flex flex-wrap gap-1 rounded-lg border border-border bg-muted/40 p-1",
         className,
       )}
     >
-      {items.map((t) => {
+      {items.map((t, itemIndex) => {
         const active = t.value === value;
         return (
           <button
@@ -65,6 +72,7 @@ export function Tabs({
             aria-controls={idBase ? tabPanelId(base, t.value) : undefined}
             tabIndex={active ? 0 : -1}
             onClick={() => onValueChange(t.value)}
+            onKeyDown={(event) => onKeyDown(event, itemIndex)}
             className={cn(
               "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
               active

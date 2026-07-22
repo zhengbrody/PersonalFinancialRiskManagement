@@ -1772,7 +1772,7 @@
         "type": "object"
       },
       "CopilotPreferencesIn": {
-        "description": "The user's explicit confirmation payload. Every field optional \u2014 a user\nmay confirm only the dimensions they care about; bounds mirror the DB\nCHECK constraints.",
+        "description": "The user's explicit Risk Fit confirmation payload.\n\nRisk tolerance is the one required choice because it sets the target used\nby the deterministic score. The remaining fields only tailor explanation\nemphasis and remain optional. Bounds mirror the DB CHECK constraints.",
         "properties": {
           "concentration_limit": {
             "anyOf": [
@@ -1838,19 +1838,15 @@
             "type": "object"
           },
           "risk_tolerance": {
-            "anyOf": [
-              {
-                "maximum": 5.0,
-                "minimum": 1.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Risk Tolerance"
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Risk Tolerance",
+            "type": "integer"
           }
         },
+        "required": [
+          "risk_tolerance"
+        ],
         "title": "CopilotPreferencesIn",
         "type": "object"
       },
@@ -4458,6 +4454,105 @@
         "title": "Envelope[SeriesBatchResponse]",
         "type": "object"
       },
+      "Envelope_ShareCardCapabilityOut_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShareCardCapabilityOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[ShareCardCapabilityOut]",
+        "type": "object"
+      },
+      "Envelope_ShareCardMintOut_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShareCardMintOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[ShareCardMintOut]",
+        "type": "object"
+      },
+      "Envelope_ShareCardResolveOut_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShareCardResolveOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[ShareCardResolveOut]",
+        "type": "object"
+      },
       "Envelope_SmartMoneyOut_": {
         "additionalProperties": true,
         "properties": {
@@ -6604,16 +6699,12 @@
       },
       "JourneyRecordRequest": {
         "additionalProperties": false,
-        "description": "Record a milestone timestamp. `first_*` milestones are set ONCE (the\nfirst time); `last_workspace_view` always updates.",
+        "description": "Record the two client-originated events.\n\n``first_score_at`` is sent only after the active-book Overview renders;\n``first_stress_test_at`` only after an explicit sandbox run succeeds;\n``last_workspace_view`` is navigation telemetry. Other milestones are\nstamped by their authoritative backend product endpoint.",
         "properties": {
           "milestone": {
             "enum": [
-              "first_portfolio_at",
               "first_score_at",
-              "first_driver_viewed_at",
               "first_stress_test_at",
-              "first_plan_at",
-              "first_plan_reviewed_at",
               "last_workspace_view"
             ],
             "title": "Milestone",
@@ -10546,11 +10637,17 @@
             "type": "number"
           },
           "risk_preference": {
-            "default": 3,
-            "maximum": 5.0,
-            "minimum": 1.0,
-            "title": "Risk Preference",
-            "type": "integer"
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Preference"
           }
         },
         "title": "ReportFromActiveRequest",
@@ -11220,6 +11317,49 @@
           "primary_driver"
         ],
         "title": "RiskExplainOutput",
+        "type": "object"
+      },
+      "RiskFitOut": {
+        "description": "Preference-relative interpretation of the measured portfolio risk.\n\n``signed_gap`` is positive when measured risk is above the selected target,\nnegative when below it, and zero-ish when aligned.  It is intentionally\nunavailable when the shared confidence gate disallows a directional claim.",
+        "properties": {
+          "reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "signed_gap": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signed Gap"
+          },
+          "status": {
+            "enum": [
+              "above",
+              "aligned",
+              "below",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "target_label": {
+            "title": "Target Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "target_label"
+        ],
+        "title": "RiskFitOut",
         "type": "object"
       },
       "RiskMetricsOut": {
@@ -11989,6 +12129,23 @@
             ],
             "title": "Risk Free Rate"
           },
+          "risk_preference": {
+            "default": 3,
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Risk Preference",
+            "type": "integer"
+          },
+          "risk_preference_source": {
+            "default": "neutral_baseline",
+            "enum": [
+              "confirmed",
+              "neutral_baseline",
+              "request_override"
+            ],
+            "title": "Risk Preference Source",
+            "type": "string"
+          },
           "rolling_volatility": {
             "anyOf": [
               {
@@ -12339,6 +12496,23 @@
               }
             ],
             "title": "Risk Free Rate"
+          },
+          "risk_preference": {
+            "default": 3,
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Risk Preference",
+            "type": "integer"
+          },
+          "risk_preference_source": {
+            "default": "neutral_baseline",
+            "enum": [
+              "confirmed",
+              "neutral_baseline",
+              "request_override"
+            ],
+            "title": "Risk Preference Source",
+            "type": "string"
           },
           "rolling_volatility": {
             "anyOf": [
@@ -12768,6 +12942,17 @@
             "title": "Component Deltas",
             "type": "array"
           },
+          "current_risk_preference": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Risk Preference"
+          },
           "current_score": {
             "title": "Current Score",
             "type": "integer"
@@ -12799,6 +12984,17 @@
             },
             "title": "Input Changes",
             "type": "array"
+          },
+          "previous_risk_preference": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Risk Preference"
           },
           "previous_score": {
             "anyOf": [
@@ -12993,6 +13189,30 @@
             "title": "Overall Score",
             "type": "integer"
           },
+          "risk_preference": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Preference"
+          },
+          "risk_preference_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Preference Source"
+          },
           "top_positions": {
             "items": {
               "additionalProperties": true,
@@ -13071,11 +13291,17 @@
             "type": "number"
           },
           "risk_preference": {
-            "default": 3,
-            "maximum": 5.0,
-            "minimum": 1.0,
-            "title": "Risk Preference",
-            "type": "integer"
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Preference"
           }
         },
         "title": "ScoreFromActiveRequest",
@@ -13235,9 +13461,29 @@
             "title": "Reason Codes",
             "type": "array"
           },
+          "risk_fit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RiskFitOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "risk_preference": {
             "title": "Risk Preference",
             "type": "integer"
+          },
+          "risk_preference_source": {
+            "default": "neutral_baseline",
+            "enum": [
+              "confirmed",
+              "neutral_baseline",
+              "request_override"
+            ],
+            "title": "Risk Preference Source",
+            "type": "string"
           },
           "risk_target": {
             "additionalProperties": true,
@@ -13532,6 +13778,153 @@
           "label"
         ],
         "title": "SeriesResultOut",
+        "type": "object"
+      },
+      "ShareCardCapabilityOut": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "ShareCardCapabilityOut",
+        "type": "object"
+      },
+      "ShareCardMintOut": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "title": "Expires At",
+            "type": "integer"
+          },
+          "share_path": {
+            "title": "Share Path",
+            "type": "string"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "expires_at",
+          "share_path"
+        ],
+        "title": "ShareCardMintOut",
+        "type": "object"
+      },
+      "ShareCardPayload": {
+        "additionalProperties": false,
+        "description": "The complete signed payload. Never add identity, tickers or exact values.",
+        "properties": {
+          "as_of": {
+            "maxLength": 32,
+            "minLength": 10,
+            "title": "As Of",
+            "type": "string"
+          },
+          "confidence_label": {
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Confidence Label",
+            "type": "string"
+          },
+          "exp": {
+            "exclusiveMinimum": 0.0,
+            "title": "Exp",
+            "type": "integer"
+          },
+          "model_version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Model Version",
+            "type": "string"
+          },
+          "risk_fit": {
+            "enum": [
+              "above",
+              "aligned",
+              "below",
+              "unavailable",
+              "not_confirmed"
+            ],
+            "title": "Risk Fit",
+            "type": "string"
+          },
+          "score_band": {
+            "enum": [
+              "poor",
+              "watch",
+              "healthy",
+              "strong"
+            ],
+            "title": "Score Band",
+            "type": "string"
+          },
+          "stress_band": {
+            "enum": [
+              "under_5_pct",
+              "5_to_10_pct",
+              "10_to_20_pct",
+              "over_20_pct",
+              "unavailable"
+            ],
+            "title": "Stress Band",
+            "type": "string"
+          },
+          "top_risk_category": {
+            "enum": [
+              "data_quality",
+              "concentration",
+              "leverage",
+              "options",
+              "downside",
+              "volatility",
+              "market_sensitivity",
+              "overall_balance"
+            ],
+            "title": "Top Risk Category",
+            "type": "string"
+          },
+          "v": {
+            "const": 1,
+            "default": 1,
+            "title": "V",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "score_band",
+          "risk_fit",
+          "top_risk_category",
+          "stress_band",
+          "confidence_label",
+          "as_of",
+          "model_version",
+          "exp"
+        ],
+        "title": "ShareCardPayload",
+        "type": "object"
+      },
+      "ShareCardResolveOut": {
+        "additionalProperties": false,
+        "properties": {
+          "card": {
+            "$ref": "#/components/schemas/ShareCardPayload"
+          }
+        },
+        "required": [
+          "card"
+        ],
+        "title": "ShareCardResolveOut",
         "type": "object"
       },
       "SimulateHolding": {
@@ -15681,7 +16074,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Record a journey milestone (first_* once; last_workspace_view always)",
+        "summary": "Record an explicit stress-test completion or workspace visit",
         "tags": [
           "risk-ops"
         ]
@@ -17935,6 +18328,105 @@
         "summary": "Backtest the portfolio's 1-day VaR vs realised breaches",
         "tags": [
           "risk"
+        ]
+      }
+    },
+    "/api/v1/share_cards/capability": {
+      "get": {
+        "description": "Expose only whether this deployment can mint links, never the secret.",
+        "operationId": "share_card_capability_api_v1_share_cards_capability_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ShareCardCapabilityOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Share Card Capability",
+        "tags": [
+          "share-cards"
+        ]
+      }
+    },
+    "/api/v1/share_cards/mint": {
+      "post": {
+        "operationId": "mint_share_card_api_v1_share_cards_mint_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "title": "ShareCardMintIn",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ShareCardMintOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Mint Share Card",
+        "tags": [
+          "share-cards"
+        ]
+      }
+    },
+    "/api/v1/share_cards/resolve": {
+      "post": {
+        "description": "Return one indistinguishable 404 for malformed, tampered or expired tokens.",
+        "operationId": "resolve_share_card_api_v1_share_cards_resolve_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "token": {
+                    "title": "Token",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "token"
+                ],
+                "title": "ShareCardResolveIn",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ShareCardResolveOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Resolve Share Card",
+        "tags": [
+          "share-cards"
         ]
       }
     }

@@ -42,6 +42,7 @@ import { QuantRegime } from "@/components/quant-regime";
 import { track } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { authHref } from "@/lib/auth-redirect";
 import { usePortfolioContext } from "@/lib/portfolio-context";
 import {
   useRunBacktest,
@@ -94,7 +95,7 @@ export default function QuantPage() {
   useEffect(() => {
     if (!configured) return;
     if (!authLoading && !user) {
-      router.replace("/login");
+      router.replace(authHref("/login", "/quant"));
     }
   }, [user, authLoading, configured, router]);
 

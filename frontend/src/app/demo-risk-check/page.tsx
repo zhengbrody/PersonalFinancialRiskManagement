@@ -59,7 +59,7 @@ export default function DemoRiskCheckPage() {
           headline="Turn a one-time check into an ongoing risk workflow."
           lede="Add your holdings, open Today, trace the risk in Analyze, test a change, and save the decision for review."
         >
-          <CTA href="/signup">Create my risk workspace</CTA>
+          <CTA href="/signup?next=%2Fportfolios%2Fnew">Create my risk workspace</CTA>
           <CTA href="/product#workflow" variant="ghost">
             See the full workflow
           </CTA>

@@ -231,6 +231,18 @@ export type DataConfidence = z.infer<typeof dataConfidenceSchema>;
 export const scoreResponseSchema = z.looseObject({
   overall_score: z.number(),
   risk_preference: z.number(),
+  risk_preference_source: z
+    .enum(["confirmed", "neutral_baseline", "request_override"])
+    .optional()
+    .default("neutral_baseline"),
+  risk_fit: z
+    .looseObject({
+      status: z.enum(["above", "aligned", "below", "unavailable"]),
+      signed_gap: z.number().nullish(),
+      target_label: z.string(),
+      reason_codes: z.array(z.string()).optional().default([]),
+    })
+    .nullish(),
   risk_target: z.record(z.string(), z.unknown()),
   metrics: portfolioMetricsSchema,
   dimensions: z.record(z.string(), dimensionScoreSchema),

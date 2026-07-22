@@ -12,6 +12,8 @@ vi.mock("@/lib/public-risk", async (importOriginal) => {
 
 import { PublicRiskCheck } from "./public-risk-check";
 import {
+  ANON_HANDOFF_STORAGE_KEY,
+  ANON_HANDOFF_TTL_MS,
   clearAnonHoldings,
   loadAnonHoldings,
   saveAnonHoldings,
@@ -45,26 +47,33 @@ const RESULT = {
   disclaimer: "Educational risk analytics — nothing stored, not investment advice.",
 };
 
-// jsdom localStorage is broken under the test runner (known project quirk —
+// jsdom storage is broken under the test runner (known project quirk —
 // see page.test.tsx) → stub a Map-backed implementation per test run.
-const _store = new Map<string, string>();
+const _localStore = new Map<string, string>();
+const _sessionStore = new Map<string, string>();
+function storage(store: Map<string, string>) {
+  return {
+    getItem: (k: string) => store.get(k) ?? null,
+    setItem: (k: string, v: string) => void store.set(k, String(v)),
+    removeItem: (k: string) => void store.delete(k),
+    clear: () => store.clear(),
+    key: (i: number) => Array.from(store.keys())[i] ?? null,
+    get length() { return store.size; },
+  };
+}
 Object.defineProperty(window, "localStorage", {
   configurable: true,
-  value: {
-    getItem: (k: string) => _store.get(k) ?? null,
-    setItem: (k: string, v: string) => void _store.set(k, String(v)),
-    removeItem: (k: string) => void _store.delete(k),
-    clear: () => _store.clear(),
-    key: (i: number) => Array.from(_store.keys())[i] ?? null,
-    get length() {
-      return _store.size;
-    },
-  },
+  value: storage(_localStore),
+});
+Object.defineProperty(window, "sessionStorage", {
+  configurable: true,
+  value: storage(_sessionStore),
 });
 
 beforeEach(() => {
   vi.clearAllMocks();
-  _store.clear();
+  _localStore.clear();
+  _sessionStore.clear();
 });
 
 function fill(ticker: string, shares: string, row = 1) {
@@ -95,13 +104,15 @@ describe("PublicRiskCheck", () => {
     expect(payloads).not.toContain("10");
   });
 
-  it("saves the holdings to localStorage for the signup handoff", async () => {
+  it("saves the holdings to a 24-hour sessionStorage handoff", async () => {
     runCheck.mockResolvedValue(RESULT);
     render(<PublicRiskCheck />);
     fill("MSFT", "5");
     fireEvent.click(screen.getByRole("button", { name: /run risk check/i }));
     await waitFor(() => expect(screen.getByTestId("public-risk-result")).toBeInTheDocument());
     expect(loadAnonHoldings()).toEqual([{ ticker: "MSFT", shares: "5" }]);
+    expect(window.localStorage.getItem(ANON_HANDOFF_STORAGE_KEY)).toBeNull();
+    expect(screen.getByText(/browser tab for up to 24 hours/i)).toBeInTheDocument();
   });
 
   it("rejects non-positive shares client-side", async () => {
@@ -110,6 +121,28 @@ describe("PublicRiskCheck", () => {
     fireEvent.click(screen.getByRole("button", { name: /run risk check/i }));
     expect(await screen.findByText(/positive numbers/i)).toBeInTheDocument();
     expect(runCheck).not.toHaveBeenCalled();
+  });
+
+  it("invalidates a result and browser handoff when the input changes", async () => {
+    runCheck.mockResolvedValue(RESULT);
+    render(<PublicRiskCheck />);
+    fill("AAPL", "10");
+    fireEvent.click(screen.getByRole("button", { name: /run risk check/i }));
+    await screen.findByTestId("public-risk-result");
+    fireEvent.change(screen.getByLabelText("Shares 1"), { target: { value: "11" } });
+    expect(screen.queryByTestId("public-risk-result")).not.toBeInTheDocument();
+    expect(loadAnonHoldings()).toEqual([]);
+  });
+
+  it("does not retain the prior result when a rerun fails", async () => {
+    runCheck.mockResolvedValueOnce(RESULT).mockRejectedValueOnce(new Error("upstream unavailable"));
+    render(<PublicRiskCheck />);
+    fill("AAPL", "10");
+    fireEvent.click(screen.getByRole("button", { name: /run risk check/i }));
+    await screen.findByTestId("public-risk-result");
+    fireEvent.click(screen.getByRole("button", { name: /run risk check/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/upstream unavailable/i);
+    expect(screen.queryByTestId("public-risk-result")).not.toBeInTheDocument();
   });
 
   it("imports a broker CSV (ticker + shares only, capped at 10)", async () => {
@@ -129,7 +162,7 @@ describe("PublicRiskCheck", () => {
   });
 });
 
-describe("localStorage handoff helpers", () => {
+describe("sessionStorage handoff helpers", () => {
   it("round-trips and clears", () => {
     saveAnonHoldings([{ ticker: "SPY", shares: "3" }]);
     expect(loadAnonHoldings()).toEqual([{ ticker: "SPY", shares: "3" }]);
@@ -138,7 +171,35 @@ describe("localStorage handoff helpers", () => {
   });
 
   it("ignores corrupt storage", () => {
-    window.localStorage.setItem("mm-anon-risk-check-holdings", "{not json");
+    window.sessionStorage.setItem(ANON_HANDOFF_STORAGE_KEY, "{not json");
     expect(loadAnonHoldings()).toEqual([]);
+    expect(window.sessionStorage.getItem(ANON_HANDOFF_STORAGE_KEY)).toBeNull();
+  });
+
+  it("removes the legacy indefinite localStorage handoff without importing it", () => {
+    window.localStorage.setItem(
+      ANON_HANDOFF_STORAGE_KEY,
+      JSON.stringify([{ ticker: "AAPL", shares: "10" }]),
+    );
+    expect(loadAnonHoldings()).toEqual([]);
+    expect(window.localStorage.getItem(ANON_HANDOFF_STORAGE_KEY)).toBeNull();
+  });
+
+  it("expires and clears the handoff after 24 hours", () => {
+    saveAnonHoldings([{ ticker: "SPY", shares: "3" }], 1_000);
+    expect(loadAnonHoldings(1_000 + ANON_HANDOFF_TTL_MS - 1)).toHaveLength(1);
+    expect(loadAnonHoldings(1_000 + ANON_HANDOFF_TTL_MS)).toEqual([]);
+    expect(window.sessionStorage.getItem(ANON_HANDOFF_STORAGE_KEY)).toBeNull();
+  });
+
+  it("lets the user discard the handoff", async () => {
+    runCheck.mockResolvedValue(RESULT);
+    render(<PublicRiskCheck />);
+    fill("MSFT", "5");
+    fireEvent.click(screen.getByRole("button", { name: /run risk check/i }));
+    await screen.findByTestId("public-risk-result");
+    fireEvent.click(screen.getByRole("button", { name: /discard browser handoff/i }));
+    expect(loadAnonHoldings()).toEqual([]);
+    expect(screen.queryByTestId("public-risk-result")).not.toBeInTheDocument();
   });
 });

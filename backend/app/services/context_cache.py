@@ -4,15 +4,13 @@ entry automatically.
 
 Keys (see the module-level builders):
 * risk score      → ``user_id + portfolio_hash + market_data_hash + engine_version``
-* scenario output → ``portfolio_hash + scenario_params``
-* copilot context → ``user_id + portfolio_hash + context_version``
+* scenario output → ``user_id + portfolio_hash + capital context + scenario_params``
+* copilot context → ``user_id + portfolio_hash + capital context + context_version``
 
 Two hard rules, enforced in code (not just convention):
 1. **User-private data is never cached without ``user_id`` in the key.** The
    risk-score and copilot-context key builders raise if ``user_id`` is blank.
-   (Scenario output is keyed by ``portfolio_hash`` ALONE on purpose — it's fully
-   determined by the portfolio, the hash never reveals holdings, and only
-   *identical* books can share an entry, so there's no cross-user leak.)
+   Scenario output includes exact portfolio values, so it is user-scoped too.
 2. **An LLM response is never cached until a ``context_hash`` is in the key** —
    the answer is deterministic w.r.t. its full context, so the key must fold
    that context in. ``cache_llm_response`` refuses without one.
@@ -38,8 +36,12 @@ RISK_ENGINE_VERSION = SCORE_VERSION
 COPILOT_CONTEXT_VERSION = "v1"
 
 _RISK_SCORE_TTL = 10 * 60
-_SCENARIO_TTL = 10 * 60
-_COPILOT_CTX_TTL = 10 * 60
+# These outputs fold current market prices into exact dollar values. Holdings,
+# capital and user identity are structural key inputs; the short TTL bounds
+# market-data staleness without forcing a second quote fetch solely to key the
+# cache. The upstream market-data service still owns its own freshness policy.
+_SCENARIO_TTL = 60
+_COPILOT_CTX_TTL = 60
 
 
 # ── key builders (with the user_id guardrail) ───────────────────────────────
@@ -58,14 +60,30 @@ def risk_score_key(user_id: object, p_hash: str, m_hash: str, params: Any = None
     )
 
 
-def scenario_key(p_hash: str, scenario_params: Any) -> str:
-    # No user_id: a scenario output is fully determined by (portfolio, params);
-    # the portfolio_hash never reveals holdings and only identical books share it.
-    return make_key("risk:scenarios", p_hash, scenario_params)
+def scenario_key(user_id: object, p_hash: str, portfolio_context: Any, scenario_params: Any) -> str:
+    return make_key(
+        "risk:scenarios",
+        _require_user_id(user_id),
+        p_hash,
+        portfolio_context,
+        scenario_params,
+    )
 
 
-def copilot_context_key(user_id: object, p_hash: str) -> str:
-    return make_key("copilot:context", _require_user_id(user_id), p_hash, COPILOT_CONTEXT_VERSION)
+def copilot_context_key(
+    user_id: object,
+    p_hash: str,
+    portfolio_context: Any,
+    risk_profile_key: str = "",
+) -> str:
+    return make_key(
+        "copilot:context",
+        _require_user_id(user_id),
+        p_hash,
+        portfolio_context,
+        COPILOT_CONTEXT_VERSION,
+        risk_profile_key,
+    )
 
 
 def context_hash(*parts: object) -> str:
@@ -156,15 +174,15 @@ def cached_risk_score(
 
 def cached_scenarios(
     *,
+    user_id: object,
     holdings: object,
+    portfolio_context: Any,
     scenario_params: Any,
     producer: Callable[[], Any],
     ttl: float = _SCENARIO_TTL,
 ) -> CacheResult:
-    """Cache a scenario output (a JSON-serializable dict, e.g. ``ScenariosOut``
-    ``model_dump()``) by portfolio_hash + scenario params. ``producer`` returns
-    that dict."""
-    key = scenario_key(portfolio_hash(holdings), scenario_params)
+    """Cache exact scenario output by user + coherent portfolio inputs."""
+    key = scenario_key(user_id, portfolio_hash(holdings), portfolio_context, scenario_params)
     return get_cache().fetch(key, producer, ttl=ttl)
 
 
@@ -172,13 +190,20 @@ def cached_copilot_context(
     *,
     user_id: object,
     holdings: object,
+    portfolio_context: Any,
+    risk_profile_key: str = "",
     producer: Callable[[], tuple[Any, Any]],
     ttl: float = _COPILOT_CTX_TTL,
 ) -> tuple[list, Any, CacheResult]:
     """Cache the deterministic ``(positions, score)`` copilot context by user_id
     + portfolio_hash + context_version. ``producer`` returns ``(positions,
     score)``; returns ``(positions, score, CacheResult)``."""
-    key = copilot_context_key(user_id, portfolio_hash(holdings))
+    key = copilot_context_key(
+        user_id,
+        portfolio_hash(holdings),
+        portfolio_context,
+        risk_profile_key=risk_profile_key,
+    )
 
     def _produce() -> dict:
         positions, score = producer()

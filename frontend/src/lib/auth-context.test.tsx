@@ -47,6 +47,7 @@ function Probe() {
     loading,
     configured,
     signIn,
+    signUp,
     signInWithGoogle,
     signOut,
   } = useAuth();
@@ -57,7 +58,8 @@ function Probe() {
       <span data-testid="user">{user?.email ?? "anon"}</span>
       <span data-testid="token">{accessToken ?? "none"}</span>
       <button onClick={() => signIn("owner@mindmarket.test", "pw")}>sign-in</button>
-      <button onClick={() => signInWithGoogle()}>google</button>
+      <button onClick={() => signUp("new@mindmarket.test", "pw", "/portfolios/new")}>sign-up</button>
+      <button onClick={() => signInWithGoogle("/portfolios/new")}>google</button>
       <button onClick={() => signOut()}>sign-out</button>
     </div>
   );
@@ -204,7 +206,36 @@ describe("AuthProvider", () => {
     expect(fakeClient.auth.signInWithOAuth).toHaveBeenCalledWith({
       provider: "google",
       options: {
-        redirectTo: expect.stringContaining("/portfolios"),
+        redirectTo: expect.stringContaining("/portfolios/new"),
+      },
+    });
+  });
+
+  it("keeps the allowlisted portfolio intent in the email confirmation redirect", async () => {
+    fakeClient.auth.getSession.mockResolvedValueOnce({ data: { session: null } });
+    fakeClient.auth.onAuthStateChange.mockReturnValueOnce({
+      data: { subscription: { unsubscribe: vi.fn() } },
+    });
+    fakeClient.auth.signUp.mockResolvedValueOnce({
+      data: { session: null },
+      error: null,
+    });
+
+    renderWithQuery(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId("loading")).toHaveTextContent("false"));
+    await userEvent.click(screen.getByText("sign-up"));
+
+    expect(fakeClient.auth.signUp).toHaveBeenCalledWith({
+      email: "new@mindmarket.test",
+      password: "pw",
+      options: {
+        emailRedirectTo: expect.stringContaining(
+          "/login?next=%2Fportfolios%2Fnew",
+        ),
       },
     });
   });

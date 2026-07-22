@@ -19,26 +19,46 @@ _RETURNS = pd.DataFrame(
 )
 
 
+@pytest.fixture(autouse=True)
+def neutral_confirmed_risk_profile(monkeypatch):
+    from backend.app.services import copilot_preferences
+
+    monkeypatch.setattr(
+        copilot_preferences,
+        "get_confirmed_strict",
+        lambda access_token, user_id: None,
+    )
+
+
 @pytest.fixture
 def fake_active_portfolio(monkeypatch):
     class _Stub:
         def __init__(self):
             self.holdings = {}
+            self.calls = []
+            self.capital_state = {
+                "cash_balance": 0.0,
+                "margin_loan": 0.0,
+                "contributed_capital": 0.0,
+            }
 
         def set(self, h):
             self.holdings = h
 
         def __call__(self, access_token=None):
-            return dict(self.holdings)
+            from libs.auth.active_portfolio import ActivePortfolioContext
+
+            self.calls.append(access_token)
+            return ActivePortfolioContext(
+                portfolio_id="p1" if self.holdings else None,
+                holdings=dict(self.holdings),
+                **self.capital_state,
+            )
 
     stub = _Stub()
     import libs.auth.active_portfolio as ap
 
-    monkeypatch.setattr(ap, "get_active_holdings", stub)
-    monkeypatch.setattr(
-        ap, "get_active_capital_inputs", lambda access_token=None: {"cash_balance": 0.0}
-    )
-    monkeypatch.setattr(ap, "get_active_margin_loan", lambda access_token=None: 0.0)
+    monkeypatch.setattr(ap, "get_active_portfolio_context", stub)
     return stub
 
 

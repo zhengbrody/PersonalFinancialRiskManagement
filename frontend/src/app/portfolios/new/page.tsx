@@ -68,7 +68,7 @@ export default function NewPortfolioPage() {
 
   useEffect(() => {
     if (!configured) return;
-    if (!authLoading && !user) router.replace("/login");
+    if (!authLoading && !user) router.replace("/login?next=%2Fportfolios%2Fnew");
   }, [user, authLoading, configured, router]);
 
   if (!configured || authLoading || !user) {
@@ -135,12 +135,14 @@ export default function NewPortfolioPage() {
                 // submitted form. The backend auto-promotes a user's FIRST
                 // portfolio to default, so a first/only book (and any book the
                 // user explicitly marks default) comes back is_default:true and
-                // IS the active book → show its Health Score. An existing user's
+                // IS the active book → land on Today, whose deterministic guide
+                // sends the user through Risk Fit → score → drivers → an
+                // explicit test. An existing user's
                 // additional NON-default book must NOT land on /score, which
                 // scores their *old* default; send them to the list where the
                 // new portfolio is visible. We never flip an existing default.
                 if (row.is_default) {
-                  router.replace("/score");
+                  router.replace("/");
                 } else {
                   router.replace("/portfolios");
                 }

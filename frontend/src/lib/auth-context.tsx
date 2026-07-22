@@ -28,6 +28,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import type { Session, User } from "@supabase/supabase-js";
 import { getSupabase } from "./supabase";
+import { safeAuthRedirect } from "./auth-redirect";
 import { clearUserScopedStorage, syncUserScopedStorage } from "./user-scoped-storage";
 
 export type AuthState = {
@@ -53,6 +54,7 @@ export type AuthState = {
   signUp: (
     email: string,
     password: string,
+    next?: string,
   ) => Promise<{ needsConfirmation: boolean }>;
   /**
    * Start Google OAuth sign-in/sign-up.
@@ -60,7 +62,7 @@ export type AuthState = {
    * Supabase handles account creation when the Google identity is new,
    * then redirects back to the app with a browser session.
    */
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: (next?: string) => Promise<void>;
   /** Sign the current user out. No-op when already signed out. */
   signOut: () => Promise<void>;
   /**
@@ -141,11 +143,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const signUp = useCallback(
-    async (email: string, password: string) => {
+    async (email: string, password: string, next?: string) => {
       if (!supabase) {
         throw new Error("Sign-up is not configured on this build.");
       }
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      const origin =
+        typeof window === "undefined" ? undefined : window.location.origin;
+      const redirectPath = safeAuthRedirect(next, "/portfolios/new");
+      const emailRedirectTo = origin
+        ? `${origin}/login?next=${encodeURIComponent(redirectPath)}`
+        : undefined;
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        ...(emailRedirectTo ? { options: { emailRedirectTo } } : {}),
+      });
       if (error) {
         throw new Error(error.message);
       }
@@ -159,13 +171,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [supabase],
   );
 
-  const signInWithGoogle = useCallback(async () => {
+  const signInWithGoogle = useCallback(async (next?: string) => {
     if (!supabase) {
       throw new Error("Google sign-in is not configured on this build.");
     }
     const origin =
       typeof window === "undefined" ? undefined : window.location.origin;
-    const redirectTo = origin ? `${origin}/portfolios` : undefined;
+    const redirectPath = safeAuthRedirect(next, "/");
+    const redirectTo = origin ? `${origin}${redirectPath}` : undefined;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: redirectTo ? { redirectTo } : undefined,

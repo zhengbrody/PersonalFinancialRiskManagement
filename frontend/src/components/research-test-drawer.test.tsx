@@ -23,7 +23,10 @@ vi.mock("@/lib/api", () => ({
   ApiError: class ApiError extends Error {},
 }));
 vi.mock("@/lib/queries", () => ({
-  useActiveScore: () => ({ data: { overall_score: 700 } }),
+  useActiveScore: () => ({ data: { overall_score: 700, risk_preference: 4 } }),
+  useCopilotPreferences: () => ({
+    data: { confirmed: true, risk_tolerance: 4 },
+  }),
   useMarketPrices: () => ({ data: {} }),
   useMyPortfolios: () => ({
     data: { portfolios: [{ id: "p1", name: "Main", holdings: holdingsHolder.value }] },
@@ -107,7 +110,9 @@ describe("ResearchTestDrawer", () => {
     await waitFor(() => expect(apiFetchMock).toHaveBeenCalled());
     const body = apiFetchMock.mock.calls[0][1].body as {
       holdings: { ticker: string; market_value: number }[];
+      risk_preference: number;
     };
+    expect(body.risk_preference).toBe(4);
     const total = body.holdings.reduce((s, h) => s + h.market_value, 0);
     // Book was SPY $10,000 + MSFT $100 = $10,100; conservation keeps it there
     // (MSFT's $100 moves to NVDA), NOT $15,000 with $4,900 fabricated.

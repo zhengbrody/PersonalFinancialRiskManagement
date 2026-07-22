@@ -20,6 +20,10 @@ class ScoreChangeRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
     window: str = "previous"  # previous | 7d | 30d
     overall_score: int
+    # Preference is part of score methodology.  Without the same value on both
+    # snapshots, a delta cannot honestly be attributed to market/holdings.
+    risk_preference: Optional[int] = Field(default=None, ge=1, le=5)
+    risk_preference_source: Optional[str] = None
     base_overall: Optional[int] = None
     dimensions: dict[str, float] = Field(default_factory=dict)  # key -> 0..10 score
     metrics: dict[str, Optional[float]] = Field(default_factory=dict)
@@ -128,3 +132,5 @@ class ScoreChangeReport(BaseModel):
     current_score_version: Optional[str] = None
     previous_score_version: Optional[str] = None
     comparable: bool = True
+    current_risk_preference: Optional[int] = None
+    previous_risk_preference: Optional[int] = None

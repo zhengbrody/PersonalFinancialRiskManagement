@@ -59,6 +59,7 @@ from ...schemas.risk import (
     PriceProvenanceOut,
     ReasonCodeOut,
     ReportFromActiveRequest,
+    RiskFitOut,
     RiskReportOut,
     RollingVolatilityOut,
     RollingVolPoint,
@@ -352,6 +353,14 @@ def _serialize_score(score) -> ScoreResponse:
     )
 
 
+def _with_risk_profile(response: ScoreResponse, *, source: str) -> ScoreResponse:
+    """Attach the preference provenance + deterministic fit interpretation."""
+    from ...services import risk_profile
+
+    fit = RiskFitOut.model_validate(risk_profile.build_risk_fit(response, response.data_confidence))
+    return response.model_copy(update={"risk_preference_source": source, "risk_fit": fit})
+
+
 def _build_returns_frame(
     body: ScoreRequest,
     tickers: list[str],
@@ -536,6 +545,10 @@ def score_portfolio_endpoint(body: ScoreRequest, request: Request):
         )
     else:
         response = response.model_copy(update={"analysis_mode": "provided_returns"})
+    source = (
+        "request_override" if "risk_preference" in body.model_fields_set else "neutral_baseline"
+    )
+    response = _with_risk_profile(response, source=source)
     return ok(response.model_dump(), request=request, started_at=started)
 
 
@@ -676,37 +689,12 @@ def score_from_active_endpoint(
     """
     started = time.perf_counter()
 
-    # Resolve the active portfolio (RLS-filtered). Cash + margin are
-    # fetched separately via _resolve_cash_and_margin (its own import).
-    try:
-        from libs.auth.active_portfolio import get_active_holdings
-    except Exception as exc:  # pragma: no cover - import guard
-        raise server_error("active_portfolio module unavailable.", reason=str(exc)) from exc
+    from ...services import risk_profile
 
-    try:
-        holdings = get_active_holdings(access_token=user.access_token)
-    except TypeError:
-        # Legacy callers still pass no args — surfaces during Streamlit ↔
-        # backend refactor windows; map to 500 with a clear hint.
-        # `from None` because the TypeError is a contract mismatch we
-        # surface in plain language; chaining the raw stack adds noise.
-        raise server_error(
-            "active_portfolio.get_active_holdings does not accept "
-            "access_token yet. Update libs/auth/active_portfolio.py."
-        ) from None
-    except Exception as exc:
-        raise server_error("Could not load active portfolio.", reason=type(exc).__name__) from exc
+    resolved_profile = risk_profile.resolve_risk_preference(user, body.risk_preference)
 
-    holdings = holdings or {}
-    if not holdings:
-        # Explicit code so the frontend can render an onboarding CTA
-        # ("you have no portfolio — create one") instead of a generic
-        # "unprocessable" toast.
-        raise APIError(
-            status=422,
-            code="no_active_portfolio",
-            message="No active portfolio. Create one before scoring.",
-        )
+    active_context = _resolve_active_context_or_raise(user)
+    holdings = active_context.holdings
 
     tickers = _priceable_tickers(holdings)
 
@@ -777,7 +765,9 @@ def score_from_active_endpoint(
     # A capital-fetch hiccup must not fail the score — degrade to the
     # unlevered, cash-free book it computed before.
     equity_value = float(sum(p.market_value for p in positions_input))
-    cash_balance, margin_loan, contributed_capital = _resolve_cash_and_margin(user)
+    cash_balance = active_context.cash_balance
+    margin_loan = active_context.margin_loan
+    contributed_capital = active_context.contributed_capital
 
     if cash_balance > 0:
         positions_input.append(
@@ -797,7 +787,7 @@ def score_from_active_endpoint(
     try:
         portfolio_input = PortfolioInput(
             positions=positions_input,
-            risk_preference=body.risk_preference,
+            risk_preference=resolved_profile.value,
             risk_free_rate=body.risk_free_rate,
         )
     except Exception as exc:
@@ -823,7 +813,8 @@ def score_from_active_endpoint(
             holdings=holdings,
             market_data=price_frame,
             params={
-                "rp": body.risk_preference,
+                "rp": resolved_profile.value,
+                "rp_source": resolved_profile.source,
                 "rfr": body.risk_free_rate,
                 "lev": round(leverage, 4),
                 # Cash + margin also shape the score (cash is folded in as a
@@ -901,6 +892,8 @@ def score_from_active_endpoint(
             }
         )
 
+    response = _with_risk_profile(response, source=resolved_profile.source)
+
     # Record a daily snapshot (deduped, fail-soft) AFTER the final score is known,
     # so day-over-day deltas + the "what changed" engine compare against the score
     # the user actually saw. Never blocks the response.
@@ -917,6 +910,7 @@ def score_from_active_endpoint(
     ]
     snapshots.record_snapshot(
         user.access_token,
+        portfolio_id=active_context.portfolio_id,
         score=score,
         cash_balance=cash_balance,
         margin_loan=margin_loan,
@@ -926,15 +920,9 @@ def score_from_active_endpoint(
         concentration=concentration,
         overall_override=int(response.overall_score),
         option_penalty=option_penalty,
+        risk_preference=resolved_profile.value,
+        risk_preference_source=resolved_profile.source,
     )
-
-    # Journey: the first successful score of the user's OWN book is the
-    # "first analyze" product event (requires holdings + a completed analysis,
-    # never a mere pageview). Fail-soft bookkeeping; memoized in-process so the
-    # hot score path pays the round-trip only once.
-    from ...services import user_journey
-
-    user_journey.stamp_milestone_failsoft(user.access_token, user.id, "first_score_at")
 
     return ok(response.model_dump(), request=request, started_at=started)
 
@@ -1003,7 +991,12 @@ def simulate_actions_endpoint(
     payload just prefills the what-if sandbox."""
     started = time.perf_counter()
 
-    holdings = _resolve_active_or_raise(user)
+    from ...services import risk_profile
+
+    resolved_profile = risk_profile.resolve_risk_preference(user, body.risk_preference)
+
+    active_context = _resolve_active_context_or_raise(user)
+    holdings = active_context.holdings
     tickers = _priceable_tickers(holdings)
 
     from ...services import market_data, risk_actions
@@ -1047,7 +1040,8 @@ def simulate_actions_endpoint(
         )
 
     equity_value = float(sum(leg["market_value"] for leg in legs))
-    cash_balance, margin_loan, _contrib = _resolve_cash_and_margin(user)
+    cash_balance = active_context.cash_balance
+    margin_loan = active_context.margin_loan
     leverage = _leverage_factor(gross_assets=equity_value + cash_balance, margin_loan=margin_loan)
     returns_frame = price_frame.pct_change().dropna(how="all")
 
@@ -1057,7 +1051,7 @@ def simulate_actions_endpoint(
             cash_balance,
             leverage,
             returns_frame,
-            risk_preference=body.risk_preference,
+            risk_preference=resolved_profile.value,
             risk_free_rate=body.risk_free_rate,
         )
     except Exception as exc:
@@ -1095,7 +1089,7 @@ def simulate_actions_endpoint(
                 mcash,
                 mlev,
                 returns_frame,
-                risk_preference=body.risk_preference,
+                risk_preference=resolved_profile.value,
                 risk_free_rate=body.risk_free_rate,
             )
         except Exception:  # noqa: BLE001 - one lever failing must not sink the rest
@@ -1157,9 +1151,14 @@ def last_snapshot_endpoint(request: Request, user: AuthedUser = Depends(require_
     """Return the most recent snapshot older than ~a day (the baseline the
     dashboard diffs today's score against), or null when there isn't one."""
     started = time.perf_counter()
+    from libs.auth.active_portfolio import get_active_portfolio_id
+
     from ...services import snapshots
 
-    snap = snapshots.get_previous_snapshot(user.access_token)
+    snap = snapshots.get_previous_snapshot(
+        user.access_token,
+        portfolio_id=get_active_portfolio_id(access_token=user.access_token),
+    )
     out: dict | None = None
     if snap:
         rm = snap.get("risk_metrics") or {}
@@ -1189,9 +1188,14 @@ def snapshot_history_endpoint(request: Request, user: AuthedUser = Depends(requi
     """Recent snapshots oldest→newest so the score/risk pages can draw trend
     sparklines. Fail-soft to an empty list."""
     started = time.perf_counter()
+    from libs.auth.active_portfolio import get_active_portfolio_id
+
     from ...services import snapshots
 
-    history = snapshots.get_snapshot_history(user.access_token)
+    history = snapshots.get_snapshot_history(
+        user.access_token,
+        portfolio_id=get_active_portfolio_id(access_token=user.access_token),
+    )
     return ok({"snapshots": history}, request=request, started_at=started)
 
 
@@ -1212,9 +1216,15 @@ def score_changes_endpoint(
     already holds — zero recompute; the backend fetches the prior snapshot. All
     deterministic (no LLM). Fail-soft: an unavailable snapshot → available=false."""
     started = time.perf_counter()
+    from libs.auth.active_portfolio import get_active_portfolio_id
+
     from ...services import score_changes, snapshots
 
-    prev = snapshots.get_snapshot_at_window(user.access_token, body.window)
+    prev = snapshots.get_snapshot_at_window(
+        user.access_token,
+        body.window,
+        portfolio_id=get_active_portfolio_id(access_token=user.access_token),
+    )
     report = score_changes.build_change_report(body, prev)
     return ok(report.model_dump(), request=request, started_at=started)
 
@@ -1222,61 +1232,37 @@ def score_changes_endpoint(
 # ── /score_from_active continues above. Below: /report_from_active. ──
 
 
-def _resolve_active_or_raise(user: AuthedUser) -> dict:
-    """Shared helper: resolve the active portfolio + raise the proper
-    422 envelope codes when it's empty. Pulled out of /score_from_active
-    so /report_from_active reuses the exact same gates."""
+def _resolve_active_context_or_raise(user: AuthedUser):
+    """Load id, holdings and capital from one RLS-scoped portfolio row."""
     try:
-        from libs.auth.active_portfolio import get_active_holdings
+        from libs.auth.active_portfolio import get_active_portfolio_context
     except Exception as exc:  # pragma: no cover - import guard
         raise server_error("active_portfolio module unavailable.", reason=str(exc)) from exc
 
     try:
-        holdings = get_active_holdings(access_token=user.access_token)
-    except TypeError:
-        raise server_error(
-            "active_portfolio.get_active_holdings does not accept "
-            "access_token yet. Update libs/auth/active_portfolio.py."
-        ) from None
+        context = get_active_portfolio_context(access_token=user.access_token)
     except Exception as exc:
         raise server_error("Could not load active portfolio.", reason=type(exc).__name__) from exc
-
-    holdings = holdings or {}
-    if not holdings:
+    if not context.holdings:
         raise APIError(
             status=422,
             code="no_active_portfolio",
             message="No active portfolio. Create one before scoring.",
         )
-    return holdings
+    return context
+
+
+def _resolve_active_or_raise(user: AuthedUser) -> dict:
+    """Shared helper: resolve the active portfolio + raise the proper
+    422 envelope codes when it's empty. Pulled out of /score_from_active
+    so /report_from_active reuses the exact same gates."""
+    return _resolve_active_context_or_raise(user).holdings
 
 
 # Cap leverage well above any realistic retail margin account (Reg-T is
 # 2×; portfolio margin ~6-7×). Beyond this the input is almost certainly
 # bad data, and the engine clamps to the same ceiling regardless.
 _MAX_LEVERAGE = 10.0
-
-
-def _resolve_cash_and_margin(user: AuthedUser) -> tuple[float, float, float]:
-    """Return ``(cash_balance, margin_loan, contributed_capital)`` for the
-    caller's active portfolio, token-scoped. Fails SOFT: any error (Supabase
-    blip, schema drift) degrades to zero capital context so a fetch hiccup never
-    takes down the score/report — the book just reads as cash-free and
-    unlevered, exactly as it did before this was wired in."""
-    try:
-        from libs.auth.active_portfolio import (
-            get_active_capital_inputs,
-            get_active_margin_loan,
-        )
-
-        cap = get_active_capital_inputs(access_token=user.access_token) or {}
-        cash = float(cap.get("cash_balance") or 0.0)
-        contributed = float(cap.get("contributed_capital") or 0.0)
-        margin = float(get_active_margin_loan(access_token=user.access_token) or 0.0)
-        return (max(0.0, cash), max(0.0, margin), max(0.0, contributed))
-    except Exception as exc:  # pragma: no cover - defensive
-        _log.warning("risk.capital_fetch_failed reason=%s", type(exc).__name__)
-        return (0.0, 0.0, 0.0)
 
 
 def _leverage_factor(*, gross_assets: float, margin_loan: float) -> float:
@@ -2031,7 +2017,12 @@ def report_from_active_endpoint(
     file-cached market_data layer absorbs the cold-cache latency."""
     started = time.perf_counter()
 
-    holdings = _resolve_active_or_raise(user)
+    from ...services import risk_profile
+
+    resolved_profile = risk_profile.resolve_risk_preference(user, body.risk_preference)
+
+    active_context = _resolve_active_context_or_raise(user)
+    holdings = active_context.holdings
     tickers = _priceable_tickers(holdings)
     # Also fetch any option UNDERLYINGS (even if not held as equity) so the
     # delta-overlay below can price them; equity weights still use `tickers`.
@@ -2079,7 +2070,9 @@ def report_from_active_endpoint(
     # scalar>1). Algebraically identical to the cash-position + leverage
     # path /score_from_active uses, so the two endpoints now agree.
     equity_value = float(sum(market_values.values()))
-    cash_balance, margin_loan, contributed_capital = _resolve_cash_and_margin(user)
+    cash_balance = active_context.cash_balance
+    margin_loan = active_context.margin_loan
+    contributed_capital = active_context.contributed_capital
     risk_scale = _equity_risk_scale(
         equity_value=equity_value, cash_balance=cash_balance, margin_loan=margin_loan
     )
@@ -2133,6 +2126,8 @@ def report_from_active_endpoint(
         )
     out = out.model_copy(
         update={
+            "risk_preference": resolved_profile.value,
+            "risk_preference_source": resolved_profile.source,
             "price_provenance": _price_provenance(price_prov, price_frame),
             "data_quality_notes": notes,
             "data_confidence": _report_data_confidence(price_prov, price_frame, notes),
@@ -2182,7 +2177,10 @@ def report_from_active_endpoint(
             net_equity=net_equity,
             observations=len(price_frame),
             base_confidence=(out.data_confidence.label if out.data_confidence else None),
-            history=snapshots.get_snapshot_history(user.access_token),
+            history=snapshots.get_snapshot_history(
+                user.access_token,
+                portfolio_id=active_context.portfolio_id,
+            ),
         )
         out = out.model_copy(
             update={
@@ -2200,6 +2198,12 @@ def report_from_active_endpoint(
         )
     except Exception as exc:  # noqa: BLE001 - cockpit extras must never 500 the report
         _log.warning("risk_cockpit.assembly_failed reason=%s", type(exc).__name__)
+
+    # A completed report is the authoritative first Drivers-view event.  Page
+    # views and client-side tab changes do not qualify.
+    from ...services import user_journey
+
+    user_journey.stamp_milestone_failsoft(user.access_token, user.id, "first_driver_viewed_at")
 
     return ok(out.model_dump(), request=request, started_at=started)
 
@@ -2223,14 +2227,15 @@ def _frame_as_of(frame) -> str | None:
         return None
 
 
-def _build_active_engine(user: AuthedUser, body: ReportFromActiveRequest):
+def _build_active_engine(user: AuthedUser, body: ReportFromActiveRequest, active_context=None):
     """Shared: active holdings → prices → weights → a constructed RiskEngine.
 
     Returns ``(engine, returns, weights_norm, total_value, risk_scale)`` where
     ``weights_norm`` is a numpy array aligned to ``returns.columns`` summing to
     1. Raises the same 422/500 envelope codes as report_from_active.
     """
-    holdings = _resolve_active_or_raise(user)
+    active_context = active_context or _resolve_active_context_or_raise(user)
+    holdings = active_context.holdings
     tickers = _priceable_tickers(holdings)
     fetch_tickers = sorted(set(tickers) | set(_option_underlyings(holdings)))
 
@@ -2264,7 +2269,8 @@ def _build_active_engine(user: AuthedUser, body: ReportFromActiveRequest):
     )
 
     equity_value = float(sum(market_values.values()))
-    cash_balance, margin_loan, _contributed_capital = _resolve_cash_and_margin(user)
+    cash_balance = active_context.cash_balance
+    margin_loan = active_context.margin_loan
     risk_scale = _equity_risk_scale(
         equity_value=equity_value, cash_balance=cash_balance, margin_loan=margin_loan
     )
@@ -2361,18 +2367,13 @@ def scenarios_endpoint(
 
     from ...services import context_cache as cc
 
-    # Resolve holdings just for the cache key (portfolio_hash). Fail-soft: if we
-    # can't, skip caching and compute directly (the producer raises the proper
-    # 422 on an empty/dataless book).
-    try:
-        from libs.auth.active_portfolio import get_active_holdings
-
-        _holdings = get_active_holdings(access_token=user.access_token) or {}
-    except Exception:  # noqa: BLE001
-        _holdings = {}
+    active_context = _resolve_active_context_or_raise(user)
+    _holdings = active_context.holdings
 
     def _compute() -> dict:
-        engine, returns, w, equity_value, risk_scale = _build_active_engine(user, body)
+        engine, returns, w, equity_value, risk_scale = _build_active_engine(
+            user, body, active_context
+        )
 
         if returns is None or returns.empty:
             raise unprocessable("No return history to simulate scenarios on.")
@@ -2425,17 +2426,22 @@ def scenarios_endpoint(
             observations=len(returns),
         ).model_dump()
 
-    # Cache the scenario output by portfolio_hash + scenario params (NO user_id:
-    # it's fully determined by the portfolio (hashed) + params, identical books
-    # legitimately share it, and the hash never reveals holdings). A holdings
-    # change busts the key → recompute.
+    # Exact portfolio values are user-private and depend on cash/margin as well
+    # as holdings, so every scoring input and the portfolio identity belongs in
+    # the key. The producer consumes this SAME immutable context.
     scenario_params = {**body.model_dump(), "shocks": list(_SCENARIO_SHOCKS)}
-    if _holdings:
-        out = cc.cached_scenarios(
-            holdings=_holdings, scenario_params=scenario_params, producer=_compute
-        ).value
-    else:
-        out = _compute()
+    out = cc.cached_scenarios(
+        user_id=user.id,
+        holdings=_holdings,
+        portfolio_context={
+            "portfolio_id": active_context.portfolio_id,
+            "cash": active_context.cash_balance,
+            "margin": active_context.margin_loan,
+            "contributed": active_context.contributed_capital,
+        },
+        scenario_params=scenario_params,
+        producer=_compute,
+    ).value
     return ok(out, request=request, started_at=started)
 
 

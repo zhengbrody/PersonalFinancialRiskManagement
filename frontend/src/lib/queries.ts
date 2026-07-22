@@ -859,6 +859,11 @@ export const lossBreakdownSchema = z.looseObject({
 export type LossBreakdown = z.infer<typeof lossBreakdownSchema>;
 
 export const riskReportSchema = z.looseObject({
+  risk_preference: z.number().optional().default(3),
+  risk_preference_source: z
+    .enum(["confirmed", "neutral_baseline", "request_override"])
+    .optional()
+    .default("neutral_baseline"),
   annual_return: z.number().nullable(),
   annual_volatility: z.number().nullable(),
   sharpe_ratio: z.number().nullable(),
@@ -1356,7 +1361,7 @@ export const copilotPreferencesSchema = z.looseObject({
 export type CopilotPreferences = z.infer<typeof copilotPreferencesSchema>;
 
 export type CopilotPreferencesInput = {
-  risk_tolerance?: number | null;
+  risk_tolerance: number;
   investment_horizon?: string | null;
   liquidity_need?: string | null;
   concentration_limit?: number | null;
@@ -1392,7 +1397,11 @@ export function useSaveCopilotPreferences() {
         authToken: accessToken ?? undefined,
         schema: copilotPreferencesSchema,
       }),
-    onSuccess: (data) => queryClient.setQueryData(["copilot-preferences"], data),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["copilot-preferences"], data);
+      void queryClient.invalidateQueries({ queryKey: ["risk"] });
+      void queryClient.invalidateQueries({ queryKey: ["copilot-insights"] });
+    },
   });
 }
 
@@ -1407,8 +1416,11 @@ export function useClearCopilotPreferences() {
         authToken: accessToken ?? undefined,
         schema: z.looseObject({ cleared: z.boolean().optional() }),
       }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["copilot-preferences"] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["copilot-preferences"] });
+      void queryClient.invalidateQueries({ queryKey: ["risk"] });
+      void queryClient.invalidateQueries({ queryKey: ["copilot-insights"] });
+    },
   });
 }
 
@@ -2486,6 +2498,8 @@ export const scoreChangeReportSchema = z.looseObject({
   current_score_version: z.string().nullish(),
   previous_score_version: z.string().nullish(),
   comparable: z.boolean().nullish(),
+  current_risk_preference: z.number().nullish(),
+  previous_risk_preference: z.number().nullish(),
 });
 export type ScoreChangeReport = z.infer<typeof scoreChangeReportSchema>;
 
@@ -3212,7 +3226,10 @@ export const journeySchema = z.looseObject({
   last_workspace_view: z.string().nullish(),
 });
 export type Journey = z.infer<typeof journeySchema>;
-export type JourneyMilestone = keyof Journey;
+export type JourneyMilestone =
+  | "first_score_at"
+  | "first_stress_test_at"
+  | "last_workspace_view";
 
 export function useJourney() {
   const { accessToken, user } = useAuth();

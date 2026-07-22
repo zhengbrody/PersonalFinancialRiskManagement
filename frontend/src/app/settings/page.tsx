@@ -29,6 +29,7 @@ import { FreeBetaNotice } from "@/components/free-beta-notice";
 import { DangerZoneCard } from "@/components/danger-zone-card";
 import { WeeklyDigestCard } from "@/components/weekly-digest-card";
 import { useAuth } from "@/lib/auth-context";
+import { authHref } from "@/lib/auth-redirect";
 import { currentUsername } from "@/lib/user-display";
 import { useBillingMe, useStartPortal, type CreditStatus } from "@/lib/queries";
 
@@ -49,7 +50,9 @@ function SettingsPageInner() {
 
   useEffect(() => {
     if (!configured) return;
-    if (!authLoading && !user) router.replace("/login");
+    if (!authLoading && !user) {
+      router.replace(authHref("/login", "/settings"));
+    }
   }, [user, authLoading, configured, router]);
 
   if (!configured || authLoading || !user || billing.isLoading) {

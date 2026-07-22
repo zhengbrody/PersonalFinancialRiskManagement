@@ -29,6 +29,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { authHref } from "@/lib/auth-redirect";
 import {
   type PortfolioRow,
   useDeletePortfolio,
@@ -45,7 +46,7 @@ export default function PortfoliosPage() {
   useEffect(() => {
     if (!configured) return;
     if (!authLoading && !user) {
-      router.replace("/login");
+      router.replace(authHref("/login", "/portfolios"));
     }
   }, [user, authLoading, configured, router]);
 

@@ -36,6 +36,7 @@ import {
 } from "recharts";
 import { isNoPortfolioError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { authHref } from "@/lib/auth-redirect";
 import { usePortfolioContext } from "@/lib/portfolio-context";
 import { runKeyForActivePortfolio, useRunOncePerUser } from "@/lib/use-run-once-per-user";
 import {
@@ -60,7 +61,9 @@ export default function ScenariosPage() {
 
   useEffect(() => {
     if (!configured) return;
-    if (!authLoading && !user) router.replace("/login");
+    if (!authLoading && !user) {
+      router.replace(authHref("/login", "/scenarios"));
+    }
   }, [user, authLoading, configured, router]);
 
   // Run once per (user + ACTIVE portfolio) so a switch recomputes for the new

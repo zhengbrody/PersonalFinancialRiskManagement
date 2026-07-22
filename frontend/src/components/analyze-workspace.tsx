@@ -30,6 +30,7 @@ import { WhatIfLab } from "@/components/whatif-lab";
 import { RiskPlansPanel } from "@/components/risk-plans-panel";
 import { track } from "@/lib/analytics";
 import { useAuth } from "@/lib/auth-context";
+import { authHref } from "@/lib/auth-redirect";
 import { usePortfolioContext } from "@/lib/portfolio-context";
 import { explainInputFromScore } from "@/lib/risk-explain-input";
 import { runKeyForActivePortfolio, useRunOncePerUser } from "@/lib/use-run-once-per-user";
@@ -66,8 +67,10 @@ export function AnalyzeWorkspace() {
 
   useEffect(() => {
     if (!configured) return;
-    if (!loading && !user) router.replace("/login");
-  }, [user, loading, configured, router]);
+    if (!loading && !user) {
+      router.replace(authHref("/login", `/analyze?view=${view}`));
+    }
+  }, [user, loading, configured, router, view]);
 
   // Record the workspace visit once per mount (last_workspace_view always).
   const recordedRef = useRef(false);
@@ -117,14 +120,21 @@ export function AnalyzeWorkspace() {
       {/* Visited stages stay mounted (hidden) so returning is instant + no refetch. */}
       {visited.has("overview") && (
         <StagePanel view="overview" active={view === "overview"}>
-          <OverviewStage />
+          <OverviewStage
+            onFirstLoad={() => {
+              recordMilestone.mutate("first_score_at");
+              track("journey_step_completed", { step: "score" });
+            }}
+          />
         </StagePanel>
       )}
       {visited.has("drivers") && (
         <StagePanel view="drivers" active={view === "drivers"}>
           <DriversStage
             onFirstLoad={() => {
-              recordMilestone.mutate("first_driver_viewed_at");
+              // The successful report response stamps this milestone on the
+              // server.  The browser records analytics only; it cannot claim
+              // that a deterministic driver report completed.
               track("journey_step_completed", { step: "drivers" }); // stage enum only
             }}
           />
@@ -180,14 +190,22 @@ function StagePanel({
 
 // ── Overview ─────────────────────────────────────────────────────────
 
-function OverviewStage() {
+function OverviewStage({ onFirstLoad }: { onFirstLoad: () => void }) {
   const score = useActiveScore();
   const snapshot = useLastSnapshot();
+  const firedRef = useRef(false);
   const explainInput = useMemo(
     () => (score.data ? explainInputFromScore(score.data, snapshot.data) : null),
     [score.data, snapshot.data],
   );
   const explain = useRiskExplain(explainInput);
+
+  useEffect(() => {
+    if (score.data && !firedRef.current) {
+      firedRef.current = true;
+      onFirstLoad();
+    }
+  }, [score.data, onFirstLoad]);
 
   if (score.isLoading) return <Skeleton className="h-64 w-full" />;
   if (score.isError) return <RiskErrorPanel error={score.error as Error} />;
@@ -254,8 +272,8 @@ function StressStage({ onFirstRun }: { onFirstRun: () => void }) {
   const { user } = useAuth();
   const historical = useHistoricalScenarios();
   const firedRef = useRef(false);
-  // ONE first-run signal, whichever real stress computation completes first —
-  // the auto-run historical replay OR an explicit what-if re-score.
+  // The journey milestone represents an EXPLICIT user test. Merely opening
+  // this stage auto-loads historical context but must not complete the step.
   const fireOnce = () => {
     if (!firedRef.current) {
       firedRef.current = true;
@@ -264,14 +282,8 @@ function StressStage({ onFirstRun }: { onFirstRun: () => void }) {
   };
 
   useRunOncePerUser(runKeyForActivePortfolio(user?.id, activePortfolioId), () => {
-    track("stress_test_started", {});
     historical.reset();
-    historical.mutate(undefined, {
-      onSuccess: () => {
-        fireOnce();
-        track("stress_test_completed", {});
-      },
-    });
+    historical.mutate(undefined);
   });
 
   const baseline = score.data ?? null;

@@ -23,11 +23,14 @@ _METADATA_MAX_BYTES = 4096
 
 
 class CopilotPreferencesIn(BaseModel):
-    """The user's explicit confirmation payload. Every field optional — a user
-    may confirm only the dimensions they care about; bounds mirror the DB
-    CHECK constraints."""
+    """The user's explicit Risk Fit confirmation payload.
 
-    risk_tolerance: Optional[int] = Field(default=None, ge=1, le=5)
+    Risk tolerance is the one required choice because it sets the target used
+    by the deterministic score. The remaining fields only tailor explanation
+    emphasis and remain optional. Bounds mirror the DB CHECK constraints.
+    """
+
+    risk_tolerance: int = Field(ge=1, le=5)
     investment_horizon: Optional[InvestmentHorizon] = None
     liquidity_need: Optional[LiquidityNeed] = None
     concentration_limit: Optional[float] = Field(default=None, ge=0.0, le=1.0)
