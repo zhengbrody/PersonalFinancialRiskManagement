@@ -48,6 +48,13 @@ jobs:
         # the [skip ci] artifact commit breaks test_model_card on the NEXT PR
         # (exactly what the 2026-07-12 weekly run did).
         run: python -m backend.app.ml.train --config backend/app/ml/configs/risk_today.yaml
+      - name: Verify artifact contract and quality floor
+        # The model card reads the committed machine artifacts directly. Run its
+        # contract before committing so a weekly metric/feature-order change is
+        # accepted only when the public card stays truthful and quality gates hold.
+        run: |
+          pip install pytest
+          pytest backend/tests/test_model_card.py -q -o "addopts="
       - name: Commit artifact if changed
         run: |
           git config user.name "regime-train-bot"
