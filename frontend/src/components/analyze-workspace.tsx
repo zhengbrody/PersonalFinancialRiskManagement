@@ -18,7 +18,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Tabs, tabId, tabPanelId } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ScoreGauge } from "@/components/score-gauge";
+import { ScoreGauge, scoreBand } from "@/components/score-gauge";
 import { RiskDiagnosis } from "@/components/risk-diagnosis";
 import { DataConfidence } from "@/components/data-confidence";
 import { ReportSections, ResultSkeleton, RiskErrorPanel } from "@/components/risk-report";
@@ -216,7 +216,24 @@ function OverviewStage({ onFirstLoad }: { onFirstLoad: () => void }) {
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
-          <CardContent className="flex items-center justify-center py-6">
+          {/* The headline number leads, then the band — same shape as the
+              /score hero. ScoreGauge only draws the band + marker, so the
+              caller always renders the score itself. */}
+          <CardContent className="space-y-3 py-6">
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span
+                data-testid="analyze-overall-score"
+                className="font-mono text-5xl font-semibold tracking-tight text-primary tabular-nums"
+              >
+                {Math.round(s.overall_score)}
+              </span>
+              <span className="text-base text-muted-foreground">/ 1000</span>
+              <span
+                className={`text-sm font-semibold uppercase tracking-wide ${scoreBand(s.overall_score).text}`}
+              >
+                {scoreBand(s.overall_score).label}
+              </span>
+            </div>
             <ScoreGauge score={s.overall_score} />
           </CardContent>
         </Card>
