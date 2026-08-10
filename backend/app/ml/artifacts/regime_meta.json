@@ -1,8 +1,8 @@
 {
   "model_version": "regime-v1.1.0",
-  "trained_at": "2026-08-03T09:31:51.835341+00:00",
+  "trained_at": "2026-08-10T07:18:40.617116+00:00",
   "sklearn_version": "1.8.0",
-  "git_sha": "cbadc92ffe58e9ea5770c5f4790a20ae02c07bac",
+  "git_sha": "384427953262db7a8135968ca2aa2b7c96774039",
   "estimator": "HistGradientBoostingClassifier",
   "config": {
     "model_version": "regime-v1.1.0",
@@ -58,69 +58,69 @@
     ]
   },
   "training_window": {
-    "start": "2012-07-09",
-    "end": "2026-07-17",
+    "start": "2012-07-16",
+    "end": "2026-07-24",
     "rows": 3526
   },
   "class_distribution": {
     "risk_on": 1875,
-    "neutral": 923,
-    "volatile": 547,
+    "neutral": 921,
+    "volatile": 549,
     "stress": 181
   },
   "metrics": {
-    "cv_macro_f1_mean": 0.3203,
-    "cv_accuracy_mean": 0.4865,
-    "holdout_accuracy": 0.5312,
-    "holdout_macro_f1": 0.3833,
-    "elevated_risk_auc": 0.7561,
+    "cv_macro_f1_mean": 0.3074,
+    "cv_accuracy_mean": 0.4756,
+    "holdout_accuracy": 0.4858,
+    "holdout_macro_f1": 0.3657,
+    "elevated_risk_auc": 0.7409,
     "baseline_majority_class": "risk_on",
-    "baseline_accuracy": 0.5099,
+    "baseline_accuracy": 0.5057,
     "per_class": {
       "risk_on": {
-        "precision": 0.598,
-        "recall": 0.806,
-        "f1-score": 0.686
+        "precision": 0.591,
+        "recall": 0.709,
+        "f1-score": 0.645
       },
       "neutral": {
-        "precision": 0.474,
-        "recall": 0.217,
-        "f1-score": 0.297
+        "precision": 0.425,
+        "recall": 0.224,
+        "f1-score": 0.293
       },
       "volatile": {
-        "precision": 0.306,
-        "recall": 0.338,
-        "f1-score": 0.321
+        "precision": 0.23,
+        "recall": 0.367,
+        "f1-score": 0.283
       },
       "stress": {
-        "precision": 0.2,
+        "precision": 0.222,
         "recall": 0.267,
-        "f1-score": 0.229
+        "f1-score": 0.242
       }
     },
     "confusion_matrix": [
       [
-        290,
-        49,
-        19,
-        2
+        253,
+        56,
+        47,
+        1
       ],
       [
-        164,
-        55,
-        31,
+        151,
+        57,
+        43,
         4
       ],
       [
-        31,
-        10,
-        26,
-        10
+        24,
+        17,
+        29,
+        9
       ],
       [
         0,
-        2,
-        9,
+        4,
+        7,
         4
       ]
     ],
@@ -133,38 +133,38 @@
     "holdout_size": 706
   },
   "feature_importances": {
-    "vix_level": 0.16827,
-    "vol_63d": 0.16064,
-    "vol_ratio": 0.08451,
-    "golden_cross": 0.08241,
-    "yield_slope": 0.07976,
-    "mom_60d": 0.06483,
-    "vol_21d": 0.05591,
-    "qqq_trend": 0.05155,
-    "qqq_spy_spread": 0.04253,
-    "drawdown": 0.03856,
-    "trend_sma50": 0.03679,
-    "vix_change_5d": 0.03561,
-    "mom_20d": 0.02661,
-    "trend_sma200": 0.02341,
-    "vix_term": 0.0179
+    "vix_level": 0.16764,
+    "vol_63d": 0.16641,
+    "golden_cross": 0.08947,
+    "vol_ratio": 0.08605,
+    "yield_slope": 0.08551,
+    "mom_60d": 0.07284,
+    "vol_21d": 0.06378,
+    "trend_sma50": 0.04428,
+    "drawdown": 0.0419,
+    "vix_change_5d": 0.0399,
+    "qqq_spy_spread": 0.03823,
+    "qqq_trend": 0.03615,
+    "mom_20d": 0.03421,
+    "vix_term": 0.02889,
+    "trend_sma200": 0.02772
   },
   "feature_medians": {
-    "trend_sma200": 0.066592,
+    "trend_sma200": 0.066664,
     "trend_sma50": 0.019728,
-    "golden_cross": 0.047103,
-    "mom_20d": 0.016746,
-    "mom_60d": 0.04177,
-    "vol_21d": 0.119056,
-    "vol_63d": 0.124918,
-    "vol_ratio": 0.819899,
-    "drawdown": -0.014013,
+    "golden_cross": 0.047449,
+    "mom_20d": 0.016693,
+    "mom_60d": 0.041806,
+    "vol_21d": 0.119005,
+    "vol_63d": 0.124919,
+    "vol_ratio": 0.821777,
+    "drawdown": -0.013969,
     "vix_level": 16.049999,
     "vix_change_5d": -0.179999,
-    "vix_term": 0.881727,
-    "qqq_trend": 0.085989,
+    "vix_term": 0.88165,
+    "qqq_trend": 0.086058,
     "qqq_spy_spread": 0.004178,
-    "yield_slope": 1.133
+    "yield_slope": 1.1305
   },
   "data_coverage": {
     "sources_present": [
@@ -176,8 +176,8 @@
       "vix3m"
     ],
     "sources_missing": [],
-    "spy_start": "2011-07-08",
-    "spy_end": "2026-07-31",
+    "spy_start": "2011-07-15",
+    "spy_end": "2026-08-07",
     "observations": 3788
   }
 }
