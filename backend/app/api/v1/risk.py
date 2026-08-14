@@ -50,6 +50,7 @@ from ...schemas.risk import (
     DimensionScoreOut,
     EfficientFrontierOut,
     FactorBetaRow,
+    FinancingResilienceOut,
     FrontierPoint,
     HistoricalScenarioRow,
     HistoricalScenariosOut,
@@ -844,6 +845,12 @@ def score_from_active_endpoint(
     # so the score page can show "what's dragging it" without the full report.
     equity_mv = {p.ticker: float(p.market_value) for p in positions_input if p.asset_type != "cash"}
     concentration = _concentration_from_values(equity_mv, holdings)
+    financing = _financing_resilience_out(
+        holdings=holdings,
+        market_values=equity_mv,
+        cash_balance=cash_balance,
+        margin_loan=margin_loan,
+    )
 
     response = _serialize_score(score)
     merged_metrics = response.metrics.model_copy(
@@ -893,6 +900,7 @@ def score_from_active_endpoint(
         )
 
     response = _with_risk_profile(response, source=resolved_profile.source)
+    response = _with_financing_context(response, financing)
 
     # Record a daily snapshot (deduped, fail-soft) AFTER the final score is known,
     # so day-over-day deltas + the "what changed" engine compare against the score
@@ -1279,6 +1287,77 @@ def _leverage_factor(*, gross_assets: float, margin_loan: float) -> float:
     if net_equity <= 0:
         return _MAX_LEVERAGE
     return min(_MAX_LEVERAGE, gross / net_equity)
+
+
+def _financing_resilience_out(
+    *,
+    holdings: dict,
+    market_values: dict[str, float],
+    cash_balance: float,
+    margin_loan: float,
+) -> FinancingResilienceOut | None:
+    """Typed API projection of the non-scoring financing-liquidity model.
+
+    Additive response blocks degrade to ``None`` rather than failing the whole
+    endpoint — a financing-context hiccup must never cost the caller their
+    score or risk report.
+    """
+
+    from ...services.financing_resilience import build_financing_resilience
+
+    try:
+        result = build_financing_resilience(
+            holdings=holdings,
+            market_values=market_values,
+            cash_balance=cash_balance,
+            margin_loan=margin_loan,
+        )
+        return FinancingResilienceOut.model_validate(result.as_dict())
+    except Exception:  # pragma: no cover - defensive
+        _log.warning("financing_resilience.failed", exc_info=True)
+        return None
+
+
+def _with_financing_context(
+    response: ScoreResponse, financing: FinancingResilienceOut | None
+) -> ScoreResponse:
+    """Attach financing context and make the existing margin reason precise.
+
+    The score and driver points are intentionally unchanged: cash-like holdings
+    already contribute their observed low market risk. Rewording prevents gross
+    leverage from being mistaken for residual risk-asset leverage.
+    """
+
+    if financing is None:
+        return response
+    if financing.margin_loan <= 0:
+        return response.model_copy(update={"financing_resilience": financing})
+
+    coverage = financing.margin_coverage_ratio or 0.0
+    gross = financing.gross_leverage
+    post = financing.post_offset_risk_leverage
+    if gross is None:
+        detail = "Net equity is non-positive; financing leverage is impaired."
+    else:
+        # Coverage is a ratio, not a cap — clamp the DISPLAY at 100% so an
+        # over-collateralised book doesn't read "250% covered".
+        detail = (
+            f"Gross financing leverage is {gross:.2f}×; cash and cash-equivalent holdings "
+            f"cover {min(coverage, 1.0):.0%} of the margin loan at current market value, "
+            f"leaving ${financing.residual_margin:,.0f} residual margin"
+            + (f" and {post:.2f}× post-offset risk-asset leverage." if post is not None else ".")
+            + " Borrowing cost and broker maintenance rules still apply."
+            + (
+                " Some of that offset is a holding you classified as cash-like yourself."
+                if financing.has_self_classified_offset
+                else ""
+            )
+        )
+    reasons = [
+        reason.model_copy(update={"detail": detail}) if reason.code == "margin_leverage" else reason
+        for reason in response.reason_codes
+    ]
+    return response.model_copy(update={"financing_resilience": financing, "reason_codes": reasons})
 
 
 def _equity_risk_scale(*, equity_value: float, cash_balance: float, margin_loan: float) -> float:
@@ -2084,6 +2163,12 @@ def report_from_active_endpoint(
         contributed_capital=contributed_capital,
         current_prices=_current_price_map(tickers, market_data),
     )
+    financing = _financing_resilience_out(
+        holdings=holdings,
+        market_values=market_values,
+        cash_balance=cash_balance,
+        margin_loan=margin_loan,
+    )
 
     # DataProvider expects the original holdings dict (with shares etc.)
     # for liquidity calculations. Engine takes the DP, does its own
@@ -2136,6 +2221,7 @@ def report_from_active_endpoint(
             "rolling_volatility": _rolling_volatility_block(
                 price_frame, weights, risk_scale=risk_scale, history_days=body.history_days
             ),
+            "financing_resilience": financing,
         }
     )
 
@@ -2170,7 +2256,25 @@ def report_from_active_endpoint(
 
         var_1d, cvar_1d, current_dd = _one_day_downside(price_frame, weights, risk_scale=risk_scale)
         ctx = risk_dimensions.DimensionContext(
-            leverage=leverage,
+            leverage=(
+                # Only re-base the leverage dimension when there is an actual
+                # loan to offset. post_offset = risk_assets / net_equity drops
+                # below 1.0 for ANY book holding idle cash, which would report
+                # "0.67x" on an unlevered account (and suppress its historical
+                # percentile, since that series is on the gross basis).
+                financing.post_offset_risk_leverage
+                if financing is not None
+                and financing.margin_loan > 0
+                and financing.post_offset_risk_leverage is not None
+                else leverage
+            ),
+            gross_leverage=(financing.gross_leverage if financing is not None else None),
+            margin_coverage_ratio=(
+                financing.margin_coverage_ratio if financing is not None else None
+            ),
+            self_classified_offset=(
+                bool(financing.has_self_classified_offset) if financing is not None else False
+            ),
             net_option_delta_notional=net_notional,
             has_options=has_options,
             current_drawdown=current_dd,

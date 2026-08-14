@@ -521,7 +521,7 @@ def test_active_falls_back_to_hardcoded_when_unauth(monkeypatch):
 def test_active_uses_db_when_authenticated(mock_supabase):
     """Authenticated + has default portfolio → DB shape returned, normalized."""
     db_holdings = {
-        "AAPL": {"shares": 100, "avg_cost": 175.4},
+        "AAPL": {"shares": 100, "avg_cost": 175.4, "liquidity_class": "risk_asset"},
         "BTC-USD": {"shares": 0.5},  # crypto: should auto-set asset_type
     }
     db_portfolio = {
@@ -543,6 +543,7 @@ def test_active_uses_db_when_authenticated(mock_supabase):
     assert holdings["AAPL"]["shares"] == 100.0
     assert holdings["AAPL"]["asset_type"] == "equity"
     assert holdings["AAPL"]["account"] == "margin"
+    assert holdings["AAPL"]["liquidity_class"] == "risk_asset"
     assert holdings["BTC-USD"]["asset_type"] == "crypto"
     assert holdings["BTC-USD"]["margin_eligible"] is False
 

@@ -1092,6 +1092,34 @@
         "title": "CalibrationBinOut",
         "type": "object"
       },
+      "CashEquivalentHoldingOut": {
+        "description": "One holding counted toward the current-value margin offset.",
+        "properties": {
+          "classification_source": {
+            "enum": [
+              "explicit",
+              "known_treasury_fund"
+            ],
+            "title": "Classification Source",
+            "type": "string"
+          },
+          "market_value": {
+            "title": "Market Value",
+            "type": "number"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "market_value",
+          "classification_source"
+        ],
+        "title": "CashEquivalentHoldingOut",
+        "type": "object"
+      },
       "ChangeAttribution": {
         "description": "The score move split into MARKET / HOLDING / DATA-QUALITY buckets.\n\nExact identity: ``score_delta = data_quality_driven + structural`` where\n``structural = \u0394base`` (the raw dimension-based score, pre-dampening) and\n``data_quality_driven = \u0394(final \u2212 base)`` (the change in how much data\nquality/dampening pulled the score toward neutral). On a day the book didn't\nchange, ``structural`` is entirely market-driven (same holdings, prices\nmoved). On a day the user traded, market and holding aren't separable\nwithout a full-book counterfactual, so they're reported jointly in\n``combined_market_holdings`` with ``separable=False`` \u2014 an honest split, not\na fabricated decimal. The data-quality bucket is the concrete separation of\n'your portfolio changed' from 'the data behind it changed'.",
         "properties": {
@@ -5713,6 +5741,117 @@
         "title": "FieldProvenance",
         "type": "object"
       },
+      "FinancingResilienceOut": {
+        "description": "Liquidity available to retire margin without selling risk assets.\n\nThis is deliberately separate from the Health Score and broker maintenance\nbuffer.  Cash-like securities keep their observed market risk in the score;\nthis block only estimates a current-value liquidation offset.",
+        "properties": {
+          "cash_balance": {
+            "title": "Cash Balance",
+            "type": "number"
+          },
+          "cash_equivalent_value": {
+            "title": "Cash Equivalent Value",
+            "type": "number"
+          },
+          "cash_equivalents": {
+            "items": {
+              "$ref": "#/components/schemas/CashEquivalentHoldingOut"
+            },
+            "title": "Cash Equivalents",
+            "type": "array"
+          },
+          "gross_assets": {
+            "title": "Gross Assets",
+            "type": "number"
+          },
+          "gross_leverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gross Leverage"
+          },
+          "liquid_resources": {
+            "title": "Liquid Resources",
+            "type": "number"
+          },
+          "margin_coverage_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Margin Coverage Ratio"
+          },
+          "margin_loan": {
+            "title": "Margin Loan",
+            "type": "number"
+          },
+          "methodology_note": {
+            "title": "Methodology Note",
+            "type": "string"
+          },
+          "net_equity": {
+            "title": "Net Equity",
+            "type": "number"
+          },
+          "post_offset_risk_leverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Post Offset Risk Leverage"
+          },
+          "residual_margin": {
+            "title": "Residual Margin",
+            "type": "number"
+          },
+          "risk_asset_value": {
+            "title": "Risk Asset Value",
+            "type": "number"
+          },
+          "status": {
+            "enum": [
+              "no_margin",
+              "covered",
+              "partial",
+              "uncovered",
+              "impaired"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "unpriced_holdings": {
+            "default": 0,
+            "title": "Unpriced Holdings",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status",
+          "gross_assets",
+          "net_equity",
+          "margin_loan",
+          "cash_balance",
+          "cash_equivalent_value",
+          "liquid_resources",
+          "risk_asset_value",
+          "residual_margin",
+          "methodology_note"
+        ],
+        "title": "FinancingResilienceOut",
+        "type": "object"
+      },
       "FrontierPoint": {
         "description": "One point on the risk/return plane (annualized).",
         "properties": {
@@ -6159,6 +6298,21 @@
               }
             ],
             "title": "Expiry"
+          },
+          "liquidity_class": {
+            "anyOf": [
+              {
+                "enum": [
+                  "risk_asset",
+                  "cash_equivalent"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Liquidity Class"
           },
           "margin_eligible": {
             "anyOf": [
@@ -12051,6 +12205,16 @@
             "title": "Factor Betas",
             "type": "array"
           },
+          "financing_resilience": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FinancingResilienceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "liquidity": {
             "items": {
               "$ref": "#/components/schemas/LiquidityRow"
@@ -12418,6 +12582,16 @@
             },
             "title": "Factor Betas",
             "type": "array"
+          },
+          "financing_resilience": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FinancingResilienceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "liquidity": {
             "items": {
@@ -13426,6 +13600,16 @@
             },
             "title": "Drivers",
             "type": "array"
+          },
+          "financing_resilience": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FinancingResilienceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "metrics": {
             "$ref": "#/components/schemas/PortfolioMetricsOut"

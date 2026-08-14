@@ -491,7 +491,7 @@ function ResultPanel({ result, canShare }: { result: ScoreResponse; canShare: bo
             </span>
           </div>
           <ScoreGauge score={result.overall_score} />
-          <HeroMeta metrics={result.metrics} />
+          <HeroMeta result={result} />
           <DataConfidence confidence={result.data_confidence} className="mt-1" />
           {canShare && !syntheticDemo && <ShareRiskCardButton />}
           <RegimeContextLine />
@@ -561,7 +561,9 @@ function ResultPanel({ result, canShare }: { result: ScoreResponse; canShare: bo
 
 /** Small hero meta — surfaces margin (hidden risk) + a cash note up top, not
  * buried in the metrics table. Renders nothing for an unlevered, cash-light book. */
-function HeroMeta({ metrics }: { metrics: ScoreResponse["metrics"] }) {
+function HeroMeta({ result }: { result: ScoreResponse }) {
+  const metrics = result.metrics;
+  const financing = result.financing_resilience;
   const lev = typeof metrics.leverage === "number" ? metrics.leverage : 1;
   const cashW = typeof metrics.cash_weight === "number" ? metrics.cash_weight : 0;
   const levered = lev > 1.0001;
@@ -571,7 +573,17 @@ function HeroMeta({ metrics }: { metrics: ScoreResponse["metrics"] }) {
     <div className="flex flex-wrap items-center gap-2 text-xs">
       {levered && (
         <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-300">
-          {lev.toFixed(2)}× margin — amplifies gains and losses
+          {lev.toFixed(2)}× gross financing
+        </span>
+      )}
+      {financing?.margin_coverage_ratio != null && financing.margin_loan > 0 && (
+        <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 font-medium text-emerald-700 dark:text-emerald-300">
+          {(financing.margin_coverage_ratio * 100).toFixed(0)}% margin covered by cash-like assets
+        </span>
+      )}
+      {financing?.post_offset_risk_leverage != null && financing.margin_loan > 0 && (
+        <span className="rounded-full border border-border bg-muted/50 px-2 py-0.5 text-muted-foreground">
+          {financing.post_offset_risk_leverage.toFixed(2)}× post-offset risk leverage
         </span>
       )}
       {cash && (
@@ -626,7 +638,7 @@ function MetricsCard({ result }: { result: ScoreResponse }) {
           <MetricRow label="Observations" value={String(result.metrics.observations ?? "—")} />
         </div>
 
-        <MarginImpact metrics={result.metrics} />
+        <MarginImpact result={result} />
 
         {result.metrics.data_quality_notes.length > 0 && (
           <div className="rounded-md border border-warning/40 bg-warning/10 p-3 text-xs text-muted-foreground">
@@ -667,25 +679,57 @@ function isSyntheticDemo(result: ScoreResponse): boolean {
  * drag visible (transparency) so the leverage-invariant asset-mix Sharpe above
  * isn't mistaken for "no leverage risk".
  */
-function MarginImpact({ metrics }: { metrics: ScoreResponse["metrics"] }) {
+function MarginImpact({ result }: { result: ScoreResponse }) {
+  const metrics = result.metrics;
+  const financing = result.financing_resilience;
   const lev = metrics.leverage ?? 1;
   if (!lev || lev <= 1.0001) return null;
   return (
     <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs">
       <div className="font-medium text-amber-600 dark:text-amber-400">
-        Margin &amp; cash impact
+        Financing &amp; liquidity
       </div>
       <div className="mt-1 grid grid-cols-2 gap-x-6 gap-y-1 text-muted-foreground sm:grid-cols-3">
-        <MetricRow label="Leverage" value={`${lev.toFixed(2)}×`} />
-        <MetricRow label="Margin cost / yr" value={fmtPct(-(metrics.margin_cost_annual ?? 0))} />
+        <MetricRow label="Gross financing leverage" value={`${lev.toFixed(2)}×`} />
+        <MetricRow
+          label="Cash-like margin coverage"
+          value={financing?.margin_coverage_ratio == null ? "—" : `${(financing.margin_coverage_ratio * 100).toFixed(0)}%`}
+        />
+        <MetricRow label="Residual margin" value={financing ? fmtUSD(financing.residual_margin) : "—"} />
+        <MetricRow
+          label="Post-offset risk leverage"
+          value={financing?.post_offset_risk_leverage == null ? "—" : `${financing.post_offset_risk_leverage.toFixed(2)}×`}
+        />
+        <MetricRow label="Cash equivalents" value={financing ? fmtUSD(financing.cash_equivalent_value) : "—"} />
+        <MetricRow label="Modeled borrow drag / yr" value={fmtPct(-(metrics.margin_cost_annual ?? 0))} />
         <MetricRow label="Asset-mix return" value={fmtPct(metrics.gross_annual_return)} />
         <MetricRow label="Equity return" value={fmtPct(metrics.annual_return)} />
       </div>
       <p className="mt-1.5 text-muted-foreground">
-        Sharpe above is the leverage-invariant asset-mix Sharpe (portfolio
-        quality). Margin amplifies vol/VaR and the borrow cost drags your
-        equity-level return — shown here so the leverage risk stays visible.
+        Cash-like holdings can offset a loan without selling risk assets, but they remain market
+        securities in the score. Coverage uses current value before tax, spread and settlement;
+        it is not a broker maintenance guarantee. Borrow drag uses the model rate, not your live
+        broker APR.
       </p>
+      {financing && financing.cash_equivalents.length > 0 && (
+        <p className="mt-1 text-muted-foreground">
+          {/* Say WHO classified each holding. An auto-matched Treasury fund and a
+              holding the user marked cash-like themselves must not read alike. */}
+          Classified cash-like:{" "}
+          {financing.cash_equivalents
+            .map(
+              (h) =>
+                `${h.ticker} (${
+                  h.classification_source === "explicit" ? "you classified" : "auto"
+                })`,
+            )
+            .join(", ")}
+          .
+          {financing.cash_equivalents.some((h) => h.classification_source === "explicit") && (
+            <> Holdings you classified yourself are taken at your word, not verified.</>
+          )}
+        </p>
+      )}
     </div>
   );
 }

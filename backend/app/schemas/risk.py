@@ -248,6 +248,46 @@ class MarginBuffer(BaseModel):
     status: Literal["none", "comfortable", "tight", "call_risk", "n/a"] = "n/a"
 
 
+class CashEquivalentHoldingOut(BaseModel):
+    """One holding counted toward the current-value margin offset."""
+
+    ticker: str
+    market_value: float
+    classification_source: Literal["explicit", "known_treasury_fund"]
+
+
+class FinancingResilienceOut(BaseModel):
+    """Liquidity available to retire margin without selling risk assets.
+
+    This is deliberately separate from the Health Score and broker maintenance
+    buffer.  Cash-like securities keep their observed market risk in the score;
+    this block only estimates a current-value liquidation offset.
+    """
+
+    status: Literal["no_margin", "covered", "partial", "uncovered", "impaired"]
+    gross_assets: float
+    net_equity: float
+    margin_loan: float
+    cash_balance: float
+    cash_equivalent_value: float
+    liquid_resources: float
+    risk_asset_value: float
+    margin_coverage_ratio: Optional[float] = None
+    residual_margin: float
+    gross_leverage: Optional[float] = None
+    post_offset_risk_leverage: Optional[float] = None
+    cash_equivalents: list[CashEquivalentHoldingOut] = Field(default_factory=list)
+    unpriced_holdings: int = 0
+    methodology_note: str
+
+    @property
+    def has_self_classified_offset(self) -> bool:
+        """True when a counted offset was classified by the user, not the
+        registry — consumers must label it as self-attested."""
+
+        return any(row.classification_source == "explicit" for row in self.cash_equivalents)
+
+
 class LossBreakdown(BaseModel):
     """Downside in % AND $ — the losses view of the cockpit. 1-day VaR/CVaR are
     a genuine 1-day historical estimate from the report's price window (the
@@ -349,6 +389,7 @@ class RiskReportOut(BaseModel):
     # ``losses`` shows downside in BOTH % and $. ──
     dimensions: list[RiskDimension] = Field(default_factory=list)
     losses: Optional[LossBreakdown] = None
+    financing_resilience: Optional[FinancingResilienceOut] = None
 
 
 class FrontierPoint(BaseModel):
@@ -584,6 +625,10 @@ class ScoreResponse(BaseModel):
     # show "what's dragging it" without the full risk report. None for an
     # empty/uncomputable book.
     concentration: Optional[ConcentrationOut] = None
+    # Margin-liquidity context is non-scoring: it explains how cash and
+    # cash-equivalent holdings could offset a loan without rewarding the same
+    # low-risk asset twice in the 0..1000 Health Score.
+    financing_resilience: Optional[FinancingResilienceOut] = None
     # Deterministic explainability + stabilization (additive). `base_overall` is
     # the score BEFORE confidence dampening (== overall_score at full data);
     # `drivers` ranks the dimensions by points-cost; `reason_codes` are the

@@ -149,6 +149,61 @@ def test_cash_book_unlevered():
     assert losses.margin_buffer.status == "none"
 
 
+def test_cash_equivalent_offset_uses_post_offset_risk_leverage():
+    dims = _by_key(
+        rd.build_dimensions(
+            _report(margin_loan=50_000.0),
+            _ctx(leverage=1.0, gross_leverage=1.5, margin_coverage_ratio=1.0),
+        )
+    )
+    leverage = dims["leverage"]
+    assert leverage.name == "Risk-asset leverage"
+    assert leverage.value == 1.0
+    assert leverage.status == "calm"
+    assert "Gross financing leverage is 1.50×" in leverage.explanation
+    assert "cover 100%" in leverage.explanation
+
+
+def test_self_classified_offset_cannot_report_calmer_than_gross_leverage():
+    """A user marking a volatile name "cash-like" must not turn a 1.7x book
+    calm. The offset is self-attested, so the status floors at the gross band
+    and the explanation says who classified it."""
+
+    dims = _by_key(
+        rd.build_dimensions(
+            _report(margin_loan=200_000.0),
+            _ctx(
+                leverage=0.0,  # post-offset: everything "covered"
+                gross_leverage=1.7,
+                margin_coverage_ratio=2.5,
+                self_classified_offset=True,
+            ),
+        )
+    )
+    leverage = dims["leverage"]
+    assert leverage.status == "elevated"  # the gross band, not "calm"
+    assert "you classified as cash-like" in leverage.explanation
+
+
+def test_registry_offset_is_not_floored():
+    """The same shape with an AUTO-classified offset keeps the post-offset
+    status — only self-attested classifications are floored."""
+
+    dims = _by_key(
+        rd.build_dimensions(
+            _report(margin_loan=200_000.0),
+            _ctx(
+                leverage=0.0,
+                gross_leverage=1.7,
+                margin_coverage_ratio=2.5,
+                self_classified_offset=False,
+            ),
+        )
+    )
+    assert dims["leverage"].status == "calm"
+    assert "you classified" not in dims["leverage"].explanation
+
+
 # ── margin: leverage elevated/high + margin-buffer band ─────────────────────────
 def test_margin_book_levered_and_buffer():
     dims = _by_key(rd.build_dimensions(_report(margin_loan=40_000.0), _ctx(leverage=1.8)))

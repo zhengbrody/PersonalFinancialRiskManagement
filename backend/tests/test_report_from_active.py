@@ -469,6 +469,66 @@ def test_margin_scales_report_risk_to_net_equity(
     assert data["betas"]["SPY"] == pytest.approx(0.96)
 
 
+def test_report_surfaces_cash_equivalent_margin_offset(
+    test_client,
+    mint_token,
+    fake_active_portfolio,
+    fake_price_history,
+    fake_engine,
+    fake_capital,
+):
+    history = _make_history(["SGOV", "SPY"])
+    fake_active_portfolio.set({"SPY": {"shares": 100}, "SGOV": {"shares": 50}})
+    fake_price_history.set(history)
+    fake_engine.last_report = _FakeReport()
+    fake_capital["margin_loan"] = 50 * float(history["SGOV"].iloc[-1])
+
+    resp = test_client.post(
+        "/api/v1/risk/report_from_active",
+        json={},
+        headers={"Authorization": f"Bearer {mint_token(sub='sgov-report')}"},
+    )
+    assert resp.status_code == 200, resp.json()
+    financing = resp.json()["data"]["financing_resilience"]
+    assert financing["status"] == "covered"
+    assert financing["margin_coverage_ratio"] == pytest.approx(1.0)
+    assert financing["post_offset_risk_leverage"] == pytest.approx(1.0, rel=1e-5)
+
+
+def test_unlevered_book_with_cash_keeps_the_gross_leverage_basis(
+    test_client,
+    mint_token,
+    fake_active_portfolio,
+    fake_price_history,
+    fake_engine,
+    fake_capital,
+):
+    """Regression: post-offset risk leverage is risk_assets / net_equity, which
+    dips below 1.0 for ANY book holding idle cash. Re-basing the leverage
+    DIMENSION on it made an unlevered account report "0.67x" while its own
+    explanation said "unlevered", and suppressed the historical percentile
+    (that series is on the gross basis). Only re-base when a loan exists.
+    """
+    fake_active_portfolio.set({"SPY": {"shares": 100}})
+    fake_price_history.set(_make_history(["SPY"]))
+    fake_engine.last_report = _FakeReport()
+    fake_capital["margin_loan"] = 0.0
+    fake_capital["cash_balance"] = 50_000.0
+
+    resp = test_client.post(
+        "/api/v1/risk/report_from_active",
+        json={},
+        headers={"Authorization": f"Bearer {mint_token(sub='cash-no-margin')}"},
+    )
+    assert resp.status_code == 200, resp.json()
+    data = resp.json()["data"]
+    assert data["financing_resilience"]["status"] == "no_margin"
+    leverage = next(d for d in data["dimensions"] if d["key"] == "leverage")
+    assert leverage["value"] == pytest.approx(1.0)
+    assert leverage["status"] == "calm"
+    assert "unlevered" in leverage["explanation"].lower()
+
+
 def test_nan_values_are_scrubbed_to_null(
     test_client,
     mint_token,

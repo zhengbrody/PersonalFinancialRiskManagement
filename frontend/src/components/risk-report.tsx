@@ -123,7 +123,7 @@ export function ReportSections({ report }: { report: RiskReport }) {
       <RiskAlertsCard input={alertsInput} source="risk" />
       <PortfolioValueSummary metrics={report} />
       <KpiGrid report={report} />
-      <LossesBreakdown losses={report.losses} />
+      <LossesBreakdown losses={report.losses} financing={report.financing_resilience} />
       <RiskDimensionsGrid dimensions={report.dimensions} />
       <BenchmarkContext mine={report} />
       <MetricTrend

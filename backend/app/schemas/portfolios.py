@@ -9,7 +9,7 @@ historical rows might be null until backfilled.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -26,6 +26,10 @@ class HoldingValue(BaseModel):
     account: Optional[str] = None
     currency: Optional[str] = None
     margin_eligible: Optional[bool] = None
+    # Optional user override for financing-coverage classification. ``None``
+    # means Auto (the backend's conservative Treasury-fund registry). This does
+    # not change the holding's asset_type or its market-risk treatment.
+    liquidity_class: Optional[Literal["risk_asset", "cash_equivalent"]] = None
 
     # Option-contract fields. Present only when ``asset_type == "option"``;
     # the holding is keyed in the JSONB dict by a synthetic OCC-style contract

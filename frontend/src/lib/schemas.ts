@@ -71,6 +71,31 @@ export const priceProvenanceSchema = z.looseObject({
 });
 export type PriceProvenance = z.infer<typeof priceProvenanceSchema>;
 
+export const financingResilienceSchema = z.looseObject({
+  status: z.enum(["no_margin", "covered", "partial", "uncovered", "impaired"]),
+  gross_assets: z.number(),
+  net_equity: z.number(),
+  margin_loan: z.number(),
+  cash_balance: z.number(),
+  cash_equivalent_value: z.number(),
+  liquid_resources: z.number(),
+  risk_asset_value: z.number(),
+  margin_coverage_ratio: z.number().nullish(),
+  residual_margin: z.number(),
+  gross_leverage: z.number().nullish(),
+  post_offset_risk_leverage: z.number().nullish(),
+  cash_equivalents: z.array(
+    z.looseObject({
+      ticker: z.string(),
+      market_value: z.number(),
+      classification_source: z.enum(["explicit", "known_treasury_fund"]),
+    }),
+  ),
+  unpriced_holdings: z.number().default(0),
+  methodology_note: z.string(),
+});
+export type FinancingResilience = z.infer<typeof financingResilienceSchema>;
+
 export const portfolioMetricsSchema = z.looseObject({
   annual_return: z.number().nullable(),
   annual_volatility: z.number().nullable(),
@@ -251,6 +276,7 @@ export const scoreResponseSchema = z.looseObject({
   // Top-name / top-5 / HHI / sector roll-up over the equity book (cheap; lets
   // the score page show "what's dragging it" without the full report).
   concentration: concentrationSchema.nullish(),
+  financing_resilience: financingResilienceSchema.nullish(),
   // Deterministic explainability + stabilization. base_overall is the score
   // BEFORE confidence dampening (== overall_score at full data); drivers rank
   // dimensions by points-cost; reason_codes are the structured penalties.
