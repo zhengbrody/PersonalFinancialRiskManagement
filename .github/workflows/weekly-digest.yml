@@ -1,0 +1,61 @@
+# Weekly risk digest — pokes the backend's cron endpoint every Monday
+# morning US time. The backend does all the work (recipients, dedupe,
+# rendering, Resend); this job is just the scheduler + a counts report.
+#
+# Self-skips until the repo secret DIGEST_CRON_TOKEN is set (db-backup.yml
+# pattern) — the same token must be in the EC2 .env so the endpoint accepts
+# it. No PII in logs: the endpoint returns counts only.
+#
+# ⚠️ ACTIVATION ORDER — set DIGEST_CRON_TOKEN in GitHub *LAST*. The gate below
+# only sees the GitHub secret, but the backend also needs:
+#   1. migration 0007_weekly_digest.sql applied (digest_prefs / digest_sends),
+#   2. RESEND_API_KEY + DIGEST_CRON_TOKEN in the EC2 .env (then recreate the
+#      backend container),
+#   3. the Resend sending domain verified.
+# Setting the GitHub secret first makes the endpoint 503 ("digest cron token
+# not configured") → red every Monday until the server side catches up.
+
+name: weekly-digest
+
+on:
+  schedule:
+    - cron: "30 12 * * 1" # Mon 12:30 UTC ≈ 8:30am ET
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly-digest
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Gate on secrets
+        id: gate
+        env:
+          TOKEN: ${{ secrets.DIGEST_CRON_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "DIGEST_CRON_TOKEN not set — skipping (see 0007 digest setup)."
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Trigger digest run
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          TOKEN: ${{ secrets.DIGEST_CRON_TOKEN }}
+        run: |
+          set -euo pipefail
+          resp=$(curl -fsS -X POST "https://mindmarket.app/api/v1/digest/run" \
+            -H "X-Digest-Token: ${TOKEN}" \
+            --max-time 300)
+          echo "digest summary: ${resp}"
+          # Fail the job when the backend reports a hard error state so the
+          # scheduled run surfaces red instead of silently no-oping forever.
+          echo "${resp}" | grep -qE '"status":\s*"(started|skipped|busy)"'

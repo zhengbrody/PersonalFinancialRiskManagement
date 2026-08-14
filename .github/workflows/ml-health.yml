@@ -1,0 +1,68 @@
+# Daily ML drift heartbeat — curls the public read-only health endpoint and
+# turns the run RED when the model reports drift (or the endpoint is down).
+# All computation + Sentry alerting happens server-side (see ADR 0005); this
+# job is just the scheduler + a visible red light.
+#
+# No secrets, no prerequisites: /api/v1/ml/health is public and unauthenticated.
+#
+# NOTE the coupling to train-regime.yml: the drift verdict compares the live
+# feature window against regime_reference.json. That baseline is only coherent
+# while it is regenerated alongside the model, which train-regime.yml now does.
+
+name: ml-health
+
+on:
+  schedule:
+    - cron: "0 13 * * *" # daily 13:00 UTC ≈ 9am ET, after US pre-market data settles
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write # a red daily cron must page, not sit in an Actions digest
+
+concurrency:
+  group: ml-health
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe /api/v1/ml/health
+        run: |
+          set -euo pipefail
+          # --retry: a transient Cloudflare/network blip must not be
+          # indistinguishable from real model drift.
+          resp=$(curl -fsS --max-time 120 --retry 3 --retry-delay 15 \
+                   --retry-all-errors "https://mindmarket.app/api/v1/ml/health")
+          echo "ml health: ${resp}"
+          # Tolerate an envelope shape change: report it as an unrecognised
+          # status rather than dying on a KeyError traceback under `pipefail`.
+          status=$(echo "${resp}" | python3 -c "import json,sys; d=(json.load(sys.stdin).get('data') or {}); print(d.get('status'), d.get('overall_status'))")
+          echo "status: ${status}"
+          case "${status}" in
+            "ok drift") echo "::error::ML drift detected"; exit 1 ;;
+            "ok watch") echo "::warning::ML drift watch band" ;;
+            "ok None") echo "::warning::live data insufficient for any drift verdict" ;;
+            "ok healthy"|"not_ready None"|"not_ready "*) : ;;
+            "unavailable"*) echo "::warning::health computed as unavailable (data/model down)" ;;
+            *) echo "::warning::unrecognized health status: ${status}" ;;
+          esac
+
+      # Matches e2e-real.yml: a scheduled red run must actively ping the owner,
+      # because GitHub's default failure email is easy to miss.
+      - name: Alert on failure (open/refresh a tracking issue)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="ML drift monitor FAILED (/api/v1/ml/health)"
+          body="Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          num=$(gh issue list --state open --search "\"$title\" in:title" \
+                --json number --jq '.[0].number' || true)
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi

@@ -4,13 +4,21 @@
 # on a GH runner, fetches free market history (yfinance), trains the sklearn
 # model, and commits the refreshed artifact (backend/app/ml/artifacts/).
 #
-# ⚠️ That artifact commit does NOT trigger any other workflow: it is pushed
-# with the default GITHUB_TOKEN (GitHub never chains workflows off such
-# pushes) AND carries [skip ci]. So the retrained model ships with the NEXT
-# code deploy — or immediately via a manual `gh workflow run build-images.yml`.
-# Note it also lands on main UNTESTED (ci.yml is skipped too); the runtime
-# loader fail-softs to a heuristic if the artifact is bad, and you can vet it
-# first with a manual ci.yml dispatch before building images.
+# ⚠️ That artifact commit cannot trigger a workflow on its own: it is pushed
+# with the default GITHUB_TOKEN (GitHub's recursion guard means `on: push`
+# never fires for such a push) AND carries [skip ci]. Between 2026-07-27 and
+# 2026-08-10 that stranded three retrains — production kept serving the model
+# baked into the 2026-07-22 image for 24 days, and nothing said so.
+#
+# So this workflow now explicitly dispatches `build-images` after a successful
+# commit. `workflow_dispatch` is the documented exception to BOTH the recursion
+# guard and [skip ci], so the image gets built while the weekly run still skips
+# the 10 unrelated CI jobs for a two-artifact diff.
+#
+# DEPLOY STAYS MANUAL. The backend image is `COPY . /app` — auto-deploying
+# "because the model changed" would also ship every unrelated commit merged
+# since the last release. The run opens/refreshes a tracking issue instead, so
+# a pending model is loud rather than silent.
 #
 # Manual (`workflow_dispatch`) or weekly. NOT on push — so it can't loop on its
 # own artifact commit. A flaky yfinance fetch just fails the run; re-dispatch.
@@ -24,6 +32,8 @@ on:
 
 permissions:
   contents: write # to commit the refreshed artifact
+  actions: write # dispatch build-images (a GITHUB_TOKEN push can't trigger it)
+  issues: write # flag the new artifact as pending a deliberate deploy
 
 concurrency:
   group: train-regime
@@ -48,6 +58,33 @@ jobs:
         # the [skip ci] artifact commit breaks test_model_card on the NEXT PR
         # (exactly what the 2026-07-12 weekly run did).
         run: python -m backend.app.ml.train --config backend/app/ml/configs/risk_today.yaml
+      - name: Quality floor on the FRESHLY trained model
+        # test_model_card's floor reads validation_report.json, which this
+        # workflow never regenerates — so it structurally cannot see THIS run's
+        # model. Gate on the meta just produced, before anything is committed:
+        # a bad artifact must never reach main, because the next feature deploy
+        # would ship it.
+        #
+        # Deliberately NOT gated on holdout_accuracy >= baseline_accuracy: the
+        # public model card states the model does not beat a persistence
+        # baseline and that its value is probability RANKING. Printed only.
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+          meta = json.loads(pathlib.Path("backend/app/ml/artifacts/regime_meta.json").read_text())
+          m = meta["metrics"]
+          checks = {
+              "elevated_risk_auc >= 0.70": m["elevated_risk_auc"] >= 0.70,
+              "holdout_size >= 500": m["holdout_size"] >= 500,
+          }
+          for name, passed in checks.items():
+              print(("PASS  " if passed else "FAIL  ") + name)
+          print(f"  elevated_risk_auc={m['elevated_risk_auc']}  holdout_size={m['holdout_size']}")
+          print(f"  holdout_accuracy={m['holdout_accuracy']}  baseline_accuracy={m['baseline_accuracy']}  (informational)")
+          if not all(checks.values()):
+              sys.exit("::error::freshly trained model is below the release floor — NOT committing")
+          PY
+
       - name: Verify artifact contract and quality floor
         # The model card reads the committed machine artifacts directly. Run its
         # contract before committing so a weekly metric/feature-order change is
@@ -56,13 +93,59 @@ jobs:
           pip install pytest
           pytest backend/tests/test_model_card.py -q -o "addopts="
       - name: Commit artifact if changed
+        id: commit
         run: |
           git config user.name "regime-train-bot"
           git config user.email "bot@users.noreply.github.com"
-          git add backend/app/ml/artifacts/regime_model.joblib backend/app/ml/artifacts/regime_meta.json
+          # regime_reference.json is the DRIFT BASELINE and train.py regenerates
+          # it every run (it embeds THIS model's predicted-class distribution).
+          # Omitting it here pinned the baseline at 2026-07-08 while the model
+          # was retrained weekly, so /ml/health compared the current model
+          # against an older model's calibration — invisible, because
+          # model_version doesn't change between retrains.
+          git add backend/app/ml/artifacts/regime_model.joblib \
+                  backend/app/ml/artifacts/regime_meta.json \
+                  backend/app/ml/artifacts/regime_reference.json
           if git diff --cached --quiet; then
             echo "No artifact change — skipping commit."
+            echo "committed=false" >> "$GITHUB_OUTPUT"
           else
             git commit -m "chore(ml): retrain regime model [skip ci]"
             git push origin HEAD:main
+            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            echo "committed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build images for the retrained artifact
+        if: steps.commit.outputs.committed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # --ref main resolves to the commit just pushed, so the sha-<full40>
+        # tag and the baked artifact match. Lands in the same
+        # build-images-refs/heads/main concurrency group as push builds, so it
+        # can't race a concurrent feature merge.
+        run: |
+          gh workflow run build-images.yml --ref main
+          echo "Dispatched build-images for ${{ steps.commit.outputs.sha }}"
+
+      - name: Flag the new artifact as pending a deliberate deploy
+        if: steps.commit.outputs.committed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha="${{ steps.commit.outputs.sha }}"
+          title="Regime model retrained — pending production deploy"
+          body="New artifact on main: \`$sha\`
+
+          Images are building (\`build-images\`). Once both are green, deploy with:
+          Actions → **Deploy to EC2 (manual, pinned SHA)** → sha = \`$sha\`
+
+          Model currently served in production — check \`trained_at\` at
+          https://mindmarket.app/api/v1/ml/health"
+          num=$(gh issue list --state open --search "\"$title\" in:title" \
+                --json number --jq '.[0].number' || true)
+          if [ -n "$num" ]; then
+            gh issue comment "$num" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
           fi
