@@ -41,7 +41,12 @@ vi.mock("@/lib/queries", () => ({
 }));
 
 // Stub heavy children so the shell renders without their data plumbing.
-vi.mock("@/components/score-gauge", () => ({ ScoreGauge: () => <div>score-gauge</div> }));
+// Only the presentational gauge is stubbed — `scoreBand` stays real so the
+// band label the Overview renders is actually exercised.
+vi.mock("@/components/score-gauge", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/components/score-gauge")>()),
+  ScoreGauge: () => <div>score-gauge</div>,
+}));
 vi.mock("@/components/risk-diagnosis", () => ({ RiskDiagnosis: () => <div>diagnosis</div> }));
 vi.mock("@/components/data-confidence", () => ({ DataConfidence: () => <div>confidence</div> }));
 vi.mock("@/components/risk-report", () => ({
@@ -87,6 +92,9 @@ describe("AnalyzeWorkspace", () => {
     render(<AnalyzeWorkspace />);
     // Overview stage content (score gauge) is visible.
     expect(screen.getByText("score-gauge")).toBeInTheDocument();
+    // The gauge only draws the band — the headline number must be rendered too.
+    expect(screen.getByTestId("analyze-overall-score")).toHaveTextContent("720");
+    expect(screen.getByText("Healthy")).toBeInTheDocument();
     // Unvisited stages have NOT mounted yet (lazy).
     expect(screen.queryByText("report-sections")).not.toBeInTheDocument();
     expect(recordMutate).toHaveBeenCalledWith("first_score_at");

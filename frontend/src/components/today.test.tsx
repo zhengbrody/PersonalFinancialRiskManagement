@@ -20,7 +20,10 @@ const state = {
   scoreChanges: { data: { available: false }, isLoading: false, isError: false, refetch: vi.fn() },
 };
 
-vi.mock("@/lib/auth-context", () => ({ useAuth: () => ({ user: { id: "u1", email: "a@b.c" } }) }));
+type TestUser = { id: string; email: string; user_metadata?: { username?: string } };
+const auth: { user: TestUser } = { user: { id: "u1", email: "risk.owner@example.com" } };
+
+vi.mock("@/lib/auth-context", () => ({ useAuth: () => auth }));
 vi.mock("@/lib/portfolio-context", () => ({ usePortfolioContext: () => ctx }));
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("@/components/market-regime", () => ({ MarketRegime: () => <div>market-regime</div> }));
@@ -37,6 +40,7 @@ vi.mock("@/lib/queries", () => ({
 import { Today } from "./today";
 
 beforeEach(() => {
+  auth.user = { id: "u1", email: "risk.owner@example.com" };
   ctx.hasPortfolios = true;
   ctx.current = { id: "pf1", name: "Book A", holdings: { SPY: { shares: 1 } } };
   ctx.activePortfolioId = "pf1";
@@ -123,6 +127,21 @@ describe("Today", () => {
     state.insights = { ...state.insights, isLoading: true };
     render(<Today />);
     expect(screen.queryByText("Review what changed")).not.toBeInTheDocument();
+  });
+
+  it("never greets with the email address (no display name set)", () => {
+    render(<Today />);
+    const header = screen.getByRole("heading", { level: 1 });
+    expect(header).toHaveTextContent("Hi, there");
+    // The local part of the email must not leak into the chrome.
+    expect(document.body.textContent).not.toContain("risk.owner");
+  });
+
+  it("greets with the display name the user chose on /settings", () => {
+    auth.user = { ...auth.user, user_metadata: { username: "Brody" } };
+    render(<Today />);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Hi, Brody");
+    expect(document.body.textContent).not.toContain("risk.owner");
   });
 
   it("does not accept an empty confirmed preference as completed Risk Fit", () => {

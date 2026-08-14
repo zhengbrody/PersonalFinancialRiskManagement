@@ -19,6 +19,7 @@ import { MarketRegime } from "@/components/market-regime";
 import { track } from "@/lib/analytics";
 import { useAuth } from "@/lib/auth-context";
 import { usePortfolioContext } from "@/lib/portfolio-context";
+import { currentUsername } from "@/lib/user-display";
 import {
   computePrimaryAction,
   computeSecondary,
@@ -58,7 +59,10 @@ export function Today() {
   );
   const scoreChanges = useScoreChanges(changeBody);
 
-  const greeting = user?.email ? user.email.split("@")[0] : "there";
+  // Never derive the greeting from the email address — the whole point of
+  // `displayName`/`currentUsername` is that the chrome shows the name the user
+  // chose on /settings, and nothing at all when they haven't chosen one.
+  const greeting = (user ? currentUsername(user) : "") || "there";
 
   // ── deterministic inputs (no LLM) ──────────────────────────────────
   const hasHoldings = current
