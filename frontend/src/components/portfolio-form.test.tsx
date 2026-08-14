@@ -126,6 +126,35 @@ describe("PortfolioForm option entry", () => {
   });
 });
 
+describe("PortfolioForm financing role", () => {
+  it("persists an explicit cash-equivalent override", () => {
+    const input = valuesToCreateInput({
+      name: "Treasury sleeve",
+      rows: [
+        {
+          ticker: "SGOV",
+          shares: "100",
+          avg_cost: "100",
+          kind: "equity",
+          liquidity_class: "cash_equivalent",
+        },
+      ],
+      margin_loan: "10000",
+      contributed_capital: "0",
+      cash_balance: "0",
+      is_default: false,
+    });
+    expect(input.holdings.SGOV.liquidity_class).toBe("cash_equivalent");
+  });
+
+  it("round-trips explicit risk-asset classification", () => {
+    const rows = rowsFromHoldings({
+      SGOV: { shares: 100, liquidity_class: "risk_asset" },
+    });
+    expect(rows[0].liquidity_class).toBe("risk_asset");
+  });
+});
+
 describe("PortfolioForm short option legs (PR4)", () => {
   it("stores a sold leg as option_side short", () => {
     const input = valuesToCreateInput({

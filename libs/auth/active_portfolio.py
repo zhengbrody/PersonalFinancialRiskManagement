@@ -308,6 +308,8 @@ def _normalise_portfolio_row(
         h["margin_eligible"] = v.get(
             "margin_eligible", h["asset_type"] not in ("crypto", "inverse_etf")
         )
+        if v.get("liquidity_class") in ("risk_asset", "cash_equivalent"):
+            h["liquidity_class"] = v["liquidity_class"]
         normalized[tk.upper()] = h
 
     margin = float(portfolio.get("margin_loan") or 0)

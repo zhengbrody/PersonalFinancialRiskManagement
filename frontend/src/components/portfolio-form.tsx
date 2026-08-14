@@ -33,6 +33,9 @@ type Row = {
   option_side?: "long" | "short"; // bought vs sold/written
   strike?: string;
   expiry?: string; // YYYY-MM-DD
+  // Financing-coverage role. Auto uses the backend's conservative
+  // Treasury-fund registry; this never changes the holding's market-risk data.
+  liquidity_class?: "auto" | "risk_asset" | "cash_equivalent";
 };
 
 const rowKind = (r: Row): "equity" | "option" => r.kind ?? "equity";
@@ -115,7 +118,16 @@ export function rowsFromHoldings(
         expiry: h.expiry == null ? "" : String(h.expiry),
       };
     }
-    return { ...base, kind: "equity" as const, ticker: key.toUpperCase() };
+    const storedLiquidity = String(h.liquidity_class ?? "auto");
+    return {
+      ...base,
+      kind: "equity" as const,
+      ticker: key.toUpperCase(),
+      liquidity_class:
+        storedLiquidity === "risk_asset" || storedLiquidity === "cash_equivalent"
+          ? storedLiquidity
+          : ("auto" as const),
+    };
   });
 }
 
@@ -153,6 +165,9 @@ export function valuesToCreateInput(
     if (!tk) continue;
     const out: PortfolioHoldingInput = { shares };
     if (Number.isFinite(avg) && avg > 0) out.avg_cost = avg;
+    if (r.liquidity_class === "risk_asset" || r.liquidity_class === "cash_equivalent") {
+      out.liquidity_class = r.liquidity_class;
+    }
     holdings[tk] = out;
   }
   return {
@@ -556,7 +571,31 @@ function HoldingRow({
           </span>
         </div>
       ) : (
-        <ImpliedPnl row={row} price={price} />
+        <>
+          <div className="flex flex-wrap items-center gap-2 px-1 pt-1 text-[11px] text-muted-foreground">
+            <label htmlFor={`liquidity-class-${i}`}>Financing role</label>
+            <select
+              id={`liquidity-class-${i}`}
+              aria-label={`Financing role ${i + 1}`}
+              className="h-7 rounded-md border border-input bg-background px-2 text-xs"
+              value={row.liquidity_class ?? "auto"}
+              onChange={(e) =>
+                onChange({
+                  liquidity_class:
+                    e.target.value === "risk_asset" || e.target.value === "cash_equivalent"
+                      ? e.target.value
+                      : "auto",
+                })
+              }
+            >
+              <option value="auto">Auto</option>
+              <option value="risk_asset">Risk asset</option>
+              <option value="cash_equivalent">Cash equivalent</option>
+            </select>
+            <span>Used only for margin-offset explanation; score still uses market history.</span>
+          </div>
+          <ImpliedPnl row={row} price={price} />
+        </>
       )}
     </div>
   );

@@ -2099,6 +2099,21 @@ export interface components {
             observed_frequency?: number | null;
         };
         /**
+         * CashEquivalentHoldingOut
+         * @description One holding counted toward the current-value margin offset.
+         */
+        CashEquivalentHoldingOut: {
+            /**
+             * Classification Source
+             * @enum {string}
+             */
+            classification_source: "explicit" | "known_treasury_fund";
+            /** Market Value */
+            market_value: number;
+            /** Ticker */
+            ticker: string;
+        };
+        /**
          * ChangeAttribution
          * @description The score move split into MARKET / HOLDING / DATA-QUALITY buckets.
          *
@@ -3541,6 +3556,52 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * FinancingResilienceOut
+         * @description Liquidity available to retire margin without selling risk assets.
+         *
+         *     This is deliberately separate from the Health Score and broker maintenance
+         *     buffer.  Cash-like securities keep their observed market risk in the score;
+         *     this block only estimates a current-value liquidation offset.
+         */
+        FinancingResilienceOut: {
+            /** Cash Balance */
+            cash_balance: number;
+            /** Cash Equivalent Value */
+            cash_equivalent_value: number;
+            /** Cash Equivalents */
+            cash_equivalents?: components["schemas"]["CashEquivalentHoldingOut"][];
+            /** Gross Assets */
+            gross_assets: number;
+            /** Gross Leverage */
+            gross_leverage?: number | null;
+            /** Liquid Resources */
+            liquid_resources: number;
+            /** Margin Coverage Ratio */
+            margin_coverage_ratio?: number | null;
+            /** Margin Loan */
+            margin_loan: number;
+            /** Methodology Note */
+            methodology_note: string;
+            /** Net Equity */
+            net_equity: number;
+            /** Post Offset Risk Leverage */
+            post_offset_risk_leverage?: number | null;
+            /** Residual Margin */
+            residual_margin: number;
+            /** Risk Asset Value */
+            risk_asset_value: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "no_margin" | "covered" | "partial" | "uncovered" | "impaired";
+            /**
+             * Unpriced Holdings
+             * @default 0
+             */
+            unpriced_holdings?: number;
+        };
+        /**
          * FrontierPoint
          * @description One point on the risk/return plane (annualized).
          */
@@ -3697,6 +3758,8 @@ export interface components {
             currency?: string | null;
             /** Expiry */
             expiry?: string | null;
+            /** Liquidity Class */
+            liquidity_class?: ("risk_asset" | "cash_equivalent") | null;
             /** Margin Eligible */
             margin_eligible?: boolean | null;
             /** Option Side */
@@ -5706,6 +5769,7 @@ export interface components {
             } | null;
             /** Factor Betas */
             factor_betas?: components["schemas"]["FactorBetaRow"][];
+            financing_resilience?: components["schemas"]["FinancingResilienceOut"] | null;
             /** Liquidity */
             liquidity?: components["schemas"]["LiquidityRow"][];
             losses?: components["schemas"]["LossBreakdown"] | null;
@@ -5798,6 +5862,7 @@ export interface components {
             } | null;
             /** Factor Betas */
             factor_betas?: components["schemas"]["FactorBetaRow"][];
+            financing_resilience?: components["schemas"]["FinancingResilienceOut"] | null;
             /** Liquidity */
             liquidity?: components["schemas"]["LiquidityRow"][];
             losses?: components["schemas"]["LossBreakdown"] | null;
@@ -6128,6 +6193,7 @@ export interface components {
             };
             /** Drivers */
             drivers?: components["schemas"]["ScoreDriverOut"][];
+            financing_resilience?: components["schemas"]["FinancingResilienceOut"] | null;
             metrics: components["schemas"]["PortfolioMetricsOut"];
             options?: components["schemas"]["OptionScoreImpactOut"] | null;
             /** Overall Score */

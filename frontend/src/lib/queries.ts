@@ -22,6 +22,7 @@ import { useAuth } from "./auth-context";
 import {
   concentrationSchema,
   dataConfidenceSchema,
+  financingResilienceSchema,
   priceProvenanceSchema,
   scoreResponseSchema,
   sourceProvenanceSchema,
@@ -43,6 +44,7 @@ export const portfolioRowSchema = z.looseObject({
       shares: z.number(),
       avg_cost: z.number().optional(),
       asset_type: z.string().optional(),
+      liquidity_class: z.enum(["risk_asset", "cash_equivalent"]).optional(),
       // option-contract fields (present only when asset_type === "option")
       option_type: z.enum(["call", "put"]).optional(),
       option_side: z.enum(["long", "short"]).optional(),
@@ -117,6 +119,7 @@ export type PortfolioHoldingInput = {
   avg_cost?: number;
   sector?: string;
   asset_type?: string;
+  liquidity_class?: "risk_asset" | "cash_equivalent";
   // Option-contract fields (present only when asset_type === "option").
   // The holding is keyed in `holdings` by a synthetic OCC-style contract
   // symbol; `shares` = number of contracts (positive magnitude),
@@ -899,6 +902,7 @@ export const riskReportSchema = z.looseObject({
   data_confidence: dataConfidenceSchema.nullish(),
   dimensions: z.array(riskDimensionSchema).optional().default([]),
   losses: lossBreakdownSchema.nullish(),
+  financing_resilience: financingResilienceSchema.nullish(),
 });
 export type RiskReport = z.infer<typeof riskReportSchema>;
 

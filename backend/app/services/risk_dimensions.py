@@ -51,6 +51,13 @@ class DimensionContext:
 
     portfolio_beta: Optional[float] = None
     leverage: Optional[float] = None
+    gross_leverage: Optional[float] = None
+    margin_coverage_ratio: Optional[float] = None
+    # True when a counted cash-equivalent offset was classified by the USER
+    # rather than the conservative ticker registry. A self-attested offset must
+    # not be able to drive this dimension to a calmer status than the account's
+    # gross leverage supports.
+    self_classified_offset: bool = False
     net_option_delta_notional: Optional[float] = None  # signed $, net across options
     has_options: bool = False
     current_drawdown: Optional[float] = None  # fraction, positive
@@ -339,29 +346,59 @@ def _dim_liquidity(report: RiskReportOut, ctx: DimensionContext) -> RiskDimensio
 
 def _dim_leverage(report: RiskReportOut, ctx: DimensionContext) -> RiskDimension:
     lev = _finite(ctx.leverage)
+    gross_lev = _finite(ctx.gross_leverage)
+    coverage = _finite(ctx.margin_coverage_ratio)
     margin = _finite(report.margin_loan) or 0.0
-    if lev is None:
-        status = "n/a"
-    elif lev <= 1.001:
-        status = "calm"
-    elif lev <= 1.5:
-        status = "normal"
-    elif lev <= 2.0:
-        status = "elevated"
+
+    # Leverage bands are INCLUSIVE-upper (1.5x is still "normal"), unlike the
+    # module-level ascending `_band`, so this stays a local helper.
+    def _leverage_band(value: float | None) -> str:
+        if value is None:
+            return "n/a"
+        if value <= 1.001:
+            return "calm"
+        if value <= 1.5:
+            return "normal"
+        if value <= 2.0:
+            return "elevated"
+        return "high"
+
+    status = _leverage_band(lev)
+    # A user-classified offset is self-attested, not verified. Never let it
+    # report a calmer band than the account's gross leverage — otherwise marking
+    # a single volatile name "cash-like" turns a 1.7x book into "calm".
+    if ctx.self_classified_offset and gross_lev is not None:
+        gross_status = _leverage_band(gross_lev)
+        if _SEVERITY.get(gross_status, 0.0) > _SEVERITY.get(status, 0.0):
+            status = gross_status
+    # Snapshot history stores the legacy gross-leverage series. Do not compare a
+    # new post-offset value against that unlike basis.
+    if gross_lev is not None and lev is not None and abs(gross_lev - lev) > 1e-6:
+        pct, n = None, 0
     else:
-        status = "high"
-    pct, n = metric_history.percentile_rank(_history_series(ctx.history, "leverage"), lev)
+        pct, n = metric_history.percentile_rank(_history_series(ctx.history, "leverage"), lev)
     if lev is None:
         expl = "Couldn't determine leverage."
     elif margin <= 0 and lev <= 1.001:
         expl = "You're unlevered (no margin loan) — market moves aren't amplified."
     else:
-        expl = f"You're levered {lev:.2f}× — gains and losses are amplified by roughly that factor."
+        if gross_lev is not None and coverage is not None:
+            expl = (
+                f"Gross financing leverage is {gross_lev:.2f}×. Cash and cash-equivalent "
+                f"holdings cover {coverage:.0%} of margin at current value, leaving "
+                f"post-offset risk-asset leverage of {lev:.2f}×."
+            )
+        else:
+            expl = f"Risk-asset leverage is {lev:.2f}×."
         if status in ("elevated", "high"):
             expl += " A sharp drop could trigger a margin call."
+        elif margin > 0:
+            expl += " Borrowing cost and broker maintenance rules still apply."
+        if ctx.self_classified_offset:
+            expl += " Part of that offset is a holding you classified as cash-like."
     return RiskDimension(
         key="leverage",
-        name="Leverage & margin",
+        name="Risk-asset leverage",
         value=lev,
         display=_x(lev),
         unit="x",

@@ -147,6 +147,24 @@ describe("ScorePage", () => {
           risk_adjusted_return: { name: "Risk-Adjusted Return", score: 6, status: "ok", detail: "" },
           downside_protection: { name: "Downside Protection", score: 4, status: "watch", detail: "" },
         },
+        financing_resilience: {
+          status: "covered",
+          gross_assets: 200000,
+          net_equity: 100000,
+          margin_loan: 100000,
+          cash_balance: 0,
+          cash_equivalent_value: 100000,
+          liquid_resources: 100000,
+          risk_asset_value: 100000,
+          margin_coverage_ratio: 1,
+          residual_margin: 0,
+          gross_leverage: 2,
+          post_offset_risk_leverage: 1,
+          cash_equivalents: [
+            { ticker: "SGOV", market_value: 100000, classification_source: "known_treasury_fund" },
+          ],
+          methodology_note: "Current-value liquidation estimate; not a broker guarantee.",
+        },
       },
       error: null,
       meta: { request_id: "rid", elapsed_ms: 10 },
@@ -159,8 +177,10 @@ describe("ScorePage", () => {
     // Sharpe is labeled as asset-mix quality and stays positive.
     expect(await screen.findByText(/asset-mix quality/i)).toBeInTheDocument();
     // The leverage cost is surfaced separately, not hidden in the Sharpe.
-    expect(screen.getByText(/margin & cash impact/i)).toBeInTheDocument();
+    expect(screen.getByText(/financing & liquidity/i)).toBeInTheDocument();
     expect(screen.getByText("2.00×")).toBeInTheDocument();
+    expect(screen.getByText("1.00×")).toBeInTheDocument();
+    expect(screen.getByText(/100% margin covered/i)).toBeInTheDocument();
   });
 
   it("renders the error panel when the backend rejects", async () => {

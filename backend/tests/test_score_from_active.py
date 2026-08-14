@@ -413,6 +413,76 @@ def test_cash_drag_lowers_risk_in_score(
     assert with_cash["metrics"]["cash_weight"] > 0.3
 
 
+def test_sgov_margin_offset_is_explained_without_changing_score_math(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_capital
+):
+    """SGOV remains a priced security in the score, while the additive
+    financing block shows that selling it could retire an equal margin loan."""
+    holdings = {
+        "SPY": {"shares": 100, "avg_cost": 90.0},
+        "SGOV": {"shares": 50, "avg_cost": 99.0},
+    }
+    history = _make_history(["SGOV", "SPY"])
+    fake_active_portfolio.set(holdings)
+    fake_price_history.set(history)
+    fake_capital["margin_loan"] = 50 * float(history["SGOV"].iloc[-1])
+
+    resp = test_client.post(
+        "/api/v1/risk/score_from_active",
+        json={},
+        headers={"Authorization": f"Bearer {mint_token(sub='sgov-offset')}"},
+    )
+    assert resp.status_code == 200, resp.json()
+    data = resp.json()["data"]
+    financing = data["financing_resilience"]
+    assert financing["status"] == "covered"
+    assert financing["margin_coverage_ratio"] == pytest.approx(1.0)
+    assert financing["residual_margin"] == pytest.approx(0.0)
+    assert financing["post_offset_risk_leverage"] == pytest.approx(1.0, rel=1e-5)
+    assert financing["cash_equivalents"][0]["ticker"] == "SGOV"
+    # The security was not converted into the engine's constant-return CASH leg.
+    assert data["metrics"]["cash_weight"] == pytest.approx(0.0)
+
+
+def test_liquidity_class_override_does_not_move_the_score(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_capital
+):
+    """The invariant the feature rests on, asserted directly.
+
+    Toggling ``liquidity_class`` changes only the financing explanation. The
+    same holdings and prices must produce a byte-identical score — cash_weight
+    was only ever a proxy for this.
+    """
+    history = _make_history(["SGOV", "SPY"])
+    fake_price_history.set(history)
+    fake_capital["margin_loan"] = 50 * float(history["SGOV"].iloc[-1])
+
+    def _score(sgov_meta: dict) -> dict:
+        fake_active_portfolio.set(
+            {
+                "SPY": {"shares": 100, "avg_cost": 90.0},
+                "SGOV": {"shares": 50, "avg_cost": 99.0, **sgov_meta},
+            }
+        )
+        resp = test_client.post(
+            "/api/v1/risk/score_from_active",
+            json={},
+            headers={"Authorization": f"Bearer {mint_token(sub='liq-invariance')}"},
+        )
+        assert resp.status_code == 200, resp.json()
+        return resp.json()["data"]
+
+    auto = _score({})
+    as_risk_asset = _score({"liquidity_class": "risk_asset"})
+
+    assert auto["overall_score"] == as_risk_asset["overall_score"]
+    assert auto["score_version"] == as_risk_asset["score_version"]
+    assert auto["dimensions"] == as_risk_asset["dimensions"]
+    # ...while the financing explanation DOES differ, which is the whole point.
+    assert auto["financing_resilience"]["status"] == "covered"
+    assert as_risk_asset["financing_resilience"]["status"] == "uncovered"
+
+
 def test_missing_avg_cost_scores_without_fabricating_pnl(
     test_client, mint_token, fake_active_portfolio, fake_price_history
 ):
