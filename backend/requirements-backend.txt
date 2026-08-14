@@ -26,7 +26,11 @@ uvicorn[standard]>=0.30,<0.35
 # access tokens with asymmetric ES256 / RS256 keys exposed through
 # JWKS.
 PyJWT>=2.8,<3
-cryptography>=42,<49
+# Floor is a SECURITY floor, not a preference: 48.0.1 carries PYSEC-2026-3552
+# (fixed in 50.0.0) plus PYSEC-2026-3553/3554 (fixed in 49.0.0), and the old
+# `<49` ceiling was itself what pinned the vulnerable build. Ceiling kept so a
+# future major still can't land unreviewed — raise both together.
+cryptography>=50,<51
 
 # httpx is FastAPI's recommended async HTTP client AND drives the
 # TestClient used in backend/tests/. Already pulled in transitively by
