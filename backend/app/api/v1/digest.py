@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 from ...core.config import get_settings
 from ...core.deps_auth import AuthedUser, require_user
-from ...core.responses import ok
+from ...core.responses import NotProvisioned, ok
 from ...schemas.envelope import Envelope
 from ...services import digest as digest_service
 
@@ -140,7 +140,11 @@ def get_pref(request: Request, user: AuthedUser = Depends(require_user)):
         # 0007 unapplied → 503 so the settings card HIDES (its contract)
         # instead of showing a toggle whose save can only fail.
         if digest_service._table_missing(exc):
-            raise HTTPException(status_code=503, detail="digest preferences unavailable") from None
+            # Designed state, not a fault: migration 0007 isn't applied, so the
+            # settings card hides. NotProvisioned keeps that contract while
+            # keeping Sentry quiet (a dormant feature must not drown real
+            # signal — it had logged 30 events/month here).
+            raise NotProvisioned(status_code=503, detail="digest preferences unavailable") from None
         # transient read blip → default-OFF (the consent-safe fallback)
     return ok({"enabled": enabled}, request=request, started_at=started)
 

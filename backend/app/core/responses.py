@@ -255,3 +255,18 @@ def _status_to_code(status: int) -> str:
         502: "bad_gateway",
         503: "service_unavailable",
     }.get(status, "error")
+
+
+class NotProvisioned(HTTPException):
+    """A 5xx that is a DESIGNED, DOCUMENTED state — not a fault.
+
+    Some endpoints answer 503 to signal "this feature's backing store isn't
+    provisioned yet", because a client contract keys off it (the weekly-digest
+    settings card HIDES on 503 rather than offering a toggle whose save can
+    only fail). That is the system working as specified, so it must not page
+    anyone: ``main._maybe_init_sentry`` passes this class to Sentry's
+    ``ignore_errors`` so a dormant feature can't drown the real signal.
+
+    Use it ONLY where the 503 is provably a provisioning state. A blanket
+    "the write failed" 503 is a genuine fault and must keep reporting.
+    """

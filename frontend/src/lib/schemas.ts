@@ -14,6 +14,8 @@
  * Schemas migrate onto the generated `Api*` types incrementally.
  */
 
+// Global Zod config (jitless) must load before the first parse.
+import "./zod-config";
 import { z } from "zod";
 import type { components } from "./api-types";
 

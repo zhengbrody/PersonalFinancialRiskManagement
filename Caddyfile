@@ -65,6 +65,19 @@
 	#   * connect-src: Supabase (auth/REST), PostHog (events + remote config),
 	#     Sentry ingest, and 'self' (covers the /api/v1/copilot SSE stream —
 	#     same-origin EventSource/fetch, unaffected by these headers).
+	#   * script-src hosts were derived from the Report-Only stream, not
+	#     guessed: us-assets.i.posthog.com serves PostHog's runtime extension
+	#     bundles as SCRIPTS (connect-src does not cover script loads — 507
+	#     reports/58 users), and static.cloudflareinsights.com is the RUM
+	#     beacon Cloudflare injects at the edge (169 reports/57 users).
+	#     Enforcing without these would have silently killed analytics.
+	#   * 'unsafe-eval' is deliberately ABSENT. The 417 `eval:` reports came
+	#     from Zod v4's JIT validator compiler probing `new Function`; that is
+	#     now disabled at source via `z.config({ jitless: true })`
+	#     (frontend/src/lib/zod-config.ts), which is the correct fix — Zod
+	#     falls back to interpreted validation under an enforcing policy
+	#     anyway, so re-permitting eval would buy nothing and cost the main
+	#     protection CSP exists for.
 	#   * form-action includes accounts.google.com for the Supabase Google
 	#     OAuth redirect; COOP is same-origin-allow-popups so any OAuth popup
 	#     flow keeps its opener (full-page redirects are unaffected either way).
@@ -77,7 +90,7 @@
 		X-Frame-Options "DENY"
 		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()"
 		Cross-Origin-Opener-Policy "same-origin-allow-popups"
-		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://byfpmmfduteajblqpuuw.supabase.co wss://byfpmmfduteajblqpuuw.supabase.co https://us.i.posthog.com https://us-assets.i.posthog.com https://o4511493492178944.ingest.us.sentry.io; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://accounts.google.com; object-src 'none'; report-uri https://o4511493492178944.ingest.us.sentry.io/api/4511494053560320/security/?sentry_key=c6ee4dd05a13fb3da4669a5a4db7ba08"
+		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline' https://us-assets.i.posthog.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://byfpmmfduteajblqpuuw.supabase.co wss://byfpmmfduteajblqpuuw.supabase.co https://us.i.posthog.com https://us-assets.i.posthog.com https://o4511493492178944.ingest.us.sentry.io; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://accounts.google.com; object-src 'none'; report-uri https://o4511493492178944.ingest.us.sentry.io/api/4511494053560320/security/?sentry_key=c6ee4dd05a13fb3da4669a5a4db7ba08"
 		-Server
 	}
 

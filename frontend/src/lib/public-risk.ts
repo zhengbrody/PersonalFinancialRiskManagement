@@ -12,6 +12,8 @@
  * never analytics (events carry step + holdings_count only).
  */
 
+// Global Zod config (jitless) must load before the first parse.
+import "./zod-config";
 import { z } from "zod";
 
 import { apiFetch } from "@/lib/api";

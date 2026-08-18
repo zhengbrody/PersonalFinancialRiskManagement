@@ -9,7 +9,12 @@ and fail-soft states (no key → skipped; 0007 unapplied → not_ready).
 
 from __future__ import annotations
 
+import pathlib
+import sys
+from types import SimpleNamespace
+
 import pytest
+from fastapi import HTTPException
 
 from backend.app.services import digest as dg
 from libs.mindmarket_core.score_version import SCORE_VERSION
@@ -456,3 +461,59 @@ def test_new_user_is_not_subscribed_by_default(digest_env, fake_admin):
     assert dg.list_recipients() == []
     fake_admin.tables["digest_prefs"] = [{"user_id": "u7", "enabled": True}]
     assert [r["user_id"] for r in dg.list_recipients()] == ["u7"]
+
+
+def test_missing_table_keeps_the_503_contract(test_client, mint_token, monkeypatch):
+    """0007 unapplied is a DESIGNED state: the settings card keys off the 503
+    to hide itself, so the status must not change."""
+
+    def _boom(*_a, **_k):
+        raise RuntimeError('relation "public.digest_prefs" does not exist')
+
+    monkeypatch.setattr("libs.auth.client.get_supabase", _boom)
+    resp = test_client.get(
+        "/api/v1/digest/pref", headers={"Authorization": f"Bearer {mint_token()}"}
+    )
+    assert resp.status_code == 503
+
+
+def test_provisioning_503_is_excluded_from_sentry_by_type(monkeypatch):
+    """That designed 503 had been logging ~30 events/month to Sentry, burying
+    real signal. It is now excluded by TYPE via ``ignore_errors`` — not by
+    matching the detail string, so rewording the message cannot silently
+    re-open the flood."""
+    from backend.app import main as app_main
+    from backend.app.core.responses import NotProvisioned
+
+    captured: dict = {}
+
+    class _FakeSentry:
+        @staticmethod
+        def init(**kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setitem(sys.modules, "sentry_sdk", _FakeSentry)
+    monkeypatch.setattr(app_main, "_running_under_pytest", lambda: False)
+
+    app_main._maybe_init_sentry(
+        SimpleNamespace(
+            environment="production",
+            sentry_dsn="https://k@o1.ingest.us.sentry.io/2",
+            app_version="test",
+        )
+    )
+    assert NotProvisioned in captured["ignore_errors"]
+    # The provisioning branch really raises that type.
+    assert issubclass(NotProvisioned, HTTPException)
+
+
+def test_a_real_write_failure_still_reports():
+    """Guard the other half: ONLY the provisioning branch is silenced. The
+    blanket write-failure 503 stays a plain HTTPException so a genuine outage
+    still pages."""
+    source = (pathlib.Path(__file__).resolve().parents[1] / "app/api/v1/digest.py").read_text()
+    set_pref_src = source.split("def set_pref(", 1)[1]
+    assert 'raise HTTPException(status_code=503, detail="digest preferences unavailable")' in (
+        set_pref_src
+    ), "set_pref's blanket 503 must stay a reported HTTPException"
+    assert "NotProvisioned" not in set_pref_src

@@ -17,6 +17,8 @@
 // Type-only import (erased at build — no runtime/client code pulled in, so the
 // server OG route can still import this module safely).
 import type { ScoreBand } from "@/components/score-gauge";
+// Global Zod config (jitless) must load before the first parse.
+import "./zod-config";
 import { z } from "zod";
 
 export type ShareBookId = "balanced" | "growth";
