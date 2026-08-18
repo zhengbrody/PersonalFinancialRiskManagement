@@ -141,6 +141,29 @@ def _deep_checks(settings: Settings, import_ok: bool) -> tuple[list[dict], bool]
             "required": False,  # AI degrades to deterministic templates by design
         }
     )
+    # PRESENCE is not READINESS: on 2026-07-25 the key was valid and the model
+    # name had been retired, so `llm_config` above was green while every AI
+    # surface was falling back to templates. This row asks whether the model we
+    # actually call is still offered. Informational — AI degradation is a
+    # documented product behaviour and must never flip readiness.
+    if settings.deepseek_api_key or settings.anthropic_api_key:
+        from ...services import llm_readiness
+
+        readiness = llm_readiness.check()
+        checks.append(
+            {
+                "name": "llm_model",
+                "category": "dependency",
+                "ok": readiness.ok,
+                "state": readiness.state,
+                # Separate axis: a deprecated model still SERVES (so ok stays
+                # true and the probe doesn't sit red for a whole migration),
+                # but work is needed on the provider's clock, not ours.
+                "action_required": readiness.action_required,
+                "detail": readiness.detail,
+                "required": False,
+            }
+        )
     checks.append(
         {
             "name": "market_data_config",
