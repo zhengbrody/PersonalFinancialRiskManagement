@@ -15,6 +15,10 @@ from libs.admin.status import IntegrationStatus, configured_status, live_check
 # yfinance); the rest are core.
 _INTEGRATIONS: list[tuple[str, list[str]]] = [
     ("Claude (Anthropic)", ["ANTHROPIC_API_KEY"]),
+    # The DEFAULT LLM provider (MINDMARKET_LLM_PROVIDER falls back to
+    # "deepseek"), i.e. the one serving every AI request — it was missing from
+    # this page while the secondary provider was listed.
+    ("DeepSeek", ["DEEPSEEK_API_KEY"]),
     ("Supabase", ["SUPABASE_URL", "SUPABASE_JWT_SECRET"]),
     ("FMP (market data)", ["FMP_API_KEY"]),
     ("Massive (market data)", ["MASSIVE_API_KEY"]),
@@ -89,8 +93,21 @@ def _check_stripe() -> tuple[bool, str]:
 # Which integrations have a cheap live validation endpoint. (Supabase auth is
 # already proven by the fact the owner's JWT verified to reach this route, so a
 # separate ping would be redundant; FMP/Sentry have no free health check.)
+def _check_deepseek() -> tuple[bool, str]:
+    """Assert the configured MODEL is still offered — not merely that the key
+    works. The 2026-07-25 outage had a valid key and a retired model name, so a
+    key-only check would have reported healthy throughout."""
+    from . import llm_readiness
+
+    result = llm_readiness.check(force=True)
+    # Deliberately NOT `result.ok`: a deprecated model still serves, but the
+    # owner opened this page to find work, so surface it as needing action.
+    return not result.action_required and result.ok, result.detail
+
+
 _LIVE_CHECKS = {
     "Claude (Anthropic)": _check_anthropic,
+    "DeepSeek": _check_deepseek,
     "Stripe": _check_stripe,
 }
 

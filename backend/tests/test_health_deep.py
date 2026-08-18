@@ -178,3 +178,60 @@ def test_deep_body_never_leaks_secret_values(client, monkeypatch, service_key):
     assert "sb_secret_test_value_never_shown" not in body
     # No raw URLs either (the JWKS url embeds the project ref).
     assert ".well-known" not in body
+
+
+# ── llm_model: presence is not readiness ───────────────────────────
+
+
+def test_deep_reports_a_retired_llm_model_without_flipping_readiness(
+    client, monkeypatch, service_key
+):
+    """On 2026-07-25 the provider retired the model name we send. The key
+    stayed valid, so `llm_config` was green while every AI surface fell back to
+    templates — nobody noticed for three weeks.
+
+    The row must therefore be visibly NOT ok, and readiness must stay 200:
+    degrading to deterministic templates is documented product behaviour, so an
+    LLM problem is not an outage.
+    """
+    monkeypatch.setattr(hmod.urllib.request, "urlopen", lambda url, timeout: _Resp(200))
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "unit-test-key")
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-chat")
+    from backend.app.core.config import reset_settings_cache
+    from backend.app.services import llm_readiness
+
+    reset_settings_cache()
+    llm_readiness.reset_cache()
+    monkeypatch.setattr(
+        llm_readiness, "_deepseek_model_ids", lambda _s: ["deepseek-v4-flash", "deepseek-v4-pro"]
+    )
+    monkeypatch.setattr(llm_readiness, "_deepseek_answers", lambda _s, _m: (False, "HTTPError"))
+
+    r = client.get("/api/v1/health?deep=1")
+    assert r.status_code == 200, r.json()
+    d = r.json()["data"]
+    assert d["status"] == "ok"  # informational: AI degradation is not an outage
+    row = {c["name"]: c for c in d["checks"]}["llm_model"]
+    assert row["ok"] is False
+    assert row["state"] == "model_retired"
+    assert row["action_required"] is True
+    assert row["required"] is False
+    assert "deepseek-v4-flash" in row["detail"]
+    llm_readiness.reset_cache()
+
+
+def test_deep_omits_the_llm_row_when_no_provider_key_is_set(client, monkeypatch, service_key):
+    """`llm_config` already reports the missing key; a second row saying the
+    same thing is noise."""
+    monkeypatch.setattr(hmod.urllib.request, "urlopen", lambda url, timeout: _Resp(200))
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    from backend.app.core.config import reset_settings_cache
+
+    reset_settings_cache()
+
+    r = client.get("/api/v1/health?deep=1")
+    assert r.status_code == 200
+    names = [c["name"] for c in r.json()["data"]["checks"]]
+    assert "llm_model" not in names
+    assert "llm_config" in names
