@@ -128,6 +128,7 @@ def _maybe_init_sentry(settings) -> None:
     try:
         import sentry_sdk
 
+        from .core.responses import NotProvisioned
         from .services.sentry_scrub import before_send
 
         sentry_sdk.init(
@@ -140,6 +141,10 @@ def _maybe_init_sentry(settings) -> None:
             # metadata, NEVER request bodies (a failing POST /copilot/chat
             # would otherwise attach the user's prompt text).
             max_request_body_size="never",
+            # A documented degradation state (e.g. a feature whose migration
+            # isn't applied) is the system working as specified. Reporting it
+            # buries the real signal — this one alone logged 30 events/month.
+            ignore_errors=[NotProvisioned],
             before_send=before_send,
         )
     except Exception:  # noqa: BLE001 - monitoring must never break boot

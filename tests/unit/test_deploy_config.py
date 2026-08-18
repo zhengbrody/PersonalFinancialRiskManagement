@@ -58,6 +58,21 @@ def test_caddyfile_ships_the_security_headers():
     ):
         assert origin in csp, f"CSP missing: {origin}"
 
+    # Script hosts derived from the Report-Only stream, not guessed: PostHog
+    # serves its runtime extension bundles as SCRIPTS from the assets host
+    # (connect-src does not cover script loads), and Cloudflare injects the RUM
+    # beacon at the edge. Enforcing without these silently kills analytics.
+    script_src = next(part for part in csp.split(";") if part.strip().startswith("script-src"))
+    for host in ("https://us-assets.i.posthog.com", "https://static.cloudflareinsights.com"):
+        assert host in script_src, f"script-src missing: {host}"
+
+    # 'unsafe-eval' must stay OUT: it re-permits the injection class the policy
+    # exists to stop. The `eval:` reports came from Zod v4's JIT probe, which is
+    # disabled at source (frontend/src/lib/zod-config.ts) instead.
+    assert "unsafe-eval" not in csp
+    zod_config = (ROOT / "frontend/src/lib/zod-config.ts").read_text()
+    assert "jitless: true" in zod_config
+
 
 def test_static_seo_pages_migrated_to_next():
     """The former static SEO pages (assets/seo/*.html) are migrated to Next.js

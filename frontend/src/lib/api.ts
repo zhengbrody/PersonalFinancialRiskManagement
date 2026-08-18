@@ -16,6 +16,8 @@
  * how envelope-shape drift starts.
  */
 
+// Global Zod config (jitless) must load before the first parse.
+import "./zod-config";
 import { z, type ZodType } from "zod";
 import { env } from "./env";
 

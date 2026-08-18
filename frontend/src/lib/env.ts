@@ -18,6 +18,8 @@
  * keep only the public side here.
  */
 
+// Global Zod config (jitless) must load before the first parse.
+import "./zod-config";
 import { z } from "zod";
 
 const publicSchema = z.object({
