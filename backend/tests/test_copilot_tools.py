@@ -349,6 +349,7 @@ class _Settings:
     deepseek_api_key = ""
     deepseek_base_url = "https://api.deepseek.com/v1"
     deepseek_model = "deepseek-chat"
+    deepseek_reasoning_effort = "none"
 
 
 def test_tool_loop_invokes_executor_and_returns_text(monkeypatch):
@@ -527,3 +528,53 @@ def test_deepseek_provider_uses_openai_compatible_chat_client(monkeypatch):
         {"role": "system", "content": "be grounded"},
         {"role": "user", "content": "portfolio?"},
     ]
+    # v4 reasoning tokens count against max_tokens; with reasoning on, the
+    # larger prompts truncated mid-JSON and silently fell back to templates.
+    assert fake.calls[0]["reasoning_effort"] == "none"
+
+
+def test_deepseek_reasoning_effort_can_be_disabled(monkeypatch):
+    """Blank DEEPSEEK_REASONING_EFFORT sends no parameter at all, so a provider
+    or model that rejects it can be reached without a code change."""
+    from backend.app.services import llm_client as lc
+
+    class _Settings2:
+        llm_provider = "deepseek"
+        anthropic_api_key = ""
+        deepseek_api_key = "sk-deepseek-test"
+        deepseek_base_url = "https://api.deepseek.com/v1"
+        deepseek_model = "deepseek-v4-flash"
+        deepseek_reasoning_effort = ""
+
+    class _Message:
+        content = "answer"
+
+    class _Choice:
+        message = _Message()
+
+    class _Resp:
+        choices = [_Choice()]
+
+    calls: list[dict] = []
+
+    class _Client:
+        def __init__(self):
+            class _Completions:
+                def create(_s, **kwargs):
+                    calls.append(kwargs)
+                    return _Resp()
+
+            class _Chat:
+                pass
+
+            _Chat.completions = _Completions()
+            self.chat = _Chat()
+
+    monkeypatch.setattr(lc, "get_settings", lambda: _Settings2())
+    monkeypatch.setattr(lc, "_get_deepseek_client", lambda: _Client())
+
+    llm = lc.get_llm_callable(with_tools=False)
+    assert llm is not None
+    assert llm("q", "sys", 400, 0.2) == "answer"
+    assert "reasoning_effort" not in calls[0]
+    assert calls[0]["model"] == "deepseek-v4-flash"

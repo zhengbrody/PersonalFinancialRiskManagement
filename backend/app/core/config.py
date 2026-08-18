@@ -139,7 +139,22 @@ class Settings:
     deepseek_base_url: str = field(
         default_factory=lambda: _env_str("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
     )
-    deepseek_model: str = field(default_factory=lambda: _env_str("DEEPSEEK_MODEL", "deepseek-chat"))
+    # v4-flash replaced deepseek-chat, which DeepSeek de-listed (it still
+    # answers, but on their clock — see services/llm_readiness.py). Measured on
+    # this app's REAL prompts at their REAL max_tokens: same or better latency
+    # than deepseek-chat, valid JSON on every surface, and cheaper per token.
+    deepseek_model: str = field(
+        default_factory=lambda: _env_str("DEEPSEEK_MODEL", "deepseek-v4-flash")
+    )
+    # v4 models emit reasoning tokens that COUNT AGAINST max_tokens — with
+    # reasoning on, risk_explain truncated at its 900-token budget and returned
+    # unparseable JSON, silently degrading that surface to its template. This
+    # app's LLM only rephrases a deterministic skeleton, so reasoning is pure
+    # cost + latency here. Env-overridable ("low"/"minimal"/"" to send nothing)
+    # so it can be tuned without a deploy.
+    deepseek_reasoning_effort: str = field(
+        default_factory=lambda: _env_str("DEEPSEEK_REASONING_EFFORT", "none")
+    )
 
     anthropic_api_key: str = field(default_factory=lambda: _env_str("ANTHROPIC_API_KEY"))
 
