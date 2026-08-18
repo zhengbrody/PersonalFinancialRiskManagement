@@ -129,17 +129,25 @@ def _make_deepseek_plain_callable(client) -> Callable[[str, str, int, float], st
     """Build an OpenAI-compatible DeepSeek callable."""
     settings = get_settings()
     model = settings.deepseek_model
+    reasoning_effort = (settings.deepseek_reasoning_effort or "").strip()
 
     def _call(prompt: str, system: str, max_tokens: int, temperature: float) -> str:
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
+        extra: dict = {}
+        if reasoning_effort:
+            # v4 reasoning tokens count against max_tokens; leaving them on
+            # truncated the larger prompts mid-JSON. Older models ignore this
+            # parameter, so it is safe to send if DEEPSEEK_MODEL is rolled back.
+            extra["reasoning_effort"] = reasoning_effort
         resp = client.chat.completions.create(
             model=model,
             max_tokens=max_tokens,
             temperature=temperature,
             messages=messages,
+            **extra,
         )
         choice = (getattr(resp, "choices", None) or [None])[0]
         message = getattr(choice, "message", None)

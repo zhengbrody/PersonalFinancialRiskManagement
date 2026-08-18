@@ -31,6 +31,12 @@ MODEL_PRICING_BY_MODEL: dict[str, ModelPricing] = {
     "claude-haiku": ModelPricing(input_per_million=1.00, output_per_million=5.00),
     "claude-sonnet": ModelPricing(input_per_million=3.00, output_per_million=15.00),
     "deepseek-chat": ModelPricing(input_per_million=0.55, output_per_million=2.19),
+    # DeepSeek prices v4 by time of day (peak 01:00-04:00 + 06:00-10:00 UTC is
+    # 2x off-peak) and discounts cache hits ~30x. These are the PEAK cache-miss
+    # rates: a cost estimate should never understate. Both are cheaper than the
+    # deepseek-chat they replaced even at peak.
+    "deepseek-v4-flash": ModelPricing(input_per_million=0.44, output_per_million=1.32),
+    "deepseek-v4-pro": ModelPricing(input_per_million=1.32, output_per_million=3.96),
 }
 
 
