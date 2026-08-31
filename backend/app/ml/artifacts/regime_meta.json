@@ -1,8 +1,8 @@
 {
   "model_version": "regime-v1.1.0",
-  "trained_at": "2026-08-24T06:43:21.787008+00:00",
+  "trained_at": "2026-08-31T12:24:00.689986+00:00",
   "sklearn_version": "1.8.0",
-  "git_sha": "4c65b872770b51b9844153a64435c7142c8fc3cf",
+  "git_sha": "dd13ed0d2f4c166adb40cad18c3767fd7cfd094a",
   "estimator": "HistGradientBoostingClassifier",
   "config": {
     "model_version": "regime-v1.1.0",
@@ -58,8 +58,8 @@
     ]
   },
   "training_window": {
-    "start": "2012-07-30",
-    "end": "2026-08-07",
+    "start": "2012-08-06",
+    "end": "2026-08-14",
     "rows": 3526
   },
   "class_distribution": {
@@ -69,28 +69,28 @@
     "stress": 181
   },
   "metrics": {
-    "cv_macro_f1_mean": 0.2864,
-    "cv_accuracy_mean": 0.462,
-    "holdout_accuracy": 0.5482,
-    "holdout_macro_f1": 0.3811,
-    "elevated_risk_auc": 0.7444,
+    "cv_macro_f1_mean": 0.2913,
+    "cv_accuracy_mean": 0.4658,
+    "holdout_accuracy": 0.5241,
+    "holdout_macro_f1": 0.3647,
+    "elevated_risk_auc": 0.7627,
     "baseline_majority_class": "risk_on",
-    "baseline_accuracy": 0.5127,
+    "baseline_accuracy": 0.5198,
     "per_class": {
       "risk_on": {
-        "precision": 0.615,
-        "recall": 0.862,
-        "f1-score": 0.718
+        "precision": 0.6,
+        "recall": 0.812,
+        "f1-score": 0.69
       },
       "neutral": {
-        "precision": 0.471,
-        "recall": 0.192,
-        "f1-score": 0.273
+        "precision": 0.414,
+        "recall": 0.195,
+        "f1-score": 0.265
       },
       "volatile": {
-        "precision": 0.291,
-        "recall": 0.291,
-        "f1-score": 0.291
+        "precision": 0.267,
+        "recall": 0.256,
+        "f1-score": 0.261
       },
       "stress": {
         "precision": 0.222,
@@ -100,26 +100,26 @@
     },
     "confusion_matrix": [
       [
-        312,
-        34,
-        15,
-        1
+        298,
+        50,
+        17,
+        2
       ],
       [
         166,
         48,
-        32,
-        4
+        29,
+        3
       ],
       [
-        29,
-        18,
-        23,
+        32,
+        17,
+        20,
         9
       ],
       [
-        0,
-        2,
+        1,
+        1,
         9,
         4
       ]
@@ -133,38 +133,38 @@
     "holdout_size": 706
   },
   "feature_importances": {
-    "vix_level": 0.1769,
-    "vol_63d": 0.15533,
-    "golden_cross": 0.10158,
-    "yield_slope": 0.08608,
-    "vol_21d": 0.07967,
-    "vol_ratio": 0.07508,
-    "mom_60d": 0.06753,
-    "drawdown": 0.06275,
-    "qqq_trend": 0.04345,
-    "qqq_spy_spread": 0.04099,
-    "vix_change_5d": 0.03921,
-    "trend_sma200": 0.03677,
-    "trend_sma50": 0.02947,
-    "mom_20d": 0.02732,
-    "vix_term": 0.0
+    "vol_63d": 0.16733,
+    "vix_level": 0.16703,
+    "golden_cross": 0.09701,
+    "yield_slope": 0.08736,
+    "vol_21d": 0.0662,
+    "vol_ratio": 0.06212,
+    "mom_60d": 0.06038,
+    "drawdown": 0.04337,
+    "trend_sma50": 0.03763,
+    "qqq_trend": 0.03639,
+    "qqq_spy_spread": 0.03603,
+    "vix_change_5d": 0.02956,
+    "vix_term": 0.02835,
+    "mom_20d": 0.02547,
+    "trend_sma200": 0.01766
   },
   "feature_medians": {
-    "trend_sma200": 0.066943,
+    "trend_sma200": 0.067113,
     "trend_sma50": 0.019689,
-    "golden_cross": 0.047679,
-    "mom_20d": 0.016693,
-    "mom_60d": 0.042042,
-    "vol_21d": 0.118991,
-    "vol_63d": 0.124918,
-    "vol_ratio": 0.82287,
-    "drawdown": -0.013866,
-    "vix_level": 16.049999,
+    "golden_cross": 0.047879,
+    "mom_20d": 0.01675,
+    "mom_60d": 0.042164,
+    "vol_21d": 0.11899,
+    "vol_63d": 0.124919,
+    "vol_ratio": 0.824608,
+    "drawdown": -0.013794,
+    "vix_level": 16.040001,
     "vix_change_5d": -0.18,
-    "vix_term": NaN,
-    "qqq_trend": 0.086212,
-    "qqq_spy_spread": 0.004178,
-    "yield_slope": 1.125
+    "vix_term": 0.8815,
+    "qqq_trend": 0.086384,
+    "qqq_spy_spread": 0.004194,
+    "yield_slope": 1.121
   },
   "data_coverage": {
     "sources_present": [
@@ -176,8 +176,8 @@
       "vix3m"
     ],
     "sources_missing": [],
-    "spy_start": "2011-07-29",
-    "spy_end": "2026-08-21",
+    "spy_start": "2011-08-05",
+    "spy_end": "2026-08-28",
     "observations": 3788
   }
 }
