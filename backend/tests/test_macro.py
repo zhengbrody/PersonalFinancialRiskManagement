@@ -145,15 +145,87 @@ def test_returns_yield_curve_envelope(test_client, fake_http):
     by_tenor = {p["tenor"]: p["yield_pct"] for p in data["points"]}
     assert by_tenor["10Y"] == pytest.approx(4.45)
     assert data["source"] == "US Treasury"
+    assert data["stale"] is False
     assert data["cache_ttl_seconds"] == 3600
     assert "Auto-refreshes" in data["refresh_policy"]
 
 
-def test_yield_curve_upstream_failure_is_server_error(test_client, fake_http):
+_CURVE_CSV = (
+    'Date,"1 Mo","3 Mo","6 Mo","1 Yr","2 Yr","5 Yr","10 Yr","30 Yr"\n'
+    "05/28/2026,3.72,3.69,3.79,3.80,3.99,4.15,4.45,4.98\n"
+)
+
+
+def _expire_cache_ttl():
+    """Age every cached entry past its TTL without touching ``stored_at``.
+
+    Simulates "the hour has elapsed, so the next call re-fetches" — which
+    is the only state in which the upstream-failure path is reachable.
+    """
+    from backend.app.services import macro_data as md
+
+    for entry in md._cache.values():
+        entry.expires_at = 0.0
+
+
+def test_yield_curve_upstream_failure_without_cache_is_503(test_client, fake_http):
+    """Cold cache + dead upstream: no answer exists, so 503 (retry later) —
+    not 500, which would blame a bug in us for a Treasury timeout."""
     fake_http.raise_with(TimeoutError("Treasury timeout"))
     resp = test_client.get("/api/v1/macro/yield_curve")
-    assert resp.status_code == 500
-    assert resp.json()["error"]["code"] == "server_error"
+    assert resp.status_code == 503
+    assert resp.json()["error"]["code"] == "service_unavailable"
+
+
+def test_yield_curve_serves_last_good_copy_when_upstream_fails(test_client, fake_http):
+    """The real production failure: Treasury read-times-out after we already
+    have today's curve. The last good copy is still the newest curve that
+    exists, so it is served — flagged stale — instead of erroring."""
+    fake_http.set("daily-treasury-rates.csv", _CURVE_CSV)
+    first = test_client.get("/api/v1/macro/yield_curve")
+    assert first.status_code == 200
+    assert first.json()["data"]["stale"] is False
+
+    _expire_cache_ttl()
+    fake_http.raise_with(TimeoutError("Treasury timeout"))
+
+    resp = test_client.get("/api/v1/macro/yield_curve")
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    assert data["stale"] is True
+    assert data["as_of"] == "2026-05-28"
+    assert {p["tenor"]: p["yield_pct"] for p in data["points"]}["10Y"] == pytest.approx(4.45)
+
+
+def test_yield_curve_stale_fallback_stops_at_the_ceiling(fake_http, monkeypatch):
+    """Past STALE_MAX_SECONDS we would be guessing, so the error propagates
+    (and the endpoint above turns it into a 503)."""
+    from backend.app.services import macro_data as md
+
+    fake_http.set("daily-treasury-rates.csv", _CURVE_CSV)
+    assert md.get_yield_curve().as_of == "2026-05-28"
+
+    _expire_cache_ttl()
+    monkeypatch.setattr(md, "STALE_MAX_SECONDS", -1)  # every entry is now too old
+    fake_http.raise_with(TimeoutError("Treasury timeout"))
+
+    with pytest.raises(TimeoutError):
+        md.get_yield_curve(allow_stale=True)
+
+
+def test_yield_curve_default_call_still_raises(fake_http):
+    """allow_stale is opt-in: research_dcf and the MCP tool, which have their
+    own fail-soft handling, must keep seeing the exception."""
+    from backend.app.services import macro_data as md
+
+    fake_http.set("daily-treasury-rates.csv", _CURVE_CSV)
+    md.get_yield_curve()
+
+    _expire_cache_ttl()
+    fake_http.raise_with(TimeoutError("Treasury timeout"))
+
+    with pytest.raises(TimeoutError):
+        md.get_yield_curve()
 
 
 # ── /macro/regime ─────────────────────────────────────────────────

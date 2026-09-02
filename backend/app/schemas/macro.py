@@ -43,6 +43,11 @@ class YieldCurveResponse(BaseModel):
 
     as_of: str
     points: list[YieldCurvePointOut]
+    # True when Treasury was unreachable and this is the last good copy
+    # served past its cache TTL. ``as_of`` still names the curve's own
+    # publication date; this flags that we could not confirm it is the
+    # newest one published.
+    stale: bool = False
     source: str = "US Treasury"
     cache_ttl_seconds: int = 3600
     refresh_policy: str = (

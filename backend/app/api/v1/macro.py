@@ -13,7 +13,7 @@ import time
 
 from fastapi import APIRouter, Query, Request
 
-from ...core.responses import ok, server_error, unprocessable
+from ...core.responses import ok, server_error, service_unavailable, unprocessable
 from ...schemas.envelope import Envelope
 from ...schemas.macro import (
     MoverRowOut,
@@ -111,17 +111,34 @@ def get_series(
     response_model=Envelope[YieldCurveResponse],
 )
 def get_yield_curve(request: Request):
-    """Return today's (or the most recent published) Treasury curve."""
+    """Return today's (or the most recent published) Treasury curve. Public.
+
+    home.treasury.gov is the slowest upstream we depend on and read-times-out
+    a couple of times a week. The curve is published once a business day, so
+    the last good copy *is* still the most recent curve in existence: on
+    upstream failure we serve it flagged ``stale`` (see
+    ``macro_data.STALE_MAX_SECONDS``) rather than failing, which is what this
+    slice's fail-soft policy — shared with /regime, /regime_detail, /movers
+    and /news — has always promised.
+
+    With nothing cached to fall back on there is genuinely no answer to give.
+    That is a 503 (an upstream we don't own is down; retry later), never a
+    500 — a recurring 500 trains everyone to ignore the error stream.
+    """
     started = time.perf_counter()
     try:
-        result = macro_data.get_yield_curve()
+        result = macro_data.get_yield_curve(allow_stale=True)
     except Exception as exc:
-        _logger.warning("macro.yield_curve.fetch_failed err=%s", exc)
-        raise server_error("Treasury fetch failed.", reason=type(exc).__name__) from exc
+        _logger.warning("macro.yield_curve.unavailable err=%s", exc)
+        raise service_unavailable(
+            "Treasury yield curve is temporarily unavailable.",
+            reason=type(exc).__name__,
+        ) from exc
 
     payload = YieldCurveResponse(
         as_of=result.as_of,
         points=[YieldCurvePointOut(tenor=p.tenor, yield_pct=p.yield_pct) for p in result.points],
+        stale=result.stale,
         cache_ttl_seconds=macro_data.CACHE_TTL_SECONDS,
     )
     return ok(payload.model_dump(), request=request, started_at=started)

@@ -15126,6 +15126,11 @@
             "default": "US Treasury",
             "title": "Source",
             "type": "string"
+          },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
           }
         },
         "required": [
@@ -16415,7 +16420,7 @@
     },
     "/api/v1/macro/yield_curve": {
       "get": {
-        "description": "Return today's (or the most recent published) Treasury curve.",
+        "description": "Return today's (or the most recent published) Treasury curve. Public.\n\nhome.treasury.gov is the slowest upstream we depend on and read-times-out\na couple of times a week. The curve is published once a business day, so\nthe last good copy *is* still the most recent curve in existence: on\nupstream failure we serve it flagged ``stale`` (see\n``macro_data.STALE_MAX_SECONDS``) rather than failing, which is what this\nslice's fail-soft policy \u2014 shared with /regime, /regime_detail, /movers\nand /news \u2014 has always promised.\n\nWith nothing cached to fall back on there is genuinely no answer to give.\nThat is a 503 (an upstream we don't own is down; retry later), never a\n500 \u2014 a recurring 500 trains everyone to ignore the error stream.",
         "operationId": "get_yield_curve_api_v1_macro_yield_curve_get",
         "responses": {
           "200": {
