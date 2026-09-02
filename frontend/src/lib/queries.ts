@@ -104,6 +104,10 @@ export type YieldCurvePoint = z.infer<typeof yieldCurvePointSchema>;
 export const yieldCurveSchema = z.looseObject({
   as_of: z.string(),
   points: z.array(yieldCurvePointSchema),
+  // true when Treasury was unreachable and the backend served the last
+  // good copy past its cache TTL. as_of still names the curve's own
+  // publication date; this says we could not confirm it is the newest.
+  stale: z.boolean().optional(),
   source: z.string().optional(),
   cache_ttl_seconds: z.number().optional(),
   refresh_policy: z.string().optional(),

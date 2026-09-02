@@ -95,6 +95,7 @@ export function MacroSnapshot() {
             </CardTitle>
             <p className="text-[10px] text-muted-foreground">
               as of {yc.data?.as_of ?? "—"} · {yc.data?.source ?? "US Treasury"}
+              {yc.data?.stale ? " · last good copy, Treasury unreachable" : ""}
             </p>
           </div>
         </CardHeader>

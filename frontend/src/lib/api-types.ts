@@ -655,7 +655,19 @@ export interface paths {
         };
         /**
          * Latest US Treasury daily yield curve
-         * @description Return today's (or the most recent published) Treasury curve.
+         * @description Return today's (or the most recent published) Treasury curve. Public.
+         *
+         *     home.treasury.gov is the slowest upstream we depend on and read-times-out
+         *     a couple of times a week. The curve is published once a business day, so
+         *     the last good copy *is* still the most recent curve in existence: on
+         *     upstream failure we serve it flagged ``stale`` (see
+         *     ``macro_data.STALE_MAX_SECONDS``) rather than failing, which is what this
+         *     slice's fail-soft policy — shared with /regime, /regime_detail, /movers
+         *     and /news — has always promised.
+         *
+         *     With nothing cached to fall back on there is genuinely no answer to give.
+         *     That is a 503 (an upstream we don't own is down; retry later), never a
+         *     500 — a recurring 500 trains everyone to ignore the error stream.
          */
         get: operations["get_yield_curve_api_v1_macro_yield_curve_get"];
         put?: never;
@@ -6729,6 +6741,11 @@ export interface components {
              * @default US Treasury
              */
             source?: string;
+            /**
+             * Stale
+             * @default false
+             */
+            stale?: boolean;
         };
         /** ConcentrationOut */
         backend__app__schemas__public_risk__ConcentrationOut: {

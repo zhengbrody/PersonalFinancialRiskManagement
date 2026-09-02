@@ -108,6 +108,43 @@ describe("MacroSnapshot", () => {
     expect(screen.getByText("3M")).toBeInTheDocument();
     expect(screen.getByText("10Y")).toBeInTheDocument();
     expect(screen.getByText("4.45%")).toBeInTheDocument();
+    // A live curve must NOT be labelled stale.
+    expect(screen.queryByText(/last good copy/i)).not.toBeInTheDocument();
+  });
+
+  it("labels a stale curve instead of passing it off as current", async () => {
+    // Backend serves the last good copy when Treasury times out (503 only
+    // when nothing is cached). The provenance line must say so — a delayed
+    // curve shown as current is exactly the claim this product never makes.
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/macro/series")) {
+        return mockJson({
+          data: { source: "FRED", cache_ttl_seconds: 3600, series: [] },
+          error: null,
+          meta: { request_id: "r-5" },
+        });
+      }
+      return mockJson({
+        data: {
+          as_of: "2026-05-28",
+          source: "US Treasury",
+          stale: true,
+          cache_ttl_seconds: 3600,
+          points: [{ tenor: "10Y", yield_pct: 4.45 }],
+        },
+        error: null,
+        meta: { request_id: "r-6" },
+      });
+    });
+
+    renderWithQuery(<MacroSnapshot />);
+
+    expect(
+      await screen.findByText(/last good copy, Treasury unreachable/i),
+    ).toBeInTheDocument();
+    // The curve itself still renders — stale beats blank.
+    expect(screen.getByText("4.45%")).toBeInTheDocument();
   });
 
   it("shows a friendly notice when the FRED endpoint errors out", async () => {

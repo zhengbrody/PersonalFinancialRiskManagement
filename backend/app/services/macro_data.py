@@ -28,7 +28,7 @@ import io
 import logging
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Iterable, Optional
 
 import pandas as pd
@@ -51,6 +51,13 @@ _HTTP_TIMEOUT = 20
 # data; the cache just dampens the load.
 _CACHE_TTL_SECONDS = 60 * 60
 CACHE_TTL_SECONDS = _CACHE_TTL_SECONDS
+
+# How far past its TTL a cached value may still be served when the
+# upstream is down (see ``get_yield_curve(allow_stale=True)``). The
+# Treasury publishes once per business day, so a copy from the last 24h
+# is still the most recent curve that exists — serving it flagged
+# ``stale`` beats failing. Past a day we'd be guessing, so we stop.
+STALE_MAX_SECONDS = 24 * 60 * 60
 
 # FRED series ID format — uppercase letters, digits, underscore, dot.
 # Examples: DFF, CPIAUCSL, GDPC1, T10Y2Y, UNRATE.
@@ -104,6 +111,10 @@ class YieldCurvePoint:
 class YieldCurveResult:
     as_of: str
     points: list[YieldCurvePoint]
+    # True when the upstream failed and this is a previously-cached copy
+    # served past its TTL. ``as_of`` still says which day the curve is
+    # from; this says "we could not confirm it is the latest".
+    stale: bool = False
 
 
 # ── internal cache ─────────────────────────────────────────────────
@@ -113,6 +124,7 @@ class YieldCurveResult:
 class _CacheEntry:
     value: object
     expires_at: float
+    stored_at: float
 
 
 _cache: dict[str, _CacheEntry] = {}
@@ -126,7 +138,20 @@ def _cache_get(key: str):
 
 
 def _cache_set(key: str, value: object) -> None:
-    _cache[key] = _CacheEntry(value=value, expires_at=time.monotonic() + _CACHE_TTL_SECONDS)
+    now = time.monotonic()
+    _cache[key] = _CacheEntry(value=value, expires_at=now + _CACHE_TTL_SECONDS, stored_at=now)
+
+
+def _cache_peek_expired(key: str, max_age_seconds: float):
+    """Return a cached value *ignoring* its TTL, provided it is younger
+    than ``max_age_seconds``. Only for upstream-failure fallbacks — the
+    normal read path is ``_cache_get``, which respects the TTL."""
+    entry = _cache.get(key)
+    if entry is None:
+        return None
+    if time.monotonic() - entry.stored_at > max_age_seconds:
+        return None
+    return entry.value
 
 
 def reset_cache() -> None:
@@ -279,19 +304,9 @@ _TENOR_MAP: dict[str, str] = {
 }
 
 
-def get_yield_curve(*, force_refresh: bool = False) -> YieldCurveResult:
-    """Return today's (or the most recent published) Treasury curve.
-
-    The Treasury publishes the CSV per calendar year. We pull the
-    current year's file and use the most recent row.
-    """
-    year = pd.Timestamp.today().year
-    cache_key = f"treasury::yc::{year}"
-    if not force_refresh:
-        cached = _cache_get(cache_key)
-        if cached is not None:
-            return cached  # type: ignore[return-value]
-
+def _fetch_yield_curve(year: int) -> YieldCurveResult:
+    """Download + parse one calendar year's Treasury CSV. Raises on any
+    network/parse failure; caching and fallback live in the caller."""
     url = (
         "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/"
         f"daily-treasury-rates.csv/{year}/all?"
@@ -302,9 +317,7 @@ def get_yield_curve(*, force_refresh: bool = False) -> YieldCurveResult:
     df = pd.read_csv(io.StringIO(text))
 
     if df.empty:
-        result = YieldCurveResult(as_of="", points=[])
-        _cache_set(cache_key, result)
-        return result
+        return YieldCurveResult(as_of="", points=[])
 
     # Treasury CSV is newest-row-first; pick the head.
     row = df.iloc[0]
@@ -326,6 +339,38 @@ def get_yield_curve(*, force_refresh: bool = False) -> YieldCurveResult:
             continue
         points.append(YieldCurvePoint(tenor=tenor, yield_pct=v))
 
-    result = YieldCurveResult(as_of=as_of, points=points)
+    return YieldCurveResult(as_of=as_of, points=points)
+
+
+def get_yield_curve(*, force_refresh: bool = False, allow_stale: bool = False) -> YieldCurveResult:
+    """Return today's (or the most recent published) Treasury curve.
+
+    The Treasury publishes the CSV per calendar year. We pull the
+    current year's file and use the most recent row.
+
+    ``allow_stale`` opts into the fallback this module's docstring
+    promises: when the upstream fails, serve the last good copy (up to
+    ``STALE_MAX_SECONDS`` old) flagged ``stale=True`` instead of
+    propagating the error. Off by default so existing callers — which
+    have their own fail-soft handling — keep their exact behaviour.
+    """
+    year = pd.Timestamp.today().year
+    cache_key = f"treasury::yc::{year}"
+    if not force_refresh:
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return cached  # type: ignore[return-value]
+
+    try:
+        result = _fetch_yield_curve(year)
+    except Exception as exc:
+        if not allow_stale:
+            raise
+        last_good = _cache_peek_expired(cache_key, STALE_MAX_SECONDS)
+        if not isinstance(last_good, YieldCurveResult):
+            raise
+        _logger.warning("macro.yield_curve.serving_stale err=%s as_of=%s", exc, last_good.as_of)
+        return replace(last_good, stale=True)
+
     _cache_set(cache_key, result)
     return result
