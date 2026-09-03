@@ -77,6 +77,7 @@ function analyzeJson() {
             name: "Long call",
             leg_count: 1,
             net_debit: 1000,
+            premium_basis: "entry",
             net_pnl: 7000,
             max_loss: 1000,
             max_gain: null, // unbounded upside
@@ -190,6 +191,47 @@ describe("optionContractsFromHoldings", () => {
       BAD: { shares: 1, asset_type: "option", option_type: "put", underlying: "SPY" }, // no strike/expiry
     });
     expect(contracts).toHaveLength(0);
+  });
+
+  it("normalizes broker sell verbs and never double-negates legacy short shares", () => {
+    const contracts = optionContractsFromHoldings({
+      GOOGL270115C00400000: {
+        shares: -1,
+        asset_type: "option",
+        option_type: "call",
+        option_side: "Sell",
+        underlying: "GOOGL",
+        strike: 400,
+        expiry: "2027-01-15",
+      },
+    });
+    expect(contracts[0]).toMatchObject({ quantity: -1, side_confirmed: true });
+  });
+
+  it("flags a positive legacy option with no side instead of silently trusting it", () => {
+    const contracts = optionContractsFromHoldings({
+      ORCL270115C00200000: {
+        shares: 1,
+        asset_type: "option",
+        option_type: "call",
+        underlying: "ORCL",
+        strike: 200,
+        expiry: "2027-01-15",
+      },
+    });
+    expect(contracts[0]).toMatchObject({ quantity: 1, side_confirmed: false });
+  });
+
+  it("drops zero or invalid quantities instead of inventing one contract", () => {
+    const base = {
+      asset_type: "option",
+      option_type: "call",
+      underlying: "ORCL",
+      strike: 200,
+      expiry: "2027-01-15",
+    };
+    expect(optionContractsFromHoldings({ ZERO: { ...base, shares: 0 } })).toEqual([]);
+    expect(optionContractsFromHoldings({ BAD: { ...base, shares: "not-a-number" } })).toEqual([]);
   });
 });
 

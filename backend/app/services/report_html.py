@@ -240,7 +240,7 @@ def render_portfolio_report(report: Any, diagnosis: Any) -> str:
             ("21-day VaR 95%", _pct(_g(r, "var_95"), 2)),
             ("21-day VaR 99%", _pct(_g(r, "var_99"), 2)),
             ("21-day CVaR 95%", _pct(_g(r, "cvar_95"), 2)),
-            ("Annual return", _pct(_g(r, "annual_return"))),
+            ("Current-mix annualized return", _pct(_g(r, "annual_return"))),
         ]
     )
 

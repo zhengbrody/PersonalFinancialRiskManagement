@@ -186,9 +186,12 @@ class OptionStrategyOut(BaseModel):
 
     underlying: str
     expiry: str
-    name: str  # "Bull call spread" | "Long straddle" | "Custom (N legs)" | …
+    name: str  # "Bull call spread" | "Long straddle" | "Net option position (N legs)" | …
     leg_count: int
-    net_debit: float  # >0 = net debit paid, <0 = net credit received
+    net_debit: Optional[float] = None  # >0 debit, <0 credit; None = no usable basis
+    # Backward-compatible default for stored/exported pre-field payloads. The
+    # live strategy builder always emits the explicit basis it actually used.
+    premium_basis: Literal["entry", "current_mark", "mixed", "unavailable"] = "entry"
     net_pnl: Optional[float] = None
     max_loss: Optional[float] = None  # None = unbounded
     max_gain: Optional[float] = None  # None = unbounded

@@ -572,6 +572,7 @@ def _account_value_metrics(
     margin_loan: float,
     contributed_capital: float,
     current_prices: dict[str, float] | None = None,
+    option_market_value: float = 0.0,
 ) -> dict[str, float | None]:
     """Deterministic account-value arithmetic for the product UI.
 
@@ -612,7 +613,12 @@ def _account_value_metrics(
     cash = max(0.0, float(cash_balance or 0.0))
     loan = max(0.0, float(margin_loan or 0.0))
     contributed = max(0.0, float(contributed_capital or 0.0))
-    total_value = latest_equity + cash
+    option_value = _finite_float(option_market_value) or 0.0
+    # Option marks are signed (long asset, short liability) and therefore enter
+    # net liquidation value exactly once. Their intraday move is intentionally
+    # excluded from daily_pnl until a prior option mark exists; fabricating it
+    # from underlying closes would be worse than an explicit partial day move.
+    total_value = latest_equity + option_value + cash
     net_equity = total_value - loan
 
     daily_pnl = None
@@ -620,7 +626,9 @@ def _account_value_metrics(
     if comparable_previous_equity > 0:
         # New/unpriced-yesterday positions should not become artificial
         # "daily gains"; carry them at latest value in the prior denominator.
-        prior_net_equity = comparable_previous_equity + noncomparable_equity + cash - loan
+        prior_net_equity = (
+            comparable_previous_equity + noncomparable_equity + option_value + cash - loan
+        )
         daily_pnl = comparable_latest_equity - comparable_previous_equity
         daily_return = daily_pnl / prior_net_equity if prior_net_equity > 0 else None
 
@@ -831,6 +839,8 @@ def score_from_active_endpoint(
     except Exception as exc:
         raise unprocessable(f"Score computation failed: {exc}") from exc
 
+    option_results = _option_results_from_holdings(holdings)
+    option_market_value = _complete_option_market_value(holdings, option_results)
     account_metrics = _account_value_metrics(
         holdings=holdings,
         price_frame=price_frame,
@@ -838,6 +848,7 @@ def score_from_active_endpoint(
         margin_loan=margin_loan,
         contributed_capital=contributed_capital,
         current_prices=_current_price_map(tickers, market_data),
+        option_market_value=option_market_value or 0.0,
     )
 
     # Concentration over the invested equity book (cash excluded; options aren't
@@ -881,6 +892,7 @@ def score_from_active_endpoint(
         equity_shares=equity_shares,
         net_equity=net_equity_val,
         base_score=int(response.overall_score),
+        option_results=option_results,
     )
     option_penalty = None
     if impact is not None:
@@ -1676,6 +1688,8 @@ def _compute_weights(
 
 def _option_specs_from_holdings(holdings: dict) -> list[SimpleNamespace]:
     """Parse option holdings into analytics specs (no network — pure)."""
+    from libs.mindmarket_core.options_positions import signed_option_quantity
+
     specs: list[SimpleNamespace] = []
     for h in (holdings or {}).values():
         if not isinstance(h, dict) or not _is_option_holding(h):
@@ -1686,17 +1700,16 @@ def _option_specs_from_holdings(holdings: dict) -> list[SimpleNamespace]:
         opt_type = str(h.get("option_type") or "").lower()
         if not underlying or strike in (None, 0) or not expiry or opt_type not in ("call", "put"):
             continue
-        # A sold/written leg is a short position: negate the contract count so
-        # the analytics + delta overlay see negative quantity (short delta,
-        # credit market value). ``shares`` itself stays a positive magnitude.
-        sign = -1.0 if str(h.get("option_side") or "long").lower() == "short" else 1.0
+        quantity = signed_option_quantity(h.get("shares"), h.get("option_side"))
+        if quantity == 0:
+            continue
         specs.append(
             SimpleNamespace(
                 underlying=underlying,
                 option_type=opt_type,
                 strike=float(strike),
                 expiry=str(expiry),
-                quantity=sign * float(h.get("shares") or 0.0),
+                quantity=quantity,
                 avg_premium=h.get("avg_cost"),
                 contract_multiplier=float(h.get("contract_multiplier") or 100.0),
             )
@@ -1709,7 +1722,56 @@ def _option_underlyings(holdings: dict) -> list[str]:
     return sorted({s.underlying for s in _option_specs_from_holdings(holdings)})
 
 
-def _option_delta_equiv_shares(specs: list[SimpleNamespace]) -> dict[str, float]:
+def _option_holding_count(holdings: dict) -> int:
+    """Count persisted option rows, including malformed/unpriceable records."""
+
+    return sum(
+        1
+        for holding in (holdings or {}).values()
+        if isinstance(holding, dict) and _is_option_holding(holding)
+    )
+
+
+def _option_results_from_holdings(holdings: dict) -> list[dict] | None:
+    """Price every option leg once for account value/risk consumers.
+
+    ``[]`` means an option-free book; ``None`` means pricing failed. Per-leg
+    missing marks remain in the returned rows so the completeness check below
+    can refuse to manufacture a broker-comparable account value.
+    """
+
+    specs = _option_specs_from_holdings(holdings)
+    if not specs:
+        return []
+    try:
+        from ...services import options_analytics
+
+        return options_analytics.analyze_contracts(specs).get("results", [])
+    except Exception as exc:  # noqa: BLE001 - options must not sink the whole report
+        _log.warning("options.account_value_failed err=%s", type(exc).__name__)
+        return None
+
+
+def _complete_option_market_value(
+    holdings: dict, option_results: list[dict] | None
+) -> float | None:
+    """Signed option liquidation value, only when every persisted leg priced."""
+
+    expected = _option_holding_count(holdings)
+    if expected == 0:
+        return 0.0
+    parsed = len(_option_specs_from_holdings(holdings))
+    if parsed != expected or option_results is None or len(option_results) != expected:
+        return None
+    values = [_finite_float(row.get("market_value")) for row in option_results]
+    if any(value is None for value in values):
+        return None
+    return round(sum(value for value in values if value is not None), 2)
+
+
+def _option_delta_equiv_shares(
+    specs: list[SimpleNamespace], option_results: list[dict] | None = None
+) -> dict[str, float]:
     """Σ delta-equivalent shares per underlying (Δ × contracts × multiplier).
 
     Fail-soft: any analytics trouble returns ``{}`` so the report degrades to
@@ -1717,13 +1779,16 @@ def _option_delta_equiv_shares(specs: list[SimpleNamespace]) -> dict[str, float]
     priced (no Greeks) are skipped."""
     if not specs:
         return {}
-    try:
-        from ...services import options_analytics
+    if option_results is None:
+        try:
+            from ...services import options_analytics
 
-        results = options_analytics.analyze_contracts(specs).get("results", [])
-    except Exception as exc:  # noqa: BLE001 - overlay must never sink the report
-        _log.warning("options.overlay_failed err=%s", type(exc).__name__)
-        return {}
+            results = options_analytics.analyze_contracts(specs).get("results", [])
+        except Exception as exc:  # noqa: BLE001 - overlay must never sink the report
+            _log.warning("options.overlay_failed err=%s", type(exc).__name__)
+            return {}
+    else:
+        results = option_results
 
     by_underlying: dict[str, float] = {}
     for r in results:
@@ -1768,6 +1833,8 @@ def _apply_option_overlay(
     equity_tickers: list[str],
     weights: dict[str, float],
     market_values: dict[str, float],
+    *,
+    option_results: list[dict] | None = None,
 ) -> tuple[dict[str, float], dict, dict[str, float], str | None]:
     """Fold option delta exposure into the engine weights + concentration.
 
@@ -1778,7 +1845,7 @@ def _apply_option_overlay(
     if not specs:
         return weights, holdings, market_values, None
 
-    eq_shares_by_u = _option_delta_equiv_shares(specs)
+    eq_shares_by_u = _option_delta_equiv_shares(specs, option_results)
     if not eq_shares_by_u:
         return weights, holdings, market_values, None
 
@@ -1802,7 +1869,12 @@ def _apply_option_overlay(
 
 
 def _option_score_impact(
-    holdings: dict, *, equity_shares: dict[str, float], net_equity: float, base_score: int
+    holdings: dict,
+    *,
+    equity_shares: dict[str, float],
+    net_equity: float,
+    base_score: int,
+    option_results: list[dict] | None = None,
 ) -> dict | None:
     """Deterministic option-risk impact on the Health Score (transparent, capped).
 
@@ -1816,7 +1888,11 @@ def _option_score_impact(
     try:
         from ...services import options_analytics, options_exposure
 
-        results = options_analytics.analyze_contracts(specs).get("results", [])
+        results = (
+            option_results
+            if option_results is not None
+            else options_analytics.analyze_contracts(specs).get("results", [])
+        )
         exposure = options_exposure.build_exposure(
             results, equity_shares_by_underlying=equity_shares, net_equity=net_equity
         )
@@ -2136,8 +2212,9 @@ def report_from_active_endpoint(
     # PR3: fold option delta-equivalent exposure into the engine weights +
     # concentration (fail-soft no-op for an option-free book). Account value /
     # P&L / liquidity stay on the REAL equity `market_values`.
+    option_results = _option_results_from_holdings(holdings)
     weights, holdings_for_engine, concentration_values, option_note = _apply_option_overlay(
-        holdings, price_frame, tickers, weights, market_values
+        holdings, price_frame, tickers, weights, market_values, option_results=option_results
     )
 
     # Fold in portfolio-level cash + margin as a single risk scalar on
@@ -2162,6 +2239,7 @@ def report_from_active_endpoint(
         margin_loan=margin_loan,
         contributed_capital=contributed_capital,
         current_prices=_current_price_map(tickers, market_data),
+        option_market_value=_complete_option_market_value(holdings, option_results) or 0.0,
     )
     financing = _financing_resilience_out(
         holdings=holdings,
@@ -2204,6 +2282,14 @@ def report_from_active_endpoint(
     notes = list(out.data_quality_notes)
     if option_note:
         notes.append(option_note)
+    if (
+        _option_holding_count(holdings)
+        and _complete_option_market_value(holdings, option_results) is None
+    ):
+        notes.append(
+            "One or more option legs lacked a usable mark; account net equity excludes "
+            "unpriced option value and should not be compared with a broker balance."
+        )
     if len(price_frame) < 60:
         notes.append(
             f"Only {len(price_frame)} trading days of price history; "

@@ -101,8 +101,9 @@ export function rowsFromHoldings(
     return [{ ticker: "", shares: "", avg_cost: "", kind: "equity" }];
   }
   return entries.map(([key, h]) => {
+    const rawShares = Number(h.shares ?? 0);
     const base = {
-      shares: String(h.shares ?? ""),
+      shares: String(Number.isFinite(rawShares) ? Math.abs(rawShares) : ""),
       avg_cost: h.avg_cost == null ? "" : String(h.avg_cost),
     };
     if (String(h.asset_type ?? "").toLowerCase() === "option") {
@@ -113,7 +114,20 @@ export function rowsFromHoldings(
         kind: "option" as const,
         ticker: String(h.underlying ?? "").toUpperCase(),
         option_type: (h.option_type === "put" ? "put" : "call") as "call" | "put",
-        option_side: (h.option_side === "short" ? "short" : "long") as "long" | "short",
+        option_side: (["short", "sell", "sold", "write", "written", "s"].includes(
+          String(h.option_side ?? "").trim().toLowerCase(),
+        ) ||
+        (![
+          "long",
+          "buy",
+          "bought",
+          "purchase",
+          "purchased",
+          "l",
+        ].includes(String(h.option_side ?? "").trim().toLowerCase()) &&
+          rawShares < 0)
+          ? "short"
+          : "long") as "long" | "short",
         strike: h.strike == null ? "" : String(h.strike),
         expiry: h.expiry == null ? "" : String(h.expiry),
       };
@@ -385,14 +399,14 @@ export function PortfolioForm({
       {/* ── capital + flags ────────────────────────────────── */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <CapitalInput
-          label="Contributed"
+          label="Net contributed capital"
           value={values.contributed_capital}
           onChange={(v) =>
             setValues((prev) => ({ ...prev, contributed_capital: v }))
           }
         />
         <CapitalInput
-          label="Cash"
+          label="Settled cash (not buying power)"
           value={values.cash_balance}
           onChange={(v) =>
             setValues((prev) => ({ ...prev, cash_balance: v }))
@@ -404,6 +418,12 @@ export function PortfolioForm({
           onChange={(v) => setValues((prev) => ({ ...prev, margin_loan: v }))}
         />
       </div>
+      <p className="text-xs text-muted-foreground">
+        Net contributed capital = settled deposits and contribution-like credits minus settled
+        withdrawals. Do not include margin borrowing. This drives lifetime account P&amp;L; it is
+        not a YTD starting balance. Cash means the settled cash balance only—broker buying power
+        often includes margin capacity and must not be entered as cash.
+      </p>
       <label className="flex items-center gap-2 text-sm">
         <input
           type="checkbox"

@@ -526,7 +526,7 @@ def _score_evidence(score) -> list[EvidenceItem]:
     return _compact(
         [
             _ev("Health score", f"{score.overall_score}/1000", "engine"),
-            _ev("Annual return", _pct(m.annual_return), "engine"),
+            _ev("Current-holdings annualized return", _pct(m.annual_return), "engine"),
             _ev("Annual volatility", _pct(m.annual_volatility), "engine"),
             _ev("Sharpe ratio", _num(m.sharpe_ratio), "engine"),
             _ev("Max drawdown", _pct(m.max_drawdown), "engine"),
@@ -613,6 +613,8 @@ def _option_specs(holdings: dict) -> list:
     """Option holdings → analytics specs (signed by long/short). Pure parse."""
     from types import SimpleNamespace
 
+    from libs.mindmarket_core.options_positions import signed_option_quantity
+
     specs = []
     for h in (holdings or {}).values():
         if not isinstance(h, dict) or str(h.get("asset_type") or "").lower() != "option":
@@ -622,14 +624,16 @@ def _option_specs(holdings: dict) -> list:
         ot = str(h.get("option_type") or "").lower()
         if not u or strike in (None, 0) or not expiry or ot not in ("call", "put"):
             continue
-        sign = -1.0 if str(h.get("option_side") or "long").lower() == "short" else 1.0
+        quantity = signed_option_quantity(h.get("shares"), h.get("option_side"))
+        if quantity == 0:
+            continue
         specs.append(
             SimpleNamespace(
                 underlying=u,
                 option_type=ot,
                 strike=float(strike),
                 expiry=str(expiry),
-                quantity=sign * float(h.get("shares") or 0.0),
+                quantity=quantity,
                 avg_premium=h.get("avg_cost"),
                 contract_multiplier=float(h.get("contract_multiplier") or 100.0),
             )

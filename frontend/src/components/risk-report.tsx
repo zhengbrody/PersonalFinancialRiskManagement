@@ -170,7 +170,7 @@ function KpiGrid({ report }: { report: RiskReport }) {
   return (
     <section className="space-y-2">
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Kpi label="Annual return" value={fmtPct(report.annual_return)} />
+        <Kpi label="Current-mix annualized return" value={fmtPct(report.annual_return)} />
         <Kpi label="Annual vol" value={fmtPct(report.annual_volatility)} />
         <Kpi label="Sharpe" value={fmtNum(report.sharpe_ratio, 2)} />
         <Kpi label="Max DD" value={fmtPct(report.max_drawdown)} />

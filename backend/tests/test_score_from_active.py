@@ -356,6 +356,44 @@ def test_account_value_metrics_do_not_turn_new_positions_into_daily_pnl():
     assert metrics["total_pnl"] == pytest.approx(600.0)
 
 
+def test_account_value_metrics_include_signed_option_liquidation_value_once():
+    """Long option assets and short option liabilities belong in net equity,
+    but without prior option marks they must not be invented as today's P&L."""
+    from backend.app.api.v1.risk import _account_value_metrics
+
+    idx = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=2)
+    price_frame = pd.DataFrame({"SPY": [100.0, 101.0]}, index=idx)
+    metrics = _account_value_metrics(
+        holdings={"SPY": {"shares": 10}},
+        price_frame=price_frame,
+        cash_balance=500.0,
+        margin_loan=100.0,
+        contributed_capital=1200.0,
+        option_market_value=450.0,  # e.g. long spread mark net of its short leg
+    )
+
+    assert metrics["total_value"] == 1960.0
+    assert metrics["net_equity"] == 1860.0
+    assert metrics["total_pnl"] == 660.0
+    assert metrics["daily_pnl"] == 10.0  # equities only until prior option marks exist
+
+
+def test_malformed_option_row_prevents_false_complete_account_value():
+    """An option row missing contract identity must not disappear from the
+    completeness denominator and make the account balance look comparable."""
+    from backend.app.api.v1.risk import _complete_option_market_value
+
+    holdings = {
+        "AAPL270115C00150000": {
+            "asset_type": "option",
+            "shares": 1,
+            "underlying": "AAPL",
+            # strike/expiry intentionally missing
+        }
+    }
+    assert _complete_option_market_value(holdings, []) is None
+
+
 def _run_score(test_client, token, fake_active_portfolio, fake_price_history, holdings):
     fake_active_portfolio.set(holdings)
     fake_price_history.set(_make_history(sorted(holdings.keys())))
