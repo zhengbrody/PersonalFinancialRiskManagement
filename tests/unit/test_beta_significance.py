@@ -3,12 +3,13 @@ test_beta_significance.py
 Tests for the multi-factor Beta statistical-significance functionality
 """
 
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import numpy as np
 import pandas as pd
 import pytest
 
+import risk_engine
 from data_provider import DataProvider
 from risk_engine import RiskEngine
 
@@ -249,6 +250,199 @@ def test_portfolio_factor_betas_shape_is_factor_indexed():
     assert "AAPL" not in fb.index
     # Exactly the columns the serializer reads.
     assert set(fb.columns) == {"beta", "r_squared", "t_stat", "p_value"}
+
+
+# ══════════════════════════════════════════════════════════════
+#  Regression: holding a ticker that is ALSO a factor ETF
+#  (duplicate column labels in the aligned frame)
+# ══════════════════════════════════════════════════════════════
+
+FACTOR_TICKERS_ORDER = ["SPY", "QQQ", "GLD", "TLT", "IWM", "VTV"]
+FACTOR_NAMES = [
+    "S&P 500",
+    "NASDAQ 100",
+    "Gold",
+    "US Treasury 20Y+",
+    "Small Cap (Size)",
+    "Value (Style)",
+]
+
+
+def _factor_frame(dates, seed=5):
+    """Deterministic, network-free factor return frame (all 6 factors)."""
+    np.random.seed(seed)
+    return pd.DataFrame(
+        {tk: np.random.randn(len(dates)) * 0.01 for tk in FACTOR_TICKERS_ORDER},
+        index=dates,
+    )
+
+
+def _engine_with_factors(factor_ret):
+    mock_dp = Mock(spec=DataProvider)
+    mock_dp.get_benchmark_returns.return_value = factor_ret
+    return RiskEngine(mock_dp)
+
+
+def test_factor_betas_when_portfolio_holds_a_factor_etf():
+    """A holding that is ALSO a factor ETF must still get real factor betas.
+
+    Regression for the production defect: `pd.concat([returns, factor_ret])`
+    produced DUPLICATE column labels when a user held SPY/QQQ/GLD/..., so
+    `aligned[ticker]` returned a (T, 2) DataFrame. `y` was then 2-D and
+    `np.column_stack([ones, factor])` raised
+    `ValueError: setting an array element with a sequence`, which the
+    per-factor try/except swallowed into a warning — leaving that holding's
+    whole factor-beta row NaN in the Risk Report (HTTP 200, silently wrong).
+    A real session holding SPY + QQQ + GLD logged exactly 18 such warnings
+    (3 tickers x 6 factors).
+    """
+    dates = pd.date_range("2023-01-03", periods=252, freq="B")
+    factor_ret = _factor_frame(dates)
+    np.random.seed(11)
+    # AAPL is a plain holding; SPY is held AND is a factor.
+    asset_returns = pd.DataFrame(
+        {"AAPL": np.random.randn(252) * 0.02, "SPY": factor_ret["SPY"]},
+        index=dates,
+    )
+    engine = _engine_with_factors(factor_ret)
+
+    with patch.object(risk_engine.logger, "warning") as mock_warn:
+        result = engine._compute_multi_factor_betas(asset_returns)
+
+    betas = result["betas"]
+    sig = result["significance"]
+
+    # Every ticker x factor cell is a real number — no NaN row for SPY.
+    assert set(betas.index) == {"AAPL", "SPY"}
+    assert set(betas.columns) == set(FACTOR_NAMES)
+    assert not betas.isna().any().any(), f"NaN betas present:\n{betas}"
+    assert np.isfinite(betas.to_numpy()).all()
+
+    # Full significance table: 2 tickers x 6 factors, all finite.
+    assert len(sig) == 12
+    assert not sig["Beta"].isna().any()
+    assert not sig["t_stat"].isna().any()
+
+    # And the failure path never fired.
+    failures = [
+        c
+        for c in mock_warn.call_args_list
+        if "Beta calculation failed" in str(c.args[0] if c.args else "")
+    ]
+    assert failures == [], f"unexpected beta-failure warnings: {failures}"
+
+    # Sanity: SPY regressed on the S&P 500 factor (its own series) is ~1.0.
+    assert betas.loc["SPY", "S&P 500"] == pytest.approx(1.0, abs=1e-9)
+
+
+def test_held_factor_etf_does_not_corrupt_other_holdings_betas():
+    """The duplicate column ALSO silently corrupted every OTHER holding.
+
+    With two identical (collinear) SPY columns, the intended univariate
+    regression became bivariate and `lstsq`'s minimum-norm solution split the
+    coefficient evenly across them — so every other holding's S&P 500 beta
+    came out at exactly HALF its true value, with no exception and no
+    warning. This asserts a holding's betas are unaffected by whether a
+    factor ETF happens to also be in the book.
+    """
+    dates = pd.date_range("2023-01-03", periods=252, freq="B")
+    factor_ret = _factor_frame(dates)
+    np.random.seed(11)
+    aapl = pd.Series(np.random.randn(252) * 0.02, index=dates)
+
+    engine = _engine_with_factors(factor_ret)
+    without_spy = engine._compute_multi_factor_betas(pd.DataFrame({"AAPL": aapl}))["betas"]
+    with_spy = engine._compute_multi_factor_betas(
+        pd.DataFrame({"AAPL": aapl, "SPY": factor_ret["SPY"]})
+    )["betas"]
+
+    for factor_name in FACTOR_NAMES:
+        assert with_spy.loc["AAPL", factor_name] == pytest.approx(
+            without_spy.loc["AAPL", factor_name], rel=1e-12, abs=1e-15
+        ), f"AAPL's {factor_name} beta changed just because SPY is held"
+
+
+def test_factor_betas_unchanged_for_non_overlapping_holdings():
+    """No-overlap book: betas are numerically IDENTICAL to the pre-fix values.
+
+    Values pinned from the pre-fix implementation (captured by stashing the
+    fix and re-running), so this fails if the namespacing change ever alters
+    the regression itself. The fix only relabels columns.
+    """
+    dates = pd.date_range("2023-01-03", periods=252, freq="B")
+    factor_ret = _factor_frame(dates)
+    np.random.seed(11)
+    asset_returns = pd.DataFrame(
+        {"AAPL": np.random.randn(252) * 0.02, "MSFT": np.random.randn(252) * 0.017},
+        index=dates,
+    )
+    engine = _engine_with_factors(factor_ret)
+    result = engine._compute_multi_factor_betas(asset_returns)
+    betas = result["betas"]
+
+    expected = {
+        "AAPL": {
+            "S&P 500": 0.13303900643282837,
+            "NASDAQ 100": 0.03847059801466438,
+            "Gold": -0.2318530573180178,
+            "US Treasury 20Y+": 0.15434122278049053,
+            "Small Cap (Size)": 0.14318065463545648,
+            "Value (Style)": -0.13871995449485316,
+        },
+        "MSFT": {
+            "S&P 500": -0.08078502279706481,
+            "NASDAQ 100": -0.017231905282481516,
+            "Gold": 0.011695063154347598,
+            "US Treasury 20Y+": -0.13289643756804664,
+            "Small Cap (Size)": 0.09977597017402275,
+            "Value (Style)": 0.11657520833234543,
+        },
+    }
+    for ticker, row in expected.items():
+        for factor_name, value in row.items():
+            assert betas.loc[ticker, factor_name] == pytest.approx(
+                value, rel=1e-12, abs=1e-15
+            ), f"{ticker}/{factor_name} drifted"
+
+    # The significance statistics are equally untouched.
+    sig = result["significance"]
+    r = sig[(sig["Ticker"] == "AAPL") & (sig["Factor"] == "S&P 500")].iloc[0]
+    assert r["Beta"] == pytest.approx(0.13303900643282837, rel=1e-12)
+    assert r["t_stat"] == pytest.approx(1.0574209077296437, rel=1e-12)
+    assert r["p_value"] == pytest.approx(0.29134021890567774, rel=1e-12)
+    assert r["r_squared"] == pytest.approx(0.004452641217646769, rel=1e-12)
+    assert r["std_error"] == pytest.approx(0.12581461692342777, rel=1e-12)
+
+
+def test_portfolio_factor_betas_with_held_factor_etf():
+    """The portfolio-level regression has no duplicate-label hazard.
+
+    `_compute_portfolio_factor_betas` concats only the renamed portfolio
+    series (`__port__`) with the factor frame — the holdings frame never
+    enters the concat — so holding SPY/QQQ/GLD cannot duplicate a label.
+    Guards that this stays true.
+    """
+    dates = pd.date_range("2023-01-03", periods=252, freq="B")
+    factor_ret = _factor_frame(dates)
+    np.random.seed(11)
+    asset_returns = pd.DataFrame(
+        {
+            "AAPL": np.random.randn(252) * 0.02,
+            "SPY": factor_ret["SPY"],
+            "QQQ": factor_ret["QQQ"],
+            "GLD": factor_ret["GLD"],
+        },
+        index=dates,
+    )
+    engine = _engine_with_factors(factor_ret)
+
+    with patch.object(risk_engine.logger, "warning") as mock_warn:
+        fb = engine._compute_portfolio_factor_betas(asset_returns, np.array([0.4, 0.2, 0.2, 0.2]))
+
+    assert fb is not None
+    assert set(fb.index) == set(FACTOR_TICKERS_ORDER)
+    assert not fb["beta"].isna().any()
+    assert mock_warn.call_args_list == []
 
 
 # ══════════════════════════════════════════════════════════════

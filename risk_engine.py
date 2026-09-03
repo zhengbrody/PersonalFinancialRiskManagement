@@ -100,6 +100,12 @@ class RiskEngine:
         "VTV": "Value (Style)",
     }
 
+    # Reserved prefix used to namespace factor columns when they are aligned
+    # (``pd.concat``) against the holdings return frame. A user can HOLD a
+    # factor ETF (SPY/QQQ/GLD/...), which would otherwise produce duplicate
+    # column labels — see ``_compute_multi_factor_betas``.
+    FACTOR_COL_PREFIX = "__factor__"
+
     # Institutional-standard participation rate (10% of ADV)
     LIQUIDITY_PARTICIPATION_RATE = 0.10
 
@@ -815,9 +821,30 @@ class RiskEngine:
             )
             return {"betas": empty_df, "significance": pd.DataFrame()}
 
+        # Namespace the factor columns BEFORE aligning. A user may hold a
+        # ticker that is also a factor ETF (SPY/QQQ/GLD/TLT/IWM/VTV); without
+        # this, `aligned` carries duplicate labels and `aligned[label]` returns
+        # a (T, 2) DataFrame instead of a Series. That broke two ways:
+        #   * the held factor ETF's own `y` became 2-D -> ValueError -> its
+        #     entire factor-beta row was NaN (logged as "Beta calculation
+        #     failed for SPY vs S&P 500");
+        #   * for EVERY other holding, the duplicated (collinear) factor column
+        #     silently turned the univariate regression into a bivariate one,
+        #     splitting the coefficient across the two identical columns —
+        #     a wrong beta with no error at all.
+        # Only the labels change; the aligned values / join / dropna are
+        # unchanged, so betas for non-overlapping tickers are identical.
+        prefix = self.FACTOR_COL_PREFIX
+        factor_ret = factor_ret.rename(columns=lambda c: f"{prefix}{c}")
+
         aligned = pd.concat([returns, factor_ret], axis=1, join="inner").dropna()
         asset_cols = returns.columns
         factor_cols = [c for c in factor_ret.columns if c in aligned.columns]
+
+        def _factor_name(col: str) -> str:
+            """Prefixed aligned-frame column -> human-readable factor name."""
+            raw = col[len(prefix) :] if col.startswith(prefix) else col
+            return self.FACTOR_TICKERS.get(raw, raw)
 
         if len(aligned) < 60 or len(factor_cols) == 0:
             empty_df = pd.DataFrame(
@@ -833,7 +860,7 @@ class RiskEngine:
 
         for ticker in asset_cols:
             if ticker not in aligned.columns:
-                beta_result[ticker] = {self.FACTOR_TICKERS.get(f, f): np.nan for f in factor_cols}
+                beta_result[ticker] = {_factor_name(f): np.nan for f in factor_cols}
                 continue
 
             y = aligned[ticker].values
@@ -842,7 +869,7 @@ class RiskEngine:
             # Compute beta and significance separately for each factor
             for f in factor_cols:
                 X_factor = aligned[f].values
-                factor_name = self.FACTOR_TICKERS.get(f, f)
+                factor_name = _factor_name(f)
 
                 try:
                     stats = self._compute_beta_with_significance(y, X_factor)
