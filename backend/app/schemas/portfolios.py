@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class HoldingValue(BaseModel):
@@ -19,7 +19,10 @@ class HoldingValue(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    shares: float = Field(..., ge=0)
+    # Legacy option imports may use a negative quantity for a short. The write
+    # layer canonicalizes those to positive magnitude + option_side=short.
+    # Negative non-option holdings remain invalid.
+    shares: float
     avg_cost: Optional[float] = Field(default=None, ge=0)
     sector: Optional[str] = None
     asset_type: Optional[str] = None
@@ -43,6 +46,12 @@ class HoldingValue(BaseModel):
     strike: Optional[float] = Field(default=None, gt=0)
     expiry: Optional[str] = None  # ISO date "YYYY-MM-DD"
     contract_multiplier: Optional[float] = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def validate_position_direction(self) -> "HoldingValue":
+        if self.shares < 0 and str(self.asset_type or "").lower() != "option":
+            raise ValueError("shares must be non-negative for non-option holdings")
+        return self
 
 
 class PortfolioOut(BaseModel):

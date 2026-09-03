@@ -4597,7 +4597,7 @@ export interface components {
             /** Name */
             name: string;
             /** Net Debit */
-            net_debit: number;
+            net_debit?: number | null;
             /** Net Greeks */
             net_greeks?: {
                 [key: string]: number;
@@ -4606,6 +4606,12 @@ export interface components {
             net_pnl?: number | null;
             /** Payoff */
             payoff?: components["schemas"]["PayoffPointOut"][];
+            /**
+             * Premium Basis
+             * @default entry
+             * @enum {string}
+             */
+            premium_basis?: "entry" | "current_mark" | "mixed" | "unavailable";
             /** Underlying */
             underlying: string;
         } & {
@@ -4633,7 +4639,7 @@ export interface components {
             /** Name */
             name: string;
             /** Net Debit */
-            net_debit: number;
+            net_debit?: number | null;
             /** Net Greeks */
             net_greeks?: {
                 [key: string]: number;
@@ -4642,6 +4648,12 @@ export interface components {
             net_pnl?: number | null;
             /** Payoff */
             payoff?: components["schemas"]["PayoffPointOut"][];
+            /**
+             * Premium Basis
+             * @default entry
+             * @enum {string}
+             */
+            premium_basis?: "entry" | "current_mark" | "mixed" | "unavailable";
             /** Underlying */
             underlying: string;
         } & {

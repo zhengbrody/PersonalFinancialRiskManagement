@@ -6,7 +6,7 @@ vi.mock("@/lib/auth-context", () => ({
   useAuth: () => ({ user: { id: "u-1" }, accessToken: "jwt", configured: true, loading: false }),
 }));
 
-import { PortfolioValueSummary } from "./portfolio-value-summary";
+import { cashAdjustedPerformance, PortfolioValueSummary } from "./portfolio-value-summary";
 
 function mockJson(snapshots: unknown[]) {
   return new Response(JSON.stringify({ data: { snapshots }, error: null, meta: { request_id: "r" } }), {
@@ -64,5 +64,35 @@ describe("PortfolioValueSummary", () => {
 
     expect(screen.getByText("-$1,000")).toBeInTheDocument();
     expect(screen.getByText("-$2,500")).toBeInTheDocument();
+  });
+
+  it("removes new contributions from tracked investment profit", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      mockJson([
+        { as_of: "2026-01-02T00:00:00Z", net_equity: 48000, contributed_capital: 40000 },
+        { as_of: "2026-06-30T00:00:00Z", net_equity: 53000, contributed_capital: 45000 },
+      ]),
+    );
+    renderWithQuery(
+      <PortfolioValueSummary metrics={{ net_equity: 51000, contributed_capital: 45000 }} />,
+    );
+    expect(await screen.findByText("-$2,000")).toBeInTheDocument();
+    expect(screen.getByText("+$5,000 net flows removed")).toBeInTheDocument();
+  });
+
+  it("uses time-weighted cash flows in its Modified-Dietz denominator", () => {
+    const performance = cashAdjustedPerformance(
+      [
+        { as_of: "2026-01-01T00:00:00Z", net_equity: 48000, contributed_capital: 40000 },
+        { as_of: "2026-07-02T00:00:00Z", net_equity: 53000, contributed_capital: 45000 },
+      ],
+      51000,
+      45000,
+      new Date("2027-01-01T00:00:00Z"),
+    );
+    expect(performance.pnl).toBe(-2000);
+    expect(performance.netFlows).toBe(5000);
+    expect(performance.flowAdjusted).toBe(true);
+    expect(performance.returnPct).toBeCloseTo(-2000 / 50506.85, 4);
   });
 });

@@ -79,6 +79,17 @@ def _sanitize_holdings(holdings: dict) -> dict:
         # options vanished on save.
         pos: dict = dict(h)
         pos["shares"] = shares
+        if str(pos.get("asset_type") or "").strip().lower() == "option":
+            # Canonical persistence: positive contract magnitude + explicit
+            # long/short whenever legacy sign or broker verbs provide enough
+            # evidence. This prevents every downstream consumer from having to
+            # guess whether a double-negative means long or short.
+            from libs.mindmarket_core.options_positions import normalized_option_side
+
+            normalized_side = normalized_option_side(pos.get("option_side"), shares)
+            if normalized_side is not None:
+                pos["option_side"] = normalized_side
+                pos["shares"] = abs(shares)
         # Fields only meaningful as a finite POSITIVE number — a 0/NaN value is
         # dropped (e.g. avg_cost 0 would book the whole position as pure profit).
         for k in ("avg_cost", "strike", "contract_multiplier"):

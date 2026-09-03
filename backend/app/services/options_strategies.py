@@ -1,5 +1,5 @@
 """Group analyzed option legs into recognized multi-leg strategies with NET,
-**bounded** economics.
+**exact** at-expiry economics.
 
 Why this exists: a per-leg view shows a short call's textbook *unbounded* max
 loss even when a long call in the same spread caps it — which reads as a huge,
@@ -10,6 +10,11 @@ break-even(s).
 
 Deterministic — no LLM, no network. Consumes the already-priced per-contract
 results from :mod:`options_analytics` (so it never re-fetches or re-prices).
+
+The extrema are evaluated at every strike (the kinks of the piecewise-linear
+expiry payoff) plus the two mathematical boundaries ``S=0`` and ``S->inf``.
+They are deliberately *not* inferred from chart samples: a coarse chart can
+miss a narrow butterfly/condor loss pocket and is not a risk calculation.
 """
 
 from __future__ import annotations
@@ -18,7 +23,8 @@ from typing import Any, Optional
 
 from .options_analytics import _intrinsic_value
 
-_GRID = 41  # at-expiry payoff resolution per strategy
+_GRID = 41  # presentation-only chart resolution; never used for risk bounds
+_EPS = 1e-9
 
 
 def build_strategies(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -28,10 +34,11 @@ def build_strategies(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     Scope: legs are grouped by (underlying, expiry), so detection covers
     same-expiry shapes (verticals, straddles, strangles). Multi-expiry
     strategies (calendar/diagonal spreads) land in separate groups, and 3-4 leg
-    shapes (butterfly, iron condor) fall through to 'Custom (N legs)'. The
-    payoff netting (grid, bounded max-loss/gain, Greeks) stays correct for any
-    grouped legs — only the human name is generic. To extend, generalize the
-    grouping key + add cases to `_detect_strategy`."""
+    shapes include common butterflies and iron condors. The payoff netting
+    (exact max-loss/gain, break-evens and Greeks) stays correct for any grouped
+    legs — unfamiliar shapes simply receive a generic name. Multi-expiry risk
+    is deliberately not collapsed into one expiry payoff because doing so
+    would require an unstated volatility/time-path assumption."""
     groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for r in results:
         underlying = str(r.get("underlying") or "").upper()
@@ -79,30 +86,62 @@ def _build_group(underlying: str, expiry: str, legs: list[dict[str, Any]]) -> di
     priceable = bool(anchors) and all(s is not None and p is not None for _, _, s, _, p in specs)
     if priceable:
         pricing = [(q, m, float(s), ot, float(p)) for q, m, s, ot, p in specs]
-        lo = max(0.01, min(anchors) * 0.5)
-        hi = max(anchors) * 1.5
-        grid = [lo + (hi - lo) * i / (_GRID - 1) for i in range(_GRID)]
-        pnls = [_group_pnl_at(x, pricing) for x in grid]
-        payoff = [{"price": round(x, 2), "pnl": round(p, 2)} for x, p in zip(grid, pnls)]
 
-        # The UP side can be unbounded from net call exposure; the DOWN side
-        # (S→0) is always finite. Net call quantity decides the unbounded side.
-        net_call_qty = sum(q for q, _, _, ot, _ in pricing if ot == "call")
-        b_min, b_max = min(pnls), max(pnls)
-        loss_val = round(-b_min, 2) if b_min < 0 else 0.0
-        gain_val = round(b_max, 2) if b_max > 0 else 0.0
-        max_loss = None if net_call_qty < 0 else loss_val
-        max_gain = None if net_call_qty > 0 else gain_val
+        # Expiry P&L is piecewise linear. Its finite extrema can only occur at
+        # S=0 or a strike; the slope above the highest strike decides whether
+        # either tail is unbounded. This remains exact for arbitrary ratios,
+        # multipliers, butterflies, condors and other custom same-expiry books.
+        critical = sorted({0.0, *[strike for _, _, strike, _, _ in pricing]})
+        critical_pnls = [_group_pnl_at(x, pricing) for x in critical]
+        tail_slope = sum(q * m for q, m, _, ot, _ in pricing if ot == "call")
+        finite_min, finite_max = min(critical_pnls), max(critical_pnls)
+        max_loss = None if tail_slope < -_EPS else round(max(0.0, -finite_min), 2)
+        max_gain = None if tail_slope > _EPS else round(max(0.0, finite_max), 2)
 
-        for i in range(1, len(grid)):
-            a, b = pnls[i - 1], pnls[i]
-            if a == 0.0:
-                breakevens.append(round(grid[i - 1], 2))
-            elif (a < 0 < b) or (a > 0 > b):
-                be = grid[i - 1] + (0.0 - a) / (b - a) * (grid[i] - grid[i - 1])
-                breakevens.append(round(be, 2))
+        breakevens = _break_evens(critical, critical_pnls, tail_slope)
 
-    net_debit = round(sum(float(leg.get("cost_basis") or 0.0) for leg in legs), 2)
+        # Chart points are presentation only, but always include every exact
+        # strike/break-even so the plotted line visibly preserves payoff kinks.
+        chart_hi = max(anchors) * 1.5
+        chart_grid = {chart_hi * i / (_GRID - 1) for i in range(_GRID)}
+        chart_grid.update(critical)
+        chart_grid.update(breakevens)
+        if spot is not None:
+            chart_grid.add(float(spot))
+        payoff = [
+            {"price": round(x, 2), "pnl": round(_group_pnl_at(x, pricing), 2)}
+            for x in sorted(chart_grid)
+        ]
+
+    # Prefer actual entry basis. If an imported leg lacks it, use that leg's
+    # signed current mark and label the result so the UI never presents a mark-
+    # based estimate as an original trade debit/credit. If either is absent,
+    # report the basis as unavailable rather than manufacturing $0.
+    signed_bases: list[float] = []
+    entry_basis_count = 0
+    for leg in legs:
+        cost_basis = leg.get("cost_basis")
+        if cost_basis is not None:
+            signed_bases.append(float(cost_basis))
+            entry_basis_count += 1
+            continue
+        mark = leg.get("mark")
+        if mark is None:
+            signed_bases = []
+            break
+        qty = float(leg.get("quantity") or 0)
+        mult = float(leg.get("contract_multiplier") or 100)
+        signed_bases.append(float(mark) * qty * mult)
+
+    net_debit = round(sum(signed_bases), 2) if len(signed_bases) == len(legs) else None
+    if net_debit is None:
+        premium_basis = "unavailable"
+    elif entry_basis_count == len(legs):
+        premium_basis = "entry"
+    elif entry_basis_count == 0:
+        premium_basis = "current_mark"
+    else:
+        premium_basis = "mixed"
     pnl_vals = [leg.get("unrealized_pnl") for leg in legs if leg.get("unrealized_pnl") is not None]
     net_pnl = round(sum(float(v) for v in pnl_vals), 2) if pnl_vals else None
 
@@ -121,6 +160,7 @@ def _build_group(underlying: str, expiry: str, legs: list[dict[str, Any]]) -> di
         "name": _detect_strategy(legs),
         "leg_count": len(legs),
         "net_debit": net_debit,  # >0 = net debit paid, <0 = net credit received
+        "premium_basis": premium_basis,
         "net_pnl": net_pnl,
         "max_loss": max_loss,  # None = unbounded
         "max_gain": max_gain,  # None = unbounded
@@ -142,6 +182,33 @@ def _group_pnl_at(spot: float, pricing: list[tuple[float, float, float, str, flo
     return total
 
 
+def _break_evens(
+    critical: list[float], critical_pnls: list[float], tail_slope: float
+) -> list[float]:
+    """Exact non-negative roots of the piecewise-linear expiry P&L."""
+
+    roots: list[float] = []
+    for i in range(1, len(critical)):
+        x0, x1 = critical[i - 1], critical[i]
+        y0, y1 = critical_pnls[i - 1], critical_pnls[i]
+        if abs(y0) <= _EPS:
+            roots.append(x0)
+        if y0 * y1 < 0:
+            roots.append(x0 - y0 * (x1 - x0) / (y1 - y0))
+
+    x_last, y_last = critical[-1], critical_pnls[-1]
+    if abs(y_last) <= _EPS:
+        roots.append(x_last)
+    elif abs(tail_slope) > _EPS:
+        tail_root = x_last - y_last / tail_slope
+        if tail_root > x_last + _EPS:
+            roots.append(tail_root)
+
+    # Round only after solving, then stable-de-duplicate boundaries shared by
+    # adjacent segments.
+    return sorted({round(max(0.0, root), 2) for root in roots})
+
+
 def _detect_strategy(legs: list[dict[str, Any]]) -> str:
     """Deterministic strategy name from leg shape. Covers single legs, the four
     vertical spreads, straddles/strangles; anything else → 'Custom (N legs)'."""
@@ -159,12 +226,22 @@ def _detect_strategy(legs: list[dict[str, Any]]) -> str:
         ka, kb = float(a.get("strike") or 0), float(b.get("strike") or 0)
         sa, sb = side(a), side(b)
 
-        # Vertical spread: same type, opposite sides, different strikes.
+        # Vertical spread: same type, opposite sides, different strikes. Unequal
+        # contract exposure is a ratio spread and must not inherit a vertical's
+        # familiar risk label.
         if ta == tb and sa != sb and ka != kb:
             long_leg = a if sa == "long" else b
             short_leg = b if sa == "long" else a
             k_long = float(long_leg.get("strike") or 0)
             k_short = float(short_leg.get("strike") or 0)
+            long_exposure = abs(float(long_leg.get("quantity") or 0)) * float(
+                long_leg.get("contract_multiplier") or 100
+            )
+            short_exposure = abs(float(short_leg.get("quantity") or 0)) * float(
+                short_leg.get("contract_multiplier") or 100
+            )
+            if abs(long_exposure - short_exposure) > _EPS:
+                return f"{str(ta).capitalize()} ratio spread"
             if ta == "call":
                 return "Bull call spread" if k_long < k_short else "Bear call spread"
             return "Bear put spread" if k_long > k_short else "Bull put spread"
@@ -174,4 +251,56 @@ def _detect_strategy(legs: list[dict[str, Any]]) -> str:
             kind = "straddle" if ka == kb else "strangle"
             return f"{'Long' if sa == 'long' else 'Short'} {kind}"
 
-    return f"Custom ({len(legs)} legs)"
+    # Common 1:-2:1 same-type butterfly. The exact payoff engine above also
+    # handles broken-wing and ratio variants; those retain a generic name.
+    if len(legs) == 3:
+        ordered = sorted(legs, key=lambda leg: float(leg.get("strike") or 0))
+        types = {str(leg.get("option_type") or "") for leg in ordered}
+        wing_exposures = [
+            float(leg.get("quantity") or 0) * float(leg.get("contract_multiplier") or 100)
+            for leg in ordered
+        ]
+        if (
+            len(types) == 1
+            and len({float(leg.get("strike") or 0) for leg in ordered}) == 3
+            and abs(wing_exposures[0] - wing_exposures[2]) <= _EPS
+            and abs(wing_exposures[1] + 2 * wing_exposures[0]) <= _EPS
+        ):
+            direction = "Long" if wing_exposures[0] > 0 else "Short"
+            return f"{direction} {next(iter(types))} butterfly"
+
+    if len(legs) == 4:
+        calls = [leg for leg in legs if leg.get("option_type") == "call"]
+        puts = [leg for leg in legs if leg.get("option_type") == "put"]
+        if len(calls) == 2 and len(puts) == 2:
+            call_sides = {side(leg) for leg in calls}
+            put_sides = {side(leg) for leg in puts}
+            equal_exposures = {
+                abs(float(leg.get("quantity") or 0)) * float(leg.get("contract_multiplier") or 100)
+                for leg in legs
+            }
+            if call_sides == put_sides == {"long", "short"} and len(equal_exposures) == 1:
+                short_call = next(leg for leg in calls if side(leg) == "short")
+                short_put = next(leg for leg in puts if side(leg) == "short")
+                long_call = next(leg for leg in calls if side(leg) == "long")
+                long_put = next(leg for leg in puts if side(leg) == "long")
+                short_center = (
+                    abs(float(short_call.get("strike") or 0) - float(short_put.get("strike") or 0))
+                    <= _EPS
+                )
+                long_center = (
+                    abs(float(long_call.get("strike") or 0) - float(long_put.get("strike") or 0))
+                    <= _EPS
+                )
+                normal_wings = (
+                    float(long_put.get("strike") or 0)
+                    < float(short_put.get("strike") or 0)
+                    <= float(short_call.get("strike") or 0)
+                    < float(long_call.get("strike") or 0)
+                )
+                reverse = long_center or not normal_wings
+                prefix = "Reverse " if reverse else ""
+                shape = "iron butterfly" if short_center or long_center else "iron condor"
+                return f"{prefix}{shape}".capitalize()
+
+    return f"Net option position ({len(legs)} legs)"

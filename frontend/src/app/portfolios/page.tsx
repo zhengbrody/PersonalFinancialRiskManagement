@@ -143,7 +143,7 @@ function PortfolioCard({ portfolio }: { portfolio: PortfolioRow }) {
         </div>
         <div className="grid gap-3 pt-2 text-xs sm:grid-cols-3">
           <Stat label="Contributed" value={fmtUSD(portfolio.contributed_capital)} />
-          <Stat label="Cash" value={fmtUSD(portfolio.cash_balance)} />
+          <Stat label="Settled cash" value={fmtUSD(portfolio.cash_balance)} />
           <Stat label="Margin" value={fmtUSD(portfolio.margin_loan)} />
         </div>
         {/* Only the default portfolio is scored inline; non-default cards

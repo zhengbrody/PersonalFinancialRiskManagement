@@ -46,6 +46,7 @@ import {
 export function OptionsAnalysis({ contracts }: { contracts: OptionContract[] }) {
   const analytics = useOptionAnalytics(contracts);
   const explain = useOptionExplain(analytics.data?.exposure);
+  const unconfirmedSides = contracts.filter((contract) => contract.side_confirmed === false).length;
 
   if (contracts.length === 0) return null;
 
@@ -83,6 +84,13 @@ export function OptionsAnalysis({ contracts }: { contracts: OptionContract[] }) 
         </Card>
       ) : analytics.data ? (
         <>
+          {unconfirmedSides > 0 && (
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+              {unconfirmedSides} option leg{unconfirmedSides === 1 ? " has" : "s have"} no
+              confirmed Buy/Sell side. Risk is provisionally modeled as long. Open Portfolio and
+              confirm every leg before relying on max loss or strategy labels.
+            </div>
+          )}
           <OptionDiagnosis explain={explain.data} loading={explain.isPending} />
           <ExposureSummary exposure={analytics.data.exposure} asOf={analytics.data.as_of} />
           <RiskFlags exposure={analytics.data.exposure} />
@@ -482,7 +490,15 @@ function StrategyList({
 
 function StrategyCard({ s }: { s: OptionStrategy }) {
   const [open, setOpen] = useState(false);
-  const credit = s.net_debit < 0;
+  const credit = s.net_debit != null && s.net_debit < 0;
+  const basisLabel =
+    s.premium_basis === "entry"
+      ? "Entry"
+      : s.premium_basis === "current_mark"
+        ? "Current mark"
+        : s.premium_basis === "mixed"
+          ? "Mixed basis"
+          : "Basis unavailable";
   const g = s.net_greeks;
   return (
     <Card>
@@ -503,22 +519,37 @@ function StrategyCard({ s }: { s: OptionStrategy }) {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs sm:grid-cols-4">
-          <Stat label={credit ? "Net credit" : "Net debit"} value={usd(Math.abs(s.net_debit))} />
           <Stat
-            label="Max loss"
+            label={`${credit ? "Net credit" : "Net debit"} (${basisLabel.toLowerCase()})`}
+            value={s.net_debit == null ? "—" : usd(Math.abs(s.net_debit))}
+          />
+          <Stat
+            label={`Max loss (${basisLabel.toLowerCase()})`}
             value={s.max_loss == null ? "Unbounded" : usd(s.max_loss)}
             tone={s.max_loss == null ? "down" : undefined}
           />
           <Stat
-            label="Max gain"
+            label={`Max gain (${basisLabel.toLowerCase()})`}
             value={s.max_gain == null ? "Unbounded" : usd(s.max_gain)}
             tone={s.max_gain == null ? "up" : undefined}
           />
           <Stat
-            label="Break-even"
+            label={`Break-even (${basisLabel.toLowerCase()})`}
             value={s.break_evens.length ? s.break_evens.map((b) => usd(b)).join(" / ") : "—"}
           />
         </div>
+
+        {s.premium_basis !== "entry" && (
+          <p className="text-[11px] text-amber-700 dark:text-amber-300">
+            One or more legs lack original premium. Debit, payoff bounds, and break-even use
+            {s.premium_basis === "current_mark"
+              ? " current marks"
+              : s.premium_basis === "mixed"
+                ? " a mix of entry costs and current marks"
+                : " no complete premium basis"}
+            ; they are not original-trade economics.
+          </p>
+        )}
 
         {(g.delta != null || g.gamma != null) && (
           <div className="grid grid-cols-4 gap-2 text-xs">

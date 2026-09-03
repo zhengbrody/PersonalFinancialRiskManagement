@@ -233,10 +233,11 @@ def analyze_contract(
     option_type = str(spec.option_type).lower()
     strike = float(spec.strike)
     expiry = str(spec.expiry)
-    quantity = float(getattr(spec, "quantity", 1) or 1)
+    raw_quantity = getattr(spec, "quantity", 1)
+    quantity = 1.0 if raw_quantity is None else float(raw_quantity)
     multiplier = float(getattr(spec, "contract_multiplier", None) or 100)
     avg_premium = getattr(spec, "avg_premium", None)
-    avg_premium = float(avg_premium) if avg_premium not in (None, 0, 0.0) else None
+    avg_premium = float(avg_premium) if avg_premium is not None else None
 
     warnings: list[str] = []
     T = time_to_expiry_years(expiry)

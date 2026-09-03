@@ -47,7 +47,8 @@ export const portfolioRowSchema = z.looseObject({
       liquidity_class: z.enum(["risk_asset", "cash_equivalent"]).optional(),
       // option-contract fields (present only when asset_type === "option")
       option_type: z.enum(["call", "put"]).optional(),
-      option_side: z.enum(["long", "short"]).optional(),
+      // Read old/imported broker verbs too; writes are canonicalized to long/short.
+      option_side: z.string().optional(),
       underlying: z.string().optional(),
       strike: z.number().optional(),
       expiry: z.string().optional(),
@@ -1148,7 +1149,11 @@ export const optionStrategySchema = z.looseObject({
   expiry: z.string(),
   name: z.string(),
   leg_count: z.number(),
-  net_debit: z.number(), // >0 debit paid, <0 credit received
+  net_debit: z.number().nullish(), // >0 debit paid, <0 credit received
+  premium_basis: z
+    .enum(["entry", "current_mark", "mixed", "unavailable"])
+    .optional()
+    .default("unavailable"),
   net_pnl: z.number().nullish(),
   max_loss: z.number().nullish(), // null = unbounded
   max_gain: z.number().nullish(), // null = unbounded
@@ -1191,7 +1196,12 @@ export type OptionContract = {
   quantity: number;
   avg_premium?: number;
   contract_multiplier?: number;
+  /** False when a legacy positive quantity had no recognizable buy/sell side. */
+  side_confirmed?: boolean;
 };
+
+const SHORT_OPTION_SIDES = new Set(["short", "sell", "sold", "write", "written", "s"]);
+const LONG_OPTION_SIDES = new Set(["long", "buy", "bought", "purchase", "purchased", "l"]);
 
 /**
  * Option contracts of the user's ACTIVE (default-flagged) portfolio — the book
@@ -1221,10 +1231,17 @@ export function optionContractsFromHoldings(
     const strike = Number(h.strike);
     const expiry = String(h.expiry ?? "");
     if (!underlying || !Number.isFinite(strike) || strike <= 0 || !expiry) continue;
-    // A sold/written leg is short → negative quantity (the analytics + delta
-    // overlay read the sign). `shares` is stored as a positive magnitude.
-    const magnitude = Number(h.shares ?? 1) || 1;
-    const quantity = h.option_side === "short" ? -magnitude : magnitude;
+    const rawQuantity = Number(h.shares);
+    if (!Number.isFinite(rawQuantity) || rawQuantity === 0) continue;
+    const rawSide = String(h.option_side ?? "").trim().toLowerCase();
+    const explicitShort = SHORT_OPTION_SIDES.has(rawSide);
+    const explicitLong = LONG_OPTION_SIDES.has(rawSide);
+    // Explicit side controls direction and |shares| controls size. This avoids
+    // turning legacy `shares=-1, side=short` into +1 (the spread bug). Without
+    // a recognized side, preserve a legacy negative sign; a positive value is
+    // provisional long and is visibly flagged for confirmation in the UI.
+    const isShort = explicitShort || (!explicitLong && rawQuantity < 0);
+    const quantity = (isShort ? -1 : 1) * Math.abs(rawQuantity);
     out.push({
       underlying,
       option_type: h.option_type === "put" ? "put" : "call",
@@ -1233,6 +1250,7 @@ export function optionContractsFromHoldings(
       quantity,
       avg_premium: typeof h.avg_cost === "number" ? h.avg_cost : undefined,
       contract_multiplier: typeof h.contract_multiplier === "number" ? h.contract_multiplier : 100,
+      side_confirmed: explicitShort || explicitLong || rawQuantity < 0,
     });
   }
   return out;

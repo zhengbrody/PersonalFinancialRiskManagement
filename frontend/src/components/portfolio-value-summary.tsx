@@ -7,7 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useSnapshotHistory } from "@/lib/queries";
+import { type SnapshotPoint, useSnapshotHistory } from "@/lib/queries";
 
 export type PortfolioValueMetrics = {
   total_value?: number | null;
@@ -24,7 +24,7 @@ export type PortfolioValueMetrics = {
 export function PortfolioValueSummary({
   metrics,
   title = "Portfolio value",
-  description = "Account-level value, today's move, and return history.",
+  description = "Account value, net-contribution return, and cash-flow-adjusted history.",
 }: {
   metrics: PortfolioValueMetrics;
   title?: string;
@@ -32,14 +32,12 @@ export function PortfolioValueSummary({
 }) {
   const history = useSnapshotHistory();
   const currentValue = finite(metrics.net_equity) ?? finite(metrics.total_value);
-  const first = (history.data?.snapshots ?? []).find((s) => finite(s.net_equity) != null);
-  const firstValue = finite(first?.net_equity);
-  const historyPnl =
-    currentValue != null && firstValue != null ? currentValue - firstValue : null;
-  const historyReturn =
-    historyPnl != null && firstValue != null && firstValue > 0
-      ? historyPnl / firstValue
-      : null;
+  const performance = cashAdjustedPerformance(
+    history.data?.snapshots ?? [],
+    currentValue,
+    finite(metrics.contributed_capital),
+  );
+  const first = performance.first;
 
   return (
     <Card>
@@ -47,32 +45,118 @@ export function PortfolioValueSummary({
         <CardTitle className="text-base">{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
-      <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <ValueTile label="Net equity" value={fmtUSD(currentValue)} />
-        <ValueTile
-          label="Today"
-          value={fmtSignedUSD(metrics.daily_pnl)}
-          delta={fmtSignedPct(metrics.daily_return)}
-          tone={tone(metrics.daily_pnl)}
-          muted="Needs two recent closes"
-        />
-        <ValueTile
-          label="Total return"
-          value={fmtSignedUSD(metrics.total_pnl)}
-          delta={fmtSignedPct(metrics.total_return)}
-          tone={tone(metrics.total_pnl)}
-          muted="Add contributed capital"
-        />
-        <ValueTile
-          label={first?.as_of ? `Since ${fmtDate(first.as_of)}` : "History change"}
-          value={fmtSignedUSD(historyPnl)}
-          delta={fmtSignedPct(historyReturn)}
-          tone={tone(historyPnl)}
-          muted={history.isLoading ? "Loading history" : "Builds after snapshots"}
-        />
+      <CardContent className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <ValueTile label="Net equity" value={fmtUSD(currentValue)} />
+          <ValueTile
+            label="Today (priced holdings)"
+            value={fmtSignedUSD(metrics.daily_pnl)}
+            delta={fmtSignedPct(metrics.daily_return)}
+            tone={tone(metrics.daily_pnl)}
+            muted="Options need prior marks for daily P&L"
+          />
+          <ValueTile
+            label="Since net contributions"
+            value={fmtSignedUSD(metrics.total_pnl)}
+            delta={fmtSignedPct(metrics.total_return)}
+            tone={tone(metrics.total_pnl)}
+            muted="Set total net contributed capital"
+          />
+          <ValueTile
+            label={
+              first?.as_of
+                ? `${performance.flowAdjusted ? "Cash-adjusted" : "Value change"} since ${fmtDate(first.as_of)}`
+                : "Tracked performance"
+            }
+            value={fmtSignedUSD(performance.pnl)}
+            delta={fmtSignedPct(performance.returnPct)}
+            tone={tone(performance.pnl)}
+            muted={
+              history.isLoading
+                ? "Loading history"
+                : performance.flowAdjusted && performance.netFlows !== 0
+                  ? `${fmtSignedUSD(performance.netFlows)} net flows removed`
+                  : "Builds after snapshots"
+            }
+          />
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          “Annualized return” in the risk model describes the current holdings&apos; historical
+          price behavior. It is not broker YTD. MindMarket labels YTD only when a Jan 1 value
+          anchor and dated external cash flows are available.
+        </p>
       </CardContent>
     </Card>
   );
+}
+
+type CashAdjustedPerformance = {
+  first: SnapshotPoint | undefined;
+  pnl: number | null;
+  returnPct: number | null;
+  netFlows: number;
+  flowAdjusted: boolean;
+};
+
+/** Modified-Dietz-style return inferred from contribution changes in snapshots. */
+export function cashAdjustedPerformance(
+  snapshots: SnapshotPoint[],
+  currentValue: number | null,
+  currentContributed: number | null,
+  now = new Date(),
+): CashAdjustedPerformance {
+  const usable = snapshots.filter((snapshot) => finite(snapshot.net_equity) != null);
+  const first = usable[0];
+  const firstValue = finite(first?.net_equity);
+  if (!first || firstValue == null || currentValue == null) {
+    return { first, pnl: null, returnPct: null, netFlows: 0, flowAdjusted: false };
+  }
+
+  const firstCapital = finite(first.contributed_capital);
+  if (firstCapital == null || currentContributed == null) {
+    const pnl = currentValue - firstValue;
+    return {
+      first,
+      pnl,
+      returnPct: firstValue > 0 ? pnl / firstValue : null,
+      netFlows: 0,
+      flowAdjusted: false,
+    };
+  }
+
+  const startMs = parsedMs(first.as_of) ?? now.getTime();
+  const endMs = Math.max(now.getTime(), startMs + 1);
+  let previousCapital = firstCapital;
+  let weightedFlows = 0;
+  for (const snapshot of usable.slice(1)) {
+    const capital = finite(snapshot.contributed_capital);
+    if (capital == null) continue;
+    const flow = capital - previousCapital;
+    if (flow !== 0) {
+      const flowMs = Math.min(endMs, Math.max(startMs, parsedMs(snapshot.as_of) ?? endMs));
+      weightedFlows += flow * ((endMs - flowMs) / (endMs - startMs));
+    }
+    previousCapital = capital;
+  }
+
+  // A change after the newest snapshot has unknown timing. It still adjusts
+  // dollar P&L, but receives zero time weight rather than an invented date.
+  const netFlows = currentContributed - firstCapital;
+  const pnl = currentValue - firstValue - netFlows;
+  const denominator = firstValue + weightedFlows;
+  return {
+    first,
+    pnl,
+    returnPct: denominator > 0 ? pnl / denominator : null,
+    netFlows,
+    flowAdjusted: true,
+  };
+}
+
+function parsedMs(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : null;
 }
 
 function ValueTile({
@@ -95,9 +179,8 @@ function ValueTile({
       <p className={`mt-1 font-mono text-xl ${!empty ? toneClass ?? "" : ""}`}>{value}</p>
       {delta && delta !== "—" ? (
         <p className={`mt-0.5 font-mono text-xs ${toneClass ?? ""}`}>{delta}</p>
-      ) : (
-        muted && <p className="mt-0.5 text-xs text-muted-foreground">{muted}</p>
-      )}
+      ) : null}
+      {muted && <p className="mt-0.5 text-xs text-muted-foreground">{muted}</p>}
     </div>
   );
 }

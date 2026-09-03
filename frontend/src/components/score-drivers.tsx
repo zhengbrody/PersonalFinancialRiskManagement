@@ -31,7 +31,7 @@ const REASONS: Record<
   ],
   risk_adjusted_return: [
     { label: "Sharpe ratio", key: "sharpe_ratio", fmt: "num" },
-    { label: "Annual return", key: "annual_return", fmt: "pct" },
+    { label: "Current-mix annualized return", key: "annual_return", fmt: "pct" },
   ],
   downside_protection: [
     { label: "Max drawdown", key: "max_drawdown", fmt: "pct" },

@@ -605,7 +605,7 @@ function MetricsCard({ result }: { result: ScoreResponse }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm md:grid-cols-3">
-          <MetricRow label="Annual return" value={fmtPct(result.metrics.annual_return)} />
+          <MetricRow label="Current-mix annualized return" value={fmtPct(result.metrics.annual_return)} />
           <MetricRow label="Annual vol" value={fmtPct(result.metrics.annual_volatility)} />
           <MetricRow
             label="Sharpe (asset-mix quality)"
@@ -702,8 +702,8 @@ function MarginImpact({ result }: { result: ScoreResponse }) {
         />
         <MetricRow label="Cash equivalents" value={financing ? fmtUSD(financing.cash_equivalent_value) : "—"} />
         <MetricRow label="Modeled borrow drag / yr" value={fmtPct(-(metrics.margin_cost_annual ?? 0))} />
-        <MetricRow label="Asset-mix return" value={fmtPct(metrics.gross_annual_return)} />
-        <MetricRow label="Equity return" value={fmtPct(metrics.annual_return)} />
+        <MetricRow label="Gross current-mix annualized return" value={fmtPct(metrics.gross_annual_return)} />
+        <MetricRow label="Levered current-mix annualized return" value={fmtPct(metrics.annual_return)} />
       </div>
       <p className="mt-1.5 text-muted-foreground">
         Cash-like holdings can offset a loan without selling risk assets, but they remain market

@@ -25,7 +25,7 @@ export type MyStats = {
 };
 
 const ROWS: { key: keyof MyStats; label: string; fmt: "pct" | "num"; higherBetter: boolean }[] = [
-  { key: "annual_return", label: "Annual return", fmt: "pct", higherBetter: true },
+  { key: "annual_return", label: "Annualized return", fmt: "pct", higherBetter: true },
   { key: "annual_volatility", label: "Volatility", fmt: "pct", higherBetter: false },
   { key: "sharpe_ratio", label: "Sharpe", fmt: "num", higherBetter: true },
   { key: "max_drawdown", label: "Max drawdown", fmt: "pct", higherBetter: true }, // less-negative is better

@@ -6359,7 +6359,6 @@
             "title": "Sector"
           },
           "shares": {
-            "minimum": 0.0,
             "title": "Shares",
             "type": "number"
           },
@@ -8913,8 +8912,15 @@
             "type": "string"
           },
           "net_debit": {
-            "title": "Net Debit",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Debit"
           },
           "net_greeks": {
             "additionalProperties": {
@@ -8941,6 +8947,17 @@
             "title": "Payoff",
             "type": "array"
           },
+          "premium_basis": {
+            "default": "entry",
+            "enum": [
+              "entry",
+              "current_mark",
+              "mixed",
+              "unavailable"
+            ],
+            "title": "Premium Basis",
+            "type": "string"
+          },
           "underlying": {
             "title": "Underlying",
             "type": "string"
@@ -8950,8 +8967,7 @@
           "underlying",
           "expiry",
           "name",
-          "leg_count",
-          "net_debit"
+          "leg_count"
         ],
         "title": "OptionStrategyOut",
         "type": "object"
@@ -9009,8 +9025,15 @@
             "type": "string"
           },
           "net_debit": {
-            "title": "Net Debit",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Debit"
           },
           "net_greeks": {
             "additionalProperties": {
@@ -9037,6 +9060,17 @@
             "title": "Payoff",
             "type": "array"
           },
+          "premium_basis": {
+            "default": "entry",
+            "enum": [
+              "entry",
+              "current_mark",
+              "mixed",
+              "unavailable"
+            ],
+            "title": "Premium Basis",
+            "type": "string"
+          },
           "underlying": {
             "title": "Underlying",
             "type": "string"
@@ -9046,8 +9080,7 @@
           "underlying",
           "expiry",
           "name",
-          "leg_count",
-          "net_debit"
+          "leg_count"
         ],
         "title": "OptionStrategyOut",
         "type": "object"

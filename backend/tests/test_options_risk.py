@@ -78,6 +78,37 @@ def test_uncovered_short_call_high_when_undercovered():
     assert f and f[0]["severity"] == "high"
 
 
+def test_same_expiry_long_call_caps_short_call_and_uses_spread_max_loss():
+    exp = oe.build_exposure(
+        [
+            _res(strike=100, quantity=1, mark=8, cost_basis=800),
+            _res(
+                strike=120,
+                quantity=-1,
+                mark=2,
+                cost_basis=-200,
+                greeks={"delta": 0.2, "gamma": 0.01, "theta": -0.01, "vega": 0.05, "rho": 0.1},
+            ),
+        ],
+        equity_shares_by_underlying={"AAPL": 0},
+        net_equity=10_000,
+    )
+    assert not any(f["code"] == "uncovered_short_call" for f in exp["flags"])
+    assert exp["short_collateral_estimate"] == 600.0
+    assert not any(f["code"] == "under_collateralized_short" for f in exp["flags"])
+
+
+def test_different_expiry_long_call_does_not_claim_to_cap_short_call():
+    exp = oe.build_exposure(
+        [
+            _res(strike=100, quantity=1, expiry="2027-05-21"),
+            _res(strike=120, quantity=-1, expiry="2027-06-18"),
+        ],
+        equity_shares_by_underlying={"AAPL": 0},
+    )
+    assert any(f["code"] == "uncovered_short_call" for f in exp["flags"])
+
+
 def test_short_put_collateral_and_flag():
     exp = oe.build_exposure(
         [
@@ -90,8 +121,9 @@ def test_short_put_collateral_and_flag():
         ],
         net_equity=10_000.0,
     )
-    # cash-secured put collateral = 100 × 1 × 100 = 10,000 > 50% of 10k net equity
-    assert exp["short_collateral_estimate"] == 10_000.0
+    # Exact at-expiry max loss = (strike 100 - premium 10) × 100 = 9,000,
+    # still > 50% of 10k net equity.
+    assert exp["short_collateral_estimate"] == 9_000.0
     assert any(f["code"] == "under_collateralized_short" for f in exp["flags"])
 
 

@@ -680,7 +680,7 @@ const FACT_LABELS: Record<string, string> = {
   overall_score: "Health score",
   sharpe_ratio: "Risk-adjusted return (Sharpe)",
   annual_volatility: "Volatility",
-  annual_return: "Expected annual return",
+  annual_return: "Current-mix annualized return",
   max_drawdown: "Worst historical drop",
   var_95_daily: "Daily risk (VaR 95%)",
   var_95: "Daily risk (VaR 95%)",

@@ -97,9 +97,12 @@ def build_exposure(
     by_underlying: dict[str, dict[str, float]] = defaultdict(
         lambda: {"contracts": 0.0, "net_delta": 0.0, "net_notional": 0.0, "short_calls": 0.0}
     )
-    short_call_underlyings: dict[str, float] = defaultdict(
-        float
-    )  # underlying → short-call contracts
+    # Underlying+expiry matching is required: a long call in the same expiry
+    # caps a short call's tail even without stock, while a different-expiry call
+    # is calendar risk and must not be treated as guaranteed coverage.
+    call_coverage: dict[tuple[str, str], dict[str, float]] = defaultdict(
+        lambda: {"long": 0.0, "short": 0.0}
+    )  # values are share-equivalent contract exposure (qty * multiplier)
 
     for r in results:
         contracts += 1
@@ -141,15 +144,12 @@ def build_exposure(
         expiry = str(r.get("expiry") or "")
         dte = _num(r.get("days_to_expiry")) or 0.0
 
-        # Short collateral: cash-secured put = strike × |contracts| × mult;
-        # naked short call ≈ spot notional (a margin proxy, clearly approximate).
-        if is_short:
-            if opt_type == "put":
-                short_collateral += strike * abs(qty) * mult
-            elif opt_type == "call":
-                short_call_underlyings[underlying] += abs(qty)
-                if spot is not None:
-                    short_collateral += spot * abs(qty) * mult
+        # Coverage inputs. Strategy-level collateral is computed after all legs
+        # are known; summing each short leg here falsely treats defined-risk
+        # verticals/condors as naked positions.
+        if opt_type == "call":
+            bucket = call_coverage[(underlying, expiry)]
+            bucket["short" if is_short else "long"] += abs(qty) * mult
 
         # Ladders.
         eb = by_expiry[expiry]
@@ -168,6 +168,46 @@ def build_exposure(
         if is_short and opt_type == "call":
             ub["short_calls"] += abs(qty)
 
+    unhedged_short_call_shares: dict[str, float] = defaultdict(float)
+    for (underlying, _expiry), coverage in call_coverage.items():
+        unhedged_short_call_shares[underlying] += max(0.0, coverage["short"] - coverage["long"])
+
+    # Defined-risk combinations use their exact at-expiry max loss. Only an
+    # unbounded option group falls back to a transparent notional proxy.
+    from .options_strategies import build_strategies
+
+    for strategy in build_strategies(results):
+        if not any(float(leg.get("quantity") or 0) < 0 for leg in strategy["legs"]):
+            continue
+        if strategy["max_loss"] is not None:
+            short_collateral += float(strategy["max_loss"])
+            continue
+        for leg in strategy["legs"]:
+            qty = _num(leg.get("quantity")) or 0.0
+            if qty >= 0:
+                continue
+            mult = _num(leg.get("contract_multiplier")) or 100.0
+            if leg.get("option_type") == "put":
+                short_collateral += (_num(leg.get("strike")) or 0.0) * abs(qty) * mult
+            # Calls are handled once, after option and stock coverage are both
+            # netted, so covered calls do not manufacture a collateral alarm.
+
+    for underlying, needed_shares in unhedged_short_call_shares.items():
+        residual_shares = max(0.0, needed_shares - equity_shares.get(underlying, 0.0))
+        if residual_shares <= 0:
+            continue
+        spot = next(
+            (
+                _num(result.get("spot"))
+                for result in results
+                if str(result.get("underlying") or "").upper() == underlying
+                and _num(result.get("spot")) is not None
+            ),
+            None,
+        )
+        if spot is not None:
+            short_collateral += spot * residual_shares
+
     flags = _build_flags(
         results=results,
         net_gamma=net_gamma,
@@ -176,7 +216,7 @@ def build_exposure(
         option_notional=option_notional,
         by_expiry=by_expiry,
         by_underlying=by_underlying,
-        short_call_underlyings=short_call_underlyings,
+        unhedged_short_call_shares=unhedged_short_call_shares,
         short_collateral=short_collateral,
         equity_shares=equity_shares,
         net_equity=net_equity,
@@ -232,7 +272,7 @@ def _build_flags(
     option_notional: float,
     by_expiry: dict[str, dict[str, float]],
     by_underlying: dict[str, dict[str, float]],
-    short_call_underlyings: dict[str, float],
+    unhedged_short_call_shares: dict[str, float],
     short_collateral: float,
     equity_shares: dict[str, float],
     net_equity: Optional[float],
@@ -292,20 +332,22 @@ def _build_flags(
                 }
             )
 
-    # Uncovered short calls: short-call contracts whose underlying lacks ≥100×
-    # shares per contract of covering stock. Without equity context we can't be
-    # sure → flag to verify.
-    for und, sc_contracts in short_call_underlyings.items():
+    # Same-expiry long calls were netted first. Only the residual short-call
+    # share exposure needs stock coverage; a vertical spread is therefore not
+    # mislabeled as a naked, unbounded short call.
+    for und, needed in unhedged_short_call_shares.items():
+        if needed <= 1e-6:
+            continue
         covered_shares = equity_shares.get(und, 0.0)
-        needed = sc_contracts * 100.0
         if equity_shares:
             if covered_shares + 1e-6 < needed:
                 flags.append(
                     {
                         "code": "uncovered_short_call",
                         "severity": "high",
-                        "detail": f"Short {int(sc_contracts)} {und} call(s) but only "
-                        f"{int(covered_shares)} shares held — uncovered upside risk is unbounded.",
+                        "detail": f"{needed:,.0f} {und} share-equivalents remain short after "
+                        f"same-expiry call hedges, but only {covered_shares:,.0f} shares are held "
+                        "— residual upside risk is unbounded.",
                     }
                 )
         else:
@@ -313,8 +355,9 @@ def _build_flags(
                 {
                     "code": "uncovered_short_call",
                     "severity": "watch",
-                    "detail": f"Short {und} call(s) — verify they are covered by stock; "
-                    "a naked short call has unbounded loss.",
+                    "detail": f"{needed:,.0f} {und} share-equivalents remain short after "
+                    "same-expiry call hedges — verify stock coverage; residual naked calls "
+                    "have unbounded loss.",
                 }
             )
 
