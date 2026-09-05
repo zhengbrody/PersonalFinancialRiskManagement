@@ -150,7 +150,7 @@ export function FloatingCopilot() {
         aria-label={open ? "Close Copilot" : "Ask Copilot"}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="fixed bottom-4 right-4 z-50 flex h-12 items-center gap-2 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground shadow-lg transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        className="fixed bottom-4 right-4 z-50 hidden h-12 items-center gap-2 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground shadow-lg transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background lg:flex"
       >
         <ChatGlyph />
         <span className="hidden sm:inline">{open ? "Close" : "Ask Copilot"}</span>

@@ -27,6 +27,13 @@ function bodyTickers(): string[] {
 }
 
 describe("DataTable", () => {
+  it("sorts through a keyboard-operable header button", async () => {
+    render(<DataTable rows={ROWS} columns={COLUMNS} rowKey={(row) => row.ticker} />);
+    screen.getByRole("button", { name: "Share" }).focus();
+    await userEvent.keyboard("{Enter}{Enter}");
+    expect(bodyTickers()).toEqual(["AAPL", "MSFT", "NVDA"]);
+    expect(screen.getByRole("columnheader", { name: /Share/ })).toHaveAttribute("aria-sort", "ascending");
+  });
   it("filters by the ticker field", async () => {
     const user = userEvent.setup();
     render(

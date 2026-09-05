@@ -174,9 +174,9 @@ function ValueTile({
 }) {
   const empty = value === "—";
   return (
-    <div className="rounded-md border border-border bg-muted/20 p-3">
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className={`mt-1 font-mono text-xl ${!empty ? toneClass ?? "" : ""}`}>{value}</p>
+    <div className="min-w-0 rounded-xl bg-muted/30 p-4">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className={`mt-2 text-2xl font-semibold tracking-tight ${!empty ? toneClass ?? "" : ""}`}>{value}</p>
       {delta && delta !== "—" ? (
         <p className={`mt-0.5 font-mono text-xs ${toneClass ?? ""}`}>{delta}</p>
       ) : null}

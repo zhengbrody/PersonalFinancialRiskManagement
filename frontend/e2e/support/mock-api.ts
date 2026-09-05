@@ -11,6 +11,7 @@
  */
 
 import type { Page } from "@playwright/test";
+import { E2E_USER } from "./auth";
 
 // The frontend validates the wrapper on every response: `meta.request_id` is a
 // required string (see src/lib/api.ts envelopeSchema), so the stub must include it.
@@ -33,6 +34,8 @@ const SCORE = {
     total_value: 100000,
     net_equity: 100000,
     cash_balance: 5000,
+    margin_loan: 0,
+    leverage: 1,
     cash_weight: 0.05,
     data_coverage: 1.0,
     observations: 252,
@@ -207,6 +210,21 @@ export async function mockBackend(page: Page): Promise<void> {
   await page.route("**/api/v1/risk/alerts", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: envelope({ alerts: [] }) }),
   );
+  await page.route("**/api/v1/risk/score_changes", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: envelope({
+      window: "previous", available: false, current_score: SCORE.overall_score,
+      component_deltas: [], input_changes: [], top_drivers: [], data_quality_changes: [],
+      holdings_changes: { added: [], removed: [], reweighted: [] },
+      summary: "A second snapshot is needed to compare changes.",
+    }) }),
+  );
+  await page.route("**/api/v1/macro/regime", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: envelope({
+      vix: { current: 18.2, change: 0.012, level: "Normal" },
+      fear_greed: { score: 52, rating: "Neutral" },
+      yield_curve: { status: "Normal", spread_3m_10y: 0.45, inverted: false },
+    }) }),
+  );
 
   // ── the surfaces under test ──────────────────────────────────────
   await page.route("**/api/v1/risk/score_from_active", (route) =>
@@ -218,8 +236,11 @@ export async function mockBackend(page: Page): Promise<void> {
       status: 200,
       contentType: "application/json",
       body: envelope({
+        user_id: E2E_USER.id,
+        email: E2E_USER.email,
         portfolios: [
-          { id: "pf1", name: "My Portfolio", holdings: { SPY: { shares: 10 } }, is_default: true },
+          { id: "pf1", user_id: E2E_USER.id, name: "My Portfolio", holdings: { SPY: { shares: 10 } }, is_default: true,
+            margin_loan: 0, contributed_capital: 95000, cash_balance: 5000, created_at: null, updated_at: null },
         ],
       }),
     }),

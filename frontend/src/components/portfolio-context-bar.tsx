@@ -125,7 +125,7 @@ export function PortfolioContextBar() {
 
   return (
     <div className="border-t border-border/60 bg-muted/30">
-      <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-1.5 text-xs">
+      <div className="mx-auto flex max-w-[1400px] items-center gap-3 px-4 py-2 text-xs lg:px-8">
         <span className="shrink-0 font-medium uppercase tracking-wide text-muted-foreground">
           Portfolio
         </span>
@@ -135,7 +135,7 @@ export function PortfolioContextBar() {
             onClick={() => setOpen((v) => !v)}
             aria-haspopup="listbox"
             aria-expanded={open}
-            className="flex max-w-[52vw] items-center gap-1.5 rounded border border-border bg-background px-2 py-1 font-medium text-foreground hover:bg-accent sm:max-w-none"
+            className="flex min-h-10 max-w-[52vw] items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 font-medium text-foreground hover:bg-accent sm:max-w-[360px]"
           >
             <span className="truncate">{current?.name ?? "Select a portfolio"}</span>
             {switchingId ? (
@@ -154,7 +154,7 @@ export function PortfolioContextBar() {
               aria-label="Switch portfolio"
               ref={onListboxMount}
               onKeyDown={onListboxKeyDown}
-              className="absolute left-0 z-40 mt-1 max-h-80 w-64 overflow-auto rounded-md border border-border bg-popover p-1 shadow-lg"
+              className="absolute left-0 z-40 mt-2 max-h-80 w-64 max-w-[calc(100vw-7rem)] overflow-auto rounded-xl border border-border bg-card p-2 shadow-xl"
             >
               {list.map((p) => {
                 const active = p.id === current?.id;
@@ -169,7 +169,7 @@ export function PortfolioContextBar() {
                       setOpen(false);
                       if (!active) void switchPortfolio(p.id);
                     }}
-                    className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left hover:bg-accent disabled:opacity-60 ${
+                    className={`flex min-h-12 w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left hover:bg-accent disabled:opacity-60 ${
                       active ? "bg-accent/60" : ""
                     }`}
                   >

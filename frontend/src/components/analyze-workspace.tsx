@@ -15,13 +15,21 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { WorkspaceIcon } from "@/components/ui/workspace-icon";
+import { RiskSnapshot } from "@/components/risk-snapshot";
 import { Tabs, tabId, tabPanelId } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScoreGauge, scoreBand } from "@/components/score-gauge";
 import { RiskDiagnosis } from "@/components/risk-diagnosis";
 import { DataConfidence } from "@/components/data-confidence";
-import { ReportSections, ResultSkeleton, RiskErrorPanel } from "@/components/risk-report";
+import {
+  ReportSections,
+  ResultSkeleton,
+  RiskErrorPanel,
+} from "@/components/risk-report";
 import { HistoricalScenarios } from "@/components/historical-scenarios";
 import { MetricTrend } from "@/components/metric-trend";
 import { ScoreChangeReport } from "@/components/score-change-report";
@@ -33,7 +41,10 @@ import { useAuth } from "@/lib/auth-context";
 import { authHref } from "@/lib/auth-redirect";
 import { usePortfolioContext } from "@/lib/portfolio-context";
 import { explainInputFromScore } from "@/lib/risk-explain-input";
-import { runKeyForActivePortfolio, useRunOncePerUser } from "@/lib/use-run-once-per-user";
+import {
+  runKeyForActivePortfolio,
+  useRunOncePerUser,
+} from "@/lib/use-run-once-per-user";
 import type { ScoreResponse } from "@/lib/schemas";
 import {
   useActiveScore,
@@ -52,7 +63,49 @@ const VIEWS = [
   { value: "history", label: "History" },
 ] as const;
 type View = (typeof VIEWS)[number]["value"];
-const isView = (v: string | null): v is View => VIEWS.some((x) => x.value === v);
+const isView = (v: string | null): v is View =>
+  VIEWS.some((x) => x.value === v);
+
+const STAGE_GUIDE: Record<
+  View,
+  { title: string; description: string; next: View; cta: string }
+> = {
+  overview: {
+    title: "Understand your starting point",
+    description:
+      "Account context, portfolio health, and the risk that deserves your attention first.",
+    next: "drivers",
+    cta: "Explore risk drivers",
+  },
+  drivers: {
+    title: "See what is driving risk",
+    description:
+      "Inspect concentrations, exposures, and loss estimates before choosing a scenario.",
+    next: "stress",
+    cta: "Test a scenario",
+  },
+  stress: {
+    title: "Explore the downside before it happens",
+    description:
+      "Compare hypothetical changes and historical shocks. Simulations never change your holdings.",
+    next: "plan",
+    cta: "Review action plans",
+  },
+  plan: {
+    title: "Turn analysis into a reviewable plan",
+    description:
+      "Compare alternatives, save your assumptions, and decide when to revisit them. No trades are placed.",
+    next: "history",
+    cta: "Review risk history",
+  },
+  history: {
+    title: "Understand what changed",
+    description:
+      "Review recorded risk trends and score changes. Tracked history is not a reconstructed broker return.",
+    next: "overview",
+    cta: "Back to overview",
+  },
+};
 
 export function AnalyzeWorkspace() {
   const router = useRouter();
@@ -98,23 +151,49 @@ export function AnalyzeWorkspace() {
   if (!configured || loading || !user) return <WorkspaceSkeleton />;
 
   return (
-    <div className="space-y-4">
-      <header className="space-y-1">
-        <p className="text-xs font-medium uppercase tracking-widest text-primary">
-          Risk workspace
-        </p>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {current ? current.name : "Analyze"}
-        </h1>
+    <div className="space-y-6">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0 space-y-2">
+          <p className="text-xs font-medium uppercase tracking-widest text-primary">
+            Risk workspace
+          </p>
+          <h1 className="break-words text-3xl font-semibold tracking-tight sm:text-4xl">
+            {current ? current.name : "Analyze"}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            One workspace. From understanding risk to testing your next move.
+          </p>
+        </div>
+        <Link
+          href="/portfolios"
+          className="workspace-nav-link border border-border bg-card"
+        >
+          Manage holdings
+        </Link>
       </header>
 
       <div className="overflow-x-auto">
         <Tabs
-          items={VIEWS as unknown as { value: string; label: string }[]}
+          items={VIEWS}
           value={view}
           onValueChange={setView}
           idBase={TAB_BASE}
+          className="flex w-full rounded-2xl p-1.5 [&>button]:flex-1"
         />
+      </div>
+
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-5">
+        <div className="max-w-2xl space-y-1">
+          <h2 className="text-lg font-semibold tracking-tight">
+            {STAGE_GUIDE[view].title}
+          </h2>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            {STAGE_GUIDE[view].description}
+          </p>
+        </div>
+        <span className="rounded-full bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
+          {VIEWS.findIndex((item) => item.value === view) + 1} / 5 views
+        </span>
       </div>
 
       {/* Visited stages stay mounted (hidden) so returning is instant + no refetch. */}
@@ -160,6 +239,18 @@ export function AnalyzeWorkspace() {
           <HistoryStage />
         </StagePanel>
       )}
+      <footer className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card p-5">
+        <p className="text-sm text-muted-foreground">
+          Explore at your own pace. Your holdings stay unchanged.
+        </p>
+        <Button
+          variant="outline"
+          onClick={() => setView(STAGE_GUIDE[view].next)}
+        >
+          {STAGE_GUIDE[view].cta}
+          <WorkspaceIcon name="arrow" className="h-4 w-4" />
+        </Button>
+      </footer>
     </div>
   );
 }
@@ -195,7 +286,8 @@ function OverviewStage({ onFirstLoad }: { onFirstLoad: () => void }) {
   const snapshot = useLastSnapshot();
   const firedRef = useRef(false);
   const explainInput = useMemo(
-    () => (score.data ? explainInputFromScore(score.data, snapshot.data) : null),
+    () =>
+      score.data ? explainInputFromScore(score.data, snapshot.data) : null,
     [score.data, snapshot.data],
   );
   const explain = useRiskExplain(explainInput);
@@ -214,16 +306,20 @@ function OverviewStage({ onFirstLoad }: { onFirstLoad: () => void }) {
   const weakest = weakestDimension(s);
   return (
     <div className="space-y-4">
+      <RiskSnapshot metrics={s.metrics} />
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           {/* The headline number leads, then the band — same shape as the
               /score hero. ScoreGauge only draws the band + marker, so the
               caller always renders the score itself. */}
           <CardContent className="space-y-3 py-6">
+            <p className="text-sm font-medium text-muted-foreground">
+              Portfolio health score
+            </p>
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <span
                 data-testid="analyze-overall-score"
-                className="font-mono text-5xl font-semibold tracking-tight text-primary tabular-nums"
+                className="text-6xl font-semibold tracking-tight text-foreground tabular-nums"
               >
                 {Math.round(s.overall_score)}
               </span>
@@ -235,18 +331,34 @@ function OverviewStage({ onFirstLoad }: { onFirstLoad: () => void }) {
               </span>
             </div>
             <ScoreGauge score={s.overall_score} />
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Higher means healthier on this model. This is a risk assessment,
+              not a return forecast.
+            </p>
           </CardContent>
         </Card>
         <div className="space-y-3">
-          <RiskDiagnosis explain={explain.data} loading={explain.isLoading} source="score" />
+          <RiskDiagnosis
+            explain={explain.data}
+            loading={explain.isLoading}
+            source="score"
+          />
           {weakest && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm">Focus first</CardTitle>
               </CardHeader>
               <CardContent className="text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">{weakest}</span> is the weakest
-                dimension right now. Open <b>Drivers</b> to see why.
+                <span className="font-medium text-foreground">{weakest}</span>{" "}
+                is the weakest dimension right now. Open <b>Drivers</b> to see
+                why.
+                <Link
+                  href="/analyze?view=drivers"
+                  className="mt-3 flex min-h-11 items-center gap-2 font-medium text-primary hover:underline"
+                >
+                  Inspect this risk{" "}
+                  <WorkspaceIcon name="arrow" className="h-4 w-4" />
+                </Link>
               </CardContent>
             </Card>
           )}
@@ -264,17 +376,20 @@ function DriversStage({ onFirstLoad }: { onFirstLoad: () => void }) {
   const { user } = useAuth();
   const { activePortfolioId } = usePortfolioContext();
   const firedRef = useRef(false);
-  useRunOncePerUser(runKeyForActivePortfolio(user?.id, activePortfolioId), () => {
-    report.reset();
-    report.mutate(undefined, {
-      onSuccess: () => {
-        if (!firedRef.current) {
-          firedRef.current = true;
-          onFirstLoad();
-        }
-      },
-    });
-  });
+  useRunOncePerUser(
+    runKeyForActivePortfolio(user?.id, activePortfolioId),
+    () => {
+      report.reset();
+      report.mutate(undefined, {
+        onSuccess: () => {
+          if (!firedRef.current) {
+            firedRef.current = true;
+            onFirstLoad();
+          }
+        },
+      });
+    },
+  );
   if (report.isPending) return <ResultSkeleton />;
   if (report.isError) return <RiskErrorPanel error={report.error as Error} />;
   if (!report.data) return <ResultSkeleton />;
@@ -298,10 +413,13 @@ function StressStage({ onFirstRun }: { onFirstRun: () => void }) {
     }
   };
 
-  useRunOncePerUser(runKeyForActivePortfolio(user?.id, activePortfolioId), () => {
-    historical.reset();
-    historical.mutate(undefined);
-  });
+  useRunOncePerUser(
+    runKeyForActivePortfolio(user?.id, activePortfolioId),
+    () => {
+      historical.reset();
+      historical.mutate(undefined);
+    },
+  );
 
   const baseline = score.data ?? null;
   return (
@@ -324,13 +442,18 @@ function StressStage({ onFirstRun }: { onFirstRun: () => void }) {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Historical crises — replayed on your book</CardTitle>
+          <CardTitle className="text-base">
+            Historical crises — replayed on your book
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {historical.isError ? (
             <RiskErrorPanel error={historical.error as Error} />
           ) : (
-            <HistoricalScenarios data={historical.data} loading={historical.isPending} />
+            <HistoricalScenarios
+              data={historical.data}
+              loading={historical.isPending}
+            />
           )}
         </CardContent>
       </Card>
@@ -358,7 +481,10 @@ function PlanStage() {
           <CardTitle className="text-base">Saved risk plans</CardTitle>
         </CardHeader>
         <CardContent>
-          <RiskPlansPanel portfolioId={activePortfolioId} currentScore={score.data ?? null} />
+          <RiskPlansPanel
+            portfolioId={activePortfolioId}
+            currentScore={score.data ?? null}
+          />
         </CardContent>
       </Card>
     </div>
@@ -371,8 +497,16 @@ function HistoryStage() {
   const score = useActiveScore();
   return (
     <div className="space-y-6">
-      <MetricTrend metric="overall_score" title="Health score over time" kind="score" />
-      <MetricTrend metric="annual_volatility" title="Volatility over time" kind="pct" />
+      <MetricTrend
+        metric="overall_score"
+        title="Health score over time"
+        kind="score"
+      />
+      <MetricTrend
+        metric="annual_volatility"
+        title="Volatility over time"
+        kind="pct"
+      />
       {score.data && <ScoreChangeReport score={score.data} />}
     </div>
   );
@@ -380,18 +514,19 @@ function HistoryStage() {
 
 // ── helpers ──────────────────────────────────────────────────────────
 
-function weakestDimension(s: ScoreResponse): string | null {
-  const dims = (s as { dimension_scores?: Record<string, number> }).dimension_scores;
-  if (!dims) return null;
-  let worst: string | null = null;
-  let worstV = Infinity;
-  for (const [k, v] of Object.entries(dims)) {
-    if (typeof v === "number" && v < worstV) {
-      worstV = v;
-      worst = k;
-    }
-  }
-  return worst ? worst.replace(/_/g, " ") : null;
+export function weakestDimension(
+  s: Pick<ScoreResponse, "dimensions">,
+): string | null {
+  // Read the actual public contract, not the obsolete `dimension_scores` field.
+  const dimensions = Object.values(s.dimensions ?? {}).filter((dimension) =>
+    Number.isFinite(dimension.score),
+  );
+  const weakest = dimensions.reduce<(typeof dimensions)[number] | null>(
+    (worst, dimension) =>
+      !worst || dimension.score < worst.score ? dimension : worst,
+    null,
+  );
+  return weakest?.name ?? null;
 }
 
 function NoPortfolio() {
@@ -402,6 +537,12 @@ function NoPortfolio() {
       </CardHeader>
       <CardContent className="text-sm text-muted-foreground">
         Add your holdings to start analyzing your risk.
+        <Link
+          href="/portfolios/new"
+          className="mt-4 block font-medium text-primary hover:underline"
+        >
+          Create your first portfolio →
+        </Link>
       </CardContent>
     </Card>
   );

@@ -23,7 +23,7 @@ export function Tabs({
   className,
   idBase,
 }: {
-  items: TabItem[];
+  items: readonly TabItem[];
   value: string;
   onValueChange: (v: string) => void;
   className?: string;
@@ -74,9 +74,9 @@ export function Tabs({
             onClick={() => onValueChange(t.value)}
             onKeyDown={(event) => onKeyDown(event, itemIndex)}
             className={cn(
-              "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              "min-h-11 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
               active
-                ? "bg-background text-foreground shadow-sm"
+                ? "bg-card text-primary shadow-sm"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >

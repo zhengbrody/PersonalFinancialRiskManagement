@@ -96,7 +96,7 @@ export function DataTable<T>({
           aria-label={filterPlaceholder}
         />
       )}
-      <div className="max-h-[28rem] overflow-auto rounded-md border border-border">
+      <div className="max-h-[28rem] overflow-auto rounded-xl border border-border">
         <table className="w-full text-xs" style={{ minWidth }}>
           <thead className="sticky top-0 z-10 bg-card">
             <tr className="border-b border-border text-left text-muted-foreground">
@@ -106,20 +106,20 @@ export function DataTable<T>({
                 return (
                   <th
                     key={c.key}
+                    scope="col"
                     className={cn(
-                      "px-3 py-2 text-[10px] font-medium uppercase tracking-wider",
+                      "px-3 py-2 text-xs font-medium",
                       c.align === "right" && "text-right",
-                      sortable && "cursor-pointer select-none hover:text-foreground",
                     )}
-                    onClick={() => onSort(c)}
                     aria-sort={activeSort ? (dir === "asc" ? "ascending" : "descending") : undefined}
                   >
-                    {c.header}
-                    {sortable && (
-                      <span className="ml-1 text-[10px] opacity-60">
+                    {sortable ? (
+                      <button type="button" onClick={() => onSort(c)} className="inline-flex min-h-11 items-center gap-1 text-inherit hover:text-foreground">
+                      {c.header}<span aria-hidden="true" className="text-[10px] opacity-60">
                         {activeSort ? (dir === "asc" ? "▲" : "▼") : "↕"}
                       </span>
-                    )}
+                      </button>
+                    ) : c.header}
                   </th>
                 );
               })}
@@ -142,7 +142,7 @@ export function DataTable<T>({
                     <td
                       key={c.key}
                       className={cn(
-                        "px-3 py-1.5",
+                        "px-3 py-3",
                         c.align === "right" && "text-right",
                         c.cellClassName?.(row),
                       )}

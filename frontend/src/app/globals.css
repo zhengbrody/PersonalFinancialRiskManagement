@@ -113,13 +113,68 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background font-sans text-foreground antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
     /* Institutional numeric discipline: fixed-width (tabular) numerals so
        figures align in columns everywhere — KPI tiles, tables, deltas —
        the way a trading terminal renders numbers. Prose is unaffected
        (only digit glyph widths change). */
     font-variant-numeric: tabular-nums;
+  }
+}
+
+/* App-only treatment: marketing keeps its own palette and art direction. */
+@layer components {
+  .workspace-shell {
+    --background: 160 12% 97%;
+    --foreground: 160 15% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 160 15% 10%;
+    --muted: 160 10% 93%;
+    --muted-foreground: 160 5% 40%;
+    --border: 160 10% 87%;
+    --input: 160 10% 87%;
+    --primary: 158 78% 25%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 158 78% 25%;
+    --accent: 160 15% 93%;
+    --accent-foreground: 160 15% 10%;
+  }
+  .dark .workspace-shell {
+    --background: 160 9% 6%;
+    --foreground: 150 10% 96%;
+    --card: 160 8% 9%;
+    --card-foreground: 150 10% 96%;
+    --muted: 160 7% 14%;
+    --muted-foreground: 160 5% 66%;
+    --border: 160 7% 20%;
+    --input: 160 7% 20%;
+    --primary: 151 66% 64%;
+    --primary-foreground: 160 15% 8%;
+    --ring: 151 66% 64%;
+    --accent: 160 7% 16%;
+    --accent-foreground: 150 10% 96%;
+  }
+  .workspace-nav-link {
+    @apply inline-flex min-h-11 items-center rounded-full px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground;
+  }
+  .workspace-nav-link[aria-current="page"] {
+    @apply bg-primary/10 text-primary;
+  }
+  .workspace-shell :is(a, button, summary, input, select, textarea):focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 3px;
+  }
+  .workspace-shell a, .workspace-shell button {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-shell *, .workspace-shell *::before, .workspace-shell *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
