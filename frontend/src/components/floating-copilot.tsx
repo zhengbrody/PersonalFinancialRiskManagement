@@ -50,14 +50,22 @@ export function FloatingCopilot() {
     const h = el?.offsetHeight ?? 640;
     const maxX = Math.max(0, window.innerWidth - w);
     const maxY = Math.max(0, window.innerHeight - h);
-    return { x: Math.min(Math.max(0, x), maxX), y: Math.min(Math.max(0, y), maxY) };
+    return {
+      x: Math.min(Math.max(0, x), maxX),
+      y: Math.min(Math.max(0, y), maxY),
+    };
   }, []);
 
-  // Re-clamp a previously-dragged panel back into view whenever it reopens.
+  // Keep dragged panels reachable after reopening, maximizing or resizing.
+  // Compact screens use the full Copilot route; CSS hides BOTH floating surfaces
+  // at the same breakpoint, preserving the conversation when returning to desktop.
   useEffect(() => {
-    if (open && pos) setPos((p) => (p ? clamp(p.x, p.y) : p));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+    if (!open) return;
+    const reposition = () => setPos((p) => (p ? clamp(p.x, p.y) : p));
+    reposition();
+    window.addEventListener("resize", reposition);
+    return () => window.removeEventListener("resize", reposition);
+  }, [open, maximized, clamp]);
 
   function onHeaderPointerDown(e: React.PointerEvent) {
     // Don't start a drag from the close/maximize buttons.
@@ -65,7 +73,10 @@ export function FloatingCopilot() {
     const el = panelRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    drag.current = { offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top };
+    drag.current = {
+      offsetX: e.clientX - rect.left,
+      offsetY: e.clientY - rect.top,
+    };
     // Seed pos from the current rect so it doesn't jump from the anchor.
     setPos(clamp(rect.left, rect.top));
     try {
@@ -78,7 +89,12 @@ export function FloatingCopilot() {
   useEffect(() => {
     function onMove(e: PointerEvent) {
       if (!drag.current) return;
-      setPos(clamp(e.clientX - drag.current.offsetX, e.clientY - drag.current.offsetY));
+      setPos(
+        clamp(
+          e.clientX - drag.current.offsetX,
+          e.clientY - drag.current.offsetY,
+        ),
+      );
     }
     function onUp() {
       drag.current = null;
@@ -111,7 +127,7 @@ export function FloatingCopilot() {
           aria-label="Portfolio Copilot"
           aria-modal="false"
           style={style}
-          className={`fixed ${anchor} ${size} z-50 flex flex-col overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-xl`}
+          className={`fixed ${anchor} ${size} z-50 hidden flex-col overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-xl lg:flex`}
         >
           <div
             onPointerDown={onHeaderPointerDown}
@@ -119,12 +135,16 @@ export function FloatingCopilot() {
           >
             <div className="flex items-center gap-2">
               <span className="inline-block h-2 w-2 rounded-full bg-primary" />
-              <span className="text-sm font-semibold tracking-tight">Portfolio Copilot</span>
+              <span className="text-sm font-semibold tracking-tight">
+                Portfolio Copilot
+              </span>
             </div>
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                aria-label={maximized ? "Restore Copilot size" : "Maximize Copilot"}
+                aria-label={
+                  maximized ? "Restore Copilot size" : "Maximize Copilot"
+                }
                 onClick={() => setMaximized((v) => !v)}
                 className="rounded-md px-2 py-0.5 text-sm leading-none text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
               >
@@ -153,7 +173,9 @@ export function FloatingCopilot() {
         className="fixed bottom-4 right-4 z-50 hidden h-12 items-center gap-2 rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground shadow-lg transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background lg:flex"
       >
         <ChatGlyph />
-        <span className="hidden sm:inline">{open ? "Close" : "Ask Copilot"}</span>
+        <span className="hidden sm:inline">
+          {open ? "Close" : "Ask Copilot"}
+        </span>
       </button>
     </>
   );

@@ -61,3 +61,31 @@ tests passed across Chromium desktop and mobile, including 360/390/768/1024px
 navigation checks. ESLint, TypeScript, production-mode Next.js build and
 `git diff --check` passed. Loaded Today/Analyze/Holdings screenshots were visually
 reviewed in light and dark themes. No browser page errors in the captured flows.
+
+## Independent acceptance review — 2026-09-05
+
+Four interaction defects were reproduced with failing tests and repaired:
+
+| Finding | Repair and regression coverage |
+| --- | --- |
+| Landscape navigation's final action extended below the viewport (421px, bottom navigation starts at 295px) | Scrollable, viewport/safe-area-bounded disclosures; menu and portfolio-management actions remain reachable at 800×360; compact menu targets are at least 44px |
+| Escape from the portfolio list lost keyboard focus | Shared `useDismiss` optionally restores opener focus on Escape only; selection also restores focus; outside clicks retain their target |
+| An open desktop Copilot continued covering the compact workspace | Panel and launcher share the CSS desktop breakpoint; returning to desktop retains the conversation; dragged panels reclamp after maximize and resize |
+| Metadata rerenders reset the user's focused portfolio option | Stable callback ref focuses the active option only on mount; ArrowDown selection survives rerenders |
+
+Navigation disclosures use native links/buttons, not incomplete ARIA application
+menus. The portfolio management link is outside the listbox's options. No new
+dependency or parallel state-management implementation was introduced.
+
+Final gates: **560 unit tests / 116 files**, **56 Chromium desktop/mobile browser
+tests**, TypeScript, ESLint, production-mode Next.js build and diff whitespace
+checks passed. Refreshed light/dark desktop/mobile screenshots were reviewed.
+The backend, risk formulas, OpenAPI, generated API types and dependency lockfile
+have no changes from the base of this UI branch.
+
+Acceptance is scoped to this UI change and the exercised fixture-driven flows.
+It is not a whole-platform security/financial-model certification or a guarantee
+of zero bugs. Safari/iOS, real broker data, live-account authorization and a
+deployed production build were not revalidated here. Existing build/test runtime
+warnings (Next lint deprecation, Node flags, server-side chart measurement) are
+not hidden or treated as UI failures. Production release remains a separate step.

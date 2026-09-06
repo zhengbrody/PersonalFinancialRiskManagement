@@ -10,7 +10,12 @@ import { renderWithQuery } from "@/test-utils";
 
 const switchPortfolioMock = vi.fn();
 const ctx = {
-  current: { id: "p1", name: "Book A", holdings: { SPY: {}, BND: {} }, updated_at: "2026-07-01T00:00:00Z" },
+  current: {
+    id: "p1",
+    name: "Book A",
+    holdings: { SPY: {}, BND: {} },
+    updated_at: "2026-07-01T00:00:00Z",
+  },
   list: [
     { id: "p1", name: "Book A", holdings: { SPY: {}, BND: {} } },
     { id: "p2", name: "Book B", holdings: {} },
@@ -58,5 +63,40 @@ describe("PortfolioContextBar", () => {
     authState.user = null;
     const { container } = renderWithQuery(<PortfolioContextBar />);
     expect(container.innerHTML).toBe("");
+  });
+
+  it("keeps the user's keyboard position when portfolio metadata rerenders", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderWithQuery(<PortfolioContextBar />);
+    await user.click(screen.getByRole("button", { name: "Book A" }));
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("option", { name: /Book B/ })).toHaveFocus();
+    rerender(<PortfolioContextBar />);
+    expect(screen.getByRole("option", { name: /Book B/ })).toHaveFocus();
+  });
+
+  it("returns keyboard focus on Escape and selection, without stealing outside clicks", async () => {
+    const user = userEvent.setup();
+    renderWithQuery(
+      <>
+        <PortfolioContextBar />
+        <button>Outside action</button>
+      </>,
+    );
+    const trigger = screen.getByRole("button", { name: "Book A" });
+    await user.click(trigger);
+    expect(screen.getByRole("option", { selected: true })).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(trigger).toHaveFocus();
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    await user.click(trigger);
+    await user.click(screen.getByRole("option", { name: /Book B/ }));
+    expect(trigger).toHaveFocus();
+    await user.click(trigger);
+    await user.click(screen.getByRole("button", { name: "Outside action" }));
+    expect(
+      screen.getByRole("button", { name: "Outside action" }),
+    ).toHaveFocus();
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
 });

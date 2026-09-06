@@ -14,7 +14,7 @@
  */
 
 import Link from "next/link";
-import { type KeyboardEvent, useState } from "react";
+import { type KeyboardEvent, useCallback, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import { usePortfolioContext } from "@/lib/portfolio-context";
@@ -43,7 +43,8 @@ function useCachedScoreMeta(userId: string | null): {
   asOf: string | null;
 } {
   const q = useQuery<
-    { data_confidence?: { label?: string; as_of?: string | null } | null } | undefined
+    | { data_confidence?: { label?: string; as_of?: string | null } | null }
+    | undefined
   >({
     queryKey: ["risk", "score_active", userId],
     enabled: false,
@@ -74,18 +75,31 @@ export function PortfolioContextBar() {
     cancelSwitch,
   } = usePortfolioContext();
   const [open, setOpen] = useState(false);
-  const ref = useDismiss<HTMLDivElement>(open, () => setOpen(false));
-  const { label: confLabel, asOf: dataAsOf } = useCachedScoreMeta(user?.id ?? null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const ref = useDismiss<HTMLDivElement>(
+    open,
+    () => setOpen(false),
+    triggerRef,
+  );
+  const { label: confLabel, asOf: dataAsOf } = useCachedScoreMeta(
+    user?.id ?? null,
+  );
 
   // Proper listbox keyboarding: focus the active option when the menu opens,
   // and move focus with Arrow/Home/End (Escape/outside-click close via useDismiss).
-  const onListboxMount = (el: HTMLDivElement | null) => {
+  const onListboxMount = useCallback((el: HTMLDivElement | null) => {
     if (!el) return;
     const opts = el.querySelectorAll<HTMLButtonElement>('[role="option"]');
-    (opts[[...opts].findIndex((o) => o.getAttribute("aria-selected") === "true")] ?? opts[0])?.focus();
-  };
+    (
+      opts[
+        [...opts].findIndex((o) => o.getAttribute("aria-selected") === "true")
+      ] ?? opts[0]
+    )?.focus();
+  }, []);
   const onListboxKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    const opts = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="option"]'));
+    const opts = Array.from(
+      e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="option"]'),
+    );
     if (opts.length === 0) return;
     const idx = opts.indexOf(document.activeElement as HTMLButtonElement);
     if (e.key === "ArrowDown") {
@@ -112,7 +126,10 @@ export function PortfolioContextBar() {
       <div className="border-t border-border/60 bg-muted/30">
         <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 py-1.5 text-xs text-muted-foreground">
           <span>No portfolio yet.</span>
-          <Link href="/portfolios/new" className="font-medium text-primary hover:underline">
+          <Link
+            href="/portfolios/new"
+            className="font-medium text-primary hover:underline"
+          >
             Create one →
           </Link>
         </div>
@@ -131,13 +148,16 @@ export function PortfolioContextBar() {
         </span>
         <div ref={ref} className="relative">
           <button
+            ref={triggerRef}
             type="button"
             onClick={() => setOpen((v) => !v)}
             aria-haspopup="listbox"
             aria-expanded={open}
             className="flex min-h-10 max-w-[52vw] items-center gap-3 rounded-lg border border-border bg-card px-3 py-2 font-medium text-foreground hover:bg-accent sm:max-w-[360px]"
           >
-            <span className="truncate">{current?.name ?? "Select a portfolio"}</span>
+            <span className="truncate">
+              {current?.name ?? "Select a portfolio"}
+            </span>
             {switchingId ? (
               <span className="text-muted-foreground" aria-label="switching">
                 …
@@ -149,42 +169,49 @@ export function PortfolioContextBar() {
             )}
           </button>
           {open && (
-            <div
-              role="listbox"
-              aria-label="Switch portfolio"
-              ref={onListboxMount}
-              onKeyDown={onListboxKeyDown}
-              className="absolute left-0 z-40 mt-2 max-h-80 w-64 max-w-[calc(100vw-7rem)] overflow-auto rounded-xl border border-border bg-card p-2 shadow-xl"
-            >
-              {list.map((p) => {
-                const active = p.id === current?.id;
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    role="option"
-                    aria-selected={active}
-                    disabled={Boolean(switchingId)}
-                    onClick={() => {
-                      setOpen(false);
-                      if (!active) void switchPortfolio(p.id);
-                    }}
-                    className={`flex min-h-12 w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left hover:bg-accent disabled:opacity-60 ${
-                      active ? "bg-accent/60" : ""
-                    }`}
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium text-foreground">{p.name}</span>
-                      <span className="block text-[11px] text-muted-foreground">
-                        {holdingsCount(p)} holding{holdingsCount(p) === 1 ? "" : "s"}
+            <div className="absolute left-0 z-40 mt-2 max-h-[min(20rem,calc(100dvh-14rem-env(safe-area-inset-bottom)))] w-64 max-w-[calc(100vw-7rem)] overflow-auto rounded-xl border border-border bg-card p-2 shadow-xl">
+              <div
+                role="listbox"
+                aria-label="Switch portfolio"
+                ref={onListboxMount}
+                onKeyDown={onListboxKeyDown}
+              >
+                {list.map((p) => {
+                  const active = p.id === current?.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      role="option"
+                      aria-selected={active}
+                      disabled={Boolean(switchingId)}
+                      onClick={() => {
+                        setOpen(false);
+                        triggerRef.current?.focus();
+                        if (!active) void switchPortfolio(p.id);
+                      }}
+                      className={`flex min-h-12 w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left hover:bg-accent disabled:opacity-60 ${
+                        active ? "bg-accent/60" : ""
+                      }`}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium text-foreground">
+                          {p.name}
+                        </span>
+                        <span className="block text-[11px] text-muted-foreground">
+                          {holdingsCount(p)} holding
+                          {holdingsCount(p) === 1 ? "" : "s"}
+                        </span>
                       </span>
-                    </span>
-                    {active && (
-                      <span className="shrink-0 text-[11px] font-medium text-primary">Active</span>
-                    )}
-                  </button>
-                );
-              })}
+                      {active && (
+                        <span className="shrink-0 text-[11px] font-medium text-primary">
+                          Active
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
               <Link
                 href="/portfolios"
                 onClick={() => setOpen(false)}

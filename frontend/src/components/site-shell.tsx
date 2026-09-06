@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { isBillingEnabled } from "@/lib/billing-flag";
@@ -192,14 +192,15 @@ function NavGroup({
   active?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useDismiss(open, () => setOpen(false));
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const ref = useDismiss(open, () => setOpen(false), triggerRef);
   return (
     <div ref={ref} className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        aria-haspopup="menu"
         data-active={active || undefined}
         className="workspace-nav-link flex items-center gap-1 data-[active=true]:bg-primary/10 data-[active=true]:text-primary"
       >
@@ -209,10 +210,7 @@ function NavGroup({
         </span>
       </button>
       {open && (
-        <div
-          role="menu"
-          className="absolute left-0 z-50 mt-1 min-w-44 rounded-md border border-border bg-card p-1 shadow-lg"
-        >
+        <div className="absolute left-0 z-50 mt-1 min-w-44 rounded-md border border-border bg-card p-1 shadow-lg">
           {items.map((it) => (
             <MenuLink
               key={it.href}
@@ -237,13 +235,13 @@ function MenuLink({
     "block rounded px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground";
   if (item.external) {
     return (
-      <a href={item.href} role="menuitem" className={cls} onClick={onNavigate}>
+      <a href={item.href} className={cls} onClick={onNavigate}>
         {item.label}
       </a>
     );
   }
   return (
-    <Link href={item.href} role="menuitem" className={cls} onClick={onNavigate}>
+    <Link href={item.href} className={cls} onClick={onNavigate}>
       {item.label}
     </Link>
   );
@@ -253,25 +251,27 @@ function MobileNav() {
   const { user, configured, signOut } = useAuth();
   const billing = useBillingMe();
   const [open, setOpen] = useState(false);
-  const ref = useDismiss(open, () => setOpen(false));
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const ref = useDismiss(open, () => setOpen(false), triggerRef);
   const close = () => setOpen(false);
   const isOwner = billing.data?.plan === "owner";
 
   return (
     <div ref={ref} className="relative lg:hidden">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-label="Menu"
-        className="flex h-9 w-9 items-center justify-center rounded-md border border-border text-foreground hover:bg-accent"
+        className="flex h-11 w-11 items-center justify-center rounded-md border border-border text-foreground hover:bg-accent"
       >
         <span aria-hidden className="text-lg leading-none">
           {open ? "✕" : "☰"}
         </span>
       </button>
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-60 rounded-md border border-border bg-card p-2 shadow-lg">
+        <div className="absolute right-0 z-50 mt-2 max-h-[calc(100dvh-10rem-env(safe-area-inset-bottom))] w-60 overflow-y-auto overscroll-contain rounded-md border border-border bg-card p-2 shadow-lg [&_a]:min-h-11 [&_button]:min-h-11">
           {MAIN_LINKS.map((it) => (
             <MenuLink key={it.href} item={it} onNavigate={close} />
           ))}
@@ -340,7 +340,8 @@ function AccountMenu() {
   const { user, loading, configured, signOut } = useAuth();
   const billing = useBillingMe();
   const [open, setOpen] = useState(false);
-  const ref = useDismiss(open, () => setOpen(false));
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const ref = useDismiss(open, () => setOpen(false), triggerRef);
 
   if (loading) {
     return <span className="ml-2 h-5 w-16 animate-pulse rounded bg-muted" />;
@@ -373,10 +374,10 @@ function AccountMenu() {
   return (
     <div ref={ref} className="relative ml-2">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        aria-haspopup="menu"
         title={displayName(user)}
         className="flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
       >
@@ -393,10 +394,7 @@ function AccountMenu() {
         </span>
       </button>
       {open && (
-        <div
-          role="menu"
-          className="absolute right-0 z-50 mt-1 min-w-48 rounded-md border border-border bg-card p-1 shadow-lg"
-        >
+        <div className="absolute right-0 z-50 mt-1 min-w-48 rounded-md border border-border bg-card p-1 shadow-lg">
           {accountLinks(isOwner).map((it) => (
             <MenuLink
               key={it.href}
@@ -406,7 +404,6 @@ function AccountMenu() {
           ))}
           <button
             type="button"
-            role="menuitem"
             onClick={() => {
               setOpen(false);
               signOut();
