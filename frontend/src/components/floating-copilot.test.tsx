@@ -93,7 +93,7 @@ describe("FloatingCopilot", () => {
 
     // Open: the shared conversation's example questions appear.
     expect(
-      screen.getByRole("button", { name: /is my portfolio too risky\?/i }),
+      screen.getByRole("button", { name: /check my portfolio/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("dialog", { name: /portfolio copilot/i }),

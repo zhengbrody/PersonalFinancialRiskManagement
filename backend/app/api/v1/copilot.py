@@ -171,8 +171,16 @@ def copilot_ask_endpoint(
     # ── Response cache (input-hash, 30 min). Keyed per-user because the
     # evidence folds in the caller's portfolio — never share across users.
     # Checked before the credit gate so a repeated question is free.
+    from ...services import copilot_scope
     from ...services.ai_cache import ask_cache, user_generation
     from ...services.ai_telemetry import input_hash
+
+    scoped = "expected_portfolio_id" in body.model_fields_set
+    scope = (
+        copilot_scope.resolve_scope(user.access_token, body.expected_portfolio_id)
+        if scoped
+        else None
+    )
 
     # route + ticker steer intent/tools, so they must be in the cache key — else
     # the same question on two pages could return a stale cross-context answer.
@@ -181,6 +189,7 @@ def copilot_ask_endpoint(
     cache_key = input_hash(
         f"{user.id}|g{user_generation(user.id)}|{body.message.strip()}"
         f"|{body.route or ''}|{(body.ticker or '').upper()}"
+        f"|scope:{scope or 'legacy'}"
     )
     cached = ask_cache.get(cache_key)
     if cached is not None:
@@ -201,6 +210,9 @@ def copilot_ask_endpoint(
     result = copilot_router.answer(
         body.message, user=user, llm_callable=llm, route=body.route, ticker=body.ticker
     )
+
+    if scope is not None:
+        copilot_scope.verify_scope(user.access_token, body.expected_portfolio_id, scope)
 
     if llm is not None and not result.data_only:
         _record_ask_cost(user.id, result, started)

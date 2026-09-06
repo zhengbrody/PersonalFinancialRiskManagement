@@ -1347,31 +1347,6 @@ export const copilotAnswerSchema = z.looseObject({
 });
 export type CopilotAnswer = z.infer<typeof copilotAnswerSchema>;
 
-/**
- * Ask the Copilot 2.0 structured-answer endpoint. A mutation (explicit user
- * action — it spends credits). 429 `quota_exceeded` on quota; `data_only`
- * answer (no LLM key) is still a valid 200. Mirrors the auth-token + schema
- * plumbing of the other copilot/equity mutations in this file.
- */
-export function useCopilotAsk() {
-  const { accessToken } = useAuth();
-  return useMutation<
-    CopilotAnswer,
-    Error,
-    { message: string; route?: string; ticker?: string }
-  >({
-    mutationFn: ({ message, route, ticker }) =>
-      apiFetch<CopilotAnswer>("/api/v1/copilot/ask", {
-        method: "POST",
-        // route/ticker are page CONTEXT — they steer intent + tool choice on
-        // the backend but never become citable evidence.
-        body: { message, ...(route ? { route } : {}), ...(ticker ? { ticker } : {}) },
-        authToken: accessToken ?? undefined,
-        schema: copilotAnswerSchema,
-      }),
-  });
-}
-
 // ── Copilot PR3/PR4 — confirmed preferences + proactive insights ─────
 
 export const copilotPreferencesSchema = z.looseObject({

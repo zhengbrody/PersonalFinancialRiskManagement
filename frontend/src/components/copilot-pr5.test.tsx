@@ -11,14 +11,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
-const askMock = vi.fn();
 const prefsMock = vi.fn();
 const saveMock = vi.fn();
 const clearMock = vi.fn();
 const insightsMock = vi.fn();
 
 vi.mock("@/lib/queries", () => ({
-  useCopilotAsk: () => askMock(),
   useMyPortfolios: () => ({ data: undefined, isLoading: false, isError: false }),
   useCopilotPreferences: () => prefsMock(),
   useSaveCopilotPreferences: () => saveMock(),
@@ -28,7 +26,8 @@ vi.mock("@/lib/queries", () => ({
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }));
 vi.mock("next/navigation", () => ({ usePathname: () => "/copilot" }));
 
-import { CopilotAsk } from "./copilot-ask";
+import { CopilotAnswerCard } from "./copilot-answer";
+import type { CopilotAnswer } from "@/lib/queries";
 import { CopilotInsightsStrip } from "./copilot-insights";
 import { CopilotPreferencesCard } from "./copilot-preferences";
 
@@ -73,12 +72,7 @@ const SECTIONED_ANSWER = {
   ],
 };
 
-function idleAsk(data: unknown = undefined) {
-  return { mutate: vi.fn(), reset: vi.fn(), isPending: false, isError: false, data, error: null };
-}
-
 beforeEach(() => {
-  askMock.mockReturnValue(idleAsk(SECTIONED_ANSWER));
   prefsMock.mockReturnValue({ data: undefined, isLoading: false, isError: false });
   saveMock.mockReturnValue({ mutate: vi.fn(), isPending: false, isError: false });
   clearMock.mockReturnValue({ mutate: vi.fn(), isPending: false });
@@ -88,7 +82,7 @@ beforeEach(() => {
 
 describe("six-section renderer", () => {
   it("renders all six titles in order with the simulation visually distinct", () => {
-    render(<CopilotAsk />);
+    render(<CopilotAnswerCard answer={SECTIONED_ANSWER as CopilotAnswer} />);
     const titles = [
       "Direct answer",
       "Why this matters for your portfolio",
@@ -110,24 +104,22 @@ describe("six-section renderer", () => {
   });
 
   it("evidence rows expand to show the computing tool and source tier", () => {
-    render(<CopilotAsk />);
+    render(<CopilotAnswerCard answer={SECTIONED_ANSWER as CopilotAnswer} />);
     expect(screen.getByText("720/1000")).toBeInTheDocument();
     expect(screen.getByText("E1")).toBeInTheDocument();
     expect(screen.getByText(/Portfolio health engine/)).toBeInTheDocument();
   });
 
   it("shows the low-confidence banner when a directional answer is blocked", () => {
-    askMock.mockReturnValue(
-      idleAsk({
+    const answer = {
         ...SECTIONED_ANSWER,
         data_confidence: {
           ...SECTIONED_ANSWER.data_confidence,
           directional_allowed: false,
           conviction_cap: "none",
         },
-      }),
-    );
-    render(<CopilotAsk />);
+      };
+    render(<CopilotAnswerCard answer={answer as CopilotAnswer} />);
     expect(screen.getByText(/Not enough verified data for a directional answer/)).toBeInTheDocument();
   });
 });

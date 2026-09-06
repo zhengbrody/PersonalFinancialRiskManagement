@@ -49,6 +49,8 @@ ARG NEXT_PUBLIC_BILLING_ENABLED=
 # DEFAULT OFF (unset) — a data-licensing decision gates enabling; the
 # build-images build-arg wiring rides the pending workflow-scope batch.
 ARG NEXT_PUBLIC_PUBLIC_RISK_CHECK=
+# Optional durable Copilot checks; enable only after migration 0014 + backend setup.
+ARG NEXT_PUBLIC_COPILOT_RUNS_ENABLED=false
 
 # Expose the args as env vars so `next build` picks them up and inlines
 # them into the static bundle.
@@ -58,6 +60,7 @@ ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL \
     NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN \
     NEXT_PUBLIC_BILLING_ENABLED=$NEXT_PUBLIC_BILLING_ENABLED \
     NEXT_PUBLIC_PUBLIC_RISK_CHECK=$NEXT_PUBLIC_PUBLIC_RISK_CHECK \
+    NEXT_PUBLIC_COPILOT_RUNS_ENABLED=$NEXT_PUBLIC_COPILOT_RUNS_ENABLED \
     NEXT_TELEMETRY_DISABLED=1
 
 COPY --from=deps /app/node_modules ./node_modules

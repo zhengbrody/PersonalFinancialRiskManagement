@@ -210,6 +210,57 @@ def test_requires_bearer(test_client):
     assert resp.status_code == 401
 
 
+def test_check_rejects_different_selected_portfolio_before_pricing(
+    test_client, mint_token, fake_active_portfolio, fake_price_history
+):
+    fake_active_portfolio.set({"SPY": {"shares": 100}})
+    fake_price_history.raise_with(AssertionError("Must not fetch prices"))
+    response = test_client.post(
+        "/api/v1/risk/report_from_active",
+        json={"expected_portfolio_id": "another-book", "include_copilot_check": True},
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "portfolio_changed"
+
+
+def test_check_projection_uses_same_report_and_one_portfolio_read(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_engine
+):
+    fake_active_portfolio.set({"SPY": {"shares": 100}})
+    fake_price_history.set(_make_history(["SPY"]))
+    fake_engine.last_report = _FakeReport()
+    token = mint_token()
+    response = test_client.post(
+        "/api/v1/risk/report_from_active",
+        json={"expected_portfolio_id": "p1", "include_copilot_check": True},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200, response.json()
+    report = response.json()["data"]
+    check = report["copilot_check"]
+    assert check["portfolio_id"] == "p1"
+    metrics = {m["key"]: m for m in check["metrics"]}
+    assert metrics["volatility"]["value"] == report["annual_volatility"]
+    assert fake_active_portfolio.calls == [token]
+
+
+def test_check_capacity_returns_retryable_error(test_client, mint_token):
+    from backend.app.api.v1.risk import _check_capacity
+
+    assert _check_capacity.acquire(blocking=False)
+    try:
+        response = test_client.post(
+            "/api/v1/risk/report_from_active",
+            json={"include_copilot_check": True},
+            headers={"Authorization": f"Bearer {mint_token()}"},
+        )
+        assert response.status_code == 429
+        assert response.json()["error"]["code"] == "analysis_busy"
+    finally:
+        _check_capacity.release()
+
+
 def test_no_active_portfolio(test_client, mint_token, fake_active_portfolio):
     fake_active_portfolio.set({})
     resp = test_client.post(

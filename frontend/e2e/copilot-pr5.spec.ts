@@ -23,11 +23,12 @@ test.describe("copilot PR5 experience", () => {
 
   test("ask renders the six-section answer with a marked simulation", async ({ page }) => {
     await page.goto("/copilot");
-    await page.getByLabel("Ask Copilot").fill("How risky is my portfolio?");
-    await page.getByRole("button", { name: "Get answer" }).click();
+    await page.getByLabel("Ask your Portfolio Copilot").fill("How risky is my portfolio?");
+    await page.getByRole("button", { name: "Ask", exact: true }).click();
 
     await expect(page.getByText("Direct answer")).toBeVisible();
     await expect(page.getByText("Why this matters for your portfolio")).toBeVisible();
+    await page.getByText("Evidence, assumptions & limits", { exact: true }).click();
     await expect(page.getByText("What would change this conclusion")).toBeVisible();
     await expect(page.getByText(/what-if · not a market fact/)).toBeVisible();
     await expect(
