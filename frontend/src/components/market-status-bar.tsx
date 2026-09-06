@@ -40,7 +40,7 @@ export function MarketStatusBar() {
 
   return (
     <div className="border-b border-border bg-muted/40">
-      <div className="mx-auto flex max-w-6xl items-center gap-x-5 overflow-x-auto whitespace-nowrap px-4 py-1 font-mono text-[11px] text-muted-foreground">
+      <div className="mx-auto flex max-w-[1400px] items-center gap-x-5 overflow-x-auto whitespace-nowrap px-4 py-1.5 text-[11px] text-muted-foreground lg:px-8">
         <span className="flex items-center gap-1.5">
           <span
             aria-hidden

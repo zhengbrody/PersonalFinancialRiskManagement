@@ -80,9 +80,10 @@ export default function ResearchPage() {
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
-      <header className="space-y-1">
+      <header className="space-y-2">
+        <p className="text-xs font-medium uppercase tracking-widest text-primary">From idea to portfolio impact</p>
         <div className="flex items-center gap-2">
-          <h1 className="text-3xl font-semibold tracking-tight">Research</h1>
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Research</h1>
           {isBillingEnabled() && billing.data?.plan && (
             <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
               {billing.data.plan}
@@ -90,10 +91,8 @@ export default function ResearchPage() {
           )}
         </div>
         <p className="text-sm text-muted-foreground">
-          Look up any stock. The fact pack lands first — valuation, quality,
-          growth, the Street&apos;s view, peers and news, each tagged with its
-          source. The AI analyst&apos;s plain-English verdict follows a moment
-          later, phrasing those numbers, never inventing them.
+          Understand a company, check the evidence, then test how it fits your portfolio.
+          Sources and missing data stay visible alongside the analysis.
         </p>
       </header>
 

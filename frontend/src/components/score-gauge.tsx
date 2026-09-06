@@ -39,9 +39,9 @@ export function ScoreGauge({ score, className }: { score: number; className?: st
         </span>
       </div>
 
-      <div className="relative h-3 w-full overflow-hidden rounded-full">
+      <div role="meter" aria-label="Portfolio health score" aria-valuemin={0} aria-valuemax={1000} aria-valuenow={clamped} aria-valuetext={`${Math.round(clamped)} of 1000, ${band.label}`} className="relative h-3 w-full">
         {/* band segments */}
-        <div className="absolute inset-0 flex">
+        <div className="absolute inset-0 flex overflow-hidden rounded-full">
           {BANDS.map((b) => (
             <div
               key={b.label}
@@ -58,12 +58,12 @@ export function ScoreGauge({ score, className }: { score: number; className?: st
         />
       </div>
 
-      <div className="flex justify-between text-[10px] text-muted-foreground">
-        <span>0</span>
-        <span>400</span>
-        <span>650</span>
-        <span>850</span>
-        <span>1000</span>
+      <div aria-hidden="true" className="relative h-4 text-[10px] text-muted-foreground">
+        <span className="absolute left-0">0</span>
+        <span className="absolute left-[40%] -translate-x-1/2">400</span>
+        <span className="absolute left-[65%] -translate-x-1/2">650</span>
+        <span className="absolute left-[85%] -translate-x-1/2">850</span>
+        <span className="absolute right-0">1000</span>
       </div>
     </div>
   );

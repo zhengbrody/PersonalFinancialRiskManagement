@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { type RefObject, useEffect, useRef } from "react";
 
 /**
  * Outside-click + Escape dismissal for popovers/dropdowns/sheets. Returns a ref
@@ -12,6 +12,7 @@ import { useEffect, useRef } from "react";
 export function useDismiss<T extends HTMLElement = HTMLDivElement>(
   open: boolean,
   close: () => void,
+  returnFocusRef?: RefObject<HTMLElement>,
 ) {
   const ref = useRef<T>(null);
   const closeRef = useRef(close);
@@ -19,10 +20,16 @@ export function useDismiss<T extends HTMLElement = HTMLDivElement>(
   useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) closeRef.current();
+      if (ref.current && !ref.current.contains(e.target as Node))
+        closeRef.current();
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeRef.current();
+      if (e.key !== "Escape") return;
+      // Restore only keyboard dismissal from this disclosure. Outside clicks
+      // must retain focus on the user's new target, not jump back to the opener.
+      const ownsFocus = ref.current?.contains(document.activeElement);
+      closeRef.current();
+      if (ownsFocus) returnFocusRef?.current?.focus();
     };
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onKey);
@@ -30,6 +37,6 @@ export function useDismiss<T extends HTMLElement = HTMLDivElement>(
       document.removeEventListener("mousedown", onDoc);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  }, [open, returnFocusRef]);
   return ref;
 }

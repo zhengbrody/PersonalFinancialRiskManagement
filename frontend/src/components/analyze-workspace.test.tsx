@@ -67,7 +67,7 @@ vi.mock("@/components/whatif-lab", () => ({
 vi.mock("@/components/save-as-plan", () => ({ SaveAsPlan: () => <div>save-as-plan</div> }));
 vi.mock("@/components/risk-plans-panel", () => ({ RiskPlansPanel: () => <div>risk-plans-panel</div> }));
 
-import { AnalyzeWorkspace } from "./analyze-workspace";
+import { AnalyzeWorkspace, weakestDimension } from "./analyze-workspace";
 
 beforeEach(() => {
   searchState.view = "overview";
@@ -80,6 +80,19 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("AnalyzeWorkspace", () => {
+  it("reads the weakest dimension from the current API contract", () => {
+    expect(weakestDimension({ dimensions: {
+      risk_match: { name: "Risk match", score: 7, status: "ok", detail: "" },
+      concentration: { name: "Concentration", score: 2, status: "poor", detail: "" },
+    } })).toBe("Concentration");
+    expect(weakestDimension({ dimensions: {} })).toBeNull();
+  });
+  it("offers the next stage without claiming an analysis was completed", async () => {
+    render(<AnalyzeWorkspace />);
+    await userEvent.click(screen.getByRole("button", { name: "Explore risk drivers" }));
+    expect(pushMock).toHaveBeenCalledWith("/analyze?view=drivers");
+    expect(recordMutate).not.toHaveBeenCalledWith("first_stress_test_at");
+  });
   it("renders the 5 stage tabs and shows the active book name", () => {
     render(<AnalyzeWorkspace />);
     for (const label of ["Overview", "Drivers", "Stress Test", "Action Plan", "History"]) {

@@ -68,16 +68,16 @@ export default function PortfoliosPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-start justify-between gap-4">
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1">
           <p className="text-xs font-medium uppercase tracking-widest text-primary">
             Portfolios
           </p>
-          <h1 className="text-3xl font-semibold tracking-tight">
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
             Your portfolios
           </h1>
           <p className="text-sm text-muted-foreground">
-            Your data is private to your account.
+            Manage your holdings here. Switch the active portfolio above to analyze a different account.
           </p>
         </div>
         <Link href="/portfolios/new">
@@ -201,7 +201,7 @@ function CardActions({ portfolio }: { portfolio: PortfolioRow }) {
   }
 
   return (
-    <div className="flex gap-2 pt-1">
+    <div className="flex flex-wrap items-start gap-2 border-t border-border pt-4">
       <Button
         type="button"
         size="sm"
@@ -218,6 +218,9 @@ function CardActions({ portfolio }: { portfolio: PortfolioRow }) {
       >
         Edit
       </Button>
+      <details className="min-w-0 flex-1">
+        <summary className="flex min-h-9 cursor-pointer items-center justify-center rounded-md border border-border px-3 text-xs font-medium text-muted-foreground hover:bg-accent">More actions <span aria-hidden="true" className="ml-2">▾</span></summary>
+        <div className="mt-2 flex flex-wrap gap-1 rounded-xl bg-muted/30 p-2">
       <Button
         type="button"
         size="sm"
@@ -245,6 +248,8 @@ function CardActions({ portfolio }: { portfolio: PortfolioRow }) {
       >
         Delete
       </Button>
+        </div>
+      </details>
     </div>
   );
 }

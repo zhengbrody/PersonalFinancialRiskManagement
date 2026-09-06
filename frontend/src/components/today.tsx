@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScoreGauge } from "@/components/score-gauge";
+import { WorkspaceIcon } from "@/components/ui/workspace-icon";
 import { MarketRegime } from "@/components/market-regime";
 import { track } from "@/lib/analytics";
 import { useAuth } from "@/lib/auth-context";
@@ -40,14 +41,20 @@ import { scoreChangeInput } from "@/lib/score-change-input";
 const SCORE_DROP_PTS = 25;
 
 function planDue(p: { review_at?: string | null; status: string }): boolean {
-  if (!p.review_at || p.status === "resolved" || p.status === "archived") return false;
+  if (!p.review_at || p.status === "resolved" || p.status === "archived")
+    return false;
   const t = new Date(p.review_at).getTime();
   return Number.isFinite(t) && t <= Date.now();
 }
 
 export function Today() {
   const { user } = useAuth();
-  const { hasPortfolios, current, activePortfolioId, isLoading: pfLoading } = usePortfolioContext();
+  const {
+    hasPortfolios,
+    current,
+    activePortfolioId,
+    isLoading: pfLoading,
+  } = usePortfolioContext();
   const score = useActiveScore();
   const journey = useJourney();
   const plans = useRiskPlans(activePortfolioId);
@@ -66,11 +73,15 @@ export function Today() {
 
   // ── deterministic inputs (no LLM) ──────────────────────────────────
   const hasHoldings = current
-    ? Object.keys((current as { holdings?: Record<string, unknown> }).holdings ?? {}).length > 0
+    ? Object.keys(
+        (current as { holdings?: Record<string, unknown> }).holdings ?? {},
+      ).length > 0
     : false;
   const conf = score.data?.metrics?.confidence;
   const dataStale =
-    conf === "low" || (score.data?.data_confidence as { stale?: boolean } | undefined)?.stale === true;
+    conf === "low" ||
+    (score.data?.data_confidence as { stale?: boolean } | undefined)?.stale ===
+      true;
   const dueReviewCount = (plans.data?.plans ?? []).filter(planDue).length;
   const hasMaterialInsight =
     Boolean(insights.data?.portfolio_available) &&
@@ -85,7 +96,8 @@ export function Today() {
   // Milestones are stamped server-side at the product event; the live plans
   // list is the fallback for plans saved before stamping existed.
   const hasPlan =
-    Boolean(journey.data?.first_plan_at) || (plans.data?.plans ?? []).length > 0;
+    Boolean(journey.data?.first_plan_at) ||
+    (plans.data?.plans ?? []).length > 0;
   // A calculated score is not the same as a score the user has reviewed.
   // The Overview stage records this milestone only after it renders a real
   // active-book score; Today's background query must not advance the journey.
@@ -161,14 +173,20 @@ export function Today() {
         <TodayHeader greeting={greeting} />
         <Card className="border-destructive/50" role="alert">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Today could not load your current score</CardTitle>
+            <CardTitle className="text-base">
+              Today could not load your current score
+            </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground">
-              Nothing was changed in your portfolio, but we can&apos;t assess today&apos;s risk until
-              the score loads.
+              Nothing was changed in your portfolio, but we can&apos;t assess
+              today&apos;s risk until the score loads.
             </p>
-            <Button type="button" variant="outline" onClick={() => void score.refetch()}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void score.refetch()}
+            >
               Retry score
             </Button>
           </CardContent>
@@ -179,44 +197,54 @@ export function Today() {
 
   const loadIssues: LoadIssue[] = [
     ...(journey.isError
-      ? [{
-          label: "setup progress",
-          retry: () => {
-            void journey.refetch();
+      ? [
+          {
+            label: "setup progress",
+            retry: () => {
+              void journey.refetch();
+            },
           },
-        }]
+        ]
       : []),
     ...(riskFit.isError
-      ? [{
-          label: "Risk Fit status",
-          retry: () => {
-            void riskFit.refetch();
+      ? [
+          {
+            label: "Risk Fit status",
+            retry: () => {
+              void riskFit.refetch();
+            },
           },
-        }]
+        ]
       : []),
     ...(plans.isError
-      ? [{
-          label: "saved plans",
-          retry: () => {
-            void plans.refetch();
+      ? [
+          {
+            label: "saved plans",
+            retry: () => {
+              void plans.refetch();
+            },
           },
-        }]
+        ]
       : []),
     ...(insights.isError
-      ? [{
-          label: "portfolio insights",
-          retry: () => {
-            void insights.refetch();
+      ? [
+          {
+            label: "portfolio insights",
+            retry: () => {
+              void insights.refetch();
+            },
           },
-        }]
+        ]
       : []),
     ...(scoreChanges.isError
-      ? [{
-          label: "score changes",
-          retry: () => {
-            void scoreChanges.refetch();
+      ? [
+          {
+            label: "score changes",
+            retry: () => {
+              void scoreChanges.refetch();
+            },
           },
-        }]
+        ]
       : []),
   ];
 
@@ -241,39 +269,86 @@ export function Today() {
       {/* Since last visit — a one-line delta, only when we have both points AND
           the primary isn't already the "explain the drop" card (no double message). */}
       {primary.kind !== "explain_change" &&
-        changeReport?.available === true && <SinceLastVisit report={changeReport} />}
+        changeReport?.available === true && (
+          <SinceLastVisit report={changeReport} />
+        )}
 
-      {/* The ONE primary action. */}
-      <Card className="border-primary/30">
-        <CardHeader className="pb-2">
-          <p className="text-xs font-medium uppercase tracking-widest text-primary">Do this next</p>
-          <CardTitle className="text-lg">{primary.title}</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3">
-          <p className="max-w-xl text-sm text-muted-foreground">{primary.description}</p>
-          <Link href={primary.href}>
-            <Button size="lg">{primary.cta}</Button>
-          </Link>
-        </CardContent>
-      </Card>
-
-      {/* Compact score — hidden when the data is stale (the primary already says
-          "metrics can't be trusted yet", so don't headline a number). */}
-      {score.data && !inputs.dataStale && (
-        <Card>
-          <CardContent className="flex flex-wrap items-center gap-6 py-4">
-            <ScoreGauge score={score.data.overall_score} className="w-40" />
-            <div className="space-y-1 text-sm text-muted-foreground">
-              <span data-testid="dashboard-active-score" className="block text-2xl font-semibold text-foreground tabular-nums">
-                {Math.round(score.data.overall_score)}
-              </span>
-              <Link href="/analyze?view=overview" className="font-medium text-primary hover:underline">
-                Open the full workspace →
-              </Link>
-            </div>
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+        {/* The ONE primary action; retain the deterministic priority engine. */}
+        <Card className="flex flex-col justify-between border-primary/20 bg-primary/[0.04]">
+          <CardHeader className="pb-3 sm:p-8">
+            <p className="text-xs font-medium uppercase tracking-widest text-primary">
+              Do this next
+            </p>
+            <CardTitle className="max-w-lg text-2xl leading-tight sm:text-3xl">
+              {primary.title}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5 sm:px-8 sm:pb-8">
+            <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
+              {primary.description}
+            </p>
+            <Link
+              href={primary.href}
+              className="inline-flex min-h-11 items-center justify-center gap-3 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              {primary.cta}
+              <WorkspaceIcon name="arrow" className="h-4 w-4" />
+            </Link>
           </CardContent>
         </Card>
-      )}
+
+        {/* Compact score — hidden when the data is stale (the primary already says
+          "metrics can't be trusted yet", so don't headline a number). */}
+        {score.data && !inputs.dataStale && (
+          <Card>
+            <CardContent className="space-y-5 py-6 sm:p-8">
+              <p className="text-sm font-medium text-muted-foreground">
+                Portfolio health · {current?.name ?? "Active portfolio"}
+              </p>
+              <div className="flex items-baseline gap-2">
+                <span
+                  data-testid="dashboard-active-score"
+                  className="text-6xl font-semibold tracking-tight text-foreground tabular-nums"
+                >
+                  {Math.round(score.data.overall_score)}
+                </span>
+                <span className="text-sm text-muted-foreground">/ 1,000</span>
+              </div>
+              <ScoreGauge score={score.data.overall_score} />
+              <div className="text-sm text-muted-foreground">
+                <Link
+                  href="/analyze?view=overview"
+                  className="font-medium text-primary hover:underline"
+                >
+                  Open the full workspace →
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+        {(!score.data || inputs.dataStale) && (
+          <Card className="flex items-center">
+            <CardContent className="space-y-3 py-6 sm:p-8">
+              <p className="text-sm font-medium">
+                A clear picture starts with your holdings.
+              </p>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {inputs.dataStale
+                  ? "Current data needs attention. Review coverage before relying on a headline risk score."
+                  : "Add a portfolio, review its risk, then test a change without changing your actual positions."}
+              </p>
+              <Link
+                href="/portfolios"
+                className="inline-flex min-h-11 items-center gap-2 text-sm font-medium text-primary"
+              >
+                Review holdings{" "}
+                <WorkspaceIcon name="arrow" className="h-4 w-4" />
+              </Link>
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       {/* Up to two secondary items. */}
       {secondary.length > 0 && (
@@ -281,9 +356,17 @@ export function Today() {
           {secondary.map((a) => (
             <Link key={a.kind + a.href} href={a.href} className="block">
               <Card className="h-full transition-colors hover:border-primary/40">
-                <CardContent className="py-3">
-                  <p className="text-sm font-medium">{a.title}</p>
-                  <p className="text-xs text-muted-foreground">{a.description}</p>
+                <CardContent className="flex items-start justify-between gap-4 py-5">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">{a.title}</p>
+                    <p className="text-sm leading-relaxed text-muted-foreground">
+                      {a.description}
+                    </p>
+                  </div>
+                  <WorkspaceIcon
+                    name="arrow"
+                    className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
+                  />
                 </CardContent>
               </Card>
             </Link>
@@ -299,7 +382,9 @@ export function Today() {
               <p className="text-xs uppercase tracking-wide text-muted-foreground">
                 Continue where you left off
               </p>
-              <p className="truncate text-sm font-medium">{continuePlan.title}</p>
+              <p className="truncate text-sm font-medium">
+                {continuePlan.title}
+              </p>
             </div>
             <Link href="/analyze?view=plan">
               <Button variant="outline" size="sm">
@@ -317,61 +402,112 @@ export function Today() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Getting started</CardTitle>
             <p className="text-xs text-muted-foreground">
-              Account-level milestones — the &quot;do this next&quot; card above always applies to
-              your active portfolio.
+              Account-level milestones — the &quot;do this next&quot; card above
+              always applies to your active portfolio.
             </p>
           </CardHeader>
           <CardContent>
-            <ol className="space-y-1.5 text-sm" aria-label="Getting started progress">
-              {journeyState.steps.map((s, idx) => {
-                const isNext = idx === journeyState.nextIndex;
-                return (
-                  <li key={s.key} className="flex items-center gap-2">
-                    <span
-                      aria-hidden
-                      className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] ${
-                        s.done
-                          ? "bg-emerald-500 text-white"
-                          : isNext
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground"
-                      }`}
+            <details>
+              <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">
+                View setup checklist{" "}
+                <span className="ml-2 font-normal text-muted-foreground">
+                  {journeyState.steps.filter((step) => step.done).length} /{" "}
+                  {journeyState.steps.length} completed
+                </span>
+              </summary>
+              <ol
+                className="grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-3"
+                aria-label="Getting started progress"
+              >
+                {journeyState.steps.map((s, idx) => {
+                  const isNext = idx === journeyState.nextIndex;
+                  return (
+                    <li
+                      key={s.key}
+                      className={`flex min-h-12 items-center gap-3 rounded-xl p-3 ${isNext ? "bg-primary/5 ring-1 ring-primary/20" : "bg-muted/30"}`}
                     >
-                      {s.done ? "✓" : idx + 1}
-                    </span>
-                    <span className="sr-only">
-                      {s.done ? "Completed: " : isNext ? "Next: " : "Not completed: "}
-                    </span>
-                    {isNext ? (
-                      <Link href={s.href} className="font-medium text-primary hover:underline">
-                        {s.label} →
-                      </Link>
-                    ) : (
-                      <span className={s.done ? "text-muted-foreground line-through" : "text-muted-foreground"}>
-                        {s.label}
+                      <span
+                        aria-hidden
+                        className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] ${
+                          s.done
+                            ? "bg-emerald-500 text-white"
+                            : isNext
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {s.done ? "✓" : idx + 1}
                       </span>
-                    )}
-                  </li>
-                );
-              })}
-            </ol>
+                      <span className="sr-only">
+                        {s.done
+                          ? "Completed: "
+                          : isNext
+                            ? "Next: "
+                            : "Not completed: "}
+                      </span>
+                      {isNext ? (
+                        <Link
+                          href={s.href}
+                          className="font-medium text-primary hover:underline"
+                        >
+                          {s.label} →
+                        </Link>
+                      ) : (
+                        <span
+                          className={
+                            s.done
+                              ? "text-muted-foreground line-through"
+                              : "text-muted-foreground"
+                          }
+                        >
+                          {s.label}
+                        </span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            </details>
           </CardContent>
         </Card>
       )}
 
-      {/* Market brief — a summary, not the star of the page. */}
-      <MarketRegime />
+      {/* Market context is secondary to the user's portfolio, available on demand. */}
+      <details className="group rounded-2xl border border-border bg-card p-5">
+        <summary className="cursor-pointer text-sm font-medium">
+          Market context{" "}
+          <span className="ml-2 font-normal text-muted-foreground">
+            VIX, sentiment &amp; rates
+          </span>
+        </summary>
+        <div className="pt-5">
+          <MarketRegime />
+        </div>
+      </details>
     </div>
   );
 }
 
 function TodayHeader({ greeting }: { greeting: string }) {
   return (
-    <header className="space-y-1">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        Hi, <span className="capitalize">{greeting}</span>
-      </h1>
-      <p className="text-sm text-muted-foreground">Here&apos;s what to look at today.</p>
+    <header className="flex flex-wrap items-end justify-between gap-4">
+      <div className="space-y-2">
+        <p className="text-xs font-medium uppercase tracking-widest text-primary">
+          Your daily risk check
+        </p>
+        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+          Hi, <span className="capitalize">{greeting}</span>
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Here&apos;s what to look at today.
+        </p>
+      </div>
+      <Link
+        href="/analyze?view=overview"
+        className="workspace-nav-link gap-2 border border-border bg-card"
+      >
+        Analyze portfolio <WorkspaceIcon name="arrow" className="h-4 w-4" />
+      </Link>
     </header>
   );
 }
@@ -393,8 +529,9 @@ function LoadStatus({
     >
       <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3">
         <p className="text-sm text-muted-foreground">
-          Today can&apos;t rank your next action because some context is unavailable (
-          {issues.map((i) => i.label).join(", ")}). Reload it before relying on a suggestion.
+          Today can&apos;t rank your next action because some context is
+          unavailable ({issues.map((i) => i.label).join(", ")}). Reload it
+          before relying on a suggestion.
         </p>
         <Button
           type="button"
@@ -410,7 +547,8 @@ function LoadStatus({
 }
 
 function SinceLastVisit({ report }: { report: ScoreChangeReport }) {
-  const delta = report.score_delta == null ? null : Math.round(report.score_delta);
+  const delta =
+    report.score_delta == null ? null : Math.round(report.score_delta);
   const driver =
     delta != null && delta >= 0
       ? report.top_positive_contributor
@@ -420,7 +558,10 @@ function SinceLastVisit({ report }: { report: ScoreChangeReport }) {
     return (
       <div className="text-sm text-muted-foreground" role="status">
         {report.summary}{" "}
-        <Link href="/analyze?view=history" className="font-medium text-primary hover:underline">
+        <Link
+          href="/analyze?view=history"
+          className="font-medium text-primary hover:underline"
+        >
           Review history →
         </Link>
       </div>
@@ -436,7 +577,10 @@ function SinceLastVisit({ report }: { report: ScoreChangeReport }) {
       <span className="text-muted-foreground">
         {report.summary}
         {driver ? ` Top driver: ${driver.label}.` : ""}{" "}
-        <Link href="/analyze?view=history" className="font-medium text-primary hover:underline">
+        <Link
+          href="/analyze?view=history"
+          className="font-medium text-primary hover:underline"
+        >
           See what changed →
         </Link>
       </span>
