@@ -12,7 +12,7 @@ import {
 } from "./risk-check";
 import { readSession, writeSession } from "./use-session-state";
 import { loadSavedRun, savedRunsEnabled, type SavedRun } from "./copilot-runs";
-import { changeComparisonSchema, changeDraftSchema, emptyChange, isChangeRequest, type ChangeDraft } from "./copilot-compare";
+import { changeComparisonSchema, changeDraftSchema, emptyChange, isChangeRequest, comparisonVerificationSchema, comparisonVerificationSummarySchema, savedComparisonSchema, savedComparisonSummarySchema, type ChangeDraft } from "./copilot-compare";
 
 const turnSchema = z.object({
   id: z.string(),
@@ -28,20 +28,39 @@ const turnSchema = z.object({
   kind: z.enum(["check", "answer", "change"]),
   change: changeDraftSchema.optional(),
   comparison: changeComparisonSchema.optional(),
+  verification: comparisonVerificationSummarySchema.optional(),
+  verificationPending: z.boolean().optional(),
+  verificationError: z.string().optional(),
+  saved: savedComparisonSummarySchema.optional(),
+  savePending: z.boolean().optional(),
+  saveError: z.string().optional(),
+  savedNeedsCheck: z.boolean().optional(),
   runId: z.string().uuid().optional(),
   activity: z.enum(["retrieve", "cancel"]).optional(),
   answer: copilotAnswerSchema.optional(),
   check: riskCheckSchema.optional(),
   error: z.string().optional(),
+  // Set when this tab dropped the turn's signed receipt to bound local storage.
+  receiptEvicted: z.boolean().optional(),
 });
 export type CopilotTurn = z.infer<typeof turnSchema>;
 
 function restore(key: string): CopilotTurn[] {
-  const parsed = z.array(turnSchema).safeParse(readSession<unknown>(key));
-  if (!parsed.success) return [];
-  return parsed.data.map((turn) =>
-    turn.status === "running" ? { ...turn, status: "interrupted" } : turn,
-  );
+  const stored = readSession<unknown>(key);
+  // Parse per item: a schema change that invalidates ONE turn must not discard
+  // the rest of the thread, which may hold the only local pointer to a saved
+  // draft plan. Unknown/blank shapes simply yield an empty thread.
+  const kept = Array.isArray(stored)
+    ? stored.flatMap((item) => { const r = turnSchema.safeParse(item); return r.success ? [r.data] : []; })
+    : [];
+  return kept.map((turn) => ({ ...turn,
+    status: turn.status === "running" ? "interrupted" : turn.status,
+    verificationPending: false,
+    savePending: false,
+    savedNeedsCheck: !!turn.saved,
+    saveError: turn.savePending ? "The last save or check did not finish. Check the saved record before retrying; no automatic request was sent." : turn.saveError,
+    verificationError: turn.verificationPending ? "Verification was interrupted. Verify again; no automatic request was sent." : turn.verificationError,
+  }));
 }
 
 export function useCopilotThread(
@@ -57,7 +76,13 @@ export function useCopilotThread(
 
   const commit = useCallback(
     (next: CopilotTurn[]) => {
-      const retained = next.slice(-30);
+      const recent = next.slice(-30);
+      // Full price snapshots are much larger than summary turns. Bound local retention.
+      const receipts = new Set(recent.filter((t) => t.comparison?.replay_receipt).slice(-2).map((t) => t.id));
+      const retained = recent.map((t) => t.comparison?.replay_receipt && !receipts.has(t.id)
+        // Flag the eviction: without the receipt the Save/Verify actions
+        // disappear, and the card must explain that rather than going silent.
+        ? { ...t, receiptEvicted: true, comparison: { ...t.comparison, replay_receipt: null } } : t);
       turnsRef.current = retained;
       setTurns(retained);
       writeSession(key, retained);
@@ -251,13 +276,91 @@ export function useCopilotThread(
     }
   }
 
+  async function verifyComparison(turn: CopilotTurn) {
+    const comparison = turn.comparison;
+    if (active.current || !ready || !portfolioId || !comparison?.replay_receipt) return;
+    const ac = new AbortController();
+    active.current = ac;
+    patch(turn.id, { verificationPending: true, verificationError: undefined, verification: undefined });
+    const timeout = setTimeout(() => ac.abort("timeout"), 120_000);
+    try {
+      const verification = await apiFetch(`/api/v1/copilot/compare-change/${comparison.result_id}/verify`, {
+        method: "POST", authToken: token ?? undefined, signal: ac.signal,
+        body: { expected_portfolio_id: portfolioId, receipt: comparison.replay_receipt }, schema: comparisonVerificationSchema,
+      });
+      if (verification.result.result_id !== comparison.result_id || verification.result.portfolio_id !== portfolioId)
+        throw new ApiError(409, "comparison_mismatch", "Verified result belongs to a different calculation or portfolio.");
+      const { result, ...summary } = verification;
+      // Replace display data with the server-reproduced original, not a locally edited summary.
+      if (!ac.signal.aborted) patch(turn.id, { comparison: { ...result, replay_receipt: comparison.replay_receipt }, verification: summary });
+    } catch (error) {
+      if (!ac.signal.aborted) patch(turn.id, { verificationError: error instanceof ApiError ? error.message : "Verification failed. No plan or holdings were saved." });
+    } finally {
+      clearTimeout(timeout);
+      patch(turn.id, { verificationPending: false, ...(ac.signal.aborted ? { verificationError: "Verification did not finish. The previous result remains unconfirmed; nothing was saved." } : {}) });
+      if (active.current === ac) active.current = null;
+    }
+  }
+
+  async function saveComparison(turn: CopilotTurn, retrieve = false) {
+    const comparison = turn.comparison;
+    if (active.current || !ready || !portfolioId || !comparison || (!retrieve && !comparison.replay_receipt?.save_available)) return;
+    const ac = new AbortController();
+    active.current = ac;
+    patch(turn.id, { savePending: true, saveError: undefined });
+    const timeout = setTimeout(() => ac.abort("timeout"), 120_000);
+    try {
+      const saved = await apiFetch(`/api/v1/copilot/compare-change/${comparison.result_id}/${retrieve ? `saved?expected_portfolio_id=${encodeURIComponent(portfolioId)}` : "confirm"}`, {
+        method: retrieve ? "GET" : "POST", authToken: token ?? undefined, signal: ac.signal,
+        ...(retrieve ? {} : { body: { expected_portfolio_id: portfolioId, receipt: comparison.replay_receipt, confirmed: true } }),
+        schema: savedComparisonSchema,
+      });
+      if (saved.portfolio_id !== portfolioId || saved.result_id !== comparison.result_id || saved.plan_id !== comparison.result_id || saved.result.result_id !== comparison.result_id || saved.result.portfolio_id !== portfolioId)
+        throw new ApiError(409, "comparison_mismatch", "Saved result belongs to a different calculation or portfolio.");
+      const { result, ...summary } = saved;
+      if (!ac.signal.aborted) patch(turn.id, { comparison: { ...result, replay_receipt: comparison.replay_receipt }, saved: summary, savedNeedsCheck: false });
+    } catch (error) {
+      // Deny-list, not an allow-list: assume the write MAY have happened unless
+      // the code provably precedes it. confirm() validates the stored row AFTER
+      // the RPC commits, so untrusted_saved_comparison / comparison_conflict can
+      // arrive with a draft plan already created — reporting those as definite
+      // failure would tell the user the opposite of what happened.
+      const settled = ["confirmation_required", "analysis_busy", "comparison_expired", "comparison_stale",
+        "portfolio_changed", "comparison_snapshot_too_large", "comparison_save_unavailable",
+        "saved_comparison_missing", "unauthorized", "forbidden"];
+      const uncertain = !(error instanceof ApiError) || !settled.includes(error.code);
+      // A definite 404 on the read path means the plan is gone (e.g. deleted from
+      // the plans panel). Drop the remembered save so the card stops pointing at
+      // a record that no longer exists and Save becomes reachable again.
+      const vanished = retrieve && error instanceof ApiError && error.code === "saved_comparison_missing";
+      if (!ac.signal.aborted) patch(turn.id, {
+        ...(vanished ? { saved: undefined, savedNeedsCheck: false } : { savedNeedsCheck: !!turn.saved }),
+        saveError: vanished
+          ? "No saved record exists for this calculation. It may have been deleted with its plan. Save again while the capture is still valid."
+          : uncertain
+            ? (retrieve
+                ? "The saved record could not be read. Check again; this did not change anything."
+                : "Saving was not confirmed. Check the saved record or retry this same result; a draft may already exist.")
+            : error.message,
+      });
+    } finally {
+      clearTimeout(timeout);
+      patch(turn.id, { savePending: false, ...(ac.signal.aborted ? { saveError: retrieve
+        ? "Stopped waiting for the saved record. Nothing was sent or changed; check again."
+        : "Stopped waiting, not cancelled. Check the saved record or retry the same result; the server may have saved it." } : {}) });
+      if (active.current === ac) active.current = null;
+    }
+  }
+
   return {
     turns,
     ready,
-    pending: turns.some((t) => t.status === "running"),
+    pending: turns.some((t) => t.status === "running" || t.verificationPending || t.savePending),
     send,
     openChange,
     compare,
+    verifyComparison,
+    saveComparison,
     editChange: (id: string, change: ChangeDraft) => { if (!active.current) patch(id, { change, error: undefined }); },
     retrieve: (turn: CopilotTurn) => recover(turn, "retrieve"),
     cancelRun: (turn: CopilotTurn) => recover(turn, "cancel"),

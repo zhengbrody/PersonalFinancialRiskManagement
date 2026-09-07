@@ -106,7 +106,8 @@ def test_complete_sale_to_cash_is_valid(context, prices):
 @pytest.mark.parametrize("kind", ["option", "crypto", "real_estate", "cash", "unknown"])
 def test_never_silently_drops_unsupported_assets(context, prices, kind):
     context.holdings["OTHER"] = {"shares": 1, "asset_type": kind}
-    with pytest.raises(APIError, match="supports long stocks"):
+    message = "identified US-listed" if kind == "option" else "supports long stocks"
+    with pytest.raises(APIError, match=message):
         compare(context, prices)
 
 
@@ -284,3 +285,21 @@ def test_capacity_and_release_on_validation_failure(test_client, mint_token, end
         risk._check_capacity.release()
     assert post(test_client, mint_token(), ticker="AAPL").status_code == 422
     assert post(test_client, mint_token()).status_code == 200
+
+
+def test_largest_position_weight_uses_the_invested_basis_not_gross(context, prices):
+    """Concentration must match `/risk` — invested book, cash excluded.
+
+    A stock-only numerator over a gross total containing cash always reports a
+    smaller, friendlier number than the rest of the product does for the same
+    account, and on a mixed book this is the only concentration figure returned.
+    """
+    cash_heavy = replace(context, cash_balance=20000, margin_loan=0)
+    baseline = compare(cash_heavy, prices, ticker="SPY", amount=1, proceeds="cash").baseline
+
+    values = {"SGOV": 100 * float(prices["SGOV"].iloc[-1]), "SPY": 10 * float(prices["SPY"].iloc[-1])}
+    invested = sum(values.values())
+    assert baseline.largest_position_weight == pytest.approx(max(values.values()) / invested)
+    # The pre-fix figure divided by gross (invested + cash) — strictly smaller.
+    assert baseline.largest_position_weight > max(values.values()) / (invested + 20000)
+    assert baseline.cash == pytest.approx(20000)

@@ -14,6 +14,28 @@ def test_split_compose_passes_supabase_service_key_to_server_only_backend_env():
     assert "must never be rendered in the UI" in compose
 
 
+def test_split_compose_forwards_every_backend_feature_flag_and_key():
+    """A setting the code reads but compose does not forward is invisible.
+
+    Values live in the EC2 `.env`; docker compose only injects the variables
+    named here. A flag left out silently stays at its default, so the feature
+    looks broken with nothing in the logs (the MASSIVE_API_KEY class of bug,
+    CLAUDE.md §2.18). Any new `_env_str`/`_env_bool` setting read by the
+    backend belongs in this list.
+    """
+    compose = (ROOT / "compose.split.yml").read_text(encoding="utf-8")
+
+    for variable in (
+        "MINDMARKET_COMPARISON_REPLAY_ENABLED",
+        "MINDMARKET_COMPARISON_SAVE_ENABLED",
+        "MINDMARKET_RISK_RUN_SIGNING_SECRET",
+        "MINDMARKET_COPILOT_RUNS_ENABLED",
+        "MINDMARKET_SHARE_SIGNING_SECRET",
+        "PUBLIC_RISK_CHECK_ENABLED",
+    ):
+        assert f"{variable}=${{{variable}" in compose, f"{variable} is not forwarded to backend"
+
+
 def test_deploy_script_forwards_supabase_service_key_from_secrets_to_env_file():
     deploy_script = (ROOT / "infra" / "scripts" / "deploy-phase-1.sh").read_text(encoding="utf-8")
 

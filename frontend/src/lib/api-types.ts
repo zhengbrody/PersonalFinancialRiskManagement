@@ -310,6 +310,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/copilot/compare-change/{result_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm Comparison */
+        post: operations["confirm_comparison_api_v1_copilot_compare_change__result_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/compare-change/{result_id}/saved": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Saved Comparison */
+        get: operations["saved_comparison_api_v1_copilot_compare_change__result_id__saved_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/compare-change/{result_id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify Comparison */
+        post: operations["verify_comparison_api_v1_copilot_compare_change__result_id__verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/copilot/insights": {
         parameters: {
             query?: never;
@@ -2237,6 +2288,10 @@ export interface components {
             methodology_version: string;
             /** Observations */
             observations: number;
+            /** Option Groups */
+            option_groups?: components["schemas"]["UnchangedOptionGroup"][];
+            /** Option Quote Basis */
+            option_quote_basis?: string | null;
             /**
              * Portfolio Id
              * Format: uuid
@@ -2244,11 +2299,20 @@ export interface components {
             portfolio_id: string;
             /** Price As Of */
             price_as_of: string;
+            replay_receipt?: components["schemas"]["ComparisonReceipt"] | null;
             /**
              * Result Id
              * Format: uuid
              */
             result_id: string;
+            /**
+             * Risk Method
+             * @default historical_equity
+             * @enum {string}
+             */
+            risk_method?: "historical_equity" | "mixed_instant_stress";
+            /** Scenarios */
+            scenarios?: components["schemas"]["PairedStress"][];
             /** Snapshot Digest */
             snapshot_digest: string;
             /** Sources */
@@ -2428,14 +2492,29 @@ export interface components {
             /** Ticker */
             ticker: string;
         };
+        /**
+         * ComparisonReceipt
+         * @description Opaque server-authenticated snapshot, not a save/order credential.
+         */
+        ComparisonReceipt: {
+            /** Record */
+            record: string;
+            /**
+             * Save Available
+             * @default false
+             */
+            save_available?: boolean;
+            /** Signature */
+            signature: string;
+        };
         /** ComparisonSide */
         ComparisonSide: {
             /** Annual Volatility */
-            annual_volatility: number;
+            annual_volatility: number | null;
             /** Cash */
             cash: number;
             /** Cvar 1D 95 Usd */
-            cvar_1d_95_usd: number;
+            cvar_1d_95_usd: number | null;
             /** Gross Assets */
             gross_assets: number;
             /** Largest Position Weight */
@@ -2446,8 +2525,38 @@ export interface components {
             margin: number;
             /** Net Equity */
             net_equity: number;
+            /**
+             * Option Assets
+             * @default 0
+             */
+            option_assets?: number;
+            /**
+             * Option Liabilities
+             * @default 0
+             */
+            option_liabilities?: number;
             /** Var 1D 95 Usd */
-            var_1d_95_usd: number;
+            var_1d_95_usd: number | null;
+        };
+        /** ComparisonVerification */
+        ComparisonVerification: {
+            /** Inputs Match Now */
+            inputs_match_now: boolean;
+            /**
+             * Notice
+             * @default Historical calculation reproduced without fetching market data. Not a saved plan or permission to trade.
+             */
+            notice?: string;
+            /** Recent Capture */
+            recent_capture: boolean;
+            result: components["schemas"]["ChangeComparison"];
+            /** Snapshot Age Seconds */
+            snapshot_age_seconds: number;
+            /**
+             * Verified At
+             * Format: date-time
+             */
+            verified_at: string;
         };
         /** ComponentDelta */
         ComponentDelta: {
@@ -2536,6 +2645,17 @@ export interface components {
             severity?: string;
         } & {
             [key: string]: unknown;
+        };
+        /** ConfirmComparison */
+        ConfirmComparison: {
+            /** Confirmed */
+            confirmed: boolean;
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
+            receipt: components["schemas"]["ComparisonReceipt"];
         };
         /** CopilotAnswer */
         CopilotAnswer: {
@@ -3096,6 +3216,14 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** Envelope[ComparisonVerification] */
+        Envelope_ComparisonVerification_: {
+            data?: components["schemas"]["ComparisonVerification"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
         /** Envelope[CopilotAnswer] */
         Envelope_CopilotAnswer_: {
             data?: components["schemas"]["CopilotAnswer"] | null;
@@ -3347,6 +3475,14 @@ export interface components {
         /** Envelope[RunOut] */
         Envelope_RunOut_: {
             data?: components["schemas"]["RunOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[SavedComparison] */
+        Envelope_SavedComparison_: {
+            data?: components["schemas"]["SavedComparison"] | null;
             error?: components["schemas"]["ErrorOut"] | null;
             meta: components["schemas"]["MetaOut"];
         } & {
@@ -4928,6 +5064,30 @@ export interface components {
             /** Institutional Pct */
             institutional_pct?: number | null;
         };
+        /** PairedStress */
+        PairedStress: {
+            /** Baseline Equity */
+            baseline_equity: number;
+            /** Baseline Pnl */
+            baseline_pnl: number;
+            /** Candidate Equity */
+            candidate_equity: number;
+            /** Candidate Pnl */
+            candidate_pnl: number;
+            /**
+             * Horizon Days
+             * @default 0
+             */
+            horizon_days?: number;
+            /** Iv Shift */
+            iv_shift: number;
+            /** Label */
+            label: string;
+            /** Shocks */
+            shocks: {
+                [key: string]: number;
+            };
+        };
         /** PayoffPointOut */
         PayoffPointOut: {
             /** Pnl */
@@ -5487,6 +5647,15 @@ export interface components {
             spread_3m_10y?: number | null;
             /** Status */
             status?: string | null;
+        };
+        /** ReplayComparison */
+        ReplayComparison: {
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
+            receipt: components["schemas"]["ComparisonReceipt"];
         };
         /**
          * ReportFromActiveRequest
@@ -6302,6 +6471,35 @@ export interface components {
              */
             updated_at: string;
         };
+        /** SavedComparison */
+        SavedComparison: {
+            /**
+             * Confirmed At
+             * Format: date-time
+             */
+            confirmed_at: string;
+            /**
+             * Notice
+             * @default Saved as a draft risk plan with the original signed calculation. No holdings changed. This is a historical assumption, not an order or current recommendation.
+             */
+            notice?: string;
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            result: components["schemas"]["ChangeComparison"];
+            /**
+             * Result Id
+             * Format: uuid
+             */
+            result_id: string;
+        };
         /** ScenarioCellOut */
         ScenarioCellOut: {
             /** Horizon */
@@ -6949,6 +7147,21 @@ export interface components {
             /** Institutions */
             institutions?: components["schemas"]["InstitutionRow"][];
         };
+        /** UnchangedOptionGroup */
+        UnchangedOptionGroup: {
+            /** Expiry */
+            expiry: string;
+            /** Leg Count */
+            leg_count: number;
+            /** Mark Basis Max Gain */
+            mark_basis_max_gain: number | null;
+            /** Mark Basis Max Loss */
+            mark_basis_max_loss: number | null;
+            /** Name */
+            name: string;
+            /** Underlying */
+            underlying: string;
+        };
         /** UnderlyingExposureOut */
         UnderlyingExposureOut: {
             /** Contracts */
@@ -7516,6 +7729,109 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_ChangeComparison_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_comparison_api_v1_copilot_compare_change__result_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                result_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmComparison"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SavedComparison_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    saved_comparison_api_v1_copilot_compare_change__result_id__saved_get: {
+        parameters: {
+            query: {
+                expected_portfolio_id: string;
+            };
+            header?: never;
+            path: {
+                result_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SavedComparison_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_comparison_api_v1_copilot_compare_change__result_id__verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                result_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplayComparison"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ComparisonVerification_"];
                 };
             };
             /** @description Validation Error */

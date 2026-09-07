@@ -33,6 +33,13 @@ const PLAN = {
 afterEach(() => vi.clearAllMocks());
 
 describe("RiskPlansPanel", () => {
+  it("does not compare a captured calculation against unrelated current-score metrics", () => {
+    plansMock.mockReturnValue({ data: { plans: [{ ...PLAN, source: "copilot", data_confidence: { calculation_id: PLAN.id } }] }, isLoading: false, isError: false });
+    render(<RiskPlansPanel portfolioId="pf1" currentScore={null} />);
+    expect(screen.queryByRole("button", { name: "Review" })).not.toBeInTheDocument();
+    expect(screen.getByText(/outcome review is not available yet/)).toBeVisible();
+    expect(reviewMutate).not.toHaveBeenCalled();
+  });
   it("shows an empty state when there are no plans", () => {
     plansMock.mockReturnValue({ data: { plans: [] }, isLoading: false, isError: false });
     render(<RiskPlansPanel portfolioId="pf1" currentScore={null} />);

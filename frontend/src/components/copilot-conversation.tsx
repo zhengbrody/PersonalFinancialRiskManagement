@@ -163,7 +163,11 @@ function Conversation({
             )}
             {turn.status === "completed" && turn.comparison && (
               <CopilotChangeResult result={turn.comparison} disabled={disabled}
-                onRevise={() => thread.openChange(turn.change)} />
+                onRevise={() => thread.openChange(turn.change)} onVerify={() => thread.verifyComparison(turn)}
+                onSave={() => thread.saveComparison(turn)} onRetrieveSaved={() => thread.saveComparison(turn, true)}
+                saved={turn.saved} savedNeedsCheck={turn.savedNeedsCheck} savePending={turn.savePending} saveError={turn.saveError}
+                receiptEvicted={turn.receiptEvicted}
+                verification={turn.verification} verificationPending={turn.verificationPending} verificationError={turn.verificationError} />
             )}
             {turn.status === "running" && (
               <div

@@ -219,6 +219,7 @@ def analyze_contract(
     spec: Any,
     *,
     risk_free_rate: float = 0.045,
+    as_of: datetime | None = None,
     spot_fn: Callable[[str], Optional[float]] = _default_spot,
     chain_fn: Callable[[str, str, str, float], Optional[dict[str, Any]]] = _default_chain_row,
 ) -> dict[str, Any]:
@@ -240,7 +241,7 @@ def analyze_contract(
     avg_premium = float(avg_premium) if avg_premium is not None else None
 
     warnings: list[str] = []
-    T = time_to_expiry_years(expiry)
+    T = time_to_expiry_years(expiry) if as_of is None else time_to_expiry_years(expiry, now=as_of)
     days_to_expiry = int(round(T * 365.25))
 
     result: dict[str, Any] = {
@@ -389,6 +390,7 @@ def analyze_contracts(
     specs: list[Any],
     *,
     risk_free_rate: float = 0.045,
+    as_of: datetime | None = None,
     spot_fn: Callable[[str], Optional[float]] = _default_spot,
     chain_fn: Callable[[str, str, str, float], Optional[dict[str, Any]]] = _default_chain_row,
 ) -> dict[str, Any]:
@@ -399,7 +401,9 @@ def analyze_contracts(
     batch never raises.
     """
     results = [
-        analyze_contract(s, risk_free_rate=risk_free_rate, spot_fn=spot_fn, chain_fn=chain_fn)
+        analyze_contract(
+            s, risk_free_rate=risk_free_rate, spot_fn=spot_fn, chain_fn=chain_fn, as_of=as_of
+        )
         for s in specs
     ]
 
@@ -441,6 +445,6 @@ def analyze_contracts(
     return {
         "results": results,
         "totals": totals,
-        "as_of": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "as_of": (as_of or datetime.now(timezone.utc)).strftime("%Y-%m-%d"),
         "warnings": [],
     }

@@ -94,6 +94,8 @@ function PlanCard({
   const del = useDeleteRiskPlan();
   const [result, setResult] = useState<PlanReview | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // A navigation/UX hint only, never proof that these editable blobs are trusted.
+  const capturedComparison = plan.source === "copilot" && plan.data_confidence?.calculation_id === plan.id;
 
   function runReview() {
     review.mutate(
@@ -128,12 +130,14 @@ function PlanCard({
             {plan.created_at ? ` · ${plan.created_at.slice(0, 10)}` : ""}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        {!capturedComparison && <div className="flex shrink-0 items-center gap-1">
           <Button type="button" size="sm" variant="outline" disabled={review.isPending} onClick={runReview}>
             {review.isPending ? "…" : "Review"}
           </Button>
-        </div>
+        </div>}
       </div>
+
+      {capturedComparison && <p className="mt-2 text-xs text-muted-foreground">Captured comparison. Its signed original is readable from the Copilot conversation that saved it, in that browser tab session; this panel shows the editable plan only. Comparing it with today&apos;s Health Score requires a matching calculation method; outcome review is not available yet.</p>}
 
       {result && (
         <div className="mt-2 space-y-1 rounded bg-muted/30 p-2">

@@ -205,12 +205,13 @@ def implied_volatility(
         return None
 
 
-def time_to_expiry_years(expiry_iso: str) -> float:
+def time_to_expiry_years(expiry_iso: str, *, now=None) -> float:
     """Convert an ISO date string (YYYY-MM-DD) to T in years from now.
     Returns 0 if the expiry has passed.
     """
     from datetime import datetime
 
-    exp_date = datetime.strptime(expiry_iso, "%Y-%m-%d")
-    T = (exp_date - datetime.now()).total_seconds() / (365.25 * 24 * 3600)
+    current = now if now is not None else datetime.now()
+    exp_date = datetime.strptime(expiry_iso, "%Y-%m-%d").replace(tzinfo=current.tzinfo)
+    T = (exp_date - current).total_seconds() / (365.25 * 24 * 3600)
     return max(T, 0.0)

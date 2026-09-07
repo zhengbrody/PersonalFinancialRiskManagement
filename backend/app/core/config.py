@@ -103,6 +103,16 @@ class Settings:
     risk_run_signing_secret: str = field(
         default_factory=lambda: _env_str("MINDMARKET_RISK_RUN_SIGNING_SECRET"), repr=False
     )
+    # Portable calculation receipts; no DB writes. Enable separately after key review.
+    copilot_comparison_replay_enabled: bool = field(
+        default_factory=lambda: _env_str("MINDMARKET_COMPARISON_REPLAY_ENABLED", "false").lower()
+        == "true"
+    )
+    # Requires migration 0015 AND replay signing; never enabled implicitly.
+    copilot_comparison_save_enabled: bool = field(
+        default_factory=lambda: _env_str("MINDMARKET_COMPARISON_SAVE_ENABLED", "false").lower()
+        == "true"
+    )
     # Trust the CF-Connecting-IP header for rate-limit identity. ONLY safe
     # when the deployment guarantees Cloudflare-only ingress (our prod SG
     # admits only Cloudflare ranges); anywhere else the header is

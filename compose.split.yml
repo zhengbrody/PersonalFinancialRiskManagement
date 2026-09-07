@@ -67,6 +67,13 @@ services:
       - MINDMARKET_SHARE_SIGNING_SECRET=${MINDMARKET_SHARE_SIGNING_SECRET:-}
       # Saved checks require migration 0014 plus a separate server-only HMAC key.
       - MINDMARKET_COPILOT_RUNS_ENABLED=${MINDMARKET_COPILOT_RUNS_ENABLED:-false}
+      # Signed comparison receipts (replay) and explicitly confirmed saved
+      # drafts. Both default off and fail closed without the signing key below;
+      # save additionally requires migration 0015. These MUST be listed here —
+      # a value set only in the EC2 .env is not visible inside the container.
+      - MINDMARKET_COMPARISON_REPLAY_ENABLED=${MINDMARKET_COMPARISON_REPLAY_ENABLED:-false}
+      - MINDMARKET_COMPARISON_SAVE_ENABLED=${MINDMARKET_COMPARISON_SAVE_ENABLED:-false}
+      # Shared root HMAC key for run journals and comparison receipts (>=32 bytes).
       - MINDMARKET_RISK_RUN_SIGNING_SECRET=${MINDMARKET_RISK_RUN_SIGNING_SECRET:-}
       # SUPABASE_SERVICE_KEY is the service-role key: server-only, used by
       # trusted owner/admin paths for platform-wide usage/cost visibility, and
