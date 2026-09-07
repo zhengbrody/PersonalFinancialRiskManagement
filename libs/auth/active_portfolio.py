@@ -297,7 +297,11 @@ def _normalise_portfolio_row(
     for tk, v in raw_holdings.items():
         if not isinstance(v, dict):
             continue
-        h: Dict[str, Any] = {"shares": float(v.get("shares", 0))}
+        # Preserve contract identity, side, multiplier and adjusted-contract flags.
+        # Dropping them turns real option spreads into ambiguous/unpriceable legs.
+        # Downstream validators remain responsible for accepting supported metadata.
+        h: Dict[str, Any] = dict(v)
+        h["shares"] = float(v.get("shares", 0))
         if "avg_cost" in v and v["avg_cost"] is not None:
             h["avg_cost"] = float(v["avg_cost"])
         if "sector" in v and v["sector"]:

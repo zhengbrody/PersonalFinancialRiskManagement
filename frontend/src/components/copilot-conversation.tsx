@@ -1,293 +1,100 @@
 "use client";
 
-/**
- * Shared AI Portfolio Copilot conversation — the reusable chat core.
- *
- * Product philosophy ("Robinhood skin"): the user is a brand-new
- * retail investor who uses margin but has little risk discipline. We
- * NEVER lead with raw numbers or matrices. Each assistant turn opens
- * with the AI's plain-language guidance; the hardcore figures are
- * tucked into a collapsible "The numbers behind this". Latency is
- * masked with a "Thinking…" skeleton bubble so the wait feels alive.
- *
- * This component owns the message list + composer + send logic and is
- * rendered by BOTH the full-page `/copilot` route AND the app-wide
- * floating widget. The `variant` prop tunes spacing/heights so the
- * same conversation feels native in a small bottom-right panel and on
- * the spacious dedicated page. There is NO copy of this logic anywhere
- * else — both surfaces delegate here (DRY).
- */
-
+/** One input and one timeline for questions and foreground risk checks. */
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { track } from "@/lib/analytics";
-import { ApiError } from "@/lib/api";
-import { BETA_LIMIT_MESSAGE, isBillingEnabled } from "@/lib/billing-flag";
-import { env } from "@/lib/env";
+import { CopilotAnswerCard } from "@/components/copilot-answer";
+import { CopilotRiskCheck } from "@/components/copilot-risk-check";
+import { CopilotChangeForm, CopilotChangeResult } from "@/components/copilot-change";
 import { useAuth } from "@/lib/auth-context";
-import { hasCjk } from "@/lib/lang";
 import { usePortfolioContext } from "@/lib/portfolio-context";
-import { readSession, writeSession } from "@/lib/use-session-state";
-
-type ChatMessage = {
-  role: "user" | "assistant";
-  text: string;
-  agentName?: string;
-  grounded?: Record<string, unknown>;
-  levers?: unknown[];
-  aiGenerated?: boolean;
-};
-
-const EXAMPLE_QUESTIONS = [
-  "Is my portfolio too risky?",
-  "What's my biggest risk right now?",
-  "How do I protect against a crash?",
-];
-
-// Chinese counterparts (same order/intent) — shown when the browser
-// locale is Chinese (empty state) so the first tap already matches the
-// user's language.
-const EXAMPLE_QUESTIONS_ZH = [
-  "我的投资组合风险太高了吗？",
-  "我现在最大的风险是什么？",
-  "如何防范市场大跌？",
-];
-
-// Deterministic follow-up prompts shown after each answer (no LLM call —
-// just the natural next questions). Ones already asked are filtered out.
-const FOLLOW_UP_QUESTIONS = [
-  "What's my single biggest risk right now?",
-  "How would a -20% market drop hit me?",
-  "Am I being paid for the risk I'm taking?",
-  "What would diversify my portfolio the most?",
-  "Any hidden fees or unrealized losses to review?",
-];
-
-// Chinese counterparts (same order/intent) — used when the LAST user
-// message is Chinese, so the suggestions follow the conversation language.
-const FOLLOW_UP_QUESTIONS_ZH = [
-  "我现在最大的单一风险是什么？",
-  "市场下跌 20% 会对我有多大影响？",
-  "我承担的风险有得到相应回报吗？",
-  "怎样才能让我的组合更分散？",
-  "有隐藏费用或需要关注的未实现亏损吗？",
-];
+import { useCopilotThread } from "@/lib/use-copilot-thread";
 
 export type CopilotConversationVariant = "page" | "floating";
 
-/**
- * The reusable chat. `variant="floating"` makes the message list a
- * flex-filling scroll region with a denser empty-state (so it fits the
- * small panel); `variant="page"` keeps the airier full-page rhythm and
- * a sticky composer.
- */
 export function CopilotConversation({
   variant = "page",
+  initialQuestion,
 }: {
   variant?: CopilotConversationVariant;
+  initialQuestion?: string;
 }) {
-  const { accessToken } = useAuth();
+  const { user, accessToken } = useAuth();
+  const { activePortfolioId, current, switchingId, isLoading } =
+    usePortfolioContext();
+  const scope = `mm:copilot:thread:v1:${user?.id ?? "anonymous"}:${activePortfolioId ?? "none"}`;
+  // Remount before painting a changed identity; page and floating use one partition.
+  return (
+    <Conversation
+      key={scope}
+      scope={scope}
+      token={accessToken}
+      portfolioId={activePortfolioId}
+      portfolioName={current?.name ?? null}
+      switching={!!switchingId || isLoading}
+      variant={variant}
+      initialQuestion={initialQuestion}
+    />
+  );
+}
 
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [draft, setDraft] = useState("");
-  const [error, setError] = useState<ApiError | null>(null);
-  const [pending, setPending] = useState(false);
-  const scrollAnchor = useRef<HTMLDivElement>(null);
-  // Lets us cancel an in-flight SSE stream — otherwise closing the floating
-  // widget (unmount) mid-answer leaks the connection and the server keeps
-  // running the (quota-consuming) LLM tool loop with no consumer.
-  const abortRef = useRef<AbortController | null>(null);
-
+function Conversation({
+  scope,
+  token,
+  portfolioId,
+  portfolioName,
+  switching,
+  variant,
+  initialQuestion,
+}: {
+  scope: string;
+  token: string | null;
+  portfolioId: string | null;
+  portfolioName: string | null;
+  switching: boolean;
+  variant: CopilotConversationVariant;
+  initialQuestion?: string;
+}) {
+  const thread = useCopilotThread(scope, portfolioId, token);
+  const [draft, setDraft] = useState(initialQuestion ?? "");
+  const [newResult, setNewResult] = useState(false);
+  const anchor = useRef<HTMLDivElement>(null);
+  const nearBottom = useRef(true);
+  const input = useRef<HTMLTextAreaElement>(null);
+  const previousPrefill = useRef(initialQuestion);
   const floating = variant === "floating";
+  const disabled = thread.pending || !thread.ready || switching;
 
-  // Keep the newest message in view as the conversation grows / streams.
   useEffect(() => {
-    scrollAnchor.current?.scrollIntoView?.({ behavior: "smooth" });
-  }, [messages, pending]);
+    if (initialQuestion !== previousPrefill.current) {
+      previousPrefill.current = initialQuestion;
+      if (initialQuestion) setDraft(initialQuestion);
+    }
+  }, [initialQuestion]);
 
-  // Cancel any in-flight stream when the component unmounts.
-  useEffect(() => () => abortRef.current?.abort(), []);
-
-  // Persist the conversation (keyed by variant AND the active portfolio) so
-  // switching screens/tabs restores the thread — but switching the active BOOK
-  // starts its own thread (the chat is grounded in that portfolio, so the prior
-  // book's turns must not carry over). Persist only COMPLETED turns.
-  const { activePortfolioId } = usePortfolioContext();
-  const storeKey = `mm:copilot:chat:${variant}:${activePortfolioId ?? "none"}`;
-  const hydratedRef = useRef(false);
   useEffect(() => {
-    // A portfolio switch changes storeKey. Abort any in-flight stream first —
-    // otherwise its deltas would append to the NEW book's (just-reset) thread.
-    // No-op on the initial mount (abortRef is null).
-    abortRef.current?.abort();
-    hydratedRef.current = false;
-    // Reset to the new key's thread (empty for a fresh book — never the prior
-    // book's messages, which `if (stored)` alone would have left in place).
-    setMessages(readSession<ChatMessage[]>(storeKey) ?? []);
-    hydratedRef.current = true;
-  }, [storeKey]);
-  useEffect(() => {
-    // Persist only COMPLETED turns (not every streaming delta — that would be
-    // O(n²) writes over a long answer).
-    if (!hydratedRef.current || pending) return;
-    writeSession(storeKey, messages);
-  }, [messages, pending, storeKey]);
-
-  /** Append streamed text to the in-flight assistant bubble (create it on
-   * the first delta so the "Thinking…" bubble shows until words arrive). */
-  function pushDelta(text: string) {
-    setMessages((prev) => {
-      const copy = [...prev];
-      const last = copy[copy.length - 1];
-      if (last && last.role === "assistant") {
-        copy[copy.length - 1] = { ...last, text: last.text + text };
-      } else {
-        copy.push({ role: "assistant", text });
-      }
-      return copy;
+    const element = anchor.current;
+    if (!element || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => {
+      nearBottom.current = entry.isIntersecting;
     });
-  }
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
-  function setAssistantMeta(meta: {
-    agent_name?: string;
-    grounded_in?: Record<string, unknown>;
-    risk_levers?: unknown[];
-    ai_generated?: boolean;
-  }) {
-    setMessages((prev) => {
-      const copy = [...prev];
-      const last = copy[copy.length - 1];
-      if (last && last.role === "assistant") {
-        copy[copy.length - 1] = {
-          ...last,
-          agentName: meta.agent_name,
-          grounded: meta.grounded_in,
-          levers: meta.risk_levers,
-          aiGenerated: meta.ai_generated,
-        };
-      }
-      return copy;
-    });
-  }
+  useEffect(() => {
+    if (!thread.turns.length) return;
+    if (nearBottom.current && !document.activeElement?.closest("form")) {
+      anchor.current?.scrollIntoView?.({ behavior: "smooth", block: "end" });
+    } else if (!thread.pending) setNewResult(true);
+  }, [thread.turns, thread.pending]);
 
-  async function send(text: string) {
-    const trimmed = text.trim();
-    if (trimmed === "" || pending) return;
-
-    track("copilot_message_sent", { variant });
-    setError(null);
-    setMessages((prev) => [...prev, { role: "user", text: trimmed }]);
+  function send(text: string) {
+    if (disabled || !text.trim() || text.trim().length > 2000) return;
     setDraft("");
-    setPending(true);
-
-    const ac = new AbortController();
-    abortRef.current = ac;
-
-    try {
-      const res = await fetch(`${env.apiBaseUrl}/api/v1/copilot/chat/stream`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        },
-        body: JSON.stringify({ message: trimmed }),
-        signal: ac.signal,
-      });
-      if (!res.ok || !res.body) {
-        throw new ApiError(
-          res.status,
-          res.status === 401 ? "unauthorized" : "http_error",
-          `Request failed (${res.status}).`,
-        );
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let streamErr: { code?: string; message?: string } | null = null;
-
-      // Parse Server-Sent Event frames (separated by a blank line).
-      const drain = () => {
-        let i;
-        while ((i = buffer.indexOf("\n\n")) >= 0) {
-          const frame = buffer.slice(0, i);
-          buffer = buffer.slice(i + 2);
-          let event = "message";
-          const dataLines: string[] = [];
-          for (const line of frame.split("\n")) {
-            if (line.startsWith("event:")) event = line.slice(6).trim();
-            else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
-          }
-          if (!dataLines.length) continue;
-          let data: Record<string, unknown> = {};
-          try {
-            data = JSON.parse(dataLines.join("\n"));
-          } catch {
-            continue;
-          }
-          if (event === "delta" && typeof data.text === "string") {
-            pushDelta(data.text);
-          } else if (event === "done") {
-            setAssistantMeta(data as never);
-          } else if (event === "error") {
-            streamErr = data as { code?: string; message?: string };
-          }
-        }
-      };
-
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        drain();
-      }
-      buffer += decoder.decode();
-      drain();
-
-      if (streamErr) {
-        // Drop the empty assistant placeholder, surface the friendly error.
-        setMessages((prev) =>
-          prev[prev.length - 1]?.role === "assistant" && !prev[prev.length - 1]?.text
-            ? prev.slice(0, -1)
-            : prev,
-        );
-        const e = streamErr as { code?: string; message?: string };
-        setError(new ApiError(0, e.code ?? "unknown", e.message ?? "Something went wrong."));
-      }
-    } catch (err) {
-      // Intentional cancel (unmount / new send) — leave state alone.
-      if (err instanceof DOMException && err.name === "AbortError") return;
-      setMessages((prev) =>
-        prev[prev.length - 1]?.role === "assistant" && !prev[prev.length - 1]?.text
-          ? prev.slice(0, -1)
-          : prev,
-      );
-      setError(
-        err instanceof ApiError ? err : new ApiError(0, "network_error", String(err)),
-      );
-    } finally {
-      if (abortRef.current === ac) abortRef.current = null;
-      setPending(false);
-    }
-  }
-
-  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    // Enter sends; Shift+Enter inserts a newline.
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      send(draft);
-    }
+    setNewResult(false);
+    void thread.send(text);
   }
 
   return (
@@ -295,440 +102,218 @@ export function CopilotConversation({
       className={
         floating
           ? "flex min-h-0 flex-1 flex-col"
-          : "flex flex-col gap-6"
+          : "flex min-w-0 flex-col gap-4"
       }
     >
+      <p className="px-3 py-2 text-xs text-muted-foreground">
+        {portfolioName
+          ? `Working with ${portfolioName}`
+          : "Select a portfolio to run an account risk check"}{" "}
+        · no changes to holdings
+      </p>
       <div
         className={
           floating
-            ? "min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3"
-            : "space-y-4"
+            ? "min-h-0 flex-1 space-y-4 overflow-y-auto p-3"
+            : "min-w-0 space-y-4"
         }
       >
-        {messages.length === 0 && !pending && (
-          <EmptyState onPick={(q) => send(q)} compact={floating} />
+        {!thread.turns.length && (
+          <div className="space-y-3 rounded-2xl border border-border bg-card p-4">
+            <h2 className="text-lg font-semibold">
+              What would you like to understand?
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Check what could hurt your portfolio. Explore the evidence here,
+              without switching pages.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {[
+                "Check my portfolio",
+                "Test a change",
+                "Explain expected shortfall",
+                "What if the market drops 20%?",
+              ].map((q) => (
+                <Button
+                  key={q}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={disabled}
+                  onClick={() => send(q)}
+                >
+                  {q}
+                </Button>
+              ))}
+            </div>
+          </div>
         )}
-
-        {messages.map((m, i) =>
-          m.role === "user" ? (
-            <UserBubble key={i} text={m.text} />
-          ) : (
-            <AssistantBubble key={i} message={m} />
-          ),
-        )}
-
-        {pending && messages[messages.length - 1]?.role !== "assistant" && (
-          <ThinkingBubble />
-        )}
-
-        {!pending &&
-          !error &&
-          messages.length > 0 &&
-          messages[messages.length - 1]?.role === "assistant" && (
-            <FollowUpChips
-              asked={messages.filter((m) => m.role === "user").map((m) => m.text)}
-              onPick={(q) => send(q)}
-            />
-          )}
-
-        {error && <ErrorNotice error={error} />}
-
-        <div ref={scrollAnchor} />
-      </div>
-
-      <div
-        className={
-          floating
-            ? "space-y-2 border-t border-border bg-background/90 p-3 backdrop-blur"
-            : "sticky bottom-4 space-y-2 rounded-lg border border-border bg-background/90 p-3 backdrop-blur"
-        }
-      >
-        <Textarea
-          data-testid="copilot-input"
-          aria-label="Ask your Portfolio Copilot"
-          placeholder="Ask your Copilot… (Enter to send, Shift+Enter for a new line)"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={onKeyDown}
-          rows={2}
-          disabled={pending}
-        />
-        <div className="flex justify-end">
-          <Button
-            type="button"
-            data-testid="copilot-send"
-            size={floating ? "sm" : "default"}
-            onClick={() => send(draft)}
-            disabled={pending || draft.trim() === ""}
-          >
-            {pending ? "Thinking…" : "Ask"}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function UserBubble({ text }: { text: string }) {
-  return (
-    <div className="flex justify-end">
-      <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-primary/10 px-4 py-3 text-[15px] leading-relaxed text-foreground">
-        {text}
-      </div>
-    </div>
-  );
-}
-
-function AssistantBubble({ message }: { message: ChatMessage }) {
-  return (
-    <div className="flex justify-start">
-      <div className="max-w-[90%] space-y-3 rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-3 text-[15px]">
-        {message.agentName && (
-          <p className="text-[10px] font-medium uppercase tracking-widest text-primary">
-            {message.agentName}
-          </p>
-        )}
-        <Markdown>{message.text}</Markdown>
-
-        {message.levers && message.levers.length > 0 && (
-          <RiskLevers levers={message.levers} />
-        )}
-
-        {message.grounded && Object.keys(message.grounded).length > 0 && (
-          <NumbersBehindThis grounded={message.grounded} />
-        )}
-
-        {message.aiGenerated !== undefined && (
-          <p className="text-[10px] text-muted-foreground">
-            {message.aiGenerated
-              ? "AI-generated · educational, not financial advice"
-              : "Deterministic summary (AI unavailable) · educational, not financial advice"}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ThinkingBubble() {
-  return (
-    <div className="flex justify-start">
-      <div className="max-w-[90%] space-y-2 rounded-2xl rounded-bl-sm border border-border bg-card px-4 py-3">
-        <p className="text-xs text-muted-foreground">Thinking…</p>
-        <Skeleton className="h-3 w-48" />
-        <Skeleton className="h-3 w-64" />
-        <Skeleton className="h-3 w-40" />
-      </div>
-    </div>
-  );
-}
-
-/**
- * The collapsible escape hatch for users who DO want the figures.
- * Native <details> so it's keyboard-accessible and needs no JS state.
- * Collapsed by default — guidance leads, numbers follow.
- */
-function NumbersBehindThis({
-  grounded,
-}: {
-  grounded: Record<string, unknown>;
-}) {
-  const facts = Object.entries(grounded)
-    .map(([key, value]) => formatFact(key, value))
-    .filter((f): f is GroundedFact => f !== null);
-
-  if (facts.length === 0) return null;
-
-  return (
-    <details className="group rounded-md border border-border bg-muted/30">
-      <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-muted-foreground transition hover:text-foreground">
-        <span className="inline-block transition group-open:rotate-90">›</span>{" "}
-        The numbers behind this
-      </summary>
-      <dl className="space-y-1 px-3 pb-3 text-xs">
-        {facts.map((f) => (
-          <div
-            key={f.key}
-            className="flex items-baseline justify-between gap-3 border-b border-border/40 py-1 last:border-b-0"
-          >
-            <dt className="text-muted-foreground">{f.label}</dt>
-            <dd className="font-mono text-foreground">{f.display}</dd>
+        {thread.turns.map((turn) => (
+          <div key={turn.id} className="min-w-0 space-y-3">
+            <div className="ml-auto w-fit max-w-[90%] whitespace-pre-wrap break-words rounded-2xl bg-primary/10 px-4 py-3 text-sm">
+              {turn.question}
+            </div>
+            {turn.kind === "change" && ["needs_input", "interrupted"].includes(turn.status) && turn.change && (
+              <>
+                {turn.error && <p role="alert" className="rounded-lg border border-border p-3 text-sm">{turn.error}</p>}
+                <CopilotChangeForm draft={turn.change} disabled={disabled || !portfolioId}
+                  onChange={(draft) => thread.editChange(turn.id, draft)}
+                  onSubmit={() => thread.compare({ ...turn, status: "needs_input" })} />
+              </>
+            )}
+            {turn.status === "completed" && turn.comparison && (
+              <CopilotChangeResult result={turn.comparison} disabled={disabled}
+                onRevise={() => thread.openChange(turn.change)} onVerify={() => thread.verifyComparison(turn)}
+                onSave={() => thread.saveComparison(turn)} onRetrieveSaved={() => thread.saveComparison(turn, true)}
+                saved={turn.saved} savedNeedsCheck={turn.savedNeedsCheck} savePending={turn.savePending} saveError={turn.saveError}
+                receiptEvicted={turn.receiptEvicted}
+                verification={turn.verification} verificationPending={turn.verificationPending} verificationError={turn.verificationError} />
+            )}
+            {turn.status === "running" && (
+              <div
+                role="status"
+                className="rounded-xl border border-border p-4 text-sm"
+              >
+                {turn.activity === "retrieve"
+                  ? "Retrieving the saved check…"
+                  : turn.activity === "cancel"
+                    ? "Requesting server cancellation…"
+                    : turn.kind === "change"
+                      ? "Comparing unchanged and proposed holdings on the same closing-price data…"
+                    : turn.kind === "check"
+                  ? "Running the risk engine against your selected portfolio…"
+                  : "Gathering evidence and preparing your answer…"}
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {turn.activity
+                    ? "Checking the original run. No new analysis is being started."
+                    : turn.kind === "check"
+                    ? "Fetching inputs and calculating the existing risk report. Cold data can take longer."
+                    : "Numbers must come from platform evidence."}
+                </p>
+              </div>
+            )}
+            {turn.status === "completed" && turn.check && (
+              <CopilotRiskCheck
+                result={turn.check}
+                disabled={disabled}
+                onRepeat={() => send("Check my portfolio")}
+              />
+            )}
+            {turn.status === "completed" && turn.answer && (
+              <CopilotAnswerCard answer={turn.answer} />
+            )}
+            {turn.kind !== "change" && ["failed", "cancelled", "interrupted"].includes(turn.status) && (
+              <div
+                role="status"
+                className="space-y-2 rounded-xl border border-border p-3 text-sm"
+              >
+                <p>
+                  {turn.error ??
+                    (turn.status === "cancelled"
+                      ? "Stopped waiting. No result was added. Server computation may finish in the background."
+                      : "This request was interrupted. It was not automatically restarted.")}
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={disabled}
+                  onClick={() => send(turn.question)}
+                >
+                  Try again
+                </Button>
+                {turn.runId && (
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" size="sm" variant="outline" disabled={disabled}
+                      onClick={() => thread.retrieve(turn)}>
+                      Retrieve saved result
+                    </Button>
+                    {turn.status === "interrupted" && (
+                      <Button type="button" size="sm" variant="ghost" disabled={disabled}
+                        onClick={() => thread.cancelRun(turn)}>
+                        Cancel server check
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ))}
-      </dl>
-    </details>
-  );
-}
-
-function RiskLevers({ levers }: { levers: unknown[] }) {
-  return (
-    <div className="rounded-md border border-border bg-muted/30 p-3">
-      <p className="mb-2 text-xs font-medium text-foreground">
-        Risk levers to evaluate
-      </p>
-      <ul className="space-y-1 text-xs text-muted-foreground">
-        {levers.map((l, i) => (
-          <li key={i}>{describeLever(l)}</li>
-        ))}
-      </ul>
-      <p className="mt-2 text-[10px] text-muted-foreground">
-        Risk-management levers, not trade instructions — MindMarket does not
-        recommend buying or selling any specific security.
-      </p>
-    </div>
-  );
-}
-
-function FollowUpChips({
-  asked,
-  onPick,
-}: {
-  asked: string[];
-  onPick: (q: string) => void;
-}) {
-  const askedSet = new Set(asked.map((q) => q.trim().toLowerCase()));
-  // Follow the conversation language: Chinese last user message → Chinese
-  // suggestions (asked is in message order, so the last entry is the most
-  // recent user turn).
-  const pool = hasCjk(asked[asked.length - 1] ?? "")
-    ? FOLLOW_UP_QUESTIONS_ZH
-    : FOLLOW_UP_QUESTIONS;
-  const suggestions = pool
-    .filter((q) => !askedSet.has(q.trim().toLowerCase()))
-    .slice(0, 3);
-  if (suggestions.length === 0) return null;
-  return (
-    <div className="flex flex-wrap gap-2">
-      {suggestions.map((q) => (
-        <Button
-          key={q}
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => onPick(q)}
-        >
-          {q}
-        </Button>
-      ))}
-    </div>
-  );
-}
-
-function EmptyState({
-  onPick,
-  compact,
-}: {
-  onPick: (q: string) => void;
-  compact?: boolean;
-}) {
-  // No user message yet → follow the browser locale. Default English on
-  // the first render and switch post-mount (SSR-safe: never touch
-  // `navigator` during render).
-  const [zh, setZh] = useState(false);
-  useEffect(() => {
-    setZh(navigator.language?.toLowerCase().startsWith("zh") ?? false);
-  }, []);
-  const examples = zh ? EXAMPLE_QUESTIONS_ZH : EXAMPLE_QUESTIONS;
-
-  if (compact) {
-    // Dense variant for the small floating panel: no Card chrome, just
-    // a one-line nudge + the tappable example questions.
-    return (
-      <div className="space-y-2">
-        <p className="text-sm text-muted-foreground">
-          New to investing? Tap a question to get started — answers come in
-          plain English.
-        </p>
-        <div className="flex flex-wrap gap-2">
-          {examples.map((q) => (
+        <div ref={anchor} />
+      </div>
+      {thread.turns.length > 0 && (
+        <div className="px-3"><Button type="button" variant="outline" size="sm" disabled={disabled || !portfolioId}
+          onClick={() => thread.openChange()}>Test a change</Button></div>
+      )}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          send(draft);
+        }}
+        className={
+          floating
+            ? "space-y-2 border-t border-border bg-background p-3"
+            : "sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-20 space-y-2 rounded-xl border border-border bg-background/95 p-3 backdrop-blur lg:bottom-4"
+        }
+      >
+        {newResult && (
+          <button
+            type="button"
+            className="text-xs text-primary"
+            onClick={() => {
+              anchor.current?.scrollIntoView?.({ behavior: "smooth" });
+              setNewResult(false);
+            }}
+          >
+            View latest result
+          </button>
+        )}
+        <Textarea
+          ref={input}
+          data-testid="copilot-input"
+          aria-label="Ask your Portfolio Copilot"
+          placeholder="Ask a question or say ‘Check my portfolio’…"
+          value={draft}
+          maxLength={2000}
+          rows={2}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (
+              e.key === "Enter" &&
+              !e.shiftKey &&
+              !e.nativeEvent.isComposing
+            ) {
+              e.preventDefault();
+              send(draft);
+            }
+          }}
+        />
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs text-muted-foreground">
+            Analysis only · review assumptions before deciding
+          </span>
+          {thread.pending ? (
             <Button
-              key={q}
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => onPick(q)}
+              onClick={thread.stop}
             >
-              {q}
+              Stop waiting
             </Button>
-          ))}
+          ) : (
+            <Button
+              data-testid="copilot-send"
+              type="submit"
+              size="sm"
+              disabled={disabled || !draft.trim()}
+            >
+              Ask
+            </Button>
+          )}
         </div>
-      </div>
-    );
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Say hello to your Copilot</CardTitle>
-        <CardDescription>
-          New to investing? Start with one of these — your Copilot answers in
-          plain English, no jargon required.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-wrap gap-2">
-        {examples.map((q) => (
-          <Button
-            key={q}
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => onPick(q)}
-          >
-            {q}
-          </Button>
-        ))}
-      </CardContent>
-    </Card>
-  );
-}
-
-/**
- * Map the structured API error codes to gentle, actionable copy.
- * Beginners shouldn't see "422 no_active_portfolio" — they should see a
- * sentence and a button.
- */
-function ErrorNotice({ error }: { error: ApiError }) {
-  if (error.code === "no_active_portfolio") {
-    return (
-      <NoticeCard
-        title="Let's set up your portfolio first"
-        body="Your Copilot needs to know what you're holding before it can help."
-      >
-        <Link href="/portfolios/new">
-          <Button variant="outline" size="sm">
-            Create a portfolio
-          </Button>
-        </Link>
-      </NoticeCard>
-    );
-  }
-
-  if (error.code === "quota_exceeded") {
-    if (!isBillingEnabled()) {
-      return <NoticeCard title="Usage limit reached" body={BETA_LIMIT_MESSAGE} />;
-    }
-    return (
-      <NoticeCard
-        title="You've used your chat quota this month"
-        body="Upgrade your plan to keep chatting with your Copilot."
-      >
-        <Link href="/pricing">
-          <Button variant="outline" size="sm">
-            See plans
-          </Button>
-        </Link>
-      </NoticeCard>
-    );
-  }
-
-  if (error.code === "unauthorized") {
-    return (
-      <NoticeCard
-        title="Please sign in again"
-        body="Your session expired. Sign back in to keep chatting."
-      >
-        <Link href="/login">
-          <Button variant="outline" size="sm">
-            Sign in
-          </Button>
-        </Link>
-      </NoticeCard>
-    );
-  }
-
-  return (
-    <NoticeCard
-      title="Something went wrong"
-      body={
-        error.code === "network_error"
-          ? "Couldn't reach the Copilot. Check your connection and try again."
-          : "Your Copilot hit a snag. Please try again in a moment."
-      }
-    />
-  );
-}
-
-function NoticeCard({
-  title,
-  body,
-  children,
-}: {
-  title: string;
-  body: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-2 rounded-2xl border border-border bg-card px-4 py-3 text-sm">
-      <p className="font-medium text-foreground">{title}</p>
-      <p className="text-muted-foreground">{body}</p>
-      {children}
+      </form>
     </div>
   );
-}
-
-// ── grounded-fact formatting ───────────────────────────────────────
-
-type GroundedFact = { key: string; label: string; display: string };
-
-/**
- * Human labels + sensible formatting for the numeric keys the backend
- * grounds responses in. Rate-like metrics render as %, the health
- * score as `/1000`, dollar figures as USD. Unknown keys fall back to a
- * title-cased label so new backend keys still render gracefully.
- */
-const FACT_LABELS: Record<string, string> = {
-  overall_score: "Health score",
-  sharpe_ratio: "Risk-adjusted return (Sharpe)",
-  annual_volatility: "Volatility",
-  annual_return: "Current-mix annualized return",
-  max_drawdown: "Worst historical drop",
-  var_95_daily: "Daily risk (VaR 95%)",
-  var_95: "Daily risk (VaR 95%)",
-  beta_to_benchmark: "Market sensitivity (beta)",
-  total_value: "Total value",
-};
-
-const PERCENT_KEYS = new Set([
-  "annual_volatility",
-  "annual_return",
-  "max_drawdown",
-  "var_95_daily",
-  "var_95",
-  "cvar_95_daily",
-  "cvar_95",
-]);
-
-const USD_KEYS = new Set(["total_value"]);
-
-function formatFact(key: string, value: unknown): GroundedFact | null {
-  if (typeof value !== "number" || Number.isNaN(value)) return null;
-  const label = FACT_LABELS[key] ?? titleCase(key);
-
-  let display: string;
-  if (key === "overall_score") {
-    display = `${Math.round(value)} / 1000`;
-  } else if (PERCENT_KEYS.has(key)) {
-    display = `${(value * 100).toFixed(1)}%`;
-  } else if (USD_KEYS.has(key)) {
-    display = `$${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-  } else {
-    display = value.toFixed(2);
-  }
-  return { key, label, display };
-}
-
-function titleCase(key: string): string {
-  return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function describeLever(lever: unknown): string {
-  if (lever && typeof lever === "object") {
-    const l = lever as Record<string, unknown>;
-    const headline = typeof l.headline === "string" ? l.headline : undefined;
-    const current = typeof l.current === "string" ? l.current : undefined;
-    if (headline) {
-      return current ? `${headline} — ${current}` : headline;
-    }
-  }
-  return JSON.stringify(lever);
 }

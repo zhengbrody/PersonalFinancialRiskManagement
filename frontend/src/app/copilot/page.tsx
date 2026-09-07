@@ -9,7 +9,7 @@
  * <CopilotConversation /> that owns ALL the chat logic. The exact same
  * conversation component powers the app-wide floating widget, so there
  * is a single source of truth for message-state, send logic, grounded
- * facts, draft trades, the "Thinking…" skeleton and friendly errors.
+ * answers, foreground risk checks, explicit waiting states and friendly errors.
  */
 
 import { Suspense, useEffect } from "react";
@@ -25,7 +25,6 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CopilotConversation } from "@/components/copilot-conversation";
-import { CopilotAsk } from "@/components/copilot-ask";
 import { CopilotInsightsStrip } from "@/components/copilot-insights";
 import { CopilotPreferencesCard } from "@/components/copilot-preferences";
 import { CreditsBadge } from "@/components/credits-badge";
@@ -79,11 +78,9 @@ export default function CopilotPage() {
 
       <CopilotInsightsStrip />
 
-      <Suspense fallback={<CopilotAsk />}>
-        <CopilotAskWithPrefill />
+      <Suspense fallback={<Skeleton className="h-40 w-full" />}>
+        <CopilotWithPrefill />
       </Suspense>
-
-      <CopilotConversation variant="page" />
 
       <CopilotPreferencesCard />
     </div>
@@ -91,10 +88,10 @@ export default function CopilotPage() {
 }
 
 /** Reads ?q= (e.g. the Research → Copilot handoff) to prefill the ask box. */
-function CopilotAskWithPrefill() {
+function CopilotWithPrefill() {
   const params = useSearchParams();
   const q = params.get("q") ?? undefined;
-  return <CopilotAsk initialQuestion={q} />;
+  return <CopilotConversation variant="page" initialQuestion={q} />;
 }
 
 function PreviewBuildNotice() {

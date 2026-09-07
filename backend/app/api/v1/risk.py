@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import threading
 import time
 from types import SimpleNamespace
 
@@ -2153,6 +2154,9 @@ def _serialize_report(
     )
 
 
+_check_capacity = threading.BoundedSemaphore(1)
+
+
 @router.post(
     "/report_from_active",
     summary="Full risk report for the authed user's active portfolio",
@@ -2163,6 +2167,35 @@ def report_from_active_endpoint(
     request: Request,
     user: AuthedUser = Depends(require_user),
 ):
+    # Foreground checks share a bounded lane on the small production worker.
+    # Do not queue unlimited heavy computations when a client retries/stops.
+    if not body.include_copilot_check:
+        return _report_from_active_response(body, request, user)
+    if not _check_capacity.acquire(blocking=False):
+        raise APIError(
+            status=429,
+            code="analysis_busy",
+            message="A risk check is already running. Please try again shortly.",
+        )
+    try:
+        return _report_from_active_response(body, request, user)
+    finally:
+        _check_capacity.release()
+
+
+def _report_from_active_response(body: ReportFromActiveRequest, request: Request, user: AuthedUser):
+    started = time.perf_counter()
+    out = compute_active_report(body, user)
+    return ok(out.model_dump(), request=request, started_at=started)
+
+
+def compute_active_report(
+    body: ReportFromActiveRequest,
+    user: AuthedUser,
+    *,
+    active_context=None,
+    resolved_profile=None,
+) -> RiskReportOut:
     """Build the full ``RiskReport`` (VaR/CVaR, factor betas, stress
     test, component VaR, liquidity) using real adjusted-close prices
     via the same cached service ``/risk/score_from_active`` uses.
@@ -2170,13 +2203,22 @@ def report_from_active_endpoint(
     Heavier than /score_from_active (Monte Carlo + factor regressions
     against SPY/QQQ/GLD/TLT/IWM/VTV — fetches their history too). The
     file-cached market_data layer absorbs the cold-cache latency."""
-    started = time.perf_counter()
-
     from ...services import risk_profile
 
-    resolved_profile = risk_profile.resolve_risk_preference(user, body.risk_preference)
+    if resolved_profile is None:
+        resolved_profile = risk_profile.resolve_risk_preference(user, body.risk_preference)
 
-    active_context = _resolve_active_context_or_raise(user)
+    if active_context is None:
+        active_context = _resolve_active_context_or_raise(user)
+    if (
+        body.expected_portfolio_id is not None
+        and body.expected_portfolio_id != active_context.portfolio_id
+    ):
+        raise APIError(
+            status=409,
+            code="portfolio_changed",
+            message="The active portfolio changed. Start a new check for the selected portfolio.",
+        )
     holdings = active_context.holdings
     tickers = _priceable_tickers(holdings)
     # Also fetch any option UNDERLYINGS (even if not held as equity) so the
@@ -2389,13 +2431,31 @@ def report_from_active_endpoint(
     except Exception as exc:  # noqa: BLE001 - cockpit extras must never 500 the report
         _log.warning("risk_cockpit.assembly_failed reason=%s", type(exc).__name__)
 
+    if body.include_copilot_check and active_context.portfolio_id:
+        from ...services._common import iso_now
+        from ...services.risk_check import build_risk_check
+
+        out = out.model_copy(
+            update={
+                "copilot_check": build_risk_check(
+                    out,
+                    portfolio_id=active_context.portfolio_id,
+                    computed_at=iso_now(),
+                    price_history_as_of=_frame_as_of(price_frame),
+                    has_options=bool(_option_holding_count(holdings)),
+                    option_results=option_results,
+                    expected_option_legs=_option_holding_count(holdings),
+                )
+            }
+        )
+
     # A completed report is the authoritative first Drivers-view event.  Page
     # views and client-side tab changes do not qualify.
     from ...services import user_journey
 
     user_journey.stamp_milestone_failsoft(user.access_token, user.id, "first_driver_viewed_at")
 
-    return ok(out.model_dump(), request=request, started_at=started)
+    return out
 
 
 # ── scenario simulator + efficient frontier ───────────────────────────

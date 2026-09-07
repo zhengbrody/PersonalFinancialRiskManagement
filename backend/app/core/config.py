@@ -94,6 +94,25 @@ class Settings:
     public_risk_check_enabled: bool = field(
         default_factory=lambda: _env_str("PUBLIC_RISK_CHECK_ENABLED", "false").lower() == "true"
     )
+    # Durable foreground checks require migration 0014 and an independent key.
+    # Off by default: preparing code never provisions production storage.
+    copilot_runs_enabled: bool = field(
+        default_factory=lambda: _env_str("MINDMARKET_COPILOT_RUNS_ENABLED", "false").lower()
+        == "true"
+    )
+    risk_run_signing_secret: str = field(
+        default_factory=lambda: _env_str("MINDMARKET_RISK_RUN_SIGNING_SECRET"), repr=False
+    )
+    # Portable calculation receipts; no DB writes. Enable separately after key review.
+    copilot_comparison_replay_enabled: bool = field(
+        default_factory=lambda: _env_str("MINDMARKET_COMPARISON_REPLAY_ENABLED", "false").lower()
+        == "true"
+    )
+    # Requires migration 0015 AND replay signing; never enabled implicitly.
+    copilot_comparison_save_enabled: bool = field(
+        default_factory=lambda: _env_str("MINDMARKET_COMPARISON_SAVE_ENABLED", "false").lower()
+        == "true"
+    )
     # Trust the CF-Connecting-IP header for rate-limit identity. ONLY safe
     # when the deployment guarantees Cloudflare-only ingress (our prod SG
     # admits only Cloudflare ranges); anywhere else the header is

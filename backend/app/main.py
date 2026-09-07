@@ -23,6 +23,8 @@ from .api.v1 import (
     account,
     billing,
     copilot,
+    copilot_compare,
+    copilot_runs,
     data,
     digest,
     feedback,
@@ -192,6 +194,8 @@ def create_app() -> FastAPI:
     app.include_router(regime_summary.router)
     app.include_router(billing.router)
     app.include_router(copilot.router)
+    app.include_router(copilot_compare.router)
+    app.include_router(copilot_runs.router)
     app.include_router(quant.router)
     app.include_router(options.router)
     app.include_router(research.router)

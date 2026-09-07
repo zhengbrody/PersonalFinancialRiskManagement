@@ -16,6 +16,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from .confidence import DataConfidence
+from .risk_check import RiskCheck
 
 AssetType = Literal["public_security", "cash", "crypto", "real_estate"]
 
@@ -390,6 +391,8 @@ class RiskReportOut(BaseModel):
     dimensions: list[RiskDimension] = Field(default_factory=list)
     losses: Optional[LossBreakdown] = None
     financing_resilience: Optional[FinancingResilienceOut] = None
+    # Optional retail-readable projection, computed from this exact report.
+    copilot_check: Optional["RiskCheck"] = None
 
 
 class FrontierPoint(BaseModel):
@@ -443,6 +446,8 @@ class ReportFromActiveRequest(BaseModel):
     the score frequently while the report takes seconds.
     """
 
+    expected_portfolio_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    include_copilot_check: bool = False
     risk_preference: Optional[int] = Field(default=None, ge=1, le=5)
     risk_free_rate: float = Field(default=0.045, ge=0.0, le=0.20)
     # Aligned with ScoreFromActiveRequest (365) so the Health Score and Risk

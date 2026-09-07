@@ -293,6 +293,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/copilot/compare-change": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Compare Change */
+        post: operations["compare_change_api_v1_copilot_compare_change_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/compare-change/{result_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm Comparison */
+        post: operations["confirm_comparison_api_v1_copilot_compare_change__result_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/compare-change/{result_id}/saved": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Saved Comparison */
+        get: operations["saved_comparison_api_v1_copilot_compare_change__result_id__saved_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/compare-change/{result_id}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify Comparison */
+        post: operations["verify_comparison_api_v1_copilot_compare_change__result_id__verify_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/copilot/insights": {
         parameters: {
             query?: never;
@@ -330,6 +398,57 @@ export interface paths {
         post?: never;
         /** Completely clear the caller's Copilot preferences */
         delete: operations["copilot_preferences_delete_api_v1_copilot_preferences_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start Run */
+        post: operations["start_run_api_v1_copilot_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Run */
+        get: operations["get_run_api_v1_copilot_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/runs/{run_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel Run */
+        post: operations["cancel_run_api_v1_copilot_runs__run_id__cancel_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1518,16 +1637,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Full risk report for the authed user's active portfolio
-         * @description Build the full ``RiskReport`` (VaR/CVaR, factor betas, stress
-         *     test, component VaR, liquidity) using real adjusted-close prices
-         *     via the same cached service ``/risk/score_from_active`` uses.
-         *
-         *     Heavier than /score_from_active (Monte Carlo + factor regressions
-         *     against SPY/QQQ/GLD/TLT/IWM/VTV — fetches their history too). The
-         *     file-cached market_data layer absorbs the cold-cache latency.
-         */
+        /** Full risk report for the authed user's active portfolio */
         post: operations["report_from_active_endpoint_api_v1_risk_report_from_active_post"];
         delete?: never;
         options?: never;
@@ -2160,6 +2270,56 @@ export interface components {
              */
             separable?: boolean;
         };
+        /** ChangeComparison */
+        ChangeComparison: {
+            assumptions: components["schemas"]["CompareChange"];
+            baseline: components["schemas"]["ComparisonSide"];
+            candidate: components["schemas"]["ComparisonSide"];
+            /**
+             * Computed At
+             * Format: date-time
+             */
+            computed_at: string;
+            /** History Start */
+            history_start: string;
+            /** Limitations */
+            limitations: string[];
+            /** Methodology Version */
+            methodology_version: string;
+            /** Observations */
+            observations: number;
+            /** Option Groups */
+            option_groups?: components["schemas"]["UnchangedOptionGroup"][];
+            /** Option Quote Basis */
+            option_quote_basis?: string | null;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Price As Of */
+            price_as_of: string;
+            replay_receipt?: components["schemas"]["ComparisonReceipt"] | null;
+            /**
+             * Result Id
+             * Format: uuid
+             */
+            result_id: string;
+            /**
+             * Risk Method
+             * @default historical_equity
+             * @enum {string}
+             */
+            risk_method?: "historical_equity" | "mixed_instant_stress";
+            /** Scenarios */
+            scenarios?: components["schemas"]["PairedStress"][];
+            /** Snapshot Digest */
+            snapshot_digest: string;
+            /** Sources */
+            sources: {
+                [key: string]: string;
+            };
+        };
         /** ChangeRow */
         ChangeRow: {
             /** Change Pct */
@@ -2218,6 +2378,72 @@ export interface components {
             /** Tool Trace */
             tool_trace?: string[];
         };
+        /** CheckFinding */
+        CheckFinding: {
+            /** Explanation */
+            explanation: string;
+            /** Key */
+            key: string;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "high" | "elevated" | "info";
+            /** Title */
+            title: string;
+        };
+        /** CheckMetric */
+        CheckMetric: {
+            /** Basis */
+            basis: string;
+            /** Explanation */
+            explanation: string;
+            /** Horizon */
+            horizon: string;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Source Field */
+            source_field: string;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "usd" | "fraction" | "multiple" | "days";
+            /** Value */
+            value?: number | null;
+        };
+        /** CheckStrategy */
+        CheckStrategy: {
+            /** Expiry */
+            expiry: string;
+            /**
+             * Gain Status
+             * @enum {string}
+             */
+            gain_status: "bounded" | "unbounded" | "unavailable";
+            /** Leg Count */
+            leg_count: number;
+            /**
+             * Loss Status
+             * @enum {string}
+             */
+            loss_status: "bounded" | "unbounded" | "unavailable";
+            /** Max Gain */
+            max_gain?: number | null;
+            /** Max Loss */
+            max_loss?: number | null;
+            /** Name */
+            name: string;
+            /**
+             * Premium Basis
+             * @enum {string}
+             */
+            premium_basis: "entry" | "current_mark" | "mixed" | "unavailable";
+            /** Underlying */
+            underlying: string;
+        };
         /**
          * CheckoutSessionRequest
          * @description Body for ``POST /api/v1/billing/checkout_session``.
@@ -2248,6 +2474,89 @@ export interface components {
             key: string;
             /** Label */
             label: string;
+        };
+        /** CompareChange */
+        CompareChange: {
+            /** Amount */
+            amount: number;
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
+            /**
+             * Proceeds
+             * @enum {string}
+             */
+            proceeds: "cash" | "repay_margin";
+            /** Ticker */
+            ticker: string;
+        };
+        /**
+         * ComparisonReceipt
+         * @description Opaque server-authenticated snapshot, not a save/order credential.
+         */
+        ComparisonReceipt: {
+            /** Record */
+            record: string;
+            /**
+             * Save Available
+             * @default false
+             */
+            save_available?: boolean;
+            /** Signature */
+            signature: string;
+        };
+        /** ComparisonSide */
+        ComparisonSide: {
+            /** Annual Volatility */
+            annual_volatility: number | null;
+            /** Cash */
+            cash: number;
+            /** Cvar 1D 95 Usd */
+            cvar_1d_95_usd: number | null;
+            /** Gross Assets */
+            gross_assets: number;
+            /** Largest Position Weight */
+            largest_position_weight: number;
+            /** Leverage */
+            leverage: number;
+            /** Margin */
+            margin: number;
+            /** Net Equity */
+            net_equity: number;
+            /**
+             * Option Assets
+             * @default 0
+             */
+            option_assets?: number;
+            /**
+             * Option Liabilities
+             * @default 0
+             */
+            option_liabilities?: number;
+            /** Var 1D 95 Usd */
+            var_1d_95_usd: number | null;
+        };
+        /** ComparisonVerification */
+        ComparisonVerification: {
+            /** Inputs Match Now */
+            inputs_match_now: boolean;
+            /**
+             * Notice
+             * @default Historical calculation reproduced without fetching market data. Not a saved plan or permission to trade.
+             */
+            notice?: string;
+            /** Recent Capture */
+            recent_capture: boolean;
+            result: components["schemas"]["ChangeComparison"];
+            /** Snapshot Age Seconds */
+            snapshot_age_seconds: number;
+            /**
+             * Verified At
+             * Format: date-time
+             */
+            verified_at: string;
         };
         /** ComponentDelta */
         ComponentDelta: {
@@ -2337,6 +2646,17 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** ConfirmComparison */
+        ConfirmComparison: {
+            /** Confirmed */
+            confirmed: boolean;
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
+            receipt: components["schemas"]["ComparisonReceipt"];
+        };
         /** CopilotAnswer */
         CopilotAnswer: {
             /** Answer Markdown */
@@ -2397,6 +2717,8 @@ export interface components {
         };
         /** CopilotAskRequest */
         CopilotAskRequest: {
+            /** Expected Portfolio Id */
+            expected_portfolio_id?: string | null;
             /** Message */
             message: string;
             /** Route */
@@ -2870,6 +3192,14 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** Envelope[ChangeComparison] */
+        Envelope_ChangeComparison_: {
+            data?: components["schemas"]["ChangeComparison"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
         /** Envelope[ChatResponse] */
         Envelope_ChatResponse_: {
             data?: components["schemas"]["ChatResponse"] | null;
@@ -2881,6 +3211,14 @@ export interface components {
         /** Envelope[CheckoutSessionResponse] */
         Envelope_CheckoutSessionResponse_: {
             data?: components["schemas"]["CheckoutSessionResponse"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[ComparisonVerification] */
+        Envelope_ComparisonVerification_: {
+            data?: components["schemas"]["ComparisonVerification"] | null;
             error?: components["schemas"]["ErrorOut"] | null;
             meta: components["schemas"]["MetaOut"];
         } & {
@@ -3129,6 +3467,22 @@ export interface components {
         /** Envelope[RiskReportOut] */
         Envelope_RiskReportOut_: {
             data?: components["schemas"]["RiskReportOut-Output"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[RunOut] */
+        Envelope_RunOut_: {
+            data?: components["schemas"]["RunOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[SavedComparison] */
+        Envelope_SavedComparison_: {
+            data?: components["schemas"]["SavedComparison"] | null;
             error?: components["schemas"]["ErrorOut"] | null;
             meta: components["schemas"]["MetaOut"];
         } & {
@@ -4710,6 +5064,30 @@ export interface components {
             /** Institutional Pct */
             institutional_pct?: number | null;
         };
+        /** PairedStress */
+        PairedStress: {
+            /** Baseline Equity */
+            baseline_equity: number;
+            /** Baseline Pnl */
+            baseline_pnl: number;
+            /** Candidate Equity */
+            candidate_equity: number;
+            /** Candidate Pnl */
+            candidate_pnl: number;
+            /**
+             * Horizon Days
+             * @default 0
+             */
+            horizon_days?: number;
+            /** Iv Shift */
+            iv_shift: number;
+            /** Label */
+            label: string;
+            /** Shocks */
+            shocks: {
+                [key: string]: number;
+            };
+        };
         /** PayoffPointOut */
         PayoffPointOut: {
             /** Pnl */
@@ -5270,6 +5648,15 @@ export interface components {
             /** Status */
             status?: string | null;
         };
+        /** ReplayComparison */
+        ReplayComparison: {
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
+            receipt: components["schemas"]["ComparisonReceipt"];
+        };
         /**
          * ReportFromActiveRequest
          * @description Body for ``POST /api/v1/risk/report_from_active``.
@@ -5281,11 +5668,18 @@ export interface components {
          *     the score frequently while the report takes seconds.
          */
         ReportFromActiveRequest: {
+            /** Expected Portfolio Id */
+            expected_portfolio_id?: string | null;
             /**
              * History Days
              * @default 365
              */
             history_days?: number;
+            /**
+             * Include Copilot Check
+             * @default false
+             */
+            include_copilot_check?: boolean;
             /**
              * Market Shock
              * @description Stress-test market move applied to the portfolio.
@@ -5416,6 +5810,72 @@ export interface components {
         RiskAlertsOutput: {
             /** Alerts */
             alerts?: components["schemas"]["RiskAlert"][];
+        };
+        /** RiskCheck */
+        "RiskCheck-Input": {
+            /** Computed At */
+            computed_at: string;
+            data_confidence?: components["schemas"]["DataConfidence-Input"] | null;
+            /** Findings */
+            findings?: components["schemas"]["CheckFinding"][];
+            /** Limitations */
+            limitations?: string[];
+            /**
+             * Methodology Version
+             * @default risk-check-v1
+             * @constant
+             */
+            methodology_version?: "risk-check-v1";
+            /** Metrics */
+            metrics?: components["schemas"]["CheckMetric"][];
+            /** Portfolio Id */
+            portfolio_id: string;
+            /** Price History As Of */
+            price_history_as_of?: string | null;
+            /** Result Id */
+            result_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ready" | "limited";
+            /** Strategies */
+            strategies?: components["schemas"]["CheckStrategy"][];
+            /** Summary */
+            summary: string;
+        };
+        /** RiskCheck */
+        "RiskCheck-Output": {
+            /** Computed At */
+            computed_at: string;
+            data_confidence?: components["schemas"]["DataConfidence-Output"] | null;
+            /** Findings */
+            findings?: components["schemas"]["CheckFinding"][];
+            /** Limitations */
+            limitations?: string[];
+            /**
+             * Methodology Version
+             * @default risk-check-v1
+             * @constant
+             */
+            methodology_version?: "risk-check-v1";
+            /** Metrics */
+            metrics?: components["schemas"]["CheckMetric"][];
+            /** Portfolio Id */
+            portfolio_id: string;
+            /** Price History As Of */
+            price_history_as_of?: string | null;
+            /** Result Id */
+            result_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ready" | "limited";
+            /** Strategies */
+            strategies?: components["schemas"]["CheckStrategy"][];
+            /** Summary */
+            summary: string;
         };
         /**
          * RiskDimension
@@ -5775,6 +6235,7 @@ export interface components {
             concentration?: components["schemas"]["ConcentrationOut-Input"] | null;
             /** Contributed Capital */
             contributed_capital?: number | null;
+            copilot_check?: components["schemas"]["RiskCheck-Input"] | null;
             correlation?: components["schemas"]["CorrelationOut"] | null;
             /** Cvar 95 */
             cvar_95?: number | null;
@@ -5868,6 +6329,7 @@ export interface components {
             concentration?: components["schemas"]["backend__app__schemas__risk__ConcentrationOut"] | null;
             /** Contributed Capital */
             contributed_capital?: number | null;
+            copilot_check?: components["schemas"]["RiskCheck-Output"] | null;
             correlation?: components["schemas"]["CorrelationOut"] | null;
             /** Cvar 95 */
             cvar_95?: number | null;
@@ -5972,6 +6434,71 @@ export interface components {
              * @default 21
              */
             window_days?: number;
+        };
+        /** RunOut */
+        RunOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Error Code */
+            error_code?: ("analysis_failed" | "run_expired") | null;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            result?: components["schemas"]["RiskCheck-Output"] | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "running" | "completed" | "failed" | "cancelled" | "interrupted";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** SavedComparison */
+        SavedComparison: {
+            /**
+             * Confirmed At
+             * Format: date-time
+             */
+            confirmed_at: string;
+            /**
+             * Notice
+             * @default Saved as a draft risk plan with the original signed calculation. No holdings changed. This is a historical assumption, not an order or current recommendation.
+             */
+            notice?: string;
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            result: components["schemas"]["ChangeComparison"];
+            /**
+             * Result Id
+             * Format: uuid
+             */
+            result_id: string;
         };
         /** ScenarioCellOut */
         ScenarioCellOut: {
@@ -6534,6 +7061,19 @@ export interface components {
             /** Source */
             source: string;
         };
+        /** StartRun */
+        StartRun: {
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+        };
         /** StressAssetLoss */
         StressAssetLoss: {
             /** Loss Pct */
@@ -6606,6 +7146,21 @@ export interface components {
         TopInstitutionsOut: {
             /** Institutions */
             institutions?: components["schemas"]["InstitutionRow"][];
+        };
+        /** UnchangedOptionGroup */
+        UnchangedOptionGroup: {
+            /** Expiry */
+            expiry: string;
+            /** Leg Count */
+            leg_count: number;
+            /** Mark Basis Max Gain */
+            mark_basis_max_gain: number | null;
+            /** Mark Basis Max Loss */
+            mark_basis_max_loss: number | null;
+            /** Name */
+            name: string;
+            /** Underlying */
+            underlying: string;
         };
         /** UnderlyingExposureOut */
         UnderlyingExposureOut: {
@@ -7154,6 +7709,142 @@ export interface operations {
             };
         };
     };
+    compare_change_api_v1_copilot_compare_change_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompareChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ChangeComparison_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_comparison_api_v1_copilot_compare_change__result_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                result_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmComparison"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SavedComparison_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    saved_comparison_api_v1_copilot_compare_change__result_id__saved_get: {
+        parameters: {
+            query: {
+                expected_portfolio_id: string;
+            };
+            header?: never;
+            path: {
+                result_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SavedComparison_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_comparison_api_v1_copilot_compare_change__result_id__verify_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                result_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplayComparison"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_ComparisonVerification_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     copilot_insights_endpoint_api_v1_copilot_insights_get: {
         parameters: {
             query?: never;
@@ -7243,6 +7934,101 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_CopilotPreferencesCleared_"];
+                };
+            };
+        };
+    };
+    start_run_api_v1_copilot_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartRun"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_RunOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_run_api_v1_copilot_runs__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_RunOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_run_api_v1_copilot_runs__run_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_RunOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

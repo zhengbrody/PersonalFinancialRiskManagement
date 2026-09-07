@@ -1181,6 +1181,130 @@
         "title": "ChangeAttribution",
         "type": "object"
       },
+      "ChangeComparison": {
+        "additionalProperties": false,
+        "properties": {
+          "assumptions": {
+            "$ref": "#/components/schemas/CompareChange"
+          },
+          "baseline": {
+            "$ref": "#/components/schemas/ComparisonSide"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/ComparisonSide"
+          },
+          "computed_at": {
+            "format": "date-time",
+            "title": "Computed At",
+            "type": "string"
+          },
+          "history_start": {
+            "title": "History Start",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "methodology_version": {
+            "title": "Methodology Version",
+            "type": "string"
+          },
+          "observations": {
+            "title": "Observations",
+            "type": "integer"
+          },
+          "option_groups": {
+            "items": {
+              "$ref": "#/components/schemas/UnchangedOptionGroup"
+            },
+            "title": "Option Groups",
+            "type": "array"
+          },
+          "option_quote_basis": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Option Quote Basis"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "price_as_of": {
+            "title": "Price As Of",
+            "type": "string"
+          },
+          "replay_receipt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComparisonReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "result_id": {
+            "format": "uuid",
+            "title": "Result Id",
+            "type": "string"
+          },
+          "risk_method": {
+            "default": "historical_equity",
+            "enum": [
+              "historical_equity",
+              "mixed_instant_stress"
+            ],
+            "title": "Risk Method",
+            "type": "string"
+          },
+          "scenarios": {
+            "items": {
+              "$ref": "#/components/schemas/PairedStress"
+            },
+            "title": "Scenarios",
+            "type": "array"
+          },
+          "snapshot_digest": {
+            "title": "Snapshot Digest",
+            "type": "string"
+          },
+          "sources": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "object"
+          }
+        },
+        "required": [
+          "result_id",
+          "portfolio_id",
+          "computed_at",
+          "snapshot_digest",
+          "methodology_version",
+          "assumptions",
+          "price_as_of",
+          "history_start",
+          "observations",
+          "sources",
+          "baseline",
+          "candidate",
+          "limitations"
+        ],
+        "title": "ChangeComparison",
+        "type": "object"
+      },
       "ChangeRow": {
         "properties": {
           "change_pct": {
@@ -1314,6 +1438,181 @@
         "title": "ChatResponse",
         "type": "object"
       },
+      "CheckFinding": {
+        "properties": {
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "high",
+              "elevated",
+              "info"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "severity",
+          "explanation"
+        ],
+        "title": "CheckFinding",
+        "type": "object"
+      },
+      "CheckMetric": {
+        "additionalProperties": false,
+        "properties": {
+          "basis": {
+            "title": "Basis",
+            "type": "string"
+          },
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "horizon": {
+            "title": "Horizon",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "source_field": {
+            "title": "Source Field",
+            "type": "string"
+          },
+          "unit": {
+            "enum": [
+              "usd",
+              "fraction",
+              "multiple",
+              "days"
+            ],
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "unit",
+          "horizon",
+          "basis",
+          "explanation",
+          "source_field"
+        ],
+        "title": "CheckMetric",
+        "type": "object"
+      },
+      "CheckStrategy": {
+        "properties": {
+          "expiry": {
+            "title": "Expiry",
+            "type": "string"
+          },
+          "gain_status": {
+            "enum": [
+              "bounded",
+              "unbounded",
+              "unavailable"
+            ],
+            "title": "Gain Status",
+            "type": "string"
+          },
+          "leg_count": {
+            "title": "Leg Count",
+            "type": "integer"
+          },
+          "loss_status": {
+            "enum": [
+              "bounded",
+              "unbounded",
+              "unavailable"
+            ],
+            "title": "Loss Status",
+            "type": "string"
+          },
+          "max_gain": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Gain"
+          },
+          "max_loss": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Loss"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "premium_basis": {
+            "enum": [
+              "entry",
+              "current_mark",
+              "mixed",
+              "unavailable"
+            ],
+            "title": "Premium Basis",
+            "type": "string"
+          },
+          "underlying": {
+            "title": "Underlying",
+            "type": "string"
+          }
+        },
+        "required": [
+          "underlying",
+          "expiry",
+          "name",
+          "leg_count",
+          "premium_basis",
+          "loss_status",
+          "gain_status"
+        ],
+        "title": "CheckStrategy",
+        "type": "object"
+      },
       "CheckoutSessionRequest": {
         "description": "Body for ``POST /api/v1/billing/checkout_session``.",
         "properties": {
@@ -1397,6 +1696,194 @@
           "definition"
         ],
         "title": "ClassDefinitionOut",
+        "type": "object"
+      },
+      "CompareChange": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 100000000.0,
+            "title": "Amount",
+            "type": "number"
+          },
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          },
+          "proceeds": {
+            "enum": [
+              "cash",
+              "repay_margin"
+            ],
+            "title": "Proceeds",
+            "type": "string"
+          },
+          "ticker": {
+            "pattern": "^[A-Z][A-Z0-9.\\-]{0,11}$",
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_portfolio_id",
+          "ticker",
+          "amount",
+          "proceeds"
+        ],
+        "title": "CompareChange",
+        "type": "object"
+      },
+      "ComparisonReceipt": {
+        "additionalProperties": false,
+        "description": "Opaque server-authenticated snapshot, not a save/order credential.",
+        "properties": {
+          "record": {
+            "maxLength": 512000,
+            "title": "Record",
+            "type": "string"
+          },
+          "save_available": {
+            "default": false,
+            "title": "Save Available",
+            "type": "boolean"
+          },
+          "signature": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Signature",
+            "type": "string"
+          }
+        },
+        "required": [
+          "record",
+          "signature"
+        ],
+        "title": "ComparisonReceipt",
+        "type": "object"
+      },
+      "ComparisonSide": {
+        "properties": {
+          "annual_volatility": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annual Volatility"
+          },
+          "cash": {
+            "title": "Cash",
+            "type": "number"
+          },
+          "cvar_1d_95_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cvar 1D 95 Usd"
+          },
+          "gross_assets": {
+            "title": "Gross Assets",
+            "type": "number"
+          },
+          "largest_position_weight": {
+            "title": "Largest Position Weight",
+            "type": "number"
+          },
+          "leverage": {
+            "title": "Leverage",
+            "type": "number"
+          },
+          "margin": {
+            "title": "Margin",
+            "type": "number"
+          },
+          "net_equity": {
+            "title": "Net Equity",
+            "type": "number"
+          },
+          "option_assets": {
+            "default": 0,
+            "title": "Option Assets",
+            "type": "number"
+          },
+          "option_liabilities": {
+            "default": 0,
+            "title": "Option Liabilities",
+            "type": "number"
+          },
+          "var_1d_95_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Var 1D 95 Usd"
+          }
+        },
+        "required": [
+          "gross_assets",
+          "net_equity",
+          "cash",
+          "margin",
+          "leverage",
+          "largest_position_weight",
+          "annual_volatility",
+          "var_1d_95_usd",
+          "cvar_1d_95_usd"
+        ],
+        "title": "ComparisonSide",
+        "type": "object"
+      },
+      "ComparisonVerification": {
+        "additionalProperties": false,
+        "properties": {
+          "inputs_match_now": {
+            "title": "Inputs Match Now",
+            "type": "boolean"
+          },
+          "notice": {
+            "default": "Historical calculation reproduced without fetching market data. Not a saved plan or permission to trade.",
+            "title": "Notice",
+            "type": "string"
+          },
+          "recent_capture": {
+            "title": "Recent Capture",
+            "type": "boolean"
+          },
+          "result": {
+            "$ref": "#/components/schemas/ChangeComparison"
+          },
+          "snapshot_age_seconds": {
+            "minimum": 0.0,
+            "title": "Snapshot Age Seconds",
+            "type": "integer"
+          },
+          "verified_at": {
+            "format": "date-time",
+            "title": "Verified At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result",
+          "verified_at",
+          "inputs_match_now",
+          "snapshot_age_seconds",
+          "recent_capture"
+        ],
+        "title": "ComparisonVerification",
         "type": "object"
       },
       "ComponentDelta": {
@@ -1622,6 +2109,30 @@
         "title": "ConfidenceReason",
         "type": "object"
       },
+      "ConfirmComparison": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/ComparisonReceipt"
+          }
+        },
+        "required": [
+          "expected_portfolio_id",
+          "receipt",
+          "confirmed"
+        ],
+        "title": "ConfirmComparison",
+        "type": "object"
+      },
       "CopilotAnswer": {
         "properties": {
           "answer_markdown": {
@@ -1751,6 +2262,19 @@
       },
       "CopilotAskRequest": {
         "properties": {
+          "expected_portfolio_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Portfolio Id"
+          },
           "message": {
             "maxLength": 2000,
             "minLength": 1,
@@ -3228,6 +3752,39 @@
         "title": "Envelope[BillingMeResponse]",
         "type": "object"
       },
+      "Envelope_ChangeComparison_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChangeComparison"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[ChangeComparison]",
+        "type": "object"
+      },
       "Envelope_ChatResponse_": {
         "additionalProperties": true,
         "properties": {
@@ -3292,6 +3849,39 @@
           "meta"
         ],
         "title": "Envelope[CheckoutSessionResponse]",
+        "type": "object"
+      },
+      "Envelope_ComparisonVerification_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComparisonVerification"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[ComparisonVerification]",
         "type": "object"
       },
       "Envelope_CopilotAnswer_": {
@@ -4315,6 +4905,72 @@
           "meta"
         ],
         "title": "Envelope[RiskReportOut]",
+        "type": "object"
+      },
+      "Envelope_RunOut_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[RunOut]",
+        "type": "object"
+      },
+      "Envelope_SavedComparison_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedComparison"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[SavedComparison]",
         "type": "object"
       },
       "Envelope_ScenariosOut_": {
@@ -9167,6 +9823,57 @@
         "title": "OwnershipBlock",
         "type": "object"
       },
+      "PairedStress": {
+        "properties": {
+          "baseline_equity": {
+            "title": "Baseline Equity",
+            "type": "number"
+          },
+          "baseline_pnl": {
+            "title": "Baseline Pnl",
+            "type": "number"
+          },
+          "candidate_equity": {
+            "title": "Candidate Equity",
+            "type": "number"
+          },
+          "candidate_pnl": {
+            "title": "Candidate Pnl",
+            "type": "number"
+          },
+          "horizon_days": {
+            "default": 0,
+            "title": "Horizon Days",
+            "type": "integer"
+          },
+          "iv_shift": {
+            "title": "Iv Shift",
+            "type": "number"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "shocks": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Shocks",
+            "type": "object"
+          }
+        },
+        "required": [
+          "label",
+          "shocks",
+          "iv_shift",
+          "baseline_pnl",
+          "candidate_pnl",
+          "baseline_equity",
+          "candidate_equity"
+        ],
+        "title": "PairedStress",
+        "type": "object"
+      },
       "PayoffPointOut": {
         "properties": {
           "pnl": {
@@ -10798,15 +11505,52 @@
         "title": "RegimeYieldCurveOut",
         "type": "object"
       },
+      "ReplayComparison": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/ComparisonReceipt"
+          }
+        },
+        "required": [
+          "expected_portfolio_id",
+          "receipt"
+        ],
+        "title": "ReplayComparison",
+        "type": "object"
+      },
       "ReportFromActiveRequest": {
         "description": "Body for ``POST /api/v1/risk/report_from_active``.\n\nMatches ScoreFromActiveRequest \u2014 both endpoints resolve the active\nportfolio from JWT. We keep them as separate routes (rather than a\nsingle 'report' that also returns the score) because the score\nendpoint is fast and the report endpoint is slow; users can poll\nthe score frequently while the report takes seconds.",
         "properties": {
+          "expected_portfolio_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Portfolio Id"
+          },
           "history_days": {
             "default": 365,
             "maximum": 2520.0,
             "minimum": 180.0,
             "title": "History Days",
             "type": "integer"
+          },
+          "include_copilot_check": {
+            "default": false,
+            "title": "Include Copilot Check",
+            "type": "boolean"
           },
           "market_shock": {
             "default": -0.1,
@@ -11184,6 +11928,194 @@
           }
         },
         "title": "RiskAlertsOutput",
+        "type": "object"
+      },
+      "RiskCheck-Input": {
+        "additionalProperties": false,
+        "properties": {
+          "computed_at": {
+            "title": "Computed At",
+            "type": "string"
+          },
+          "data_confidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataConfidence-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/CheckFinding"
+            },
+            "maxItems": 3,
+            "title": "Findings",
+            "type": "array"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "methodology_version": {
+            "const": "risk-check-v1",
+            "default": "risk-check-v1",
+            "title": "Methodology Version",
+            "type": "string"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/CheckMetric"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "portfolio_id": {
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "price_history_as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price History As Of"
+          },
+          "result_id": {
+            "title": "Result Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "limited"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "strategies": {
+            "items": {
+              "$ref": "#/components/schemas/CheckStrategy"
+            },
+            "title": "Strategies",
+            "type": "array"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "portfolio_id",
+          "result_id",
+          "computed_at",
+          "status",
+          "summary"
+        ],
+        "title": "RiskCheck",
+        "type": "object"
+      },
+      "RiskCheck-Output": {
+        "additionalProperties": false,
+        "properties": {
+          "computed_at": {
+            "title": "Computed At",
+            "type": "string"
+          },
+          "data_confidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataConfidence-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/CheckFinding"
+            },
+            "maxItems": 3,
+            "title": "Findings",
+            "type": "array"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "methodology_version": {
+            "const": "risk-check-v1",
+            "default": "risk-check-v1",
+            "title": "Methodology Version",
+            "type": "string"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/CheckMetric"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "portfolio_id": {
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "price_history_as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price History As Of"
+          },
+          "result_id": {
+            "title": "Result Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ready",
+              "limited"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "strategies": {
+            "items": {
+              "$ref": "#/components/schemas/CheckStrategy"
+            },
+            "title": "Strategies",
+            "type": "array"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "portfolio_id",
+          "result_id",
+          "computed_at",
+          "status",
+          "summary"
+        ],
+        "title": "RiskCheck",
         "type": "object"
       },
       "RiskDimension": {
@@ -12152,6 +13084,16 @@
             ],
             "title": "Contributed Capital"
           },
+          "copilot_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RiskCheck-Input"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "correlation": {
             "anyOf": [
               {
@@ -12529,6 +13471,16 @@
               }
             ],
             "title": "Contributed Capital"
+          },
+          "copilot_check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RiskCheck-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "correlation": {
             "anyOf": [
@@ -12919,6 +13871,124 @@
           }
         },
         "title": "RollingVolatilityOut",
+        "type": "object"
+      },
+      "RunOut": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "analysis_failed",
+                  "run_expired"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RiskCheck-Output"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "enum": [
+              "running",
+              "completed",
+              "failed",
+              "cancelled",
+              "interrupted"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "portfolio_id",
+          "state",
+          "created_at",
+          "expires_at",
+          "updated_at"
+        ],
+        "title": "RunOut",
+        "type": "object"
+      },
+      "SavedComparison": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed_at": {
+            "format": "date-time",
+            "title": "Confirmed At",
+            "type": "string"
+          },
+          "notice": {
+            "default": "Saved as a draft risk plan with the original signed calculation. No holdings changed. This is a historical assumption, not an order or current recommendation.",
+            "title": "Notice",
+            "type": "string"
+          },
+          "plan_id": {
+            "format": "uuid",
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/ChangeComparison"
+          },
+          "result_id": {
+            "format": "uuid",
+            "title": "Result Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan_id",
+          "portfolio_id",
+          "result_id",
+          "confirmed_at",
+          "result"
+        ],
+        "title": "SavedComparison",
         "type": "object"
       },
       "ScenarioCellOut": {
@@ -14452,6 +15522,27 @@
         "title": "SourceRef",
         "type": "object"
       },
+      "StartRun": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "expected_portfolio_id"
+        ],
+        "title": "StartRun",
+        "type": "object"
+      },
       "StressAssetLoss": {
         "properties": {
           "loss_pct": {
@@ -14677,6 +15768,58 @@
           }
         },
         "title": "TopInstitutionsOut",
+        "type": "object"
+      },
+      "UnchangedOptionGroup": {
+        "properties": {
+          "expiry": {
+            "title": "Expiry",
+            "type": "string"
+          },
+          "leg_count": {
+            "title": "Leg Count",
+            "type": "integer"
+          },
+          "mark_basis_max_gain": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mark Basis Max Gain"
+          },
+          "mark_basis_max_loss": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mark Basis Max Loss"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "underlying": {
+            "title": "Underlying",
+            "type": "string"
+          }
+        },
+        "required": [
+          "underlying",
+          "expiry",
+          "name",
+          "leg_count",
+          "mark_basis_max_loss",
+          "mark_basis_max_gain"
+        ],
+        "title": "UnchangedOptionGroup",
         "type": "object"
       },
       "UnderlyingExposureOut": {
@@ -15759,6 +16902,206 @@
         ]
       }
     },
+    "/api/v1/copilot/compare-change": {
+      "post": {
+        "operationId": "compare_change_api_v1_copilot_compare_change_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompareChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ChangeComparison_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compare Change",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/compare-change/{result_id}/confirm": {
+      "post": {
+        "operationId": "confirm_comparison_api_v1_copilot_compare_change__result_id__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "result_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Result Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmComparison"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SavedComparison_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Comparison",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/compare-change/{result_id}/saved": {
+      "get": {
+        "operationId": "saved_comparison_api_v1_copilot_compare_change__result_id__saved_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "result_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Result Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_portfolio_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Expected Portfolio Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SavedComparison_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Saved Comparison",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/compare-change/{result_id}/verify": {
+      "post": {
+        "operationId": "verify_comparison_api_v1_copilot_compare_change__result_id__verify_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "result_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Result Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplayComparison"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_ComparisonVerification_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Verify Comparison",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
     "/api/v1/copilot/insights": {
       "get": {
         "description": "Server-computed, deterministic, credit-free. Materiality thresholds +\none-per-kind dedup + stable episode ids (client dismissal survives while a\ncondition persists). Thin data \u2192 only the data-quality insight. FAIL-SOFT:\nany internal failure degrades to an empty list, never a 500.",
@@ -15855,6 +17198,133 @@
           }
         },
         "summary": "Explicitly CONFIRM (save) Copilot preferences \u2014 the only write path",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/runs": {
+      "post": {
+        "operationId": "start_run_api_v1_copilot_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRun"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_RunOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Run",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/runs/{run_id}": {
+      "get": {
+        "operationId": "get_run_api_v1_copilot_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_RunOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Run",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/runs/{run_id}/cancel": {
+      "post": {
+        "operationId": "cancel_run_api_v1_copilot_runs__run_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_RunOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Run",
         "tags": [
           "copilot"
         ]
@@ -18260,7 +19730,6 @@
     },
     "/api/v1/risk/report_from_active": {
       "post": {
-        "description": "Build the full ``RiskReport`` (VaR/CVaR, factor betas, stress\ntest, component VaR, liquidity) using real adjusted-close prices\nvia the same cached service ``/risk/score_from_active`` uses.\n\nHeavier than /score_from_active (Monte Carlo + factor regressions\nagainst SPY/QQQ/GLD/TLT/IWM/VTV \u2014 fetches their history too). The\nfile-cached market_data layer absorbs the cold-cache latency.",
         "operationId": "report_from_active_endpoint_api_v1_risk_report_from_active_post",
         "requestBody": {
           "content": {

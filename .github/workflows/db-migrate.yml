@@ -55,9 +55,14 @@ jobs:
           fi
           # Single-quoted sh -c so $PGURL expands INSIDE the container (the
           # db-backup review-caught gotcha), and the migration mounts read-only.
+          # Bounded waits: never queue behind a lock holder or sit in a long
+          # rewrite against live traffic. Exceeding either aborts the single
+          # transaction and rolls back, so a contended run fails loudly instead
+          # of blocking the application — diagnose, then re-run.
           docker run --rm \
             -v "$PWD/supabase/migrations:/migrations:ro" \
             -e PGURL="$SUPABASE_DB_URL" \
             -e MIGRATION="$MIGRATION" \
+            -e PGOPTIONS="-c lock_timeout=5s -c statement_timeout=120s" \
             postgres:17-alpine@sha256:dc17045ccfd343b49600570ea734b9c4991cf1c3f3302e67df51e3b402dd55c4 \
             sh -c 'psql "$PGURL" --single-transaction -v ON_ERROR_STOP=1 -f "/migrations/$MIGRATION"'

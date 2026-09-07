@@ -94,6 +94,8 @@ class CopilotAnswerSection(BaseModel):
 
 class CopilotAskRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
+    # When supplied (including explicit null), bind the foreground UI's book.
+    expected_portfolio_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
     # Page-awareness context (optional, additive). `route` is the app path the
     # user is on (e.g. "/research", "/risk"); `ticker` is the security currently
     # in view. Both only STEER intent + which deterministic tools run — they
