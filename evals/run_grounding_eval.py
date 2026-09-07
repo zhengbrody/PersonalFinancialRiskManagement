@@ -1,6 +1,6 @@
 """Copilot grounding eval — is every number in the answer traceable to evidence?
 
-Runs the 36 cases in evals/copilot/cases.jsonl through the REAL router
+Runs the cases in evals/copilot/cases.jsonl through the REAL router
 (``copilot_router.answer``) with every evidence-source seam patched to the
 case's fixture, extracts numeric claims from the answer, and verifies them
 against the evidence packet with unit-normalized, kind-aware display-rounding
@@ -27,6 +27,7 @@ Exit codes: 0 ok · 1 faithfulness below --threshold or intent mismatch ·
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import sys
 from contextlib import contextmanager
@@ -69,20 +70,87 @@ def _factpack_obj(ticker: str, d: dict):
     )
 
 
+def _assert_call_compatible(original, replacement, name: str) -> None:
+    """A seam whose signature does not match production is a DEAD seam.
+
+    ``_option_evidence`` was patched as ``lambda message, user`` while
+    production takes ``(message, user, *, holdings=None)``. The call site
+    passes ``holdings=`` as a keyword, so every invocation raised TypeError —
+    which ``safe()`` swallows into an empty list. The seam looked pinned-empty
+    on purpose and could never have returned anything else, so no case could
+    exercise option evidence at all. Bind a production-shaped call against the
+    replacement here so that failure mode is loud instead of silent.
+    """
+    if not (callable(original) and callable(replacement)):
+        return
+    try:
+        origin = inspect.signature(original)
+    except (TypeError, ValueError):  # builtins / C callables
+        return
+    args, kwargs = [], {}
+    for param in origin.parameters.values():
+        if param.kind is param.VAR_POSITIONAL or param.kind is param.VAR_KEYWORD:
+            continue
+        if param.kind is param.KEYWORD_ONLY:
+            kwargs[param.name] = None
+        else:
+            args.append(None)
+    try:
+        inspect.signature(replacement).bind(*args, **kwargs)
+    except TypeError as exc:
+        raise AssertionError(
+            f"fixture seam {name!r} cannot accept the call production makes "
+            f"({origin}): {exc}. A mismatched seam is silently swallowed by "
+            f"safe() and the case then proves nothing."
+        ) from None
+
+
+def _evidence_items(rows, tool: str | None = None) -> list:
+    """Build production-shaped EvidenceItem rows from a fixture list.
+
+    Absent key -> [] (the seam is off for that case). Most builders are stamped
+    by the CALL SITE, so their seam leaves ``tool`` unset and the router fills
+    it. ``_preference_evidence`` stamps itself internally, so its seam must too
+    — otherwise the replacement is subtly unlike production and a
+    tools_expected assertion would silently never see it."""
+    from backend.app.schemas.copilot2 import EvidenceItem
+
+    return [
+        EvidenceItem(
+            label=r["label"],
+            value=str(r["value"]),
+            source=r.get("source", "engine"),
+            source_type=r.get("source_type"),
+            tool=tool,
+        )
+        for r in (rows or [])
+    ]
+
+
 @contextmanager
-def patched_seams(fixture: dict):
+def patched_seams(fixture: dict, passthrough: frozenset | set | tuple = ()):
     """Point every evidence-gathering seam at the case fixture; restore after.
 
     The subject under test is the ANSWER's faithfulness to evidence — the
     evidence builders themselves have their own unit tests, so patching at
     the source seams (the same ones the router's tests use) is the honest
-    boundary. Desk-view/option evidence are pinned empty so the value set is
-    exactly the fixture-derived packet."""
+    boundary. Seams with no fixture key return empty, so the value set is
+    exactly the fixture-derived packet; supplying the key turns that evidence
+    on, which is what makes tool-choice and completeness checks possible.
+
+    ``passthrough`` names seams to leave at production, for probes that measure
+    the real call path itself (the isolation probe watches which token
+    ``_score_change_evidence`` forwards, so stubbing it would make the probe
+    vacuously pass)."""
     fx = fixture or {}
     saved: list[tuple] = []
 
     def put(obj, name, val):
-        saved.append((obj, name, getattr(obj, name)))
+        if name in passthrough:
+            return
+        original = getattr(obj, name)
+        _assert_call_compatible(original, val, name)
+        saved.append((obj, name, original))
         setattr(obj, name, val)
 
     def no_portfolio(_user):
@@ -98,16 +166,46 @@ def patched_seams(fixture: dict):
         put(cr, "_load_score", no_portfolio)
 
     packs = fx.get("factpacks") or {}
-    put(cr, "_risk_reference_evidence", lambda score, positions: [])
-    put(cr, "_option_evidence", lambda message, user: [])
+    # Signatures below MIRROR production exactly — see _assert_call_compatible.
+    put(
+        cr,
+        "_risk_reference_evidence",
+        lambda score, positions, _fx=fx.get("risk_reference"): _evidence_items(_fx),
+    )
+    put(
+        cr,
+        "_option_evidence",
+        lambda message, user, *, holdings=None, _fx=fx.get("options"): _evidence_items(_fx),
+    )
+    put(
+        cr,
+        "_preference_evidence",
+        lambda user, _fx=fx.get("preferences"): _evidence_items(_fx, "user_preferences"),
+    )
+    put(
+        cr,
+        "_score_change_evidence",
+        lambda user, score, positions=None, *, portfolio_id=None, _fx=fx.get(
+            "score_change"
+        ): _evidence_items(_fx),
+    )
+
     put(cr, "_optimizer_scans", lambda score, positions: dict(fx.get("scans") or {}))
-    put(rf, "build_fact_pack", lambda tk: _factpack_obj(tk, packs[tk]))
+    put(
+        rf,
+        "build_fact_pack",
+        lambda tk, *, yf_enricher=None: _factpack_obj(tk, packs[tk]),
+    )
 
     macro = fx.get("macro")
     if macro:
-        put(mr, "get_market_regime", lambda m=macro: dict(m))
+        put(mr, "get_market_regime", lambda *, force_refresh=False, m=macro: dict(m))
     else:
-        put(mr, "get_market_regime", lambda: (_ for _ in ()).throw(RuntimeError("no macro")))
+        put(
+            mr,
+            "get_market_regime",
+            lambda *, force_refresh=False: (_ for _ in ()).throw(RuntimeError("no macro")),
+        )
 
     try:
         yield
@@ -117,6 +215,36 @@ def patched_seams(fixture: dict):
 
 
 # ── one case ──────────────────────────────────────────────────────────
+
+
+def _fixture_metric(fixture: dict | None, name: str):
+    """Read one engine number a completeness rule keys off.
+
+    Explicit map, no attribute walking: a typo in a case must fail loudly at
+    review rather than silently resolve to None and disable the rule."""
+    score = (fixture or {}).get("score") or {}
+    metrics = score.get("metrics") or {}
+    known = {
+        "overall_score": score.get("overall_score"),
+        "annual_volatility": metrics.get("annual_volatility"),
+        "max_drawdown": metrics.get("max_drawdown"),
+        "beta_to_benchmark": metrics.get("beta_to_benchmark"),
+        "sharpe_ratio": metrics.get("sharpe_ratio"),
+        "var_95_daily": metrics.get("var_95_daily"),
+        "leverage": metrics.get("leverage"),
+        "concentration_top_weight": metrics.get("concentration_top_weight"),
+    }
+    if name not in known:
+        raise KeyError(f"unknown must_mention_when metric {name!r}; add it to _fixture_metric")
+    return known[name]
+
+
+def _rule_fires(actual: float, rule: dict) -> bool:
+    if "gt" in rule:
+        return actual > rule["gt"]
+    if "lt" in rule:
+        return actual < rule["lt"]
+    raise KeyError(f"must_mention_when rule needs 'gt' or 'lt': {rule!r}")
 
 
 def run_case(case: dict, llm_callable) -> dict:
@@ -163,6 +291,36 @@ def run_case(case: dict, llm_callable) -> dict:
 
     # Low-confidence directional gate: blocked answers must carry
     # directional_allowed=False and ZERO AI-phrased narrative sections.
+    # Tool choice. The router already stamps EvidenceItem.tool (_stamp); the
+    # harness simply never read it. `tools_expected` are tools the intent MUST
+    # have used; `tools_forbidden` catches spending budget on evidence the
+    # question does not need — the "fewest necessary tools" signal.
+    tools_used = {e.tool for e in ans.evidence if e.tool}
+    tool_failures = [
+        f"missing_tool:{t}" for t in (case.get("tools_expected") or []) if t not in tools_used
+    ] + [f"unexpected_tool:{t}" for t in (case.get("tools_forbidden") or []) if t in tools_used]
+
+    # Deterministic completeness — "did the agent even look?".
+    #
+    # Asserted against the EVIDENCE, not the prose. Matching words anywhere in
+    # the answer is vacuous: the deterministic template's boilerplate caveat
+    # already contains risk vocabulary ("…fresher price or provided leverage…"),
+    # so a prose rule passes even when the engine surfaced nothing. Evidence is
+    # deterministic in both modes, and its absence is exactly the failure this
+    # is meant to catch. Each rule fires only when the FIXTURE's own engine
+    # number crosses the threshold, so editing a fixture retunes the
+    # expectation instead of leaving a stale one behind.
+    evidence_low = evidence_text.lower()
+    completeness_failures = []
+    for rule in case.get("must_surface_when") or []:
+        actual = _fixture_metric(case.get("fixture"), rule["metric"])
+        if actual is None or not _rule_fires(actual, rule):
+            continue
+        if not any(word.lower() in evidence_low for word in rule["any_of"]):
+            completeness_failures.append(
+                f"{rule['metric']}={actual} but no evidence row mentions {rule['any_of']}"
+            )
+
     gate_ok = True
     if case.get("expect_directional_blocked"):
         dc = ans.data_confidence
@@ -184,6 +342,9 @@ def run_case(case: dict, llm_callable) -> dict:
         "data_only": bool(ans.data_only),
         "trap": case.get("trap"),
         "check_failures": check_failures,
+        "tools_used": sorted(tools_used),
+        "tool_failures": tool_failures,
+        "completeness_failures": completeness_failures,
         "sections_ok": sections_ok,
         "language_ok": language_ok,
         "gate_ok": gate_ok,
@@ -225,7 +386,9 @@ def isolation_probe() -> dict:
             seen.append(token),
             None,
         )[1]
-        with patched_seams(fixture):
+        # Leave the score-change seam at production: the token it forwards IS
+        # the thing under test here.
+        with patched_seams(fixture, passthrough={"_score_change_evidence"}):
             cr.answer(
                 "why did my score fall",
                 user=SimpleNamespace(access_token="token-A", id="A"),
@@ -281,6 +444,8 @@ def summarize(rows: list[dict], *, llm_mode: bool = False) -> dict:
             for r in rows
             if r["category"] == "injection" and (r.get("check_failures") or not r["intent_ok"])
         ],
+        "tool_choice_failures": [r["id"] for r in rows if r.get("tool_failures")],
+        "completeness_failures": [r["id"] for r in rows if r.get("completeness_failures")],
         "language_failures": [r["id"] for r in rows if not r.get("language_ok", True)],
         "confidence_gate_failures": [r["id"] for r in rows if not r.get("gate_ok", True)],
         "sections_integrity_failures": [r["id"] for r in rows if not r.get("sections_ok", True)],
@@ -345,6 +510,7 @@ def main() -> int:
         "followup",
         "gate",
         "provenance",
+        "coverage",
     ):
         c = s["categories"].get(name)
         if c:
@@ -362,6 +528,10 @@ def main() -> int:
             print(f"VIOLATION {r['id']}: {v['raw']} ({v['kind']}) …{v['context']}…{trap}")
         for c in r.get("check_failures") or []:
             print(f"CHECK FAILURE {r['id']}: answer contains forbidden string {c!r}")
+        for t in r.get("tool_failures") or []:
+            print(f"TOOL FAILURE {r['id']}: {t} (used: {r.get('tools_used')})")
+        for c in r.get("completeness_failures") or []:
+            print(f"COMPLETENESS FAILURE {r['id']}: {c}")
     if s["intent_mismatches"]:
         for r in rows:
             if not r["intent_ok"]:
@@ -375,6 +545,8 @@ def main() -> int:
 
     for hard in (
         "check_failures",
+        "tool_choice_failures",
+        "completeness_failures",
         "injection_failures",
         "language_failures",
         "confidence_gate_failures",

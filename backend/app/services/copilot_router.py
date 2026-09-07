@@ -163,8 +163,15 @@ _KW = {
         "如果市场",
     ),
     "macro_rates": (
-        "rate",
-        "fed",
+        # Leading space = word boundary. `text` is space-padded, so " rate"
+        # still matches "rate"/"rates"/"interest rate" but no longer fires on
+        # conCENTRATEd / corpoRATE / accuRATE / modeRATE, and " fed" no longer
+        # fires on FEDeral. Substring matching stays the default everywhere
+        # else (it is what makes "option" match "options"); these four are
+        # short enough to hide inside ordinary words. The CJK side was already
+        # made substring-safe (CLAUDE.md 2.51); this is the English half.
+        " rate",
+        " fed",
         "inflation",
         "macro",
         "vix",
@@ -173,8 +180,8 @@ _KW = {
         "interest",
         "economy",
         "market overall",
-        "fear",
-        "greed",
+        " fear",
+        " greed",
         "利率",
         "美联储",
         "通胀",

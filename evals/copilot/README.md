@@ -63,7 +63,7 @@ None of these affect the template-mode gate (claims and evidence come from
 identical strings); they bound what a live-LLM faithfulness number can
 claim.
 
-## cases.jsonl — 44 cases
+## cases.jsonl — 50 cases
 
 | category | n | what it covers |
 |---|---|---|
@@ -89,13 +89,43 @@ mode; the CI job (`copilot-eval`) is BLOCKING and uploads the report artifact.
 One JSON object per line:
 
 ```json
-{"id": "…", "category": "normal|induced|boundary|injection", "intent_expected": "…",
+{"id": "…", "category": "normal|induced|boundary|injection|coverage", "intent_expected": "…",
  "question": "…", "trap": "(induced/injection) what the trap is",
  "route": "(optional) page-route context", "ticker": "(optional) page-ticker context",
  "checks": {"must_not_contain": ["…"]},
+ "tools_expected": ["portfolio_score", …], "tools_forbidden": ["macro_regime", …],
+ "must_surface_when": [{"metric": "leverage", "gt": 1.5, "any_of": ["leverage", "杠杆"]}],
  "fixture": {"score": {"overall_score": 720, "metrics": {…}} | null,
-              "factpacks": {"TICKER": {…}}, "macro": {…}, "scans": {…}}}
+              "factpacks": {"TICKER": {…}}, "macro": {…}, "scans": {…},
+              "options": [{"label": "…", "value": "…"}], "score_change": [...],
+              "preferences": [...], "risk_reference": [...]}}
 ```
+
+### Tool choice and completeness
+
+`tools_expected` / `tools_forbidden` assert over `{e.tool for e in ans.evidence}`.
+The router already stamps every item (`_stamp`); the harness simply never read
+it. `tools_forbidden` is the *fewest-necessary-tools* signal — a pure macro
+question must not pull the portfolio engine even when a score is available, so
+give such a case a score fixture or the assertion cannot be falsified.
+
+`must_surface_when` is the deterministic completeness check: when the fixture's
+own engine number crosses the threshold, the named words must appear in the
+**evidence**. It is asserted against evidence, not prose, because the template's
+boilerplate caveat already contains risk vocabulary ("…fresher price or provided
+leverage…") — a prose rule passes even when the engine surfaced nothing. Metrics
+must exist in `_fixture_metric`; an unknown name raises rather than silently
+disabling the rule.
+
+### Fixture seams must match production signatures
+
+`patched_seams` asserts every replacement can accept the call production makes
+(`_assert_call_compatible`). This is not ceremony: `_option_evidence` had been
+patched as `lambda message, user` while production takes
+`(message, user, *, holdings=None)`. Every call raised `TypeError`, `safe()`
+swallowed it, and the seam looked deliberately pinned-empty — so no case could
+exercise option evidence at all. A seam whose signature drifts is a dead seam,
+and a dead seam makes its cases prove nothing.
 
 Adding a case: pick the category, author the fixture, and check the intent —
 `classify()` keywords decide routing (`"what is …"` → explain_metric, a lone
@@ -109,8 +139,9 @@ is a violation in every mode.
 ## CI
 
 `backend-tests` already enforces the offline suite via
-`backend/tests/test_ai_eval_grounding.py` (full 36-case template run must be
-100% traceable with zero injection-check failures). The dedicated non-blocking job below additionally surfaces
+`backend/tests/test_ai_eval_grounding.py` (the full template run must be
+100% traceable with zero injection-check failures). The dedicated job below is
+ALSO blocking — it has no `continue-on-error` — and additionally surfaces
 it as its own check — it lives in `.github/workflows/ci.yml`, which needs a
 `workflow`-scoped token to push (same constraint as ml-health/weekly-digest;
 snippet kept here so it's recoverable from the repo):
@@ -118,7 +149,7 @@ snippet kept here so it's recoverable from the repo):
 ```yaml
   copilot-eval:
     runs-on: ubuntu-latest
-    continue-on-error: true # advisory (mypy precedent) — backend-tests is the hard gate
+    # no continue-on-error: this job is blocking, like backend-tests
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
