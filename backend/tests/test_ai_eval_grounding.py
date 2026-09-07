@@ -270,11 +270,28 @@ def _cases() -> list[dict]:
     return [json.loads(line) for line in CASES.read_text().splitlines() if line.strip()]
 
 
+# Every tool name the router can stamp. Derived here rather than hand-listed so
+# a rename in copilot_router surfaces as a failing case, not a silently dead
+# tools_expected entry.
+KNOWN_TOOLS = {
+    "factpack",
+    "glossary",
+    "macro_regime",
+    "options_exposure",
+    "portfolio_score",
+    "risk_reference",
+    "score_change",
+    "simulation",
+    "ticker_exposure",
+    "user_preferences",
+}
+
+
 def test_cases_schema_and_distribution():
     cases = _cases()
-    assert len(cases) == 44
+    assert len(cases) == 50
     ids = [c["id"] for c in cases]
-    assert len(set(ids)) == 44
+    assert len(set(ids)) == 50
     by_cat: dict[str, int] = {}
     for c in cases:
         by_cat[c["category"]] = by_cat.get(c["category"], 0) + 1
@@ -291,7 +308,18 @@ def test_cases_schema_and_distribution():
         "followup": 2,
         "gate": 2,
         "provenance": 2,
+        "coverage": 6,
     }
+    # Tool-choice and completeness rules must name real things, or they are
+    # silently inert: an unknown metric raises in _fixture_metric, and a tool
+    # nobody stamps can never appear in the evidence.
+    runner = _load_runner()
+    for c in cases:
+        for rule in c.get("must_surface_when") or []:
+            runner._fixture_metric(c.get("fixture"), rule["metric"])
+            assert rule.get("any_of"), f"{c['id']} rule has no any_of"
+        for tool in (c.get("tools_expected") or []) + (c.get("tools_forbidden") or []):
+            assert tool in KNOWN_TOOLS, f"{c['id']} names unknown tool {tool!r}"
 
 
 def _load_runner():
@@ -334,7 +362,7 @@ def test_llm_mode_excludes_silent_template_fallbacks():
 
 
 def test_template_mode_full_run_is_fully_traceable_offline():
-    """The CI gate: all 36 cases through the REAL router (template mode, no
+    """The CI gate: every case through the REAL router (template mode, no
     network, no key) — every numeric claim traceable, every intent as
     authored, every injection predicate clean. ~100% is structural in template
     mode (evidence is printed verbatim); this guards the router + the grounding
@@ -342,7 +370,7 @@ def test_template_mode_full_run_is_fully_traceable_offline():
     runner = _load_runner()
     rows = [runner.run_case(c, None) for c in _cases()]
     summary = runner.summarize(rows)
-    assert summary["cases"] == 44
+    assert summary["cases"] == 50
     assert summary["intent_mismatches"] == []
     assert summary["check_failures"] == [], [
         (r["id"], r["check_failures"]) for r in rows if r.get("check_failures")
@@ -352,6 +380,12 @@ def test_template_mode_full_run_is_fully_traceable_offline():
     assert summary["language_failures"] == []
     assert summary["confidence_gate_failures"] == []
     assert summary["sections_integrity_failures"] == []
+    assert summary["tool_choice_failures"] == [], [
+        (r["id"], r["tool_failures"]) for r in rows if r.get("tool_failures")
+    ]
+    assert summary["completeness_failures"] == [], [
+        (r["id"], r["completeness_failures"]) for r in rows if r.get("completeness_failures")
+    ]
     # machine-readable aliases stay consistent
     assert summary["claims"] == summary["total_claims"]
     assert summary["grounded_claims"] == summary["matched"]

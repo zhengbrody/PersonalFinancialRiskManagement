@@ -93,9 +93,10 @@ jobs:
       run: mypy --config-file backend/mypy.ini backend/app/schemas backend/app/core
 
   # ── Copilot grounding eval — offline deterministic-template mode (no LLM
-  # key). Advisory for now (mypy precedent): backend-tests already hard-gates
-  # the same 30-case run via test_ai_eval_grounding.py; this job surfaces the
-  # faithfulness report as its own visible check.
+  # key). BLOCKING: there is no continue-on-error below, and this job fails the
+  # build on any hard failure. backend-tests independently hard-gates the same
+  # run via test_ai_eval_grounding.py; this job additionally surfaces the
+  # faithfulness report as its own visible check and uploads it.
   copilot-eval:
     # BLOCKING (PR6): grounding faithfulness, six-section integrity, injection
     # predicates, language contract, confidence gate and the isolation probe
