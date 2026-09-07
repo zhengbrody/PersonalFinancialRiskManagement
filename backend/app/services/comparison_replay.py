@@ -8,6 +8,7 @@ keys or prompts. No DB writes and no implicit feature activation.
 import hashlib
 import hmac
 import json
+import math
 import platform
 from dataclasses import asdict
 from datetime import datetime, timezone
@@ -146,6 +147,41 @@ def implementation_fingerprint() -> str:
     return hashlib.sha256(json.dumps([hashes, runtime], sort_keys=True).encode()).hexdigest()
 
 
+def reproduces(replayed: BaseModel, captured: BaseModel) -> bool:
+    """Structural comparison that tolerates last-bit floating-point noise.
+
+    Byte equality of the serialized result is too strict to be correct here.
+    IEEE-754 reductions are not bit-reproducible run to run — array layout and
+    BLAS threading can move the last unit in the last place — so an unmodified
+    calculation can legitimately re-run to a neighbouring double. Production
+    measured exactly that: replaying a `proceeds="cash"` comparison reproduced
+    `var_1d_95_usd` as 468.8543564516835 against a captured 468.85435645168354,
+    and the save was refused although nothing had changed.
+
+    Tightness still matters, so everything that is not a float must match
+    exactly, and floats must agree to 1e-9 relative. The inputs themselves are
+    covered by the receipt HMAC, not by this check; what this catches is code
+    or version drift, which moves results by far more than a nanodollar.
+    """
+    if type(replayed) is not type(captured):
+        return False
+    return _same(replayed.model_dump(mode="json"), captured.model_dump(mode="json"))
+
+
+def _same(a: object, b: object) -> bool:
+    if isinstance(a, bool) or isinstance(b, bool):
+        return a is b
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_same(a[k], b[k]) for k in a)
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_same(x, y) for x, y in zip(a, b))
+    if isinstance(a, float) or isinstance(b, float):
+        if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
+            return False
+        return math.isclose(float(a), float(b), rel_tol=1e-9, abs_tol=1e-9)
+    return a == b
+
+
 def canonical(value: BaseModel) -> str:
     return json.dumps(
         value.model_dump(mode="json"), sort_keys=True, separators=(",", ":"), allow_nan=False
@@ -231,7 +267,7 @@ def replay(snapshot: CalculationSnapshot) -> ChangeComparison:
     )
     # Random presentation IDs aren't calculation outputs. All other fields must match.
     result = result.model_copy(update={"result_id": snapshot.result.result_id})
-    if canonical(result) != canonical(snapshot.result):
+    if not reproduces(result, snapshot.result):
         raise APIError(
             409,
             "comparison_replay_mismatch",

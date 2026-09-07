@@ -182,6 +182,24 @@ with nothing in the logs. Both are now forwarded, and
 `tests/unit/test_deploy_config.py` guards every backend flag and key against the
 same omission.
 
+### Found in production during the staged rollout, then fixed
+
+The feature was enabled behind its flags and exercised with a dedicated test
+account. Saving a `proceeds="repay_margin"` comparison worked; saving a
+`proceeds="cash"` one always failed with `comparison_replay_mismatch` — half the
+assumption space was unsaveable. The cause was not the calculation but the
+replay criterion: it demanded byte equality of the serialized result, and an
+unmodified re-run reproduced `var_1d_95_usd` as 468.8543564516835 against a
+captured 468.85435645168354, one unit in the last place. IEEE-754 reductions are
+not bit-reproducible run to run.
+
+No local test could have caught it: synthetic fixtures replay bit-exactly, and
+the divergence needs a real price matrix. The flags were switched off, the
+comparison replaced with a structural one — exact for everything that is not a
+float, 1e-9 relative for floats — and the tolerance pinned from both sides
+(reverting to exact equality fails the new test; widening it to 1e-2 fails the
+rejection tests). Nothing had been saved in production at that point.
+
 ### Disclosed, not fixed
 
 A stock close up to seven days old may be paired with a fresher option quote,

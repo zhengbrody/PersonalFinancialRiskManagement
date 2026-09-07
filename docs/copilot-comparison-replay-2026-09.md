@@ -21,7 +21,15 @@ the receipt to `/api/v1/copilot/compare-change/{result_id}/verify`. The server:
    replay rather than silently reinterpreting old numbers.
 5. Re-executes the existing comparison against the captured matrix and option
    rows, at the original clock. **No market fetch, LLM call or account write.**
-6. Requires exact canonical result equality (excluding random presentation ID).
+6. Requires the result to reproduce (excluding the random presentation ID).
+   Everything that is not a float must match exactly; floats must agree to 1e-9
+   relative. Byte equality was tried first and is **wrong** here: IEEE-754
+   reductions are not bit-reproducible run to run, and production refused an
+   unmodified `proceeds="cash"` comparison whose `var_1d_95_usd` re-ran to the
+   neighbouring double (468.8543564516835 against 468.85435645168354). The
+   inputs are covered by the receipt HMAC, not by this comparison; what it
+   catches is code or version drift, which moves results by far more than a
+   nanodollar.
 7. Rechecks active account identity/inputs and returns the reproduced result,
    checked time, input-match status and capture age. The frontend replaces its
    local summary with the server-reproduced result.

@@ -239,3 +239,49 @@ def test_authenticated_verify_flow_is_read_only_and_reports_stale_inputs(
         assert test_client.post(path, headers=headers, json=body).status_code == 429
     finally:
         api.risk._check_capacity.release()
+
+
+def _side(**over):
+    from backend.app.schemas.copilot_compare import ComparisonSide
+
+    base = dict(
+        gross_assets=42207.0,
+        net_equity=40207.0,
+        cash=5300.0,
+        margin=2000.0,
+        leverage=1.0497425821374387,
+        largest_position_weight=0.8266074186468692,
+        annual_volatility=0.11678841029345419,
+        var_1d_95_usd=468.85435645168354,
+        cvar_1d_95_usd=618.2610535451386,
+    )
+    base.update(over)
+    return ComparisonSide(**base)
+
+
+def test_replay_accepts_a_last_bit_floating_point_difference():
+    """Production case: an unmodified re-run landed on the neighbouring double.
+
+    IEEE-754 reductions are not bit-reproducible, so byte equality refused a
+    calculation that had not changed. 468.8543564516835 vs 468.85435645168354
+    is one unit in the last place.
+    """
+    assert replay.reproduces(_side(var_1d_95_usd=468.8543564516835), _side())
+
+
+def test_replay_still_rejects_a_materially_changed_number():
+    # A cent on a $468 figure is ~2e-5 relative — far outside the 1e-9 window.
+    assert not replay.reproduces(_side(var_1d_95_usd=468.86), _side())
+    assert not replay.reproduces(_side(net_equity=40207.01), _side())
+
+
+def test_replay_requires_exact_equality_for_everything_that_is_not_a_float():
+    assert not replay._same({"ticker": "SPY"}, {"ticker": "AAPL"})
+    assert not replay._same({"proceeds": "cash"}, {"proceeds": "repay_margin"})
+    assert not replay._same({"a": 1}, {"b": 1})
+    assert not replay._same([1.0, 2.0], [1.0])
+    # A bool must never be compared as the number it would coerce to.
+    assert not replay._same({"x": True}, {"x": 1})
+    assert not replay._same({"x": False}, {"x": 0.0})
+    # None stays distinguishable from zero.
+    assert not replay._same({"x": None}, {"x": 0.0})
