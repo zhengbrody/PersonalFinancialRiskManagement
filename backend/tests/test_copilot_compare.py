@@ -297,7 +297,10 @@ def test_largest_position_weight_uses_the_invested_basis_not_gross(context, pric
     cash_heavy = replace(context, cash_balance=20000, margin_loan=0)
     baseline = compare(cash_heavy, prices, ticker="SPY", amount=1, proceeds="cash").baseline
 
-    values = {"SGOV": 100 * float(prices["SGOV"].iloc[-1]), "SPY": 10 * float(prices["SPY"].iloc[-1])}
+    values = {
+        "SGOV": 100 * float(prices["SGOV"].iloc[-1]),
+        "SPY": 10 * float(prices["SPY"].iloc[-1]),
+    }
     invested = sum(values.values())
     assert baseline.largest_position_weight == pytest.approx(max(values.values()) / invested)
     # The pre-fix figure divided by gross (invested + cash) — strictly smaller.
