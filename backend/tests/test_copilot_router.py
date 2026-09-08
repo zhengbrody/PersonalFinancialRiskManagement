@@ -876,3 +876,93 @@ def test_f3_chinese_question_with_latin_ticker(monkeypatch):
     labels = {e.label for e in ans.evidence}
     assert "NVDA weight in your book" in labels  # portfolio-aware exposure fired
     assert "Chinese" in seen["system"]  # reply language forced to Chinese
+
+
+# ── tool budget ───────────────────────────────────────────────────────────
+
+
+def _budget_score():
+    """A resolvable score, so the branch walks past its first call and the cap
+    is actually reached; otherwise the test proves nothing."""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        overall_score=640,
+        metrics=SimpleNamespace(
+            annual_return=0.09,
+            annual_volatility=0.24,
+            sharpe_ratio=0.38,
+            max_drawdown=-0.31,
+            var_95_daily=-0.028,
+            beta_to_benchmark=1.28,
+            total_value=42000.0,
+            leverage=1.8,
+        ),
+    )
+
+
+def test_tool_budget_stops_execution_rather_than_discarding_results(monkeypatch):
+    """Past the cap the tool must NOT RUN — not run and have its output dropped.
+
+    Asserted by counting real invocations, because a test that only checks the
+    evidence is absent would pass just as happily if every tool still executed
+    and the results were thrown away. That distinction is the whole point of a
+    budget: it exists to stop work, not to tidy output.
+    """
+    from backend.app.services import copilot_router as cr
+
+    calls: list[str] = []
+    real_use = cr.ToolBudget.use
+
+    def counting_use(self, label, fn):
+        result = real_use(self, label, fn)
+        if self.used <= self.limit and label not in self.skipped:
+            calls.append(label)
+        return result
+
+    monkeypatch.setattr(cr.ToolBudget, "use", counting_use)
+    monkeypatch.setattr(cr, "_load_score_positions", lambda user: ([], _budget_score()))
+
+    budget = cr.ToolBudget(limit=2)
+    cr._gather("portfolio_diagnosis", "how risky is my book?", [], user=object(), budget=budget)
+
+    assert budget.used == 2, budget.used
+    assert len(calls) == 2, calls
+    # Everything past the allowance was refused, and named so the skip is visible.
+    assert budget.skipped, "over-budget tools were not recorded"
+    assert not set(calls) & set(budget.skipped)
+
+
+def test_tool_budget_counts_every_attempt_including_fail_soft_ones():
+    """A tool that fail-softs to None still consumed a call. Charging only for
+    successes would let a degraded provider silently multiply real work."""
+    from backend.app.services import copilot_router as cr
+
+    budget = cr.ToolBudget(limit=3)
+
+    def boom():
+        raise RuntimeError("provider down")
+
+    assert budget.use("a", boom) is None
+    assert budget.use("b", lambda: "ok") == "ok"
+    assert budget.used == 2
+
+    # A retry is a second unit, not a free redo of the same tool.
+    assert budget.use("a", boom) is None
+    assert budget.used == 3
+    assert budget.use("c", lambda: "never") is None
+    assert budget.skipped == ["c"]
+
+
+def test_default_budget_does_not_bite_the_widest_branch(monkeypatch):
+    """TOOL_BUDGET is the current portfolio-branch maximum: today nothing is
+    refused, so a skip in production means a NEW gatherer was added."""
+    from backend.app.services import copilot_router as cr
+
+    monkeypatch.setattr(cr, "_load_score_positions", lambda user: ([], _budget_score()))
+    budget = cr.ToolBudget()
+    cr._gather(
+        "action_plan", "what should I watch on my margin book?", [], user=object(), budget=budget
+    )
+    assert budget.skipped == [], budget.skipped
+    assert budget.used <= cr.TOOL_BUDGET

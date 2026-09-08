@@ -525,7 +525,42 @@ def _simulation_evidence(message: str, score) -> list[EvidenceItem]:
     return _stamp(items, "simulation")
 
 
-# ── per-intent evidence gathering (≤3 deterministic tool calls each) ──
+# ── per-intent evidence gathering ──────────────────────────────────
+#
+# TOOL BUDGET. Enforced, not described: `_gather` spends through `budget.use`,
+# and once the allowance is gone the remaining tools are NOT executed — the
+# call is skipped and recorded, rather than run and discarded. The previous
+# comment here claimed "≤3 deterministic tool calls each" while the portfolio
+# branch could fire eight; a budget nobody enforces is a wish.
+#
+# Counting rules, so "how many did it use" has one answer:
+#   * one budget per answer, created in answer() and threaded into _gather;
+#   * every attempt costs 1, whether or not it returns evidence — a tool that
+#     fail-softs to None still cost a call;
+#   * a retry of the same tool costs another unit (no path retries today; the
+#     rule is stated so adding one cannot quietly double the real spend);
+#   * parallel calls each cost 1 (nothing runs in parallel today, same reason).
+# TOOL_BUDGET is the current portfolio-branch maximum. It does not bite today
+# by design: the point is that a ninth gatherer now needs a deliberate decision
+# instead of appearing unnoticed.
+TOOL_BUDGET = 8
+
+
+class ToolBudget:
+    """Counts and CAPS tool executions for one answer."""
+
+    def __init__(self, limit: int = TOOL_BUDGET) -> None:
+        self.limit = limit
+        self.used = 0
+        self.skipped: list[str] = []
+
+    def use(self, label: str, fn):
+        """Spend one unit and run ``fn`` through ``safe``; refuse past the cap."""
+        if self.used >= self.limit:
+            self.skipped.append(label)
+            return None
+        self.used += 1
+        return safe(label, fn)
 
 
 def _score_evidence(score) -> list[EvidenceItem]:
@@ -898,12 +933,16 @@ def _ticker_exposure_evidence(
     return _compact(items)
 
 
-def _gather(intent: str, message: str, tickers: list[str], *, user):
+def _gather(
+    intent: str, message: str, tickers: list[str], *, user, budget: "ToolBudget | None" = None
+):
     """Returns (evidence, quality_floor). ``quality_floor`` is the grounding
     data's OWN quality (0..1) when the answer rests on the portfolio score /
     FactPack — so a thin-history book can't yield a directional Copilot answer
     just because its evidence is engine-computed. None when the answer rests on
     reference/macro data (gated by evidence presence, not a directional call)."""
+    budget = budget if budget is not None else ToolBudget()
+    safe = budget.use  # every gather below spends through the cap
     if intent in ("ticker_research", "compare_tickers"):
         from . import research_factpack as rf
 
