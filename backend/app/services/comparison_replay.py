@@ -147,38 +147,71 @@ def implementation_fingerprint() -> str:
     return hashlib.sha256(json.dumps([hashes, runtime], sort_keys=True).encode()).hexdigest()
 
 
+# Fields whose last bit is NOT reproducible run to run, with the reason. Every
+# other float must match EXACTLY: a blanket tolerance is unnecessary slack, and
+# an echoed input (assumptions.amount) drifting is a different calculation, not
+# noise.
+#   * annual_volatility / var_1d_95_usd / cvar_1d_95_usd — numpy reductions in
+#     compute_portfolio_metrics; array layout and BLAS threading move the last
+#     unit in the last place. This is the pair production actually hit:
+#     468.8543564516835 replayed against a captured 468.85435645168354.
+#   * *_pnl / *_equity / mark_basis_* — Black-Scholes repricing (exp/log/erf);
+#     transcendental libm results are not bit-stable across runs either.
+# Money and weights are Decimal arithmetic converted once to float, and option
+# marks are read back from the snapshot rather than recomputed, so both
+# reproduce exactly and are held to exact equality.
+TOLERANT_FLOAT_FIELDS = frozenset(
+    {
+        "annual_volatility",
+        "var_1d_95_usd",
+        "cvar_1d_95_usd",
+        "baseline_pnl",
+        "candidate_pnl",
+        "baseline_equity",
+        "candidate_equity",
+        "mark_basis_max_loss",
+        "mark_basis_max_gain",
+    }
+)
+FLOAT_REL_TOL = 1e-9
+FLOAT_ABS_TOL = 1e-9
+
+
 def reproduces(replayed: BaseModel, captured: BaseModel) -> bool:
-    """Structural comparison that tolerates last-bit floating-point noise.
+    """Did re-running the captured inputs produce the captured result?
 
-    Byte equality of the serialized result is too strict to be correct here.
-    IEEE-754 reductions are not bit-reproducible run to run — array layout and
-    BLAS threading can move the last unit in the last place — so an unmodified
-    calculation can legitimately re-run to a neighbouring double. Production
-    measured exactly that: replaying a `proceeds="cash"` comparison reproduced
-    `var_1d_95_usd` as 468.8543564516835 against a captured 468.85435645168354,
-    and the save was refused although nothing had changed.
+    NOT a signature check — the receipt bytes are authenticated by HMAC in
+    read_receipt() BEFORE anything is replayed, so tampering is already
+    rejected by the time this runs and no tolerance here can mask it. What
+    this catches is code or version drift, which moves results by far more
+    than a nanodollar.
 
-    Tightness still matters, so everything that is not a float must match
-    exactly, and floats must agree to 1e-9 relative. The inputs themselves are
-    covered by the receipt HMAC, not by this check; what this catches is code
-    or version drift, which moves results by far more than a nanodollar.
+    Byte equality of the serialized result was tried first and is wrong:
+    IEEE-754 reductions are not bit-reproducible run to run, and production
+    refused an unmodified `proceeds="cash"` comparison whose var_1d_95_usd
+    re-ran to the neighbouring double. Tolerance is therefore scoped to the
+    fields named in TOLERANT_FLOAT_FIELDS and argued there; everything else,
+    including every identifier, string, date and echoed input, must match
+    exactly.
     """
     if type(replayed) is not type(captured):
         return False
     return _same(replayed.model_dump(mode="json"), captured.model_dump(mode="json"))
 
 
-def _same(a: object, b: object) -> bool:
+def _same(a: object, b: object, key: str | None = None) -> bool:
     if isinstance(a, bool) or isinstance(b, bool):
         return a is b
     if isinstance(a, dict) and isinstance(b, dict):
-        return a.keys() == b.keys() and all(_same(a[k], b[k]) for k in a)
+        return a.keys() == b.keys() and all(_same(a[k], b[k], k) for k in a)
     if isinstance(a, list) and isinstance(b, list):
-        return len(a) == len(b) and all(_same(x, y) for x, y in zip(a, b))
+        return len(a) == len(b) and all(_same(x, y, key) for x, y in zip(a, b))
     if isinstance(a, float) or isinstance(b, float):
         if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
             return False
-        return math.isclose(float(a), float(b), rel_tol=1e-9, abs_tol=1e-9)
+        if key not in TOLERANT_FLOAT_FIELDS:
+            return float(a) == float(b)
+        return math.isclose(float(a), float(b), rel_tol=FLOAT_REL_TOL, abs_tol=FLOAT_ABS_TOL)
     return a == b
 
 

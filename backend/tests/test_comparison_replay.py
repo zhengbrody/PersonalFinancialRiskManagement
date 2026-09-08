@@ -285,3 +285,68 @@ def test_replay_requires_exact_equality_for_everything_that_is_not_a_float():
     assert not replay._same({"x": False}, {"x": 0.0})
     # None stays distinguishable from zero.
     assert not replay._same({"x": None}, {"x": 0.0})
+
+
+def _comparison(**over):
+    """A full ChangeComparison, so the scoping can be tested where it matters:
+    on echoed inputs and money fields, not only on a bare side."""
+    from backend.app.schemas.copilot_compare import ChangeComparison
+
+    base = dict(
+        result_id="44444444-4444-4444-8444-444444444444",
+        portfolio_id="33333333-3333-4333-8333-333333333333",
+        computed_at="2026-09-06T12:00:00Z",
+        snapshot_digest="d",
+        methodology_version="reduce-close-v1",
+        assumptions={
+            "expected_portfolio_id": "33333333-3333-4333-8333-333333333333",
+            "ticker": "SPY",
+            "amount": 1000.0,
+            "proceeds": "cash",
+        },
+        price_as_of="2026-09-04",
+        history_start="2026-01-01",
+        observations=100,
+        sources={"SPY": "fixture"},
+        baseline=_side(),
+        candidate=_side(),
+        limitations=[],
+    )
+    base.update(over)
+    return ChangeComparison(**base)
+
+
+def test_echoed_input_amount_must_match_exactly():
+    """assumptions.amount is the user's own number coming back, not a computed
+    result. A replay that produces a different amount is a DIFFERENT
+    calculation; there is no float-reduction story that justifies slack."""
+    other = dict(_comparison().assumptions)
+    other["amount"] = 1000.0000001
+    assert not replay.reproduces(_comparison(assumptions=other), _comparison())
+
+
+def test_money_fields_must_match_exactly():
+    """Decimal arithmetic converted once to float — deterministic, so held to
+    exact equality. Only the numpy/Black-Scholes fields get tolerance."""
+    for field in ("net_equity", "cash", "margin", "gross_assets", "leverage"):
+        drifted = _comparison(candidate=_side(**{field: _side().model_dump()[field] + 1e-9}))
+        assert not replay.reproduces(drifted, _comparison()), field
+
+
+def test_only_the_argued_fields_carry_tolerance():
+    # The production pair: a numpy-derived statistic, one unit in the last place.
+    assert replay.reproduces(
+        _comparison(candidate=_side(var_1d_95_usd=468.8543564516835)), _comparison()
+    )
+    # …and the set is explicit, so a new float field does not inherit slack.
+    assert "annual_volatility" in replay.TOLERANT_FLOAT_FIELDS
+    assert "net_equity" not in replay.TOLERANT_FLOAT_FIELDS
+    assert "amount" not in replay.TOLERANT_FLOAT_FIELDS
+
+
+def test_scenario_shock_constants_must_match_exactly():
+    """Shock magnitudes are fixed constants the code chooses (-0.20, -0.01, …),
+    not measurements — a drifting shock means the scenario changed."""
+    assert not replay._same({"shocks": {"SPY": -0.2}}, {"shocks": {"SPY": -0.2000000001}})
+    # The P&L those shocks produce IS Black-Scholes output, so it may drift.
+    assert replay._same({"baseline_pnl": -2732.29}, {"baseline_pnl": -2732.2900000001})
