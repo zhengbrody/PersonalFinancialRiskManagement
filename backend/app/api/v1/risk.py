@@ -79,6 +79,8 @@ from ...schemas.risk_actions import ActionCard, ActionSimulateOut, SimulateHoldi
 from ...schemas.risk_alerts import RiskAlertsInput, RiskAlertsOutput
 from ...schemas.risk_explain import RiskExplainInput, RiskExplainOutput
 from ...schemas.score_changes import ScoreChangeReport, ScoreChangeRequest
+from ...services.leverage import MAX_LEVERAGE as _MAX_LEVERAGE
+from ...services.leverage import leverage_factor as _leverage_factor
 
 router = APIRouter(prefix="/api/v1/risk", tags=["risk"])
 
@@ -1283,23 +1285,10 @@ def _resolve_active_or_raise(user: AuthedUser) -> dict:
 # Cap leverage well above any realistic retail margin account (Reg-T is
 # 2×; portfolio margin ~6-7×). Beyond this the input is almost certainly
 # bad data, and the engine clamps to the same ceiling regardless.
-_MAX_LEVERAGE = 10.0
-
-
-def _leverage_factor(*, gross_assets: float, margin_loan: float) -> float:
-    """Leverage = gross_assets / net_equity, where net_equity =
-    gross_assets − margin_loan. Returns 1.0 (unlevered) when there's no
-    margin. When the loan meets or exceeds assets (net equity wiped out)
-    we return the max-leverage cap rather than ``inf`` — the account is
-    in/near a margin call, i.e. maximal risk."""
-    gross = float(gross_assets)
-    loan = max(0.0, float(margin_loan))
-    if loan <= 0 or gross <= 0:
-        return 1.0
-    net_equity = gross - loan
-    if net_equity <= 0:
-        return _MAX_LEVERAGE
-    return min(_MAX_LEVERAGE, gross / net_equity)
+# The constant and the function live in ``services.leverage`` (imported at the
+# top of this module) so the live read and the stored snapshot can never end up
+# on different bases — they did, and a comparison showed a change that never
+# happened.
 
 
 def _financing_resilience_out(

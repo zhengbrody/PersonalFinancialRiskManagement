@@ -19,6 +19,8 @@ from typing import Any, Optional
 
 from libs.mindmarket_core.score_version import SCORE_VERSION
 
+from . import leverage as _leverage
+
 _log = logging.getLogger(__name__)
 
 # Record at most one snapshot per this window so deltas mean "what moved since
@@ -98,7 +100,12 @@ def record_snapshot(
         net_equity = _finite(extra.get("net_equity"))
         if net_equity is None:
             net_equity = gross - loan
-        leverage = (gross / net_equity) if net_equity > 0 else None
+        # Same definition as the live read (services.leverage). This used to be
+        # an uncapped ratio that became None once net equity was wiped out, so a
+        # book at gross 250k / loan 240k was stored as 25.0 while the live read
+        # said 10.0 — and "what changed since your last visit" reported a 15x
+        # improvement that never happened.
+        leverage = _leverage.leverage_factor(gross_assets=gross, margin_loan=gross - net_equity)
 
         final_overall = (
             int(overall_override) if overall_override is not None else int(score.overall_score)
@@ -301,7 +308,11 @@ def get_snapshot_history(
                     # Series backing the cockpit's per-dimension historical
                     # percentiles (additive; already stored, just surfaced).
                     "beta_to_benchmark": _finite(m.get("beta_to_benchmark")),
-                    "leverage": _finite(r.get("leverage") or m.get("leverage")),
+                    # Rows written before the cap existed hold raw ratios;
+                    # clamp so the sparkline and the live figure share a basis.
+                    "leverage": _leverage.clamp_stored_leverage(
+                        _finite(r.get("leverage") or m.get("leverage"))
+                    ),
                     "concentration_top_holding": _finite(conc.get("top_holding_weight")),
                 }
             )
