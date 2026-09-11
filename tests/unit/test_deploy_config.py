@@ -193,3 +193,35 @@ def test_deploy_script_actually_applies_a_changed_caddyfile():
         "--remove-orphans would delete the caddy container (it is owned by the "
         "other compose file) -- the header comment says so; keep it a comment"
     )
+
+
+def test_csp_allows_the_browser_translation_widget_without_widening_scripts():
+    """English-only is a product decision that leans on browser auto-translate.
+
+    On Chrome/iOS the translate feature runs as an injected library and IS
+    governed by page CSP (unlike desktop Chrome's privileged native translate).
+    A real visitor was seen translating the homepage to zh-CN, and the widget's
+    telemetry beacon, stylesheet and icon fonts were being blocked. No SCRIPT of
+    theirs was ever blocked, so translation itself was not broken -- but these
+    would fire forever, and the Report-Only stream has to reach a clean baseline
+    before the policy can be enforced.
+
+    The important half of this test is the second assertion: the allowance is
+    img/style/font ONLY. script-src must stay exactly as narrow as it was.
+    """
+    caddyfile = (ROOT / "Caddyfile").read_text(encoding="utf-8")
+    csp = next(
+        line for line in caddyfile.splitlines() if "Content-Security-Policy-Report-Only" in line
+    )
+    directives = {
+        d.strip().split(" ")[0]: d.strip() for d in csp.split('"')[1].split(";") if d.strip()
+    }
+
+    assert "https://translate.google.com" in directives["img-src"]
+    assert "https://www.gstatic.com" in directives["style-src"]
+    assert "https://fonts.gstatic.com" in directives["font-src"]
+
+    assert directives["script-src"] == (
+        "script-src 'self' 'unsafe-inline' https://us-assets.i.posthog.com "
+        "https://static.cloudflareinsights.com"
+    ), "the translate allowance must never widen script-src"

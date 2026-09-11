@@ -82,7 +82,19 @@
 	#     OAuth redirect; COOP is same-origin-allow-popups so any OAuth popup
 	#     flow keeps its opener (full-page redirects are unaffected either way).
 	#   * X-Frame-Options DENY + frame-ancestors 'none': nothing embeds us.
-	#   * Fonts are self-hosted (/fonts/*, below) — font-src stays 'self'.
+	#   * Our own fonts are self-hosted (/fonts/*, below); the gstatic entries
+	#     are NOT ours -- see the next bullet.
+	#   * translate.google.com + *.gstatic.com on img/style/font are the browser's
+	#     page-translation widget. The product is English-only BY DESIGN and
+	#     relies on browser auto-translate for other locales, and a real visitor
+	#     was seen translating the homepage to zh-CN on Chrome/iOS (where the
+	#     feature runs as an injected library and IS governed by page CSP, unlike
+	#     desktop Chrome's privileged native translate). No SCRIPT of theirs is
+	#     blocked, so translation itself was never broken -- what was blocked is
+	#     the widget's telemetry beacon, stylesheet and icon fonts. They are
+	#     allowlisted because the Report-Only stream has to reach a clean
+	#     baseline before enforcement, and these would otherwise fire forever.
+	#     img/style/font only: script-src is deliberately NOT widened.
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
@@ -90,7 +102,7 @@
 		X-Frame-Options "DENY"
 		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()"
 		Cross-Origin-Opener-Policy "same-origin-allow-popups"
-		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline' https://us-assets.i.posthog.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://byfpmmfduteajblqpuuw.supabase.co wss://byfpmmfduteajblqpuuw.supabase.co https://us.i.posthog.com https://us-assets.i.posthog.com https://o4511493492178944.ingest.us.sentry.io; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://accounts.google.com; object-src 'none'; report-uri https://o4511493492178944.ingest.us.sentry.io/api/4511494053560320/security/?sentry_key=c6ee4dd05a13fb3da4669a5a4db7ba08"
+		Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self' 'unsafe-inline' https://us-assets.i.posthog.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://www.gstatic.com; img-src 'self' data: blob: https://translate.google.com https://www.gstatic.com https://fonts.gstatic.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://byfpmmfduteajblqpuuw.supabase.co wss://byfpmmfduteajblqpuuw.supabase.co https://us.i.posthog.com https://us-assets.i.posthog.com https://o4511493492178944.ingest.us.sentry.io; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://accounts.google.com; object-src 'none'; report-uri https://o4511493492178944.ingest.us.sentry.io/api/4511494053560320/security/?sentry_key=c6ee4dd05a13fb3da4669a5a4db7ba08"
 		-Server
 	}
 
