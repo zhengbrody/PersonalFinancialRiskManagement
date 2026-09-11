@@ -9,14 +9,15 @@
 
 ## Do next (trust artifacts — each is hours, not days)
 
-1. **External uptime monitoring + alerting** *(owner-side, ~1h — highest value
-   per hour of anything on this page).* UptimeRobot/BetterStack free tier:
-   monitors on `https://mindmarket.app/` and
-   `https://mindmarket.app/api/v1/health`, 5-min interval, email + phone push.
-   Take the bundled free public **status page** — cheap credibility for a
-   fintech. Today, if prod 500s at 2am, nothing tells anyone: Sentry only sees
-   in-app exceptions (a dead container/Caddy/cert/CF-52x emits none), and the
-   nightly e2e is ≤24h behind. Note: GitHub auto-disables cron workflows after
+1. ~~**External uptime monitoring + alerting**~~ **DONE 2026-07-02** (matches
+   the risk register below). Monitors are live on `https://mindmarket.app/` and
+   `https://mindmarket.app/api/v1/health`; the alert path proved itself
+   immediately with a false "down" (monitors default to `HEAD`, and the
+   GET-only FastAPI route answered 405) — fixed server-side by a bodyless
+   `@router.head("/health")` in `backend/app/api/v1/health.py`. Remaining
+   optional polish: point a second check at `/api/v1/health?deep=1` (503 when
+   the product is degraded, not just when the process is up) and publish the
+   bundled free status page. Note: GitHub auto-disables cron workflows after
    60 days of repo inactivity — the external monitor keeps watching regardless.
 2. **Test-restore the DB backup** — now AUTOMATED as
    `.github/workflows/db-restore-drill.yml` (dispatch-only): downloads the
@@ -53,12 +54,19 @@
   `trusted_proxies static <CF ranges>`) is written out in
   `cloudflare-setup.md` Step 6. Observability-only today (no per-IP backend
   logic exists); apply together with #4, gated by `validate-config`.
-- **Caddy: safe security headers** — `X-Content-Type-Options: nosniff`,
-  `Referrer-Policy: strict-origin-when-cross-origin`. Skip
-  `X-Frame-Options: DENY` (would break the report-preview iframe), skip strict
-  CSP (breaks Next/Supabase/Sentry/PostHog without report-only tuning), add
-  HSTS only after confirming no plain-HTTP subdomain need — or set HSTS at the
-  Cloudflare edge instead.
+- ~~**Caddy: safe security headers**~~ **DONE** — all of it shipped in the
+  `Caddyfile` (`header` block on the main site): HSTS
+  (`max-age=31536000; includeSubDomains`), `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: strict-origin-when-cross-origin`,
+  **`X-Frame-Options: DENY`**, `Permissions-Policy`,
+  `Cross-Origin-Opener-Policy: same-origin-allow-popups`, `-Server`, and a
+  **Content-Security-Policy-Report-Only** (report-uri → the frontend Sentry
+  project) as the observation phase before enforcement. The old reason for
+  skipping `X-Frame-Options` was wrong: the report preview is an
+  `<iframe srcDoc … sandbox="">` (`frontend/src/components/analyst-report.tsx`),
+  an inline document that framing headers don't govern — nothing embeds us
+  cross-origin. Remaining: flip the CSP from Report-Only to enforcing once the
+  report stream is quiet.
 - **Caddy healthcheck in compose.aws.yml** — e.g.
   `test: ["CMD","wget","-q","--spider","http://localhost:2019/config/"]`.
   Note Docker does NOT restart merely-unhealthy containers; the external

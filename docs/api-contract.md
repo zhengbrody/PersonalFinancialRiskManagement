@@ -49,12 +49,15 @@ Commit both. Forgetting to is caught by the gates below.
    the committed `openapi.json` matches the live app's contract map. **Live now.**
 2. **`.github/workflows/contract.yml`** — byte-exact regen-diff: regenerates
    `openapi.json` + `api-types.ts` with a pinned codegen toolchain and fails on
-   any `git diff`. **Staged locally** (`.git/info/exclude`) — pushing a workflow
-   file needs `gh auth refresh -h github.com -s workflow`, same as
-   `ml-health.yml` / `weekly-digest.yml`. Until pushed, gate (1) covers the
-   backend side.
+   any `git diff`. **Live now** — the workflow is committed (it was briefly
+   staged while waiting on a `workflow`-scoped token; that is resolved, and
+   `.git/info/exclude` no longer holds any workflow entries).
 
-The `contract.yml` toolchain pins (`fastapi==0.128.5`, `pydantic==2.12.5`,
-`pydantic-core==2.41.5`, `starlette==0.52.1`, `openapi-typescript` from the
-lockfile) must match whatever produced the committed artifacts. Bump them
-together when regenerating on a newer toolchain.
+The codegen toolchain is no longer a separate set of pins that can drift:
+`contract.yml` installs the app's own `requirements.txt` +
+`backend/requirements-backend.txt`, which pin **`fastapi==0.139.0`**,
+**`starlette==1.3.1`** and **`pydantic==2.12.5`** (→ `pydantic-core==2.41.5`)
+exactly — the same toolchain that produced the committed `openapi.json` /
+`api-types.ts`, plus `openapi-typescript` from the frontend lockfile. So the
+app deps ARE the codegen toolchain. Regenerate on those versions; bumping them
+means regenerating and committing both artifacts in the same change.

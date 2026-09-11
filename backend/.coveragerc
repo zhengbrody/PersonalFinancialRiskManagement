@@ -8,7 +8,11 @@
 [run]
 source = backend/app
 omit =
-    backend/app/mcp_server/*
+    # The MCP server lives at backend/mcp_server/ (NOT backend/app/mcp_server/,
+    # which this line used to name and which has never existed). It already sits
+    # outside `source` above, so this entry is belt-and-braces intent, not a
+    # behaviour change — but a wrong path is a trap if `source` ever widens.
+    backend/mcp_server/*
     */__init__.py
 
 [report]

@@ -2,8 +2,9 @@
 
 > **Topology note (2026-06-23):** the live stack is Next.js (frontend) + FastAPI
 > (backend) + Caddy, deployed GHCR pull-only. The legacy Streamlit `app` tier was
-> retired (CLAUDE.md §1B) — the "Phase 1 only (EC2 + Streamlit)" section below is
-> historical.
+> retired on 2026-06-23 (see `README.md` and the `Caddyfile` / `compose.aws.yml`
+> headers, which record the removal) — the "Phase 1 only (EC2 + Streamlit)"
+> section below is historical.
 
 > Day-to-day commands for deploying, observing, and tearing down the
 > MindMarket AI AWS stacks. Pair with `docs/aws/phase-1-ec2.md` for the

@@ -14,7 +14,7 @@
 | `.env` (all secrets) | Box only | Rebuild from the key inventory below |
 | `mindmarket.service` | Box + `deploy/mindmarket.service` (verbatim copy, captured 2026-07-01) | `sudo cp` from the repo |
 | GHCR `docker login` | Box only | Re-login with a `read:packages` PAT |
-| Let's Encrypt certs | `caddy_data` named volume | Auto-reissued by Caddy on first boot **if** DNS + SG are right (see step 8) |
+| **Origin TLS cert + key** — `/srv/tls/origin.pem` + `/srv/tls/origin.key` | Host filesystem only (deliberately never in git) | Re-issue a Cloudflare **Origin CA** cert and place it by hand — **step 7**. `Caddyfile:31` PINS these paths, so there is no ACME fallback: if they are missing, **Caddy refuses to start and the site stays down**. |
 
 ## Fixed identifiers
 
@@ -88,7 +88,51 @@
    | `MASSIVE_BASE_URL` / `MASSIVE_EOD_PATH` / `MASSIVE_HISTORY_PATH` / `MASSIVE_REFERENCE_PATH`, `DEEPSEEK_BASE_URL` / `DEEPSEEK_MODEL` | Optional overrides — normally unset (blank default = built-in behavior) |
    | `NEXT_PUBLIC_*` | GitHub repo → Settings → Variables (only needed on-box for a local build — which you never do; images carry them baked) |
 
-7. **Install the boot unit + start the stack:**
+7. **Place the origin TLS cert + key** (do this BEFORE step 8 — Caddy will not
+   start without them). The live `Caddyfile` pins
+   `tls /srv/tls/origin.pem /srv/tls/origin.key`, so Caddy never issues a
+   Let's Encrypt cert; a fresh box has an empty `/srv/tls` and caddy dies with
+   `Error: loading http app module: ... open /srv/tls/origin.pem: no such file
+   or directory`. Issue a fresh Cloudflare **Origin CA** certificate per
+   `docs/aws/cloudflare-setup.md` **Step 3** (Cloudflare → SSL/TLS → Origin
+   Server → Create Certificate; RSA, hostnames `mindmarket.app` +
+   `*.mindmarket.app`; 15-year validity), then on the box:
+   ```bash
+   sudo mkdir -p /srv/tls
+   sudo tee /srv/tls/origin.pem >/dev/null   # paste the CERTIFICATE PEM, then Ctrl-D
+   sudo tee /srv/tls/origin.key >/dev/null   # paste the PRIVATE KEY PEM, then Ctrl-D
+   sudo chmod 644 /srv/tls/origin.pem
+   sudo chmod 600 /srv/tls/origin.key        # key is secret — 600, root-owned
+   ```
+   `compose.aws.yml` mounts `/srv/tls:/srv/tls:ro` into the caddy service, so
+   nothing else needs configuring.
+
+   > **Paste gotcha (this has bitten us — see `cloudflare-setup.md` Step 3):** a
+   > single leading SPACE before `-----BEGIN` makes OpenSSL/Caddy reject the
+   > WHOLE file with the unhelpful `No supported data to decode`. The header
+   > must start at column 1:
+   > ```bash
+   > sudo head -1 /srv/tls/origin.pem | cat -A | head -1   # no leading space/^I
+   > sudo openssl x509 -in /srv/tls/origin.pem -noout -subject -enddate  # must parse
+   > sudo sed -i 's/^[[:space:]]*-----BEGIN/-----BEGIN/' /srv/tls/origin.pem \
+   >                                                     /srv/tls/origin.key
+   > ```
+
+   **Validate before starting anything** (a bad cert file is a boot-time
+   outage, and this catches it while the box is already down rather than after
+   you think you're finished):
+   ```bash
+   docker run --rm -v /srv/tls:/srv/tls:ro \
+     -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
+     -e SITE_HOST=mindmarket.app \
+     caddy:2.11-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+   # expect: "Valid configuration"
+   ```
+   (Rollback note, for context only: the still-valid LE cert lives in the
+   `caddy_data` volume, which a rebuilt box does NOT have — on a rebuild the
+   Origin CA cert is the only path.)
+
+8. **Install the boot unit + start the stack:**
    ```bash
    sudo cp deploy/mindmarket.service /etc/systemd/system/mindmarket.service
    sudo systemctl daemon-reload
@@ -97,12 +141,6 @@
    # (caddy has no healthcheck — see docs/aws/hardening-backlog.md)
    docker ps
    ```
-8. **TLS caveat:** the new `caddy_data` volume is empty, so Caddy re-issues
-   the Let's Encrypt cert via HTTP-01 on `:80`. That works only because the
-   SG admits Cloudflare on 80/443 and CF doesn't cache
-   `/.well-known/acme-challenge/*`. If issuance loops, check
-   `docker logs <caddy>` and Cloudflare SSL/TLS mode (Full). The permanent fix
-   is a Cloudflare **Origin CA** cert (see `docs/aws/hardening-backlog.md`).
 9. **Verify:**
    ```bash
    curl -sI https://mindmarket.app/ | head -3                 # 200 via CF

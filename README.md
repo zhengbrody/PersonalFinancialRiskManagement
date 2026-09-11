@@ -141,7 +141,7 @@ small EC2 instance never runs a memory-heavy `next build`.
 
 | Layer | Choices |
 | --- | --- |
-| Frontend | Next.js 14 App Router, TypeScript, Tailwind CSS, shadcn-style primitives, React Query, Zod |
+| Frontend | Next.js 15 App Router, TypeScript, Tailwind CSS, shadcn-style primitives, React Query, Zod |
 | Backend | FastAPI, Pydantic, typed response envelope, PyJWT/JWKS auth verification |
 | Quant | NumPy, pandas, SciPy, custom portfolio scoring and risk engine |
 | Data | Massive Stocks, Yahoo Finance fallback, FMP, FRED CSV, Treasury CSV, SEC EDGAR |
@@ -363,10 +363,12 @@ auto-generated [validation report](docs/ml/validation_report.md) lead with
 the verdict that the model LOSES to a persistence baseline on 4-class
 accuracy (0.490 vs 0.523) and earns its keep only as a probability-ranking
 signal (Brier 0.1042 vs 0.1133 base-rate reference; elevated-risk ROC-AUC
-0.743).
+**0.7642** on the shipped `regime_meta.json` artifact — the model card
+explains why the walk-forward figures carry an earlier date than the
+artifact's own hold-out numbers).
 
-**Copilot grounding: 100% of numeric claims traceable to evidence across 30
-eval cases** ([evals/copilot](evals/copilot/README.md)) — in deterministic
+**Copilot grounding: 100% of numeric claims (722) traceable to evidence
+across 50 eval cases** ([evals/copilot](evals/copilot/README.md)) — in deterministic
 template mode, where that figure is a structural regression guarantee, not a
 model score; run `python evals/run_grounding_eval.py --llm` against a real
 key for a live-LLM faithfulness measurement.

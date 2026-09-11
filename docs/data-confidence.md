@@ -18,15 +18,19 @@ column — flagged, not built.
 sources cover the same field) · `conviction_cap` · `directional_allowed` ·
 `sources[]` / `missing[]` (`FieldProvenance`) · `reason_codes[]`.
 
-`FieldProvenance` normalises the four pre-existing provenance vocabularies into:
-`source` · `source_type` (**primary / secondary / derived** — mapped from the
-provider registry's primary/fallback/computed) · `as_of` · `fetched_at` ·
-`stale` · `coverage` · `fallback_used` · `missing_reason` · `note`.
+`FieldProvenance` normalises the four pre-existing provenance vocabularies into
+13 fields: `field` · `source` · `source_type` (**primary / secondary /
+derived** — mapped from the provider registry's primary/fallback/computed) ·
+`group` · `label` · `as_of` · `fetched_at` · `stale` · `coverage` ·
+`fallback_used` · **`critical`** (the per-field flag that drives the
+criticality gate below) · `missing_reason` · `note`.
 
 `MissingReason` is the typed enum that finally replaces the scattered strings
 (`fmp_key_missing`, `massive_rate_limited`, `no_estimates`, …):
 `unsupported | no_key | provider_error | rate_limited | insufficient_history |
-not_applicable | stale_fallback | empty`.
+not_applicable | stale_fallback | synthetic_demo | empty` (nine values —
+`synthetic_demo` is the honesty marker for the anonymous demo's illustrative
+inputs, which are not observed market data).
 
 ## Enforcement (rule #3) — `backend/app/services/confidence.py::cap_conviction`
 One place, applied on every surface:
@@ -63,8 +67,10 @@ directional conclusion anywhere; `data-confidence.test.tsx` covers the UI states
 ## Cross-source agreement (wired 2026-07-17)
 `services/source_agreement.py` classifies per-field pairs into
 `exact | within_tolerance | disagreement | incomparable | only_one_source`
-with field-specific tolerances (price 1% · market cap 3% · statements 2% + an
-absolute EPS epsilon). Unit or fiscal-period mismatch → `incomparable`, never a
+with field-specific tolerances (`FIELD_TOLERANCES` in that module: last price
+**2%** — providers snapshot at different times, so intraday drift inside 2% is
+quote-timing rather than a source conflict · market cap 3% · revenue /
+net income / EPS 2%, plus an absolute epsilon for near-zero EPS). Unit or fiscal-period mismatch → `incomparable`, never a
 silent conversion. Both raw values ride `FieldAgreement.observations` verbatim —
 a disagreement lowers the confidence float (−0.10/field, cap −0.20, reason code
 `cross_source_disagreement`) but never overwrites either side's number.
@@ -98,11 +104,12 @@ a bucket). Surfaces in the owner `/admin` Live-activity card. Distinguishes
 provider-reality gaps (empty / rate_limited) from code faults (provider_error).
 
 ## Known follow-ups
-- `copilot_router._factpack_evidence` hardcodes `source="fmp"` for price/PE/
-  margin/ROE even when the FactPack filled them from the yfinance FALLBACK
-  (`_pref`) — so those show a "primary" badge. Pre-existing; the honest fix is to
-  thread the FactPack's per-field source through the compact merge. The verdict's
-  own provenance (`_verdict_confidence`) is already correct.
+- ~~`copilot_router._factpack_evidence` hardcodes `source="fmp"`~~ **DONE** —
+  it now reads the pack's OWN per-field provenance
+  (`fp.data_quality.sources` → `profile_src` / `fund_src`), so a
+  yfinance-fallback price is never badged FMP; `"fmp"` survives only as the
+  default when a pack carries no provenance at all. The verdict's own
+  provenance (`_verdict_confidence`) was already correct.
 - EPS dual-source capture at the earnings merge (`_merge_earnings_estimates`
   has FMP + yfinance EPS for matched quarters when FMP carries actuals) —
   a clean future extension of the same machinery.

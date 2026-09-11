@@ -30,9 +30,15 @@ build images in **GitHub Actions** (~7 GB runners) → push to **GHCR** → EC2 
    settings → Personal access tokens.)
 
 ## Build (automatic)
-On push to `main` touching `frontend/`, `backend/`, the Dockerfiles, or the
-imported root modules — or via **Actions → Build & push images → Run workflow**.
-Wait for it green; images land in GHCR under the owner's Packages.
+On **every** push to `main` except pure docs and Caddy-served static assets —
+`build-images.yml` uses `paths-ignore: ['**.md', 'docs/**', 'assets/**']`, not
+an allowlist. That inversion is deliberate: the backend image is built with
+`COPY . /app`, so imported root modules are image inputs too, and the old
+allowlist silently missed one (a `regime_detector.py` change triggered no build
+→ a silent no-deploy, 2026-06-20). A redundant build on a docs-adjacent code
+change is cheap; a silent no-deploy is not. Also available via
+**Actions → Build & push images → Run workflow**. Wait for it green; images
+land in GHCR under the owner's Packages.
 
 ## Deploy on EC2 (NO build — safe on the t3.micro)
 
@@ -44,7 +50,7 @@ cd ~/PersonalFinancialRiskManagement
 Or by hand:
 ```bash
 cd ~/PersonalFinancialRiskManagement
-git pull --ff-only origin main          # picks up compose/Caddy/code changes
+git pull --ff-only origin main          # updates compose/Caddyfile/assets on disk
 docker compose -f compose.split.yml pull backend frontend
 docker compose -f compose.split.yml up -d --no-deps --no-build backend frontend
 docker image prune -af                  # -a: also unused non-dangling (disk is tight)
@@ -71,6 +77,24 @@ there is no per-service pin.
 origin/main regardless. A CONFIG regression (bad compose or Caddyfile commit)
 therefore needs a `git revert` on main — that's also what keeps the next
 reboot safe.
+
+⚠️ **A Caddyfile change is NOT live after a deploy.** `scripts/deploy-ec2.sh`
+updates the file on disk but never reloads or recreates Caddy, and the
+`Caddyfile` is a **single-file bind mount** — the running container holds the
+old inode, so a committed Caddyfile change is a silent no-op until Caddy is
+recreated. When a deploy includes a Caddyfile change, run this extra step
+(validate FIRST — an invalid config here is a boot-time outage):
+```bash
+cd ~/PersonalFinancialRiskManagement
+docker run --rm -v /srv/tls:/srv/tls:ro \
+  -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" -e SITE_HOST=mindmarket.app \
+  caddy:2.11-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+# only if that prints "Valid configuration":
+docker compose -f compose.aws.yml up -d --force-recreate --no-deps caddy
+```
+(`/srv/tls` must be mounted for validation — the Caddyfile pins the Origin CA
+cert, and `caddy validate` loads the files. A brief benign
+`no OCSP stapling … Origin CA` warning after recreate is expected.)
 
 ## Guardrails
 - **Never `--remove-orphans`** — backend/frontend (this file) and caddy

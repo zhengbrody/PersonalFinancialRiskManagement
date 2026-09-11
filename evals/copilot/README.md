@@ -75,6 +75,9 @@ claim.
 | `followup` | 2 | context-less follow-up phrasing ("And what about my drawdown?", ZH variant) still answers standalone with the right evidence (the /ask API is stateless) |
 | `gate` | 2 | no-data fixtures must produce `directional_allowed=false`, ZERO AI-phrased sections, and the explicit not-enough-data wording (EN + ZH) |
 | `provenance` | 2 | missing data renders the honest "No verified data is available" (never fake zeros), and derived figures carry the "(derived estimate)" marker |
+| `coverage` | 6 | tool-selection and evidence-completeness assertions (`tools_expected` / `tools_forbidden` / `must_surface_when`) — the agent must actually CALL the right deterministic builders, not merely produce prose that mentions the right words |
+
+Totals: 14 + 8 + 8 + 6 + 2 + 2 + 2 + 2 + 6 = **50**.
 
 **Runner-level probes** (not jsonl cases): `isolation_probe()` drives two fake
 users through the REAL router with the snapshot seam captured — each call must
@@ -142,9 +145,11 @@ is a violation in every mode.
 `backend/tests/test_ai_eval_grounding.py` (the full template run must be
 100% traceable with zero injection-check failures). The dedicated job below is
 ALSO blocking — it has no `continue-on-error` — and additionally surfaces
-it as its own check — it lives in `.github/workflows/ci.yml`, which needs a
-`workflow`-scoped token to push (same constraint as ml-health/weekly-digest;
-snippet kept here so it's recoverable from the repo):
+it as its own check. **It is committed and live** in
+`.github/workflows/ci.yml` — read that file for the authoritative definition
+(it also passes `--json copilot-eval-report.json` and uploads the report as a
+build artifact, which the abbreviated sketch below predates). The workflow-scope
+token constraint that once kept it out of the repo is resolved:
 
 ```yaml
   copilot-eval:

@@ -220,7 +220,7 @@ Any single one of these reverts the change:
   **must** allow Cloudflare on :80 and Cloudflare must not cache
   `/.well-known/acme-challenge/*`.
 - **Reboot behaviour**: unrelated to Cloudflare, but recall the box reverts Caddy
-  routing on reboot (see `docs/aws/operations.md` / CLAUDE.md). The Cloudflare
+  routing on reboot (see `docs/aws/operations.md`). The Cloudflare
   edge keeps absorbing traffic regardless; only origin routing needs the usual
   post-reboot fix.
 - **Cost**: Free plan is sufficient for launch. Pro ($20/mo) adds image

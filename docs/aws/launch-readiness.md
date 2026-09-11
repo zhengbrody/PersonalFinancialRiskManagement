@@ -2,8 +2,9 @@
 
 > **Note (2026-06-23):** point-in-time checklist from 2026-06-04. Since then the
 > legacy Streamlit tier was fully retired — the live stack is Next.js + FastAPI +
-> Caddy only (no `/legacy`). Streamlit references below are historical. See
-> CLAUDE.md §1B.
+> Caddy only (no `/legacy`). Streamlit references below are historical. The
+> retirement is recorded in `README.md` and in the `Caddyfile` /
+> `compose.aws.yml` headers.
 
 > Status (2026-06-04): the product is feature- and credibility-complete for a
 > paid beta. The remaining work is **owner-gated** (systemd, DNS, Stripe keys) —
@@ -78,8 +79,15 @@ Protects the single t3.micro and speeds static assets. DNS change is yours
    cache API responses / break Copilot SSE). Add Cache Rules:
    - Bypass cache for `mindmarket.app/api/*`.
    - Bypass cache for `mindmarket.app/_stcore/*` (legacy Streamlit WS).
-   - (Caddy already excludes `text/event-stream` from gzip; Cloudflare's bypass
-     on `/api/*` covers the Copilot stream which lives under `/api/v1/copilot`.)
+   - **Correction (this claim was wrong):** Caddy does NOT exclude
+     `text/event-stream` from gzip — it runs a plain `encode gzip`. An attempt
+     to add that exclusion used an invalid response-matcher syntax
+     (`encode { match { not header … } }`, unrecognized even by Caddy 2.11),
+     which crash-looped Caddy on boot and caused an outage; it was replaced by
+     the plain directive and the `Caddyfile` documents why. The Copilot stream
+     is fine regardless: Cloudflare fronts the origin and does edge
+     compression, the `/api/*` cache bypass covers `/api/v1/copilot`, and
+     browsers decode gzip transparently while the stream still flushes.
 6. Leave HTML caching default (Cloudflare won't cache HTML without a rule).
 
 **Verify:** `curl -sI https://mindmarket.app/` shows a `cf-ray` header; a Copilot

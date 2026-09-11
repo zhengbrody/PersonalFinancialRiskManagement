@@ -9,6 +9,8 @@ _Applies to `backend/app/ml/` · artifact `regime_model.joblib` + `regime_meta.j
 | **Scheduled** — every Monday 06:00 UTC | `train-regime.yml` (automatic; commits the artifact `[skip ci]`) |
 | **Drift** — `GET /api/v1/ml/health` shows `overall_status: drift` | daily `ml-health.yml` cron / Sentry "ML drift" warning — **investigate first, don't reflex-retrain** (see below) |
 | **Watch** — `overall_status: watch` | look, don't act — see the measured operating point below |
+| **sklearn upgrade** — `sklearn_match: false` in `/ml/health` | dependency bumps (the pickle is pinned to `scikit-learn>=1.8,<1.9`) |
+| **Label/threshold change** — editing `labels.py` bands | must change `labels.py` AND `configs/risk_today.yaml` together (the config loader enforces the match) |
 
 ### Measured operating point (replayed on all 684 in-sample windows)
 
@@ -23,8 +25,6 @@ Honest base rates, so real alerts aren't discounted as noise:
   2021 · 2022 · 2023 — i.e. a red cron day means "this market window is
   extreme vs the training era" and tends to arrive in clusters during genuine
   regime breaks, a few times a year at most.
-| **sklearn upgrade** — `sklearn_match: false` in `/ml/health` | dependency bumps (the pickle is pinned to `scikit-learn>=1.8,<1.9`) |
-| **Label/threshold change** — editing `labels.py` bands | must change `labels.py` AND `configs/risk_today.yaml` together (the config loader enforces the match) |
 
 ### What a drift alert means (and doesn't)
 
