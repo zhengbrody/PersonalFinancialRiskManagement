@@ -1,12 +1,11 @@
 import { type ReactNode } from "react";
 import { MarketingShell } from "./marketing-shell";
 import { C, display } from "./theme";
+import styles from "./public-experience.module.css";
 
 /**
- * Centered auth-page scaffold (login / signup): the minimal dark MarketingShell
- * + a serif title + subtitle + a hairline card holding the form + an optional
- * footer line. One source for the auth chrome so the two pages stay identical
- * except for their form + copy.
+ * Shared auth scaffold: a product introduction beside the desktop form;
+ * form-first on mobile. Existing auth and safe redirect behavior stay in pages.
  */
 export function AuthShell({
   title,
@@ -23,7 +22,15 @@ export function AuthShell({
 }) {
   return (
     <MarketingShell minimal>
-      <div style={{ maxWidth: 440, margin: "0 auto", padding: "150px 24px 90px" }}>
+      <div className={styles.authLayout}>
+        <aside className={styles.authIntro}>
+          <p className={styles.eyebrow}>Clarity before action</p>
+          <h2>Understand your risk.<br />Keep the decision yours.</h2>
+          <p>Inspect your portfolio, test a hypothetical change, and keep the evidence behind your plan.</p>
+          <a className={styles.link} href="/demo-risk-check">Explore a sample first →</a>
+          <p className={styles.hint}>No trades placed. Tests do not change real holdings.</p>
+        </aside>
+        <div>
         <div style={{ textAlign: "center", marginBottom: 26 }}>
           <h1
             style={{
@@ -73,6 +80,7 @@ export function AuthShell({
         {footer && (
           <p style={{ textAlign: "center", marginTop: 18, fontSize: 14, color: C.slate }}>{footer}</p>
         )}
+        </div>
       </div>
     </MarketingShell>
   );

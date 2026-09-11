@@ -27,8 +27,8 @@ describe("MobileNav", () => {
     expect(screen.queryByRole("link", { name: "Product" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /open menu/i }));
     expect(screen.getByRole("link", { name: "Product" })).toHaveAttribute("href", "/product");
-    expect(screen.getByRole("link", { name: "Markets" })).toHaveAttribute("href", "/markets");
-    expect(screen.getByRole("link", { name: /create risk workspace/i })).toHaveAttribute("href", "/signup");
+    expect(screen.getByRole("link", { name: "How it works" })).toHaveAttribute("href", "/product#workflow");
+    expect(screen.getByRole("link", { name: /try demo/i })).toHaveAttribute("href", "/demo-risk-check");
   });
 
   it("shows Open Today when signed in", () => {
@@ -58,6 +58,26 @@ describe("MobileNav", () => {
 });
 
 describe("StickyMobileCTA", () => {
+  it("does not cover the interactive hero or appear before the hero is reached", () => {
+    let notify: IntersectionObserverCallback;
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(callback: IntersectionObserverCallback) { notify = callback; }
+      observe() {}
+      disconnect() {}
+    });
+    try {
+      render(<><header data-hero-cta>Sample</header><StickyMobileCTA /></>);
+      const update = (visible: boolean, bottom: number) => act(() => notify([
+        { isIntersecting: visible, boundingClientRect: { bottom } } as IntersectionObserverEntry,
+      ], {} as IntersectionObserver));
+      update(false, 1600);
+      expect(screen.queryByRole("link", { name: /open risk demo/i })).not.toBeInTheDocument();
+      update(true, 400);
+      expect(screen.queryByRole("link", { name: /open risk demo/i })).not.toBeInTheDocument();
+      update(false, -5);
+      expect(screen.getByRole("link", { name: /open risk demo/i })).toBeInTheDocument();
+    } finally { vi.unstubAllGlobals(); }
+  });
   it("stays hidden until the first CTA scrolls out of view", () => {
     setScrollY(0); // still looking at the hero
     const { container } = render(<StickyMobileCTA />);

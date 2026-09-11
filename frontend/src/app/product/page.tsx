@@ -13,13 +13,14 @@ import {
 } from "@/components/marketing/primitives";
 import {
   ProductSurfaceGrid,
-  RiskOsPreview,
+  ComparisonCapabilities,
   RiskWorkflow,
 } from "@/components/marketing/risk-os-story";
+import { SampleComparison } from "@/components/marketing/sample-comparison";
 import { pageMetadata } from "@/lib/site";
 
 export const metadata = pageMetadata({
-  title: "Portfolio Risk OS — Today, Analyze, Test, Plan & Review",
+  title: "Understand Portfolio Risk & Compare Changes",
   description:
     "See how MindMarket connects daily risk priorities, a unified Analyze workspace, Research-to-Test scenarios, saved risk plans, alerts, and a grounded portfolio Copilot.",
   path: "/product",
@@ -30,20 +31,20 @@ export default function ProductPage() {
   return (
     <MarketingShell>
       <MarketingHero
-        eyebrow="Portfolio Risk OS"
+        eyebrow="Understand. Compare. Decide."
         title={
           <>
-            One place to see, test, and <Em>remember</Em> portfolio risk decisions
+            A clearer view of risk. A more <Em>considered</Em> next move.
           </>
         }
-        lede="MindMarket replaces scattered scorecards and forgotten reports with a connected workflow. Today prioritizes what changed; Analyze explains why; Research-to-Test models a response; plans and alerts bring the decision back when it needs review."
+        lede="Understand what drives your portfolio’s risk, compare a hypothetical change, and keep a plan you can review. Your real holdings stay unchanged throughout the test."
       >
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 30 }}>
           <CTA href="/demo-risk-check" lg>
-            Explore the interactive demo
+            Try a sample portfolio
           </CTA>
-          <CTA href="/signup" variant="ghost" lg>
-            Create my risk workspace
+          <CTA href="/signup?next=%2Fportfolios%2Fnew" variant="ghost" lg>
+            Analyze my portfolio
           </CTA>
         </div>
       </MarketingHero>
@@ -56,10 +57,10 @@ export default function ProductPage() {
             <p style={{ color: C.slate, fontSize: 16, lineHeight: 1.65, margin: "18px 0 0" }}>
               The active portfolio follows you through every surface. Priorities link directly to
               the relevant Analyze stage, research idea, test, alert, or saved plan, so the product
-              always gives you a clear next action.
+              helps you find the next relevant analysis. Keeping the portfolio unchanged is also a valid decision.
             </p>
           </div>
-          <RiskOsPreview />
+          <SampleComparison />
         </div>
       </Band>
 
@@ -82,6 +83,12 @@ export default function ProductPage() {
       </Band>
 
       <Band>
+        <Eyebrow>What each test actually covers</Eyebrow>
+        <SecTitle>Choose the right comparison for your question.</SecTitle>
+        <div style={{ marginTop: 28 }}><ComparisonCapabilities /></div>
+      </Band>
+
+      <Band>
         <Eyebrow>Safety and evidence</Eyebrow>
         <div
           style={{
@@ -95,10 +102,12 @@ export default function ProductPage() {
             Tests are hypothetical. The AI <Em>explains</Em> computed evidence.
           </SecTitle>
           <p style={{ fontSize: 16, lineHeight: 1.65, color: C.slate, margin: "16px 0 0", maxWidth: "48em" }}>
-            Research-to-Test and scenario tools re-score a sandbox portfolio; they never place a
-            trade or change saved holdings. Health Score, VaR, factor exposure, and scenario losses
-            are computed by deterministic services. Copilot can explain and navigate that evidence,
-            but missing or stale critical data lowers confidence instead of being filled with a guess.
+            Research-to-Test re-scores an equity-only sandbox; it never places a
+            trade or changes saved holdings. Available Health Score, VaR, factor exposure and scenario losses
+            come from calculation services, with coverage specific to each analysis. Copilot can explain and navigate that evidence;
+            missing or stale critical inputs can lower confidence or prevent a result.
+            AI explanations can still be wrong. Options support depends on contract details and
+            data availability; Copilot comparison does not edit option legs or optimize every strategy.
           </p>
         </div>
       </Band>

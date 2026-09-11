@@ -8,9 +8,9 @@
 
 export const PRODUCT_POSITIONING = {
   name: "Portfolio Risk OS",
-  headline: "Know what changed. Test what matters. Keep a risk plan.",
+  headline: "Understand your risk before your next move.",
   description:
-    "MindMarket is a portfolio risk operating system for individual investors: review today's priorities, trace risk in Analyze, test changes without touching holdings, save a plan, and revisit it when conditions change.",
+    "See what drives your portfolio’s risk, test a change, and understand the trade-offs—without changing your actual holdings.",
 } as const;
 
 export const RISK_WORKFLOW = [
@@ -30,19 +30,19 @@ export const RISK_WORKFLOW = [
     key: "test",
     label: "Test",
     title: "Model a change",
-    body: "Send a research idea into a what-if test and compare the before-and-after risk — real holdings are never changed.",
+    body: "Test additions, reductions or replacements in the stock/ETF portion of your portfolio. This Research sandbox excludes cash and option legs; real holdings stay unchanged.",
   },
   {
     key: "plan",
     label: "Plan",
     title: "Save the decision",
-    body: "Keep the scenario, rationale, and review state together as a risk plan instead of exporting a forgotten report.",
+    body: "Save supported scenarios as risk plans. Copilot comparison drafts require an available save action and your confirmation; they preserve the original calculation.",
   },
   {
     key: "review",
     label: "Review",
     title: "Return when it matters",
-    body: "Alerts, saved plans, and score history show what deserves another look as the portfolio or market changes.",
+    body: "Reopen saved plans, inspect recorded score history, and manage alerts. Reviews depend on comparable metrics; saving a plan does not start automatic monitoring.",
   },
 ] as const;
 
@@ -51,7 +51,7 @@ export const PRODUCT_SURFACES = [
     key: "today",
     title: "Today action center",
     tag: "Prioritized, not noisy",
-    body: "A daily queue of the risks, alerts, and plan reviews that matter most for the active portfolio.",
+    body: "A prioritized view of available risks, alerts and plan reviews for your active portfolio when you open the workspace.",
     href: "/product#workflow",
   },
   {
@@ -65,7 +65,7 @@ export const PRODUCT_SURFACES = [
     key: "research",
     title: "Research to Test",
     tag: "Ideas become scenarios",
-    body: "Move from source-backed ticker research into a portfolio what-if and see the risk impact before saving a plan.",
+    body: "Move from ticker research into a stock/ETF-only what-if. Compare that portion of your portfolio, not the risk of a full account containing cash and options.",
     href: "/product#research-to-test",
   },
   {
@@ -78,9 +78,33 @@ export const PRODUCT_SURFACES = [
   {
     key: "copilot",
     title: "Portfolio-aware Copilot",
-    tag: "Grounded, not improvising",
-    body: "Ask why risk changed, inspect exposure, and navigate to the next useful surface with citations and explicit data-confidence limits.",
+    tag: "Computed evidence, checked explanations",
+    body: "Ask about available portfolio evidence or test a supported stock/ETF reduction. Inspect sources and data limits; AI explanations can still be wrong.",
     href: "/product#copilot",
+  },
+] as const;
+
+/** Match the separate signed-in workflows; do not market one as the other.
+ * Evidence and release caveats: docs/marketing/public-experience.md.
+ */
+export const COMPARISON_CAPABILITIES = [
+  {
+    key: "research",
+    title: "Research: test the stock/ETF portion",
+    body: "Try adding, increasing, reducing or replacing a position in the equity-only sandbox.",
+    limitation: "Cash and option legs are excluded. These results are not a full-account risk comparison.",
+  },
+  {
+    key: "copilot",
+    title: "Copilot: compare a held stock/ETF reduction",
+    body: "Enter a USD amount and choose to keep the hypothetical proceeds as cash or repay margin. Supported option legs remain unchanged.",
+    limitation: "Supported US-listed, USD-priced holdings only. Equity-only comparisons use historical risk metrics; accounts with options use instantaneous stresses, not historical account VaR or volatility. Missing or ambiguous inputs can prevent a comparison.",
+  },
+  {
+    key: "save",
+    title: "Save a captured comparison when available",
+    body: "Confirm an eligible result to keep its original calculation as a draft plan. The account revision and capture age are checked before a new save.",
+    limitation: "A new save requires a capture within 15 minutes. Saving does not refresh quotes, execute a trade or start automatic monitoring. Later reviews require comparable data.",
   },
 ] as const;
 
@@ -93,11 +117,23 @@ export const PRODUCT_FAQS = [
   {
     question: "Do tests change my real holdings?",
     answer:
-      "No. Research-to-Test and scenario tools re-score a hypothetical portfolio. They do not place trades or mutate the holdings you saved.",
+      "No. Research-to-Test models the stock/ETF portion only. Copilot can compare a supported stock/ETF reduction with keeping the portfolio unchanged. Neither places trades or changes your saved holdings.",
   },
   {
-    question: "Does the Copilot invent portfolio numbers?",
+    question: "How does Copilot use my portfolio data?",
     answer:
-      "No. Risk figures come from deterministic services. The Copilot explains available evidence, cites its tools, and lowers confidence when important data is missing or stale.",
+      "Risk figures come from calculation services. Copilot explains the available evidence with output checks and data-quality limits. AI explanations can still be wrong; inspect the evidence and assumptions before relying on a result.",
+  },
+  {
+    question: "Is the sample based on live market data?",
+    answer: "No. The interactive sample uses fictional holdings and fixed sensitivities to explain a hypothetical change. It is not the full risk engine, a return forecast, or a maximum-loss calculation. The assumptions are available beside the results.",
+  },
+  {
+    question: "Are all options strategies and changes supported?",
+    answer: "No. Support depends on the analysis, contract details and available data. The current Copilot comparison tests reductions in supported held stocks or ETFs; it does not edit option legs or automatically optimize every strategy.",
+  },
+  {
+    question: "Does saving a plan start an autonomous agent?",
+    answer: "No. A saved plan is a record for you to revisit. Copilot comparison drafts preserve a captured calculation, not continuously refreshed prices. Saving does not launch background monitoring, automatic optimization or trade execution.",
   },
 ] as const;

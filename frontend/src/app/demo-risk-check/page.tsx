@@ -1,13 +1,10 @@
 /**
- * /demo-risk-check — public, no-auth Demo Risk Check on the premium dark
- * <MarketingShell/>. The fastest path to "I get it": a real, deterministic risk
- * cockpit on a sample book with a one-click high-growth stress toggle. Server
- * component (SSR/SEO) wrapping the client <SampleCockpit/> (which uses theme
- * tokens → renders dark under the shell's `dark` root); a tiny client ping fires
- * `demo_started` on mount.
+ * Public demo: shared local comparison first, separate sample cockpit as an
+ * optional drill-down. The existing anonymous API experiment remains gated.
  */
 
 import { SampleCockpit } from "@/components/sample-cockpit";
+import { SampleComparison } from "@/components/marketing/sample-comparison";
 import { PublicRiskCheck } from "@/components/public-risk-check";
 import { isPublicRiskCheckEnabled } from "@/lib/public-risk";
 import { DemoStartedPing } from "@/components/demo-started-ping";
@@ -17,9 +14,9 @@ import { CTA, CTABox, Disclaimer, Em, MarketingHero } from "@/components/marketi
 import { pageMetadata } from "@/lib/site";
 
 export const metadata = pageMetadata({
-  title: "Interactive Portfolio Risk Demo — Stress a Sample Book",
+  title: "Interactive Portfolio Demo — Compare a Hypothetical Change",
   description:
-    "Explore a sample portfolio risk workflow without signing in: inspect the Health Score, concentration, volatility, and estimated stress losses. Every number is computed and clearly labeled.",
+    "Try a fictional portfolio without signing in. Reduce a sample position, compare cash versus margin repayment, and inspect the assumptions behind a simplified stress scenario.",
   path: "/demo-risk-check",
   ogType: "website",
 });
@@ -32,20 +29,27 @@ export default function DemoRiskCheckPage() {
         eyebrow="Demo Risk Check"
         title={
           <>
-            See what can break a portfolio — <Em>before</Em> you add more risk
+            Try a change. <Em>Understand</Em> the difference.
           </>
         }
         lede={
           <>
-            No sign-in. Start with a balanced book, then one-click{" "}
-            <span style={{ color: C.paper, fontWeight: 500 }}>stress a high-growth portfolio</span> to
-            see how concentration, volatility, and a tech-and-crypto selloff change the picture.
+            No sign-in. Reduce a position in a fictional portfolio, choose what happens to
+            the proceeds, and compare the outcome under a hypothetical market fall.
+            This is a simplified educational model, not live analysis.
           </>
         }
       />
 
-      <div style={{ maxWidth: 920, margin: "0 auto", padding: "28px 24px 8px" }}>
-        <SampleCockpit />
+      <div style={{ maxWidth: 650, margin: "0 auto", padding: "28px 24px 32px" }}>
+        <SampleComparison />
+      </div>
+      <div style={{ maxWidth: 920, margin: "0 auto", padding: "8px 24px 32px" }}>
+        <details style={{ border: `1px solid ${C.hair}`, borderRadius: 16, padding: 20 }}>
+          <summary style={{ cursor: "pointer", color: C.teal }}>Explore the separate sample risk cockpit</summary>
+          <p style={{ color: C.slate, lineHeight: 1.6 }}>A different sample dataset illustrates score and risk drivers. Its numbers are not directly comparable with the change demo above.</p>
+          <SampleCockpit />
+        </details>
       </div>
 
       {isPublicRiskCheckEnabled() && (
@@ -56,8 +60,8 @@ export default function DemoRiskCheckPage() {
 
       <div style={{ maxWidth: 920, margin: "0 auto", padding: "16px 24px 64px" }}>
         <CTABox
-          headline="Turn a one-time check into an ongoing risk workflow."
-          lede="Add your holdings, open Today, trace the risk in Analyze, test a change, and save the decision for review."
+          headline="Move from the sample to your own portfolio."
+          lede="Add your holdings, inspect available risk metrics in Analyze, and choose a supported what-if test. Eligible scenarios can be saved for you to revisit; this does not start automatic monitoring."
         >
           <CTA href="/signup?next=%2Fportfolios%2Fnew">Create my risk workspace</CTA>
           <CTA href="/product#workflow" variant="ghost">
@@ -67,7 +71,7 @@ export default function DemoRiskCheckPage() {
         <div style={{ marginTop: 18 }}>
           <Disclaimer>
             Sample data for illustration — not live prices and not investment advice. Your own
-            cockpit uses real market data with full source provenance.
+            analysis depends on available market data; inspect its sources, timestamps and coverage limits.
           </Disclaimer>
         </div>
       </div>

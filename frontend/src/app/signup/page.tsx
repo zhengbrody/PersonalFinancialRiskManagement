@@ -106,7 +106,7 @@ export default function SignupPage() {
   return (
     <AuthShell
       title="Create your account"
-      subtitle="Create one portfolio, then move from today's priority to a testable risk plan."
+      subtitle="Start with your holdings. Understand the risk before testing a change."
       highlights={[
         "Add tickers and shares or import a supported CSV.",
         "Open Today to see the highest-priority risk first.",

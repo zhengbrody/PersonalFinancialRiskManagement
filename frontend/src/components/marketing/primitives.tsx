@@ -2,7 +2,7 @@
  * Presentational marketing primitives on the shared dark palette. No hooks /
  * browser APIs → server-safe, so the content pages (/product, /learn, …) stay
  * server components (fully crawlable) while still wearing the premium look.
- * Colours are inline literals from theme.ts (forced-dark, theme-independent).
+ * Colours use theme.ts variables shared with the app's light/dark palette.
  */
 
 import Link from "next/link";
@@ -42,7 +42,7 @@ export function CTA({
   };
   const v =
     variant === "primary"
-      ? { background: C.ctaBg, color: C.ctaFg, boxShadow: "0 10px 30px -10px rgba(212,160,23,.35)" }
+      ? { background: C.ctaBg, color: C.ctaFg }
       : { background: C.surfaceFaint, color: C.paper, borderColor: C.hairStrong };
   const style = { ...base, ...v };
   if (href.startsWith("/")) {

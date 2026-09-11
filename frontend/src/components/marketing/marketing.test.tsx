@@ -25,7 +25,7 @@ describe("MarketingShell", () => {
     // Wordmark in both nav and footer.
     expect(screen.getAllByText("MindMarket").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
-    expect(screen.getByRole("link", { name: "Get started" })).toHaveAttribute("href", "/signup");
+    expect(screen.getByRole("link", { name: "Try demo" })).toHaveAttribute("href", "/demo-risk-check");
     // Educational disclaimer present (no-advice guarantee).
     expect(screen.getByText(/does not provide investment/i)).toBeInTheDocument();
   });
@@ -58,7 +58,7 @@ describe("Product page (restyled)", () => {
     expect(screen.getByText(/starting point is Today/i)).toBeInTheDocument();
     expect(screen.getByText("Unified Analyze workspace")).toBeInTheDocument();
     expect(screen.getByText("Portfolio-aware Copilot")).toBeInTheDocument();
-    expect(screen.getByText(/never place a trade/i)).toBeInTheDocument();
+    expect(screen.getByText(/never places a trade or changes saved holdings/i)).toBeInTheDocument();
   });
 });
 

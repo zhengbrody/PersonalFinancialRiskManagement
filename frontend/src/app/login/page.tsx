@@ -86,7 +86,7 @@ export default function LoginPage() {
   return (
     <AuthShell
       title="Welcome back"
-      subtitle="Return to Today and continue the risk decisions already in motion."
+      subtitle="Your portfolio. Your evidence. Pick up where you left off."
       highlights={[
         "Review today's priorities for the active portfolio.",
         "Continue an Analyze stage or saved risk plan.",

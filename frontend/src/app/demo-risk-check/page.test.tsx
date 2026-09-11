@@ -22,7 +22,8 @@ describe("DemoRiskCheckPage", () => {
   it("renders the public demo cockpit + CTAs with no auth", () => {
     const { container } = render(<DemoRiskCheckPage />);
     expect(container.querySelector("#sample-cockpit")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: /before you add more risk/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Try a change. Understand the difference/i })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Interactive sample portfolio" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /create my risk workspace/i })).toHaveAttribute(
       "href",
       "/signup?next=%2Fportfolios%2Fnew",
