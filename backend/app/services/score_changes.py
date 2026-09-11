@@ -29,6 +29,7 @@ from ..schemas.score_changes import (
     ScoreChangeReport,
     ScoreChangeRequest,
 )
+from . import leverage as _leverage
 
 _DIM_WEIGHTS = {"risk_match": 0.35, "risk_adjusted_return": 0.35, "downside_protection": 0.30}
 _DIM_NAMES = {
@@ -74,6 +75,11 @@ def _prev_metric(prev_rm: dict, prev_row: dict, key: str) -> Optional[float]:
     val = _finite(prev_rm.get(key))
     if val is None and key in ("net_equity", "leverage", "contributed_capital"):
         val = _finite(prev_row.get(key))
+    if key == "leverage":
+        # Snapshots written before the cap existed hold raw, uncapped ratios.
+        # Comparing one against a capped live figure invents a change, so put
+        # the stored side on the live basis before the subtraction.
+        return _leverage.clamp_stored_leverage(val)
     return val
 
 

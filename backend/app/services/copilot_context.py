@@ -23,6 +23,7 @@ from typing import Optional
 
 from ..core.deps_auth import AuthedUser
 from ..core.responses import APIError, server_error
+from .leverage import leverage_factor as _leverage_factor
 
 
 @dataclass(frozen=True)
@@ -187,19 +188,5 @@ def load_positions_and_score(
     )
 
 
-# Mirror of risk.py's helpers (kept local so this service doesn't import from
-# the API layer). Cap leverage well above any realistic retail margin account.
-_MAX_LEVERAGE = 10.0
-
-
-def _leverage_factor(*, gross_assets: float, margin_loan: float) -> float:
-    """``gross_assets / net_equity`` (net = gross − loan). 1.0 when no loan;
-    capped at ``_MAX_LEVERAGE`` if net equity is wiped out."""
-    gross = float(gross_assets)
-    loan = max(0.0, float(margin_loan))
-    if loan <= 0 or gross <= 0:
-        return 1.0
-    net_equity = gross - loan
-    if net_equity <= 0:
-        return _MAX_LEVERAGE
-    return min(_MAX_LEVERAGE, gross / net_equity)
+# Leverage lives in ``services.leverage``. This was a local copy of risk.py's
+# helper, which is how the bases drifted apart in the first place.

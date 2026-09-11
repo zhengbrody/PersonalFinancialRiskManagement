@@ -17,6 +17,8 @@ import math
 from dataclasses import asdict, dataclass
 from typing import Any, Literal, Mapping
 
+from . import leverage as _shared
+
 LiquidityClass = Literal["risk_asset", "cash_equivalent"]
 ClassificationSource = Literal["explicit", "known_treasury_fund"]
 
@@ -26,11 +28,11 @@ ClassificationSource = Literal["explicit", "known_treasury_fund"]
 # turns their market returns into a constant cash return in the score engine.
 KNOWN_CASH_EQUIVALENT_TICKERS = frozenset({"BIL", "SGOV", "SHV", "TBIL", "TFLO", "USFR"})
 
-# Mirrors ``risk._MAX_LEVERAGE``. A near-wiped-out account produces an
-# arithmetically true but meaningless ratio (net equity of one cent yields
-# 1e7x); the score path already clamps, so clamp here too rather than letting
-# the same screen show "10.00x" next to "10000000.01x".
-MAX_LEVERAGE = 10.0
+# Re-exported from ``services.leverage`` so a near-wiped-out account clamps to
+# the same ceiling everywhere. A net equity of one cent yields an arithmetically
+# true but meaningless 1e7x; without the shared ceiling the same screen could
+# show "10.00x" next to "10000000.01x".
+MAX_LEVERAGE = _shared.MAX_LEVERAGE
 
 
 @dataclass(frozen=True)
