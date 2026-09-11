@@ -198,6 +198,12 @@ def _bars_to_series(bars) -> Optional[pd.Series]:
     return pd.Series(pairs).sort_index()
 
 
+def _is_rate_limited(res: object) -> bool:
+    """True when Massive answered 429. The provider surfaces it as an explicit
+    ``massive_rate_limited`` warning and never retries, so the caller decides."""
+    return "massive_rate_limited" in (getattr(res, "warnings", None) or [])
+
+
 def _massive_fallback(missing: list[str], days: int, frames: dict, src_map: dict) -> None:
     """Backfill yfinance-missing tickers from Massive (fallback only). Mutates
     ``frames``/``src_map`` in place. Fail-soft: a dead Massive just leaves the
@@ -223,6 +229,9 @@ def _massive_fallback(missing: list[str], days: int, frames: dict, src_map: dict
                 "market_data.massive_fallback_error ticker=%s err=%s", t, type(exc).__name__
             )
             continue
+        if _is_rate_limited(res):
+            _logger.warning("market_data.massive_fallback_budget_exhausted")
+            return
         if res.ok and res.data:
             series = _bars_to_series(res.data)
             if series is not None and not series.empty:
@@ -241,6 +250,12 @@ def _massive_primary(tickers: list[str], days: int, frames: dict, src_map: dict)
         return
     if not tickers or not massive.is_configured():
         return
+    # Free Basic is ~5 calls/min. A cache hit costs nothing, so we do NOT cap the
+    # ticker count -- we stop at the first 429, because every call after the
+    # budget is gone is a wasted round-trip that also starves the other Massive
+    # consumers in that minute (the admin live check, /market/prices). Before
+    # this, the ONLY cap lived in _massive_fallback, which the production branch
+    # never reaches, so a 26-holding book fired 26 serial calls.
     for t in tickers:
         try:
             res = massive.get_daily_history(t, days=days)
@@ -249,6 +264,13 @@ def _massive_primary(tickers: list[str], days: int, frames: dict, src_map: dict)
                 "market_data.massive_primary_error ticker=%s err=%s", t, type(exc).__name__
             )
             continue
+        if _is_rate_limited(res):
+            _logger.warning(
+                "market_data.massive_primary_budget_exhausted served=%d remaining=%d",
+                len(frames),
+                len(tickers) - len(frames),
+            )
+            return
         if res.ok and res.data:
             series = _bars_to_series(res.data)
             if series is not None and not series.empty:
