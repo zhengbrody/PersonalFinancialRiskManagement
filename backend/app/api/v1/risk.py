@@ -79,6 +79,7 @@ from ...schemas.risk_actions import ActionCard, ActionSimulateOut, SimulateHoldi
 from ...schemas.risk_alerts import RiskAlertsInput, RiskAlertsOutput
 from ...schemas.risk_explain import RiskExplainInput, RiskExplainOutput
 from ...schemas.score_changes import ScoreChangeReport, ScoreChangeRequest
+from ...services import _common as _common_holdings
 from ...services.leverage import MAX_LEVERAGE as _MAX_LEVERAGE
 from ...services.leverage import leverage_factor as _leverage_factor
 
@@ -89,34 +90,15 @@ _log = logging.getLogger(__name__)
 # The domain model (AssetPositionInput) only accepts these asset_type labels.
 # Stored/legacy holdings may carry others (e.g. 'equity', 'stock', 'etf') —
 # normalise unknowns to 'public_security' so a stray label never 500s the score.
-_VALID_ASSET_TYPES = {"public_security", "cash", "crypto", "real_estate", "option"}
+_VALID_ASSET_TYPES = _common_holdings.VALID_ASSET_TYPES
 
 
-def _normalize_asset_type(raw: object) -> str:
-    s = str(raw or "").strip().lower()
-    if s in _VALID_ASSET_TYPES:
-        return s
-    if "crypto" in s:
-        return "crypto"
-    if "real" in s or "estate" in s or "reit" in s:
-        return "real_estate"
-    if "option" in s or s in {"call", "put"}:
-        return "option"
-    return "public_security"
-
-
-def _is_option_holding(h: object) -> bool:
-    """True if a stored holding record is an option contract.
-
-    Option holdings are keyed in the JSONB by a synthetic OCC-style contract
-    symbol that isn't a price-fetchable ticker, and they need the dedicated
-    Greeks/exposure path (PR2) rather than the equity spot-price path. Until
-    that lands they're excluded from the score/report price fetch so they
-    neither 500 nor get mispriced as an equity.
-    """
-    return _normalize_asset_type((h or {}).get("asset_type") if isinstance(h, dict) else None) == (
-        "option"
-    )
+# Both live in services._common so the risk path and the discovery adapters
+# (institutions, market sentiment) cannot drift apart on what an option is.
+# They had drifted, and the disagreement fed a synthetic OCC symbol to a
+# credit-gated endpoint as though it were an equity ticker.
+_normalize_asset_type = _common_holdings.normalize_asset_type
+_is_option_holding = _common_holdings.is_option_holding
 
 
 def _priceable_tickers(holdings: dict) -> list[str]:

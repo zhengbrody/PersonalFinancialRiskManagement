@@ -20,6 +20,43 @@ from typing import Any, Callable, Optional
 _log = logging.getLogger(__name__)
 
 
+# The domain model (AssetPositionInput) only accepts these asset_type labels.
+# Stored/legacy holdings may carry others ('equity', 'stock', 'etf', 'call'...),
+# so unknowns normalise to 'public_security' rather than 500ing the score.
+VALID_ASSET_TYPES = {"public_security", "cash", "crypto", "real_estate", "option"}
+
+
+def normalize_asset_type(raw: object) -> str:
+    """Map any stored/legacy asset_type label onto a domain-valid one."""
+    s = str(raw or "").strip().lower()
+    if s in VALID_ASSET_TYPES:
+        return s
+    if "crypto" in s:
+        return "crypto"
+    if "real" in s or "estate" in s or "reit" in s:
+        return "real_estate"
+    if "option" in s or s in {"call", "put"}:
+        return "option"
+    return "public_security"
+
+
+def is_option_holding(h: object) -> bool:
+    """True if a stored holding record is an option contract.
+
+    THE one predicate. There were two and they disagreed: the risk path
+    normalised the label (catching 'call' / 'put' / 'long_call'), while
+    ``active_tickers`` compared the raw string to 'option' exactly. A holding
+    stored as asset_type='call' was therefore correctly excluded from the price
+    fetch but handed to the discovery adapters as an equity ticker -- and its
+    key is a synthetic OCC symbol like AAPL260116C00150000, which no provider
+    can resolve. /market/sentiment is credit-gated and caps the batch at 12, so
+    that unresolvable row both cost the user credits and could push a real
+    holding out of the batch.
+    """
+    raw = (h or {}).get("asset_type") if isinstance(h, dict) else None
+    return normalize_asset_type(raw) == "option"
+
+
 def iso_now() -> str:
     """Current UTC instant as an ISO-8601 string (shared ``generated_at`` stamp)."""
     return datetime.now(timezone.utc).isoformat()
@@ -72,11 +109,7 @@ def active_tickers(access_token: str | None) -> list[str]:
         holdings = get_active_holdings(access_token=access_token) or {}
         # Skip option contracts: their synthetic OCC keys aren't real symbols,
         # so the discovery adapters (sentiment, 13F) would only fail-soft on them.
-        return [
-            str(t).upper()
-            for t, h in holdings.items()
-            if str((h or {}).get("asset_type") if isinstance(h, dict) else "").lower() != "option"
-        ]
+        return [str(t).upper() for t, h in holdings.items() if not is_option_holding(h)]
     except Exception as exc:  # noqa: BLE001
         _log.warning("active_tickers.failed err=%s", type(exc).__name__)
         return []

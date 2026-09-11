@@ -95,7 +95,12 @@
 	}
 
 	# ── Brand + SEO static assets (unchanged from Caddyfile) ──────
-	@brand_assets path /favicon.ico /favicon.png /favicon.svg /favicon-192.png /favicon-512.png /apple-touch-icon.png /site.webmanifest
+	# /site.webmanifest is deliberately NOT here: assets/brand holds a pre-V2
+	# copy (old product name, old theme colour, and no maskable icon), and
+	# serving it shadowed the current frontend/public one that layout.tsx
+	# declares -- so installing the PWA got the old brand. Let it fall
+	# through to Next.js, which owns the manifest and its icon set.
+	@brand_assets path /favicon.ico /favicon.png /favicon.svg /favicon-192.png /favicon-512.png /apple-touch-icon.png
 	handle @brand_assets {
 		root * /srv/brand
 		header Cache-Control "public, max-age=86400"
