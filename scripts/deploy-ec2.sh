@@ -26,7 +26,9 @@ free -m || true
 df -h / || true
 
 echo "== Sync repo (compose/Caddyfile/assets ride git, not images) =="
+CADDY_BEFORE="$(git rev-parse HEAD:Caddyfile 2>/dev/null || echo none)"
 git pull --ff-only origin main
+CADDY_AFTER="$(git rev-parse HEAD:Caddyfile 2>/dev/null || echo none)"
 if [ "$TAG" != "latest" ]; then
   echo "NOTE: images are pinned to ${TAG}, but compose/Caddyfile/assets were"
   echo "      just fast-forwarded to origin/main. A CONFIG regression needs a"
@@ -37,6 +39,25 @@ fi
 echo "== Pull + swap app containers (tag: ${MM_IMAGE_TAG}) =="
 docker compose -f compose.split.yml pull backend frontend
 docker compose -f compose.split.yml up -d --no-deps --no-build backend frontend
+
+# The Caddyfile is a SINGLE-FILE bind mount, so the running container holds the
+# old inode: a git pull updates the file on disk and changes nothing that is
+# serving. It has to be recreated, and validating first matters because an
+# invalid Caddyfile crash-loops the container (that is exactly how the site went
+# 521 after a reboot once). Validation runs with the REAL certs mounted because
+# the committed Caddyfile pins `tls /srv/tls/origin.pem` and validation loads it.
+if [ "$CADDY_BEFORE" != "$CADDY_AFTER" ]; then
+  echo "== Caddyfile changed ($CADDY_BEFORE -> $CADDY_AFTER): validate, then recreate =="
+  docker run --rm \
+    -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
+    -v /srv/tls:/srv/tls:ro \
+    -e SITE_HOST="${SITE_HOST:-mindmarket.app}" \
+    caddy:2.11-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+  docker compose -f compose.aws.yml up -d --force-recreate --no-deps caddy
+  echo "   (recreated; a lone 'no OCSP stapling ... Origin CA' warning is expected)"
+else
+  echo "== Caddyfile unchanged — not touching caddy =="
+fi
 
 echo "== Reclaim disk (unused images; volumes/containers untouched) =="
 docker image prune -af
