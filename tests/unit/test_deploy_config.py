@@ -181,13 +181,13 @@ def test_deploy_script_actually_applies_a_changed_caddyfile():
     # "unchanged" -- permanently unapplied. Assert the read, the write, and the
     # absence of the diff approach's tell-tale.
     assert 'cat "$CADDY_MARKER"' in script, "must READ the last-applied marker"
-    assert 'echo "$CADDY_NOW" > "$CADDY_MARKER"' in script, (
-        "must WRITE the marker only after a successful recreate"
-    )
+    assert (
+        'echo "$CADDY_NOW" > "$CADDY_MARKER"' in script
+    ), "must WRITE the marker only after a successful recreate"
     assert "sha256sum Caddyfile" in script, "the marker must hash the file itself"
-    assert "git rev-parse HEAD:Caddyfile" not in script, (
-        "that is the before/after-diff approach this replaced"
-    )
+    assert (
+        "git rev-parse HEAD:Caddyfile" not in script
+    ), "that is the before/after-diff approach this replaced"
     commands = [ln for ln in script.splitlines() if ln.strip() and not ln.strip().startswith("#")]
     assert not any("--remove-orphans" in ln for ln in commands), (
         "--remove-orphans would delete the caddy container (it is owned by the "
