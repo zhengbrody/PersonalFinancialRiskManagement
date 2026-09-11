@@ -257,6 +257,15 @@ def issue_receipt(
     )
 
 
+def require_enabled() -> None:
+    """503 when verification is off, so callers can gate before doing work."""
+    settings = get_settings()
+    if not settings.copilot_comparison_replay_enabled or len(signing_key()) < 32:
+        raise APIError(
+            503, "comparison_replay_unavailable", "Calculation verification is not enabled."
+        )
+
+
 def read_receipt(
     receipt: ComparisonReceipt, user_id: str, portfolio_id: str, result_id: str
 ) -> CalculationSnapshot:

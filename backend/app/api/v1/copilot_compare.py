@@ -96,6 +96,11 @@ def confirm_comparison(
         raise APIError(
             422, "confirmation_required", "Explicit confirmation is required to save a draft plan."
         )
+    # Cheap gates before the analysis lane. There is exactly one lane for the
+    # whole process, so acquiring it first meant a DISABLED feature could take
+    # it and then 503 -- and a caller arriving during a real analysis was told
+    # "another analysis is running" when the truthful answer is "not enabled".
+    comparison_save.require_enabled()
     if not risk._check_capacity.acquire(blocking=False):
         raise APIError(
             429, "analysis_busy", "Another risk analysis is running. Please try again shortly."
@@ -133,6 +138,7 @@ def verify_comparison(
     request: Request,
     user: AuthedUser = Depends(require_user),
 ):
+    comparison_replay.require_enabled()  # cheap gate before the single analysis lane
     if not risk._check_capacity.acquire(blocking=False):
         raise APIError(
             429, "analysis_busy", "Another risk analysis is running. Please try again shortly."

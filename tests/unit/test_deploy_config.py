@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -14,26 +15,64 @@ def test_split_compose_passes_supabase_service_key_to_server_only_backend_env():
     assert "must never be rendered in the UI" in compose
 
 
-def test_split_compose_forwards_every_backend_feature_flag_and_key():
+def _env_names_read_by_backend_config() -> set[str]:
+    """Every environment variable ``backend/app/core/config.py`` actually reads."""
+    text = (ROOT / "backend" / "app" / "core" / "config.py").read_text(encoding="utf-8")
+    names: set[str] = set()
+    for pattern in (
+        r'_env\w*\(\s*"([A-Z][A-Z0-9_]+)"',
+        r'os\.environ(?:\.get)?\(\s*"([A-Z][A-Z0-9_]+)"',
+        r'os\.getenv\(\s*"([A-Z][A-Z0-9_]+)"',
+    ):
+        names |= set(re.findall(pattern, text))
+    return names
+
+
+def test_split_compose_forwards_every_variable_the_backend_reads():
     """A setting the code reads but compose does not forward is invisible.
 
     Values live in the EC2 `.env`; docker compose only injects the variables
-    named here. A flag left out silently stays at its default, so the feature
-    looks broken with nothing in the logs (the MASSIVE_API_KEY class of bug,
-    CLAUDE.md §2.18). Any new `_env_str`/`_env_bool` setting read by the
-    backend belongs in this list.
+    named in the service's `environment:` block. One left out silently stays at
+    its default, so the feature looks broken with nothing in the logs -- the
+    MASSIVE_API_KEY class of bug, which has now happened three times
+    (MASSIVE_API_KEY, the two comparison flags, and a whole documented
+    owner-activation procedure for the API-balance card whose env path was
+    never wired).
+
+    This is DERIVED from config.py rather than a hand-kept list, because a
+    hand-kept list is exactly what went stale each time. Adding a setting and
+    forgetting compose now fails here instead of in production.
     """
     compose = (ROOT / "compose.split.yml").read_text(encoding="utf-8")
+    backend_block = compose.split("backend:", 1)[1].split("frontend:", 1)[0]
+    forwarded = set(re.findall(r"-\s+([A-Z][A-Z0-9_]+)=", backend_block))
 
-    for variable in (
-        "MINDMARKET_COMPARISON_REPLAY_ENABLED",
-        "MINDMARKET_COMPARISON_SAVE_ENABLED",
-        "MINDMARKET_RISK_RUN_SIGNING_SECRET",
-        "MINDMARKET_COPILOT_RUNS_ENABLED",
-        "MINDMARKET_SHARE_SIGNING_SECRET",
-        "PUBLIC_RISK_CHECK_ENABLED",
-    ):
-        assert f"{variable}=${{{variable}" in compose, f"{variable} is not forwarded to backend"
+    missing = sorted(_env_names_read_by_backend_config() - forwarded)
+    assert not missing, (
+        "read by backend/app/core/config.py but not forwarded to the backend "
+        f"container, so setting them in the EC2 .env does nothing: {missing}"
+    )
+
+
+def test_image_build_passes_every_public_build_arg_the_frontend_declares():
+    """A NEXT_PUBLIC_* value is baked at BUILD time, not read at runtime.
+
+    If the Dockerfile declares the ARG but the workflow never passes it, the
+    published image is frozen at the default and the owner cannot turn the
+    feature on no matter what they set -- which is where
+    NEXT_PUBLIC_PUBLIC_RISK_CHECK was.
+    """
+    dockerfile = (ROOT / "frontend" / "Dockerfile").read_text(encoding="utf-8")
+    declared = set(re.findall(r"^ARG\s+(NEXT_PUBLIC_[A-Z0-9_]+)", dockerfile, re.M))
+
+    workflow = (ROOT / ".github" / "workflows" / "build-images.yml").read_text(encoding="utf-8")
+    passed = set(re.findall(r"(NEXT_PUBLIC_[A-Z0-9_]+)=", workflow))
+
+    missing = sorted(declared - passed)
+    assert not missing, (
+        "declared as a build ARG but never passed by build-images.yml, so the "
+        f"published image is stuck at the default: {missing}"
+    )
 
 
 def test_deploy_script_forwards_supabase_service_key_from_secrets_to_env_file():
@@ -117,3 +156,26 @@ def test_static_seo_pages_migrated_to_next():
         "assets/brand/fonts/instrument-serif-italic.woff2",
     ):
         assert (ROOT / font).exists(), f"missing committed font file: {font}"
+
+
+def test_deploy_script_actually_applies_a_changed_caddyfile():
+    """A git pull updates the Caddyfile; it does not apply it.
+
+    The Caddyfile is a single-file bind mount, so the running container keeps
+    the old inode and a committed change is a silent no-op. This was hit in
+    production (the new security headers were absent after the deploy that
+    shipped them) and had to be applied by hand. The script must validate --
+    an invalid Caddyfile crash-loops the container -- and then recreate.
+    """
+    script = (ROOT / "scripts" / "deploy-ec2.sh").read_text(encoding="utf-8")
+
+    assert "caddy validate" in script, "must validate before recreating"
+    assert (
+        "/srv/tls" in script
+    ), "validation loads the pinned Origin CA cert; without the mount it fails"
+    assert "--force-recreate" in script and "caddy" in script, "must recreate caddy"
+    commands = [ln for ln in script.splitlines() if ln.strip() and not ln.strip().startswith("#")]
+    assert not any("--remove-orphans" in ln for ln in commands), (
+        "--remove-orphans would delete the caddy container (it is owned by the "
+        "other compose file) -- the header comment says so; keep it a comment"
+    )

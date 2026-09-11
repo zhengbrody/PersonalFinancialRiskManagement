@@ -100,6 +100,19 @@ services:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-}
       - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-}
+      # Turns v4 reasoning off (blank => send no parameter). Documented as
+      # tunable without a deploy, which is only true if it is forwarded.
+      - DEEPSEEK_REASONING_EFFORT=${DEEPSEEK_REASONING_EFFORT:-}
+      - DEEPSEEK_BALANCE_URL=${DEEPSEEK_BALANCE_URL:-}
+      # Owner API-balance card: the Claude top-up is entered in /admin, but
+      # the env path is documented as an alternative and must actually work.
+      - DEEPSEEK_LOW_BALANCE=${DEEPSEEK_LOW_BALANCE:-}
+      - ANTHROPIC_TOPUP_USD=${ANTHROPIC_TOPUP_USD:-}
+      - ANTHROPIC_TOPUP_SINCE=${ANTHROPIC_TOPUP_SINCE:-}
+      - ANTHROPIC_WARN_PCT=${ANTHROPIC_WARN_PCT:-}
+      - ANTHROPIC_CRITICAL_PCT=${ANTHROPIC_CRITICAL_PCT:-}
+      # Optional shared cache (services/cache.py). Blank => in-process store.
+      - REDIS_URL=${REDIS_URL:-}
       # Anthropic is optional fallback/configurable provider; deterministic
       # fallbacks keep the app usable when no LLM key is present.
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
