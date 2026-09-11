@@ -186,8 +186,38 @@ def fail(
 # ── exception handlers (wired in main.py) ──────────────────────────
 
 
+def _report_if_our_bug(exc: APIError) -> None:
+    """Send a 500 to Sentry. Never raises.
+
+    Registering a handler for APIError means the exception never reaches
+    Sentry's ASGI middleware, so its "auto-captures unhandled 500s" only ever
+    covered genuine crashes -- every deliberate ``raise server_error(...)``
+    (50 sites) returned a 500 to the user and was invisible in Sentry. Both
+    production bugs found in the 2026-09 sweep were dug out of container logs
+    for this reason.
+
+    500 only. This codebase defines 503 as a transient failure of a dependency
+    we do not own ("as opposed to 500 -- our bug"), and one of those, the
+    dormant weekly digest, was already paging ~30 times a month before it was
+    filtered out by type. Reporting every 5xx would rebuild that flood and
+    train everyone to ignore the stream.
+    """
+    if exc.status != 500:
+        return
+    try:
+        import sentry_sdk
+
+        # A no-op when Sentry was never initialised (dev / CI / no DSN).
+        with sentry_sdk.push_scope() as scope:
+            scope.set_tag("error_code", exc.code)
+            sentry_sdk.capture_exception(exc)
+    except Exception:  # noqa: BLE001 - reporting must never break the response
+        pass
+
+
 async def api_error_handler(request: Request, exc: APIError) -> JSONResponse:
     """Catch every ``raise APIError(...)`` and emit the envelope."""
+    _report_if_our_bug(exc)
     return fail(exc, request=request)
 
 
@@ -203,6 +233,9 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
         code=_status_to_code(exc.status_code),
         message=str(exc.detail) if exc.detail else "Request failed.",
     )
+    # Same reason as api_error_handler: handling it means Sentry's middleware
+    # never sees it, so a 500 raised from a dependency would be invisible too.
+    _report_if_our_bug(err)
     return fail(err, request=request)
 
 

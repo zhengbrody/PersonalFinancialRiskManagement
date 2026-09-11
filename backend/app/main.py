@@ -123,7 +123,9 @@ def _quiet_expected_provider_noise() -> None:
 
 def _maybe_init_sentry(settings) -> None:
     """Initialise Sentry — PRODUCTION ONLY, so dev/CI/test never send events.
-    The FastAPI integration (sentry-sdk[fastapi]) auto-captures unhandled 500s.
+    The FastAPI integration (sentry-sdk[fastapi]) auto-captures unhandled
+    exceptions; deliberate ``raise server_error(...)`` 500s never reach it
+    (they are handled), so responses.api_error_handler reports those.
     Errors-only (no perf tracing) to keep cost bounded. Never raises."""
     if _running_under_pytest() or settings.environment != "production" or not settings.sentry_dsn:
         return
