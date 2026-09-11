@@ -183,7 +183,6 @@
    grids and trim the nav on narrow screens (matches the design prototype). */
 @media (max-width: 900px) {
   .mm-hero-grid,
-  .mm-demo-grid,
   .mm-pillars,
   .mm-seo-grid,
   .mm-market-page-grid,

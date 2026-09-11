@@ -141,8 +141,8 @@ export function MobileNav({ signedIn }: { signedIn: boolean }) {
               </Link>
             ) : (
               <>
-                <Link href="/signup" onClick={() => setOpen(false)} style={primaryBtn}>
-                  Create risk workspace
+                <Link href="/demo-risk-check" onClick={() => setOpen(false)} style={primaryBtn}>
+                  Try demo
                 </Link>
                 <Link href="/login" onClick={() => setOpen(false)} style={ghostBtn}>
                   Sign in

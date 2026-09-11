@@ -18,6 +18,7 @@ import { C } from "./theme";
 import { CTA } from "./primitives";
 import { MobileNav } from "./mobile-nav";
 import { NAV_LINKS } from "./nav-links";
+import styles from "./public-experience.module.css";
 
 export function MarketingShell({
   children,
@@ -82,6 +83,7 @@ function MarketingNav({ minimal }: { minimal: boolean }) {
 
   return (
     <nav
+      className={styles.nav}
       style={{
         position: "fixed",
         insetInline: 0,
@@ -125,10 +127,10 @@ function MarketingNav({ minimal }: { minimal: boolean }) {
             <CTA href="/">Open Today</CTA>
           ) : (
             <>
-              <CTA variant="ghost" href="/login">
+              <span className={styles.desktopSignIn}><CTA variant="ghost" href="/login">
                 Sign in
-              </CTA>
-              <CTA href="/signup">Get started</CTA>
+              </CTA></span>
+              <CTA href="/demo-risk-check">Try demo</CTA>
             </>
           )}
           {/* Mobile hamburger — visible <640px where .mm-nav-links collapses. */}

@@ -27,7 +27,7 @@ export function StickyMobileCTA() {
     const target = document.querySelector("[data-hero-cta]");
     if (target && "IntersectionObserver" in window) {
       const io = new IntersectionObserver(
-        ([entry]) => setPastHero(!entry.isIntersecting),
+        ([entry]) => setPastHero(!entry.isIntersecting && entry.boundingClientRect.bottom < 0),
       );
       io.observe(target);
       return () => io.disconnect();

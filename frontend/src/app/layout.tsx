@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import { Instrument_Serif } from "next/font/google";
 import "./globals.css";
 import { SiteShell } from "@/components/site-shell";
 import { MarketThemeSync } from "@/components/market-theme-sync";
@@ -39,21 +38,12 @@ const geistMono = localFont({
   variable: "--font-geist-mono",
   weight: "100 900",
 });
-// Display serif for marketing headlines only (the premium editorial look).
-// Geist stays the UI/body font.
-const instrumentSerif = Instrument_Serif({
-  weight: "400",
-  style: ["normal", "italic"],
-  subsets: ["latin"],
-  variable: "--font-display",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   applicationName: "MindMarket",
   title: {
-    default: "MindMarket | Portfolio Risk OS for Individual Investors",
+    default: "MindMarket | Understand Portfolio Risk Before Your Next Move",
     template: "%s | MindMarket",
   },
   description: PRODUCT_POSITIONING.description,
@@ -84,7 +74,7 @@ export const metadata: Metadata = {
     type: "website",
     url: "/",
     siteName: "mindmarket.app",
-    title: "MindMarket | Portfolio Risk OS",
+    title: "MindMarket | Understand Your Portfolio Risk",
     description: PRODUCT_POSITIONING.description,
     images: [
       {
@@ -97,7 +87,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "MindMarket | Portfolio Risk OS",
+    title: "MindMarket | Understand Your Portfolio Risk",
     description: PRODUCT_POSITIONING.description,
     images: ["/og.jpg?v=3"],
   },
@@ -165,7 +155,7 @@ export default function RootLayout({
   // because that script mutates the <html> class before React hydrates.
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} ${instrumentSerif.variable}`}>
+      <body className={`${geistSans.variable} ${geistMono.variable}`}>
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON_LD }} />
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
         <MarketThemeSync />

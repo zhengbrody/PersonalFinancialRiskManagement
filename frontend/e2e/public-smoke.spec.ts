@@ -11,7 +11,7 @@ test.describe("public surface (anonymous)", () => {
     // The signed-in score must be absent…
     await expect(page.getByTestId("dashboard-active-score")).toHaveCount(0);
     // …and a sign-up entry point is present (href is stable regardless of copy).
-    await expect(page.locator('a[href="/signup"]').first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Analyze my portfolio" }).first()).toBeVisible();
   });
 
   test("legal pages are reachable and money-free during the beta", async ({ page }) => {

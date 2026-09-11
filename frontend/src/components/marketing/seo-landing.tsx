@@ -267,6 +267,16 @@ export function SeoLanding({ page }: { page: SeoPage }) {
           </div>
         )}
 
+        <p style={{ margin: "24px 0", fontSize: 15 }}>
+          <Link href="/demo-risk-check" style={{ color: C.teal, textUnderlineOffset: 4 }}>
+            Put the idea into practice: try a sample portfolio comparison →
+          </Link>
+        </p>
+
+        {page.sections.map((s, i) => (
+          <Section key={i} s={s} />
+        ))}
+
         <section style={{ marginTop: 38 }}>
           <h2 style={secTitle}>From this question to a decision you can review</h2>
           <p style={{ fontSize: 15.5, lineHeight: 1.65, color: C.slate, margin: "0 0 18px" }}>
@@ -276,10 +286,6 @@ export function SeoLanding({ page }: { page: SeoPage }) {
           </p>
           <RiskWorkflow compact />
         </section>
-
-        {page.sections.map((s, i) => (
-          <Section key={i} s={s} />
-        ))}
 
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", margin: "40px 0 22px" }}>
           <CTA href={page.cta.href} lg>

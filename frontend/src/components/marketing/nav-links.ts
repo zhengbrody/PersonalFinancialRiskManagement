@@ -6,8 +6,6 @@
  */
 export const NAV_LINKS: [string, string][] = [
   ["Product", "/product"],
-  ["Workflow", "/product#workflow"],
+  ["How it works", "/product#workflow"],
   ["Learn", "/learn"],
-  ["Markets", "/markets"],
-  ["Demo", "/demo-risk-check"],
 ];

@@ -1,10 +1,6 @@
 /**
- * Shared marketing design tokens — the premium "editorial ×
- * Robinhood" palette used by every pre-login surface (landing + /product +
- * /learn + /demo-risk-check + auth pages). These are intentional MARKETING
- * LITERALS, distinct from the app's `.dark` theme tokens (globals.css), so the
- * pre-login experience renders identically regardless of the market-hours
- * theme. Centralised here so the look is changed in ONE place.
+ * Shared marketing tokens. CSS variables follow the app's light/dark theme.
+ * Public typography is deliberately aligned with the signed-in workspace.
  */
 
 import { type CSSProperties } from "react";
@@ -40,8 +36,8 @@ export const C = {
   surfaceFaint: "var(--mm-surface-faint)", // faint inset surface
 } as const;
 
-/** Instrument Serif (wired in layout.tsx as --font-display) for headlines. */
-export const display: CSSProperties = { fontFamily: "var(--font-display, Georgia, serif)" };
+/** Same legible sans-serif family as the product; metrics use mono below. */
+export const display: CSSProperties = { fontFamily: "var(--font-geist-sans, system-ui, sans-serif)" };
 /** Geist Mono, tabular — for figures. */
 export const mono: CSSProperties = {
   fontFamily: "var(--font-geist-mono, ui-monospace, monospace)",
