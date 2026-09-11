@@ -85,3 +85,6 @@ exports/
 
 # MLflow local file store (training-side experiment tracking)
 mlruns/
+
+# Box-local marker: hash of the last Caddyfile deploy-ec2.sh successfully applied
+.caddy-applied

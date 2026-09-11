@@ -26,9 +26,7 @@ free -m || true
 df -h / || true
 
 echo "== Sync repo (compose/Caddyfile/assets ride git, not images) =="
-CADDY_BEFORE="$(git rev-parse HEAD:Caddyfile 2>/dev/null || echo none)"
 git pull --ff-only origin main
-CADDY_AFTER="$(git rev-parse HEAD:Caddyfile 2>/dev/null || echo none)"
 if [ "$TAG" != "latest" ]; then
   echo "NOTE: images are pinned to ${TAG}, but compose/Caddyfile/assets were"
   echo "      just fast-forwarded to origin/main. A CONFIG regression needs a"
@@ -43,20 +41,30 @@ docker compose -f compose.split.yml up -d --no-deps --no-build backend frontend
 # The Caddyfile is a SINGLE-FILE bind mount, so the running container holds the
 # old inode: a git pull updates the file on disk and changes nothing that is
 # serving. It has to be recreated, and validating first matters because an
-# invalid Caddyfile crash-loops the container (that is exactly how the site went
-# 521 after a reboot once). Validation runs with the REAL certs mounted because
-# the committed Caddyfile pins `tls /srv/tls/origin.pem` and validation loads it.
-if [ "$CADDY_BEFORE" != "$CADDY_AFTER" ]; then
-  echo "== Caddyfile changed ($CADDY_BEFORE -> $CADDY_AFTER): validate, then recreate =="
+# invalid Caddyfile crash-loops the container (that is how the site once went
+# 521 after a reboot). Validation runs with the REAL certs mounted because the
+# committed Caddyfile pins `tls /srv/tls/origin.pem` and validation loads it.
+#
+# The trigger is a MARKER holding the hash of the last SUCCESSFULLY-applied
+# file, not a before/after diff across the pull. A diff only sees the change on
+# the run that performs the pull, so if a later step fails (an image that isn't
+# built yet, say) the new config sits on disk while caddy serves the old one --
+# and every re-run then decides "unchanged" and skips it forever.
+CADDY_MARKER=".caddy-applied"
+CADDY_NOW="$(sha256sum Caddyfile | cut -d' ' -f1)"
+CADDY_APPLIED="$(cat "$CADDY_MARKER" 2>/dev/null || echo none)"
+if [ "$CADDY_NOW" != "$CADDY_APPLIED" ]; then
+  echo "== Caddyfile not yet applied (${CADDY_APPLIED:0:12} -> ${CADDY_NOW:0:12}): validate, then recreate =="
   docker run --rm \
     -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
     -v /srv/tls:/srv/tls:ro \
     -e SITE_HOST="${SITE_HOST:-mindmarket.app}" \
     caddy:2.11-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
   docker compose -f compose.aws.yml up -d --force-recreate --no-deps caddy
+  echo "$CADDY_NOW" > "$CADDY_MARKER"
   echo "   (recreated; a lone 'no OCSP stapling ... Origin CA' warning is expected)"
 else
-  echo "== Caddyfile unchanged — not touching caddy =="
+  echo "== Caddyfile already applied — not touching caddy =="
 fi
 
 echo "== Reclaim disk (unused images; volumes/containers untouched) =="

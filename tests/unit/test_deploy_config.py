@@ -174,6 +174,20 @@ def test_deploy_script_actually_applies_a_changed_caddyfile():
         "/srv/tls" in script
     ), "validation loads the pinned Origin CA cert; without the mount it fails"
     assert "--force-recreate" in script and "caddy" in script, "must recreate caddy"
+    # The trigger must be a MARKER holding the last APPLIED hash. A
+    # before/after diff across the git pull only fires on the run that pulls, so
+    # any later failure (an image that isn't built yet, say) leaves the new
+    # config on disk, caddy serving the old one, and every re-run deciding
+    # "unchanged" -- permanently unapplied. Assert the read, the write, and the
+    # absence of the diff approach's tell-tale.
+    assert 'cat "$CADDY_MARKER"' in script, "must READ the last-applied marker"
+    assert 'echo "$CADDY_NOW" > "$CADDY_MARKER"' in script, (
+        "must WRITE the marker only after a successful recreate"
+    )
+    assert "sha256sum Caddyfile" in script, "the marker must hash the file itself"
+    assert "git rev-parse HEAD:Caddyfile" not in script, (
+        "that is the before/after-diff approach this replaced"
+    )
     commands = [ln for ln in script.splitlines() if ln.strip() and not ln.strip().startswith("#")]
     assert not any("--remove-orphans" in ln for ln in commands), (
         "--remove-orphans would delete the caddy container (it is owned by the "
