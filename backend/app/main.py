@@ -1,4 +1,4 @@
-"""FastAPI app instance for MindMarket — Phase 1.
+"""FastAPI app instance for MindMarket.
 
 Run locally::
 

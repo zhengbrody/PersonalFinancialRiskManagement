@@ -1,18 +1,22 @@
 """Runtime configuration for the FastAPI service.
 
-All settings come from environment variables. The
-``MINDMARKET_BACKEND_`` prefix keeps them in a distinct namespace
-from the Streamlit-era secrets (``ANTHROPIC_API_KEY``,
-``STRIPE_SECRET_KEY``, etc.) which the FastAPI process inherits as-is
-from the host environment when running on the same EC2.
+All settings come from environment variables, read under their plain
+names. Service-specific secrets (``ANTHROPIC_API_KEY``,
+``STRIPE_SECRET_KEY``, ``SUPABASE_*``, ...) keep the names their
+providers document, and the app's own knobs use a ``MINDMARKET_``
+prefix (``MINDMARKET_ENV``, ``MINDMARKET_LLM_PROVIDER``,
+``MINDMARKET_ALLOWED_ORIGINS``, ...). There is no
+``MINDMARKET_BACKEND_`` namespace — an earlier version of this
+docstring claimed one, but nothing ever read such a variable.
 
 Design notes
 ------------
 - We deliberately do NOT depend on ``pydantic-settings`` here so the
   backend remains importable with just ``pydantic>=2`` already in
-  ``requirements.txt``. This file is therefore a ~30-line hand-rolled
-  settings object — small enough to maintain, big enough to cover
-  the Phase-1 surface.
+  ``requirements.txt``. This file is therefore a hand-rolled settings
+  object rather than a framework one; it has grown with the service
+  and now covers the whole backend surface (auth, providers, LLM,
+  billing, feature flags, signing secrets).
 - ``allowed_origins`` is environment-aware:
     * dev / test  → http://localhost:3000 (Next.js default port)
     * production  → strict allow-list from ``MINDMARKET_ALLOWED_ORIGINS``

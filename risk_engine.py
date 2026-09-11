@@ -39,7 +39,7 @@ class RiskReport:
     max_drawdown: float = 0.0
     # Beta (relative to benchmark)
     betas: Dict[str, float] = field(default_factory=dict)
-    # Multi-factor Beta (SPY/QQQ/GLD/TLT) — per-asset beta matrix for each factor (index=ticker)
+    # Multi-factor Beta (SPY/QQQ/GLD/TLT/IWM/VTV) — per-asset beta matrix for each factor (index=ticker)
     factor_betas: Optional[pd.DataFrame] = None
     # Multi-factor Beta statistical-significance info
     factor_betas_significance: Optional[pd.DataFrame] = None
@@ -199,7 +199,7 @@ class RiskEngine:
         # ── Single-factor Beta (SPY) ──────────────────────────
         report.betas = self._compute_betas(returns, self.benchmark_ticker)
 
-        # ── Multi-factor Beta (SPY/QQQ/GLD/TLT) ───────────────
+        # ── Multi-factor Beta (SPY/QQQ/GLD/TLT/IWM/VTV) ───────
         factor_result = self._compute_multi_factor_betas(returns)
         report.factor_betas = factor_result["betas"]
         report.factor_betas_significance = factor_result["significance"]
@@ -794,7 +794,7 @@ class RiskEngine:
             "std_error": float(std_errors[1]) if len(std_errors) > 1 else np.nan,
         }
 
-    # ── Multi-factor Beta (SPY/QQQ/GLD/TLT) ───────────────────
+    # ── Multi-factor Beta (SPY/QQQ/GLD/TLT/IWM/VTV) ───────────
     def _compute_multi_factor_betas(self, returns):
         """
         Compute multi-factor beta and its statistical significance

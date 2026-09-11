@@ -6,13 +6,22 @@
 > historical/architectural context only. Much of it is stale: the open
 > "Q8–Q13" questions are long settled, the "CRITICAL" security findings are
 > resolved, and the UI is **no longer Streamlit** (the live product is a Next.js
-> 14 + TypeScript frontend on a FastAPI backend; Streamlit survives only at
-> `/legacy/*`). Where this doc says "Codex" it means the Anthropic Claude API.
+> 15 + TypeScript frontend on a FastAPI backend). **Streamlit was fully retired
+> on 2026-06-23** — nothing below it runs any more: the `app` container was
+> deleted from `compose.aws.yml`, the `/legacy/*` and `/_stcore/*` routes were
+> removed from the `Caddyfile` (such requests now 404 through the Next.js
+> catch-all), and the backend no longer depends on Streamlit at all. Where this
+> doc says "Codex" it means the LLM backend — today that is DeepSeek by default,
+> with the Anthropic Claude API as the alternate.
 >
 > **For current state, see:**
 > - `README.md` — live project overview
 > - `TECH_STACK.md` — current split-stack technology stack (Next.js + FastAPI primary)
-> - `CLAUDE.md` — authoritative, continuously-updated project context & decision log
+> - `docs/` — operational runbooks, ML model card, data-confidence and CI contracts
+>
+> (The owner keeps a detailed running session log locally in an untracked
+> `CLAUDE.md`; it is gitignored and is **not** part of any clone, so don't send
+> readers there.)
 >
 > _Original snapshot below, unedited:_
 

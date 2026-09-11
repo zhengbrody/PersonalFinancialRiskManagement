@@ -16,7 +16,7 @@ The platform runs on a **split stack**: a Next.js + TypeScript frontend (the pri
 UI) talking to a FastAPI + Pydantic backend. It began as a Streamlit app, which was
 **fully retired in 2026-06** once every surface had been ported to the split stack.
 
-**Scale**: ~570 backend tests + ~265 frontend tests + ~850 legacy-engine tests | 10+
+**Scale**: 1,342 backend tests + 590 frontend tests + 869 legacy-engine tests + 74 Playwright E2E | 10+
 external API integrations | envelope-shaped `{data, error, meta}` API | English-only UI
 
 ---
@@ -35,7 +35,7 @@ internet → Cloudflare → Caddy :80/443 ─┬─► /          → Next.js   
 
 | Tier | Technology | Role |
 |------|-----------|------|
-| **Frontend (primary)** | Next.js 14 (App Router) + TypeScript + Tailwind + shadcn-style primitives + Recharts | The live UI at mindmarket.app — standalone output, SSR/SEO, market-synced theme |
+| **Frontend (primary)** | Next.js 15 (App Router) + TypeScript + Tailwind + shadcn-style primitives + Recharts | The live UI at mindmarket.app — standalone output, SSR/SEO, market-synced theme |
 | **Backend (API)** | FastAPI (Python 3.12) + Pydantic v2 | Envelope-shaped `{data, error, meta}` endpoints; reuses the quant engine verbatim |
 | **MCP server** | Anthropic MCP (stdio) | 10 tools exposing scoring / market / research / portfolio-risk to Claude |
 
@@ -54,7 +54,7 @@ internet → Cloudflare → Caddy :80/443 ─┬─► /          → Next.js   
 
 | Skill | Implementation |
 |-------|---------------|
-| **Monte Carlo VaR/CVaR** | 5,000-50,000 path simulation for Value-at-Risk and Expected Shortfall (95th/99th percentile) |
+| **Monte Carlo VaR/CVaR** | Fixed 10,000-path simulation for Value-at-Risk and Expected Shortfall (95th/99th percentile) — `risk_engine.py` and `libs/mindmarket_core/var.py` both default to 10,000 and no live caller overrides it (the adjustable path count was a Streamlit-sidebar control, retired with that UI) |
 | **EWMA Covariance** | Exponentially-weighted moving average (lambda=0.94) for dynamic correlation modeling |
 | **Multi-Factor Beta Analysis** | OLS regression against SPY, QQQ, GLD, TLT, IWM, VTV with statistical significance (t-stats, p-values, R-squared) |
 | **Efficient Frontier** | Markowitz portfolio optimization via `scipy.optimize.minimize` (min variance, max Sharpe) |
@@ -87,11 +87,15 @@ internet → Cloudflare → Caddy :80/443 ─┬─► /          → Next.js   
 
 ## 3. Frontend Application Development — Next.js
 
-### UI (primary) — Next.js 14 + TypeScript
-- App Router with standalone output; ~14 public + authed routes
-  (`/`, `/score`, `/risk`, `/scenarios`, `/quant`, `/research`, `/markets`,
-  `/copilot`, `/institutions`, `/portfolios`, `/pricing`, `/settings`, `/admin`,
-  `/learn/*`, `/product`).
+### UI (primary) — Next.js 15 + TypeScript
+- App Router with standalone output; **40 route segments** (`page.tsx` files).
+  Authed cockpit: **`/analyze`** (the primary signed-in surface — a five-stage
+  URL-addressable workspace), plus `/score`, `/risk`, `/scenarios`, `/quant`,
+  `/research`, `/markets`, `/copilot`, `/institutions`, `/portfolios`,
+  `/settings`, `/admin`. Public/SEO: `/`, `/product`, `/learn/*`,
+  `/resources`, `/risk-today`, `/methodology/health-score`,
+  `/methodology/regime-model`, `/demo-risk-check`, `/share/risk-card`,
+  `/legal/*`, `/pricing` (billing UI hidden during free beta).
 - Tailwind CSS + shadcn-style primitives (Button / Card / Input / Tabs / DataTable /
   ScoreGauge / KPI / Badge).
 - **Recharts** for all data visualization (time-series, bar, donut, sparkline, payoff).
@@ -105,7 +109,8 @@ internet → Cloudflare → Caddy :80/443 ─┬─► /          → Next.js   
   intent-routed structured Q&A.
 
 ### Backend Application — FastAPI + Pydantic v2
-- 16 endpoints, all envelope-shaped `{data, error, meta}`; per-route JWT dependency.
+- **89 paths / 98 operations** across 23 routers (measured from the committed
+  `openapi.json`), all envelope-shaped `{data, error, meta}`; per-route JWT dependency.
 - Supabase RLS JWT forwarding; fail-closed auth (503 on JWKS outage, never silent
   downgrade).
 - Reuses the legacy quant engine modules verbatim — one source of truth for the math.
@@ -123,9 +128,8 @@ internet → Cloudflare → Caddy :80/443 ─┬─► /          → Next.js   
 
 | Technology | Usage |
 |-----------|-------|
-| **Anthropic Claude API** (primary) | Risk briefing, market sentiment, scenario narrative, ticker verdict, Copilot — Sonnet/Haiku routing by token budget |
-| **DeepSeek API** (via OpenAI client) | Alternative LLM backend; default provider in some configs (real `/user/balance` metering) |
-| **Ollama** (local dev) | Local inference for development (deepseek-r1:14b), auto-detected via localhost probe |
+| **DeepSeek API** (default, via the OpenAI client) | `MINDMARKET_LLM_PROVIDER` defaults to `deepseek` (model `deepseek-v4-flash`, reasoning disabled) — risk briefing, market sentiment, scenario narrative, ticker verdict, Copilot. Real `/user/balance` metering feeds the owner dashboard |
+| **Anthropic Claude API** (alternate) | Swap in with `MINDMARKET_LLM_PROVIDER=anthropic`, no code change — Sonnet/Haiku routing by token budget. These two are the only backends `services/llm_client.py` implements |
 | **Deterministic boundary** | `build_skeleton()` derives severity/findings/actions in pure Python; the LLM only **rephrases** into JSON. No-key / quota / bad-JSON → deterministic template. The model never originates a number. |
 | **Grounded attribution** | Every AI answer ships `grounded_in` / source-labeled evidence; figures cite the engine output or a named data provider. |
 | **Forced reply language** | Copilot detects a Chinese question (deterministic CJK heuristic) and forces a Chinese LLM reply; the **UI itself is English-only**. |
@@ -137,8 +141,8 @@ internet → Cloudflare → Caddy :80/443 ─┬─► /          → Next.js   
 
 | Component | Detail |
 |-----------|--------|
-| **Data Sources** | Yahoo Finance (yfinance — bulk workhorse), Financial Modeling Prep (FMP — fundamentals/analyst/peers), Massive (Polygon-style EOD/history fallback), FRED + US Treasury (macro), SEC EDGAR (13F / Form-4), CNN Fear & Greed, RSS feeds |
-| **Provider strategy** | Smart hybrid: yfinance for bulk prices; FMP primary for fundamentals; Massive fallback fills gaps; each domain uses its strongest source, with provenance shown everywhere |
+| **Data Sources** | Massive (Polygon-style — primary for US prices/OHLC/history), Yahoo Finance (yfinance — free fallback that fills whatever Massive doesn't return), Financial Modeling Prep (FMP — fundamentals/analyst/peers), FRED + US Treasury (macro), SEC EDGAR (13F / Form-4), CNN Fear & Greed, RSS feeds |
+| **Provider strategy** | Registry-declared roles (`services/providers/registry.py`): Massive primary for prices, FMP primary for fundamentals, FRED/Treasury for macro, SEC for filings — **yfinance is FALLBACK only**. `market_data.get_price_history` tries Massive first when configured and lets yfinance fill the remainder; every figure carries its actual source |
 | **Data Pipeline** | Per-ticker error isolation, multi-point data-quality validation; everything fail-soft (a provider blip degrades to a fallback, never a 5xx) |
 | **Caching** | In-process TTL caches per domain (price / history / fundamentals / macro) |
 | **Data Validation** | Min data points, missing-rate, negative-price, extreme-return and suspension detection; finite-guards on all serialized numbers |
@@ -167,15 +171,18 @@ internet → Cloudflare → Caddy :80/443 ─┬─► /          → Next.js   
 
 | Tool | Usage |
 |------|-------|
-| **pytest** | ~430 backend tests + ~990 legacy-engine unit/integration tests |
-| **Vitest** | ~230 frontend tests (React Testing Library) |
+| **pytest** | 1,342 backend tests + 869 legacy-engine unit/integration tests |
+| **Vitest** | 590 frontend tests (React Testing Library) |
 | **tsc / ESLint** | Strict TypeScript type-checking + linting on the frontend |
 | **Black / Ruff** | Python formatting (100-char) + fast linting (pycodestyle, pyflakes, isort) |
 | **MyPy** | Static type checking on core modules |
 | **pre-commit** | Git hooks: black, ruff, trailing whitespace, YAML check, large-file prevention |
 
+| **Playwright** | 74 E2E tests (mocked-API suite, run on both a desktop and a Pixel-7 mobile project) + a gated nightly real-auth smoke against production |
+
 > Test counts are measured, not hardcoded: `python -m pytest backend/tests/ --collect-only -q`
-> (backend), `npx vitest list` (frontend), `python -m pytest tests/ --collect-only -q` (legacy).
+> (backend), `npx vitest list` (frontend), `python -m pytest tests/ --collect-only -q` (legacy),
+> `npx playwright test --list` (E2E).
 
 ---
 
@@ -188,7 +195,7 @@ internet → Cloudflare → Caddy :80/443 ─┬─► /          → Next.js   
 | **GitHub Actions CI/CD** | Builds frontend + backend images on GH runners → pushes to **GHCR** (`ghcr.io/zhengbrody/mindmarket-{frontend,backend}`); runs pytest / vitest / black / ruff / tsc / eslint |
 | **Pull-only deploys** | EC2 pulls prebuilt images from GHCR (never builds on-box — the t3.micro is RAM-bound); zero-build, fast rollback |
 | **Cloudflare** | DNS + CDN + edge WAF/rate-limiting in front of EC2; origin IP hidden, AWS SG locked to Cloudflare IP ranges |
-| **AWS EC2 + Caddy + Let's Encrypt** | Production at `https://mindmarket.app` (t3.micro + 1 GB swap) |
+| **AWS EC2 + Caddy + Cloudflare Origin CA** | Production at `https://mindmarket.app` (t3.micro + 1 GB swap). Origin TLS is a 15-year Cloudflare Origin CA cert pinned via `tls` in the `Caddyfile` — it retired ACME behind the proxy; the old Let's Encrypt cert survives only as an unused rollback in the `caddy_data` volume |
 
 ---
 
@@ -243,11 +250,11 @@ internet → Cloudflare → Caddy :80/443 ─┬─► /          → Next.js   
 
 | API | Purpose |
 |-----|---------|
-| Yahoo Finance (yfinance) | Historical prices, fundamentals, news, volume (bulk workhorse) |
-| Anthropic Claude | AI narratives, Copilot, ticker verdict (primary LLM) |
-| DeepSeek | Alternative LLM inference + live balance metering |
+| Massive (Polygon-style) | **Primary** US EOD price + daily history |
+| Yahoo Finance (yfinance) | **Fallback** prices + free fundamentals, news, volume fill-in |
+| DeepSeek | AI narratives, Copilot, ticker verdict (**default LLM**) + live balance metering |
+| Anthropic Claude | Alternate LLM backend, selected by `MINDMARKET_LLM_PROVIDER=anthropic` |
 | Financial Modeling Prep (FMP) | Fundamentals, ratios, growth, analyst consensus, peers, insider, news |
-| Massive (Polygon-style) | EOD price + daily history fallback |
 | FRED + US Treasury | Macro series + yield curve (free) |
 | SEC EDGAR | 13F institutional filings + Form-4 insider transactions |
 | CNN Fear & Greed | Market sentiment index |
@@ -264,7 +271,7 @@ internet → Cloudflare → Caddy :80/443 ─┬─► /          → Next.js   
 - **Adapter Pattern**: thin fail-soft `services/*` wrappers over each data provider + the legacy engine.
 - **Skeleton → LLM template**: deterministic `build_skeleton()` + `render_template()` fallback;
   the LLM only rephrases (risk-explain / options-explain / verdict).
-- **Strategy Pattern**: multiple LLM backends (Claude / DeepSeek / Ollama) unified via a stateless client.
+- **Strategy Pattern**: both LLM backends (DeepSeek default / Claude alternate) unified behind one stateless client, selected by env var.
 - **Provider Pattern**: `ProviderResult{data, source, as_of, coverage, warnings}` carries provenance end-to-end.
 - **Separation of Concerns**: Frontend (Next.js/TS) / API (FastAPI) / Domain math (engine) /
   Data layer (services/providers) / Cross-cutting (auth, billing, logging, telemetry).
@@ -277,5 +284,5 @@ internet → Cloudflare → Caddy :80/443 ─┬─► /          → Next.js   
 2. **Quantitative Finance**: VaR, Monte Carlo, EWMA, Markowitz optimization, multi-factor models, options Greeks, regime detection.
 3. **AI with a hard truth boundary**: the LLM never invents a number — it rephrases deterministic engine output, with grounded attribution and per-call telemetry.
 4. **Data engineering**: multi-source smart-hybrid ETL with provenance, fail-soft adapters, per-domain caching.
-5. **Production-ready**: GHCR image pipeline + pull-only deploys, Cloudflare + Caddy + Let's Encrypt, Sentry + PostHog observability, ~430 + ~230 + ~990 tests.
+5. **Production-ready**: GHCR image pipeline + pull-only deploys, Cloudflare + Caddy + a pinned Cloudflare Origin CA cert, Sentry + PostHog observability, 1,342 + 590 + 869 tests plus 74 Playwright E2E.
 6. **Full-stack engineering**: typed end-to-end (Pydantic v2 ↔ zod / openapi-typescript), Supabase multi-tenancy + RLS, Stripe billing, MCP server.
