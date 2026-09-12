@@ -1766,6 +1766,10 @@ def answer(
         lang = _lang_code(message)
         support, bodies = describe_task(task, topic, lang)
         support.candidate_comparison_available = get_settings().async_analysis_enabled
+        support.cash_secured_put_available = get_settings().cash_secured_put_enabled and topic in {
+            "put",
+            "margin",
+        }
         dc = _answer_confidence([], None)
         sections = _build_sections(
             intent="explain_metric" if task.kind == "explanation" else "action_plan",

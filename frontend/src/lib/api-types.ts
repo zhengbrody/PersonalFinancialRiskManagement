@@ -238,6 +238,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/copilot/cash-secured-put": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Scenario */
+        post: operations["scenario_api_v1_copilot_cash_secured_put_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/copilot/chat": {
         parameters: {
             query?: never;
@@ -2453,6 +2470,117 @@ export interface components {
             /** Ticker */
             ticker: string;
         };
+        /** CashSecuredPutRequest */
+        CashSecuredPutRequest: {
+            /** Assumed Spot */
+            assumed_spot: number;
+            /** Cash Buffer */
+            cash_buffer: number;
+            /** Confirmed */
+            confirmed: boolean;
+            /** Contracts */
+            contracts: number;
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
+            /**
+             * Expiry
+             * Format: date
+             */
+            expiry: string;
+            /** Fees Total */
+            fees_total: number;
+            /** Gross Settled Usd Cash Confirmed */
+            gross_settled_usd_cash_confirmed: boolean;
+            /** Other Reserved Cash */
+            other_reserved_cash: number;
+            /** Premium Per Share */
+            premium_per_share: number;
+            /** Standard Contract Confirmed */
+            standard_contract_confirmed: boolean;
+            /** Strike */
+            strike: number;
+            /** Underlying */
+            underlying: string;
+        };
+        /** CashSecuredPutResult */
+        CashSecuredPutResult: {
+            /** Assignment Notional */
+            assignment_notional: number;
+            assumptions: components["schemas"]["CashSecuredPutRequest"];
+            /** Best Expiry Pnl */
+            best_expiry_pnl: number;
+            /** Breakeven */
+            breakeven: number;
+            /**
+             * Computed At
+             * Format: date-time
+             */
+            computed_at: string;
+            /** Existing Put Reserve */
+            existing_put_reserve: number;
+            /**
+             * Funding Status
+             * @enum {string}
+             */
+            funding_status: "covered_under_assumptions" | "insufficient_cash";
+            /** Gross Premium */
+            gross_premium: number;
+            /** Initial Incremental Equity */
+            initial_incremental_equity: number;
+            /**
+             * Input Basis
+             * @default user_hypothesis_not_live_quote
+             * @constant
+             */
+            input_basis?: "user_hypothesis_not_live_quote";
+            /** Limitations */
+            limitations: string[];
+            /** Maximum Loss */
+            maximum_loss: number;
+            /**
+             * Methodology Version
+             * @default cash-secured-put-v1
+             * @constant
+             */
+            methodology_version?: "cash-secured-put-v1";
+            /** Net Premium */
+            net_premium: number;
+            /** No Action Free Cash */
+            no_action_free_cash: number;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Pre Trade Funding Gap */
+            pre_trade_funding_gap: number;
+            /** Recorded Cash */
+            recorded_cash: number;
+            /**
+             * Result Id
+             * Format: uuid
+             */
+            result_id: string;
+            /**
+             * Save Available
+             * @default false
+             * @constant
+             */
+            save_available?: false;
+            /** Scenarios */
+            scenarios: components["schemas"]["PutExpiryScenario"][];
+            /** Snapshot Digest */
+            snapshot_digest: string;
+            /**
+             * Source Url
+             * @default https://www.optionseducation.org/strategies/all-strategies/cash-secured-put
+             * @constant
+             */
+            source_url?: "https://www.optionseducation.org/strategies/all-strategies/cash-secured-put";
+        };
         /**
          * ChangeAttribution
          * @description The score move split into MARKET / HOLDING / DATA-QUALITY buckets.
@@ -3337,6 +3465,11 @@ export interface components {
              */
             candidate_comparison_available?: boolean;
             /**
+             * Cash Secured Put Available
+             * @default false
+             */
+            cash_secured_put_available?: boolean;
+            /**
              * Coverage
              * @enum {string}
              */
@@ -3507,6 +3640,14 @@ export interface components {
         /** Envelope[CandidateRunOut] */
         Envelope_CandidateRunOut_: {
             data?: components["schemas"]["CandidateRunOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[CashSecuredPutResult] */
+        Envelope_CashSecuredPutResult_: {
+            data?: components["schemas"]["CashSecuredPutResult"] | null;
             error?: components["schemas"]["ErrorOut"] | null;
             meta: components["schemas"]["MetaOut"];
         } & {
@@ -5813,6 +5954,29 @@ export interface components {
             /** Stress */
             stress?: components["schemas"]["StressRowOut"][];
         };
+        /** PutExpiryScenario */
+        PutExpiryScenario: {
+            /** Assumes Assignment */
+            assumes_assignment: boolean;
+            /** Candidate Incremental Pnl */
+            candidate_incremental_pnl: number;
+            /** Cash After Settlement */
+            cash_after_settlement: number;
+            /** Free Cash After Reserves */
+            free_cash_after_reserves: number;
+            /** Funding Gap After Reserves */
+            funding_gap_after_reserves: number;
+            /**
+             * No Action Incremental Pnl
+             * @default 0
+             * @constant
+             */
+            no_action_incremental_pnl?: 0;
+            /** Shares Acquired */
+            shares_acquired: number;
+            /** Underlying Price */
+            underlying_price: number;
+        };
         /** QualityBlock */
         QualityBlock: {
             /** Current Ratio */
@@ -8077,6 +8241,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_CopilotAnswer_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scenario_api_v1_copilot_cash_secured_put_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CashSecuredPutRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_CashSecuredPutResult_"];
                 };
             };
             /** @description Validation Error */

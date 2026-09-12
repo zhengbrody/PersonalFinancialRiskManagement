@@ -102,6 +102,10 @@ class Settings:
         default_factory=lambda: _env_str("MINDMARKET_ASYNC_ANALYSIS_ENABLED", "false").lower()
         == "true"
     )
+    cash_secured_put_enabled: bool = field(
+        default_factory=lambda: _env_str("MINDMARKET_CASH_SECURED_PUT_ENABLED", "false").lower()
+        == "true"
+    )
     decision_support_enabled: bool = field(
         default_factory=lambda: _env_str("MINDMARKET_DECISION_SUPPORT_ENABLED", "false").lower()
         == "true"

@@ -1417,6 +1417,241 @@
         "title": "CashEquivalentHoldingOut",
         "type": "object"
       },
+      "CashSecuredPutRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assumed_spot": {
+            "exclusiveMaximum": 1000000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Assumed Spot",
+            "type": "number"
+          },
+          "cash_buffer": {
+            "maximum": 100000000.0,
+            "minimum": 0.0,
+            "multipleOf": 0.01,
+            "title": "Cash Buffer",
+            "type": "number"
+          },
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "contracts": {
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Contracts",
+            "type": "integer"
+          },
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          },
+          "expiry": {
+            "format": "date",
+            "title": "Expiry",
+            "type": "string"
+          },
+          "fees_total": {
+            "maximum": 100000.0,
+            "minimum": 0.0,
+            "multipleOf": 0.01,
+            "title": "Fees Total",
+            "type": "number"
+          },
+          "gross_settled_usd_cash_confirmed": {
+            "title": "Gross Settled Usd Cash Confirmed",
+            "type": "boolean"
+          },
+          "other_reserved_cash": {
+            "maximum": 100000000.0,
+            "minimum": 0.0,
+            "multipleOf": 0.01,
+            "title": "Other Reserved Cash",
+            "type": "number"
+          },
+          "premium_per_share": {
+            "exclusiveMinimum": 0.0,
+            "multipleOf": 0.01,
+            "title": "Premium Per Share",
+            "type": "number"
+          },
+          "standard_contract_confirmed": {
+            "title": "Standard Contract Confirmed",
+            "type": "boolean"
+          },
+          "strike": {
+            "exclusiveMaximum": 100000.0,
+            "exclusiveMinimum": 0.0,
+            "multipleOf": 0.01,
+            "title": "Strike",
+            "type": "number"
+          },
+          "underlying": {
+            "pattern": "^[A-Z]{1,6}$",
+            "title": "Underlying",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_portfolio_id",
+          "underlying",
+          "expiry",
+          "strike",
+          "premium_per_share",
+          "assumed_spot",
+          "contracts",
+          "fees_total",
+          "other_reserved_cash",
+          "cash_buffer",
+          "confirmed",
+          "gross_settled_usd_cash_confirmed",
+          "standard_contract_confirmed"
+        ],
+        "title": "CashSecuredPutRequest",
+        "type": "object"
+      },
+      "CashSecuredPutResult": {
+        "additionalProperties": false,
+        "properties": {
+          "assignment_notional": {
+            "title": "Assignment Notional",
+            "type": "number"
+          },
+          "assumptions": {
+            "$ref": "#/components/schemas/CashSecuredPutRequest"
+          },
+          "best_expiry_pnl": {
+            "title": "Best Expiry Pnl",
+            "type": "number"
+          },
+          "breakeven": {
+            "title": "Breakeven",
+            "type": "number"
+          },
+          "computed_at": {
+            "format": "date-time",
+            "title": "Computed At",
+            "type": "string"
+          },
+          "existing_put_reserve": {
+            "title": "Existing Put Reserve",
+            "type": "number"
+          },
+          "funding_status": {
+            "enum": [
+              "covered_under_assumptions",
+              "insufficient_cash"
+            ],
+            "title": "Funding Status",
+            "type": "string"
+          },
+          "gross_premium": {
+            "title": "Gross Premium",
+            "type": "number"
+          },
+          "initial_incremental_equity": {
+            "title": "Initial Incremental Equity",
+            "type": "number"
+          },
+          "input_basis": {
+            "const": "user_hypothesis_not_live_quote",
+            "default": "user_hypothesis_not_live_quote",
+            "title": "Input Basis",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "maximum_loss": {
+            "title": "Maximum Loss",
+            "type": "number"
+          },
+          "methodology_version": {
+            "const": "cash-secured-put-v1",
+            "default": "cash-secured-put-v1",
+            "title": "Methodology Version",
+            "type": "string"
+          },
+          "net_premium": {
+            "title": "Net Premium",
+            "type": "number"
+          },
+          "no_action_free_cash": {
+            "title": "No Action Free Cash",
+            "type": "number"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "pre_trade_funding_gap": {
+            "title": "Pre Trade Funding Gap",
+            "type": "number"
+          },
+          "recorded_cash": {
+            "title": "Recorded Cash",
+            "type": "number"
+          },
+          "result_id": {
+            "format": "uuid",
+            "title": "Result Id",
+            "type": "string"
+          },
+          "save_available": {
+            "const": false,
+            "default": false,
+            "title": "Save Available",
+            "type": "boolean"
+          },
+          "scenarios": {
+            "items": {
+              "$ref": "#/components/schemas/PutExpiryScenario"
+            },
+            "title": "Scenarios",
+            "type": "array"
+          },
+          "snapshot_digest": {
+            "title": "Snapshot Digest",
+            "type": "string"
+          },
+          "source_url": {
+            "const": "https://www.optionseducation.org/strategies/all-strategies/cash-secured-put",
+            "default": "https://www.optionseducation.org/strategies/all-strategies/cash-secured-put",
+            "title": "Source Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result_id",
+          "portfolio_id",
+          "computed_at",
+          "snapshot_digest",
+          "assumptions",
+          "recorded_cash",
+          "existing_put_reserve",
+          "no_action_free_cash",
+          "assignment_notional",
+          "gross_premium",
+          "net_premium",
+          "initial_incremental_equity",
+          "pre_trade_funding_gap",
+          "funding_status",
+          "best_expiry_pnl",
+          "maximum_loss",
+          "breakeven",
+          "scenarios",
+          "limitations"
+        ],
+        "title": "CashSecuredPutResult",
+        "type": "object"
+      },
       "ChangeAttribution": {
         "description": "The score move split into MARKET / HOLDING / DATA-QUALITY buckets.\n\nExact identity: ``score_delta = data_quality_driven + structural`` where\n``structural = \u0394base`` (the raw dimension-based score, pre-dampening) and\n``data_quality_driven = \u0394(final \u2212 base)`` (the change in how much data\nquality/dampening pulled the score toward neutral). On a day the book didn't\nchange, ``structural`` is entirely market-driven (same holdings, prices\nmoved). On a day the user traded, market and holding aren't separable\nwithout a full-book counterfactual, so they're reported jointly in\n``combined_market_holdings`` with ``separable=False`` \u2014 an honest split, not\na fabricated decimal. The data-quality bucket is the concrete separation of\n'your portfolio changed' from 'the data behind it changed'.",
         "properties": {
@@ -3754,6 +3989,11 @@
             "title": "Candidate Comparison Available",
             "type": "boolean"
           },
+          "cash_secured_put_available": {
+            "default": false,
+            "title": "Cash Secured Put Available",
+            "type": "boolean"
+          },
           "coverage": {
             "enum": [
               "unsupported",
@@ -4315,6 +4555,39 @@
           "meta"
         ],
         "title": "Envelope[CandidateRunOut]",
+        "type": "object"
+      },
+      "Envelope_CashSecuredPutResult_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CashSecuredPutResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[CashSecuredPutResult]",
         "type": "object"
       },
       "Envelope_ChangeComparison_": {
@@ -11527,6 +11800,56 @@
         "title": "PublicRiskCheckOut",
         "type": "object"
       },
+      "PutExpiryScenario": {
+        "additionalProperties": false,
+        "properties": {
+          "assumes_assignment": {
+            "title": "Assumes Assignment",
+            "type": "boolean"
+          },
+          "candidate_incremental_pnl": {
+            "title": "Candidate Incremental Pnl",
+            "type": "number"
+          },
+          "cash_after_settlement": {
+            "title": "Cash After Settlement",
+            "type": "number"
+          },
+          "free_cash_after_reserves": {
+            "title": "Free Cash After Reserves",
+            "type": "number"
+          },
+          "funding_gap_after_reserves": {
+            "title": "Funding Gap After Reserves",
+            "type": "number"
+          },
+          "no_action_incremental_pnl": {
+            "const": 0,
+            "default": 0,
+            "title": "No Action Incremental Pnl",
+            "type": "integer"
+          },
+          "shares_acquired": {
+            "title": "Shares Acquired",
+            "type": "integer"
+          },
+          "underlying_price": {
+            "title": "Underlying Price",
+            "type": "number"
+          }
+        },
+        "required": [
+          "underlying_price",
+          "assumes_assignment",
+          "candidate_incremental_pnl",
+          "shares_acquired",
+          "cash_after_settlement",
+          "free_cash_after_reserves",
+          "funding_gap_after_reserves"
+        ],
+        "title": "PutExpiryScenario",
+        "type": "object"
+      },
       "QualityBlock": {
         "properties": {
           "current_ratio": {
@@ -17678,6 +18001,47 @@
           }
         },
         "summary": "Copilot 2.0 \u2014 intent-routed, evidence-grounded answer",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/cash-secured-put": {
+      "post": {
+        "operationId": "scenario_api_v1_copilot_cash_secured_put_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CashSecuredPutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CashSecuredPutResult_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scenario",
         "tags": [
           "copilot"
         ]

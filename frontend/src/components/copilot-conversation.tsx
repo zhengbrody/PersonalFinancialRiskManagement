@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { CopilotRecovery } from "@/components/copilot-recovery";
+import { CopilotPut } from "@/components/copilot-put";
 import { CopilotCandidates } from "@/components/copilot-candidates";
 import { CopilotAnswerCard } from "@/components/copilot-answer";
 import { CopilotRiskCheck } from "@/components/copilot-risk-check";
@@ -204,6 +205,8 @@ function Conversation({
             {turn.status === "completed" && turn.answer && (
               <>
                 <CopilotAnswerCard answer={turn.answer} />
+                {portfolioId && turn.answer.decision_support?.cash_secured_put_available &&
+                  <CopilotPut key={portfolioId} token={token} portfolioId={portfolioId} />}
                 {portfolioId && turn.answer.decision_support?.candidate_comparison_available &&
                   ["candidate_request", "clarification"].includes(turn.answer.decision_support.task.kind) &&
                   <CopilotCandidates token={token} portfolioId={portfolioId} scope={`${scope}:${turn.id}`} />}

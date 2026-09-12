@@ -116,11 +116,11 @@ Local SQL tests do not substitute for that evidence.
 Still outside this slice: free-form multi-turn task state, independent resumable tool steps,
 Research retrieval/claim linking, new hypothetical option legs, assignment and
 broker buying-power calculations, option strategy modification, cross-time
-versioned review and scheduled monitoring. E and the new parts of F are not
-implemented. Existing user-confirmed comparison/save functionality is reused.
+versioned review and scheduled monitoring. The initial E cash-secured-put slice is recorded below; leveraged/combined
+option scenarios and the new parts of F remain unimplemented. Existing user-confirmed comparison/save functionality is reused.
 
-The first sell-Put question now leads to a scoped funding comparison. It does
-**not yet** answer whether a new put is affordable or suitable after assignment.
+The first sell-Put question now leads to a scoped funding comparison. The first E slice below adds conditional cash-funding arithmetic for a standard
+new put. It does not establish suitability or support financing/combined positions.
 Do not present this slice as the complete sell-Put decision loop.
 
 
@@ -214,3 +214,70 @@ D validation:
   gate passed. Browser screenshots were inspected, including the mobile layout.
 - No live provider call, hosted database migration, deployment or paid training
   job was performed. The implementation branch remains default-off.
+
+
+## E follow-up: hypothetical cash-secured Put (2026-09-12)
+
+The existing conversation conditionally exposes a structured Put form.
+POST /api/v1/copilot/cash-secured-put is authenticated and read-only. Both
+MINDMARKET_DECISION_SUPPORT_ENABLED and MINDMARKET_CASH_SECURED_PUT_ENABLED
+must be true; both default off, including Compose forwarding. No migration,
+quote subscription, order, stored job or plan-save capability is added.
+
+Inputs are user-confirmed hypothetical underlying, expiry, spot, strike,
+per-share premium, whole contracts, total estimated fees, other cash holds and
+cash buffer. Separate confirmations establish standard unadjusted USD 100-share
+physical delivery and that recorded cash is gross settled USD cash BEFORE holds.
+The app cannot independently verify settlement, open orders or contract listing.
+
+The initial supported account has zero financing debt, identified nonnegative
+USD cash/stock/ETF positions and, optionally, fully described existing short puts.
+Unconfirmed, adjusted, near-expiry or other option legs stop the funding
+calculation. Long options may create exercise/delivery obligations; their
+protection is never removed or silently credited as available collateral.
+Non-USD assets, short securities and unsupported asset types also stop it.
+
+- Full assignment payment = strike × contracts × 100.
+- Existing short puts reserve their full strike payment without hedge offsets;
+  those reserves remain locked across displayed scenarios. Other cash holds and
+  the requested buffer are additional deductions. Treasury ETFs are not cash.
+- Coverage requires full strike funding BEFORE new premium. A premium receipt
+  cannot hide a pre-trade shortfall. Coverage is conditional arithmetic, never
+  a broker buying-power or suitability claim.
+- Reuses options_strategies.build_strategies for exact expiry risk bounds and
+  options_analytics intrinsic value for the scenario ledger. Net premium, fees,
+  worst loss at zero, break-even and assignment cash are shown.
+- At entry, the assumed option liability offsets premium received; initial
+  incremental equity is minus fees. Premium is not immediate profit.
+- Each expiry row compares incremental P&L with zero for no new trade and shows
+  shares acquired, settlement cash, cash after retained reserves and funding gap.
+  Below-strike rows assume assignment; actual early/at-expiry exercise can differ.
+- Captured account identity/data are checked again before response. Changing
+  assumptions clears the frontend result and all confirmations. Nothing is saved.
+
+The formulas and assignment caveats were checked against the public
+[OIC cash-secured-put guide](https://www.optionseducation.org/strategies/all-strategies/cash-secured-put)
+on 2026-09-12. No article body is stored or provided to a model. The new service
+does not call a market provider or LLM.
+
+Remaining E scope: verified executable quotes/contracts, brokerage-specific
+collateral/settlement rules, leveraged funding, combined protection legs,
+exercise-event handling, existing holdings' scenario P&L and account concentration.
+The user's full “sell holdings then fund puts using margin” acceptance case is
+still not complete. Saving this new scenario and cross-time review belong to F.
+
+E validation:
+- Backend CI suite: 1473 passed, 23 skipped, coverage 88.81%; opt-in external
+  integration checks were not run for this deterministic foreground addition.
+- 27 Put checks passed after restoring eight verified mutations: consent,
+  pre-premium funding, existing collateral, entry equity, fee-inclusive loss,
+  other option obligations, final account binding and contract scaling.
+- Frontend 606 tests and TypeScript passed; lint and production Next build passed.
+  Desktop/mobile Put and candidate flows passed all four tests; after improving
+  fractional break-even display, the two Put browser checks passed again.
+- Required backend mypy: 48 schema/core files passed. Black checked all 425 Python
+  files; Ruff passed. Compose parsed successfully with the new flag default off.
+- Existing offline eval: 50 cases, 722/722 assertions, not training.
+- The mobile result screenshot was inspected. Synthetic tests use supplied
+  assumptions, never real broker orders or personal portfolio data.
+- No live quote execution, database write, deployment or model training occurred.

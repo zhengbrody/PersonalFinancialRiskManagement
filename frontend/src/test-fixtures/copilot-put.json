@@ -1,0 +1,120 @@
+{
+  "result_id": "7ce05268-0bad-4c46-b4bc-6f7a5d8a4c8e",
+  "portfolio_id": "33333333-3333-4333-8333-333333333333",
+  "computed_at": "2026-09-12T00:00:00Z",
+  "snapshot_digest": "synthetic",
+  "assumptions": {
+    "expected_portfolio_id": "33333333-3333-4333-8333-333333333333",
+    "underlying": "SPY",
+    "expiry": "2026-10-16",
+    "strike": 100.0,
+    "premium_per_share": 2.0,
+    "assumed_spot": 105.0,
+    "contracts": 1,
+    "fees_total": 1.0,
+    "other_reserved_cash": 0.0,
+    "cash_buffer": 1000.0,
+    "confirmed": true,
+    "gross_settled_usd_cash_confirmed": true,
+    "standard_contract_confirmed": true
+  },
+  "methodology_version": "cash-secured-put-v1",
+  "input_basis": "user_hypothesis_not_live_quote",
+  "recorded_cash": 11000.0,
+  "existing_put_reserve": 0.0,
+  "no_action_free_cash": 10000.0,
+  "assignment_notional": 10000.0,
+  "gross_premium": 200.0,
+  "net_premium": 199.0,
+  "initial_incremental_equity": -1.0,
+  "pre_trade_funding_gap": 0.0,
+  "funding_status": "covered_under_assumptions",
+  "best_expiry_pnl": 199.0,
+  "maximum_loss": 9801.0,
+  "breakeven": 98.01,
+  "scenarios": [
+    {
+      "underlying_price": 0.0,
+      "assumes_assignment": true,
+      "no_action_incremental_pnl": 0,
+      "candidate_incremental_pnl": -9801.0,
+      "shares_acquired": 100,
+      "cash_after_settlement": 1199.0,
+      "free_cash_after_reserves": 199.0,
+      "funding_gap_after_reserves": 0.0
+    },
+    {
+      "underlying_price": 50.0,
+      "assumes_assignment": true,
+      "no_action_incremental_pnl": 0,
+      "candidate_incremental_pnl": -4801.0,
+      "shares_acquired": 100,
+      "cash_after_settlement": 1199.0,
+      "free_cash_after_reserves": 199.0,
+      "funding_gap_after_reserves": 0.0
+    },
+    {
+      "underlying_price": 80.0,
+      "assumes_assignment": true,
+      "no_action_incremental_pnl": 0,
+      "candidate_incremental_pnl": -1801.0,
+      "shares_acquired": 100,
+      "cash_after_settlement": 1199.0,
+      "free_cash_after_reserves": 199.0,
+      "funding_gap_after_reserves": 0.0
+    },
+    {
+      "underlying_price": 98.01,
+      "assumes_assignment": true,
+      "no_action_incremental_pnl": 0,
+      "candidate_incremental_pnl": 0.0,
+      "shares_acquired": 100,
+      "cash_after_settlement": 1199.0,
+      "free_cash_after_reserves": 199.0,
+      "funding_gap_after_reserves": 0.0
+    },
+    {
+      "underlying_price": 100.0,
+      "assumes_assignment": false,
+      "no_action_incremental_pnl": 0,
+      "candidate_incremental_pnl": 199.0,
+      "shares_acquired": 0,
+      "cash_after_settlement": 11199.0,
+      "free_cash_after_reserves": 10199.0,
+      "funding_gap_after_reserves": 0.0
+    },
+    {
+      "underlying_price": 105.0,
+      "assumes_assignment": false,
+      "no_action_incremental_pnl": 0,
+      "candidate_incremental_pnl": 199.0,
+      "shares_acquired": 0,
+      "cash_after_settlement": 11199.0,
+      "free_cash_after_reserves": 10199.0,
+      "funding_gap_after_reserves": 0.0
+    },
+    {
+      "underlying_price": 115.50000000000001,
+      "assumes_assignment": false,
+      "no_action_incremental_pnl": 0,
+      "candidate_incremental_pnl": 199.0,
+      "shares_acquired": 0,
+      "cash_after_settlement": 11199.0,
+      "free_cash_after_reserves": 10199.0,
+      "funding_gap_after_reserves": 0.0
+    }
+  ],
+  "limitations": [
+    "Hypothetical standard USD 100-share physically settled equity put; contract listing, deliverables and executable quotes are not verified.",
+    "Recorded cash is assumed to be gross settled USD cash before reservations, as confirmed by the user. Broker balances and open orders are not connected.",
+    "Other reserved cash excludes the listed short-put reserves calculated here. Cash-equivalent securities are not counted as settled cash.",
+    "Full strike funding is required before new premium; existing short puts reserve gross assignment cash without hedge offsets.",
+    "Scenarios compare this new position with no new trade; existing holdings' P&L, portfolio concentration and total portfolio stress are not calculated.",
+    "New premium is offset by a new option liability at entry; it is not immediate profit or stable income.",
+    "Below-strike rows assume physical assignment; actual exercise can differ, including at-the-money or early assignment. Full strike cash may be needed before expiry.",
+    "Fees are the user's estimated total; taxes, interest, slippage, dividends and post-expiry price changes are excluded.",
+    "Funding coverage is conditional arithmetic, not broker buying power, approval, a suitability judgment or a trade recommendation."
+  ],
+  "source_url": "https://www.optionseducation.org/strategies/all-strategies/cash-secured-put",
+  "save_available": false
+}

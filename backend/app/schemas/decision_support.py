@@ -40,3 +40,4 @@ class DecisionSupport(BaseModel):
     # This envelope describes the task, not a signed calculation/save receipt.
     save_available: Literal[False] = False
     candidate_comparison_available: bool = False
+    cash_secured_put_available: bool = False
