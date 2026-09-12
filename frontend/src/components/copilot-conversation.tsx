@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { CopilotCandidates } from "@/components/copilot-candidates";
 import { CopilotAnswerCard } from "@/components/copilot-answer";
 import { CopilotRiskCheck } from "@/components/copilot-risk-check";
 import { CopilotChangeForm, CopilotChangeResult } from "@/components/copilot-change";
@@ -200,7 +201,12 @@ function Conversation({
               />
             )}
             {turn.status === "completed" && turn.answer && (
-              <CopilotAnswerCard answer={turn.answer} />
+              <>
+                <CopilotAnswerCard answer={turn.answer} />
+                {portfolioId && turn.answer.decision_support?.candidate_comparison_available &&
+                  ["candidate_request", "clarification"].includes(turn.answer.decision_support.task.kind) &&
+                  <CopilotCandidates token={token} portfolioId={portfolioId} scope={`${scope}:${turn.id}`} />}
+              </>
             )}
             {turn.kind !== "change" && ["failed", "cancelled", "interrupted"].includes(turn.status) && (
               <div

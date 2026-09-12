@@ -21,6 +21,7 @@ from pydantic import ValidationError
 
 from ..core.config import get_settings
 from ..core.responses import APIError
+from ..schemas.copilot_jobs import CandidateRunRecord
 from ..schemas.copilot_runs import RunRecord, RunSnapshot
 from ..schemas.risk_check import RiskCheck
 
@@ -41,7 +42,7 @@ def signing_key() -> bytes:
     return key
 
 
-def encode(record: RunRecord, key: bytes) -> dict:
+def encode(record: RunRecord | CandidateRunRecord, key: bytes) -> dict:
     # TEXT storage preserves exact signed bytes across PostgreSQL/JSON transports.
     try:
         raw = json.dumps(
@@ -63,7 +64,7 @@ def encode(record: RunRecord, key: bytes) -> dict:
     }
 
 
-def decode(row: dict, key: bytes, user_id: str, run_id: str) -> RunRecord:
+def decode(row: dict, key: bytes, user_id: str, run_id: str, *, record_type=RunRecord):
     try:
         raw, signature = row["record"], row["signature"]
         if not isinstance(raw, str) or len(raw.encode()) > MAX_RECORD_BYTES:
@@ -71,7 +72,7 @@ def decode(row: dict, key: bytes, user_id: str, run_id: str) -> RunRecord:
         expected = hmac.new(key, raw.encode(), hashlib.sha256).hexdigest()
         if not isinstance(signature, str) or not hmac.compare_digest(expected, signature):
             raise ValueError("Invalid signature")
-        record = RunRecord.model_validate_json(raw)
+        record = record_type.model_validate_json(raw)
         if str(record.id) != run_id or str(record.user_id) != user_id:
             raise ValueError("Invalid scope")
         for column in ("id", "user_id", "portfolio_id", "state"):

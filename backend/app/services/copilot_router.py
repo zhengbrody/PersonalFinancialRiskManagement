@@ -1737,6 +1737,49 @@ def answer(
     # route + ticker are UNTRUSTED client context. Sanitize BOTH before either
     # touches the classifier or the LLM prompt (F1): route must be a strict safe
     # internal path, ticker a valid symbol; anything else is dropped.
+    from ..core.config import get_settings
+    from .decision_support import classify_task, describe_task
+
+    decision = classify_task(message) if get_settings().decision_support_enabled else None
+    if decision is not None:
+        task, topic = decision
+        lang = _lang_code(message)
+        support, bodies = describe_task(task, topic, lang)
+        support.candidate_comparison_available = get_settings().async_analysis_enabled
+        dc = _answer_confidence([], None)
+        sections = _build_sections(
+            intent="explain_metric" if task.kind == "explanation" else "action_plan",
+            tickers=[],
+            evidence=[],
+            dc=dc,
+            lang=lang,
+            narrative={},
+        )
+        for section in sections:
+            if section.key in bodies:
+                section.markdown = bodies[section.key]
+            elif section.key == "data_confidence":
+                section.markdown = (
+                    "方法解释不验证账户数据；候选尚未计算。"
+                    if lang == "zh"
+                    else "Method explanations do not verify account data. No candidate calculation has been performed."
+                )
+            elif section.key == "simulation":
+                section.markdown = (
+                    "尚未运行模拟。" if lang == "zh" else "No simulation has been run."
+                )
+        return CopilotAnswer(
+            intent="explain_metric" if task.kind == "explanation" else "action_plan",
+            answer_markdown=_flat_from_sections(sections, lang),
+            sections=sections,
+            data_only=True,
+            conviction="none",
+            data_confidence=dc,
+            language=lang,
+            disclaimer=_DISCLAIMER[lang],
+            decision_support=support,
+        )
+
     route = _safe_route(route)
     ticker = _safe_ticker(ticker)
     tickers = extract_tickers(message)

@@ -38,7 +38,7 @@ const rows = [
   ["net_equity", "Net equity (captured valuation basis)", money],
   ["cash", "Account cash", money], ["margin", "Margin loan", money],
   ["leverage", "Gross assets / net equity", (v: number) => `${v.toFixed(2)}×`],
-  ["largest_position_weight", "Largest stock/ETF / gross assets", percent],
+  ["largest_position_weight", "Largest invested position / invested assets", percent],
   ["annual_volatility", "Annualized equity volatility", percent],
   ["var_1d_95_usd", "Historical 1-day 95% VaR", money],
   ["cvar_1d_95_usd", "Historical 1-day expected shortfall (95%)", money],

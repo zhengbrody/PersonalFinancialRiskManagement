@@ -44,6 +44,7 @@ function sourceClass(source: string): string {
 export function CopilotAnswerCard({ answer }: { answer: CopilotAnswer }) {
   const sections = answer.sections ?? [];
   const directionalBlocked =
+    !answer.decision_support &&
     answer.data_confidence != null &&
     answer.data_confidence.directional_allowed === false;
   return (
@@ -74,6 +75,34 @@ export function CopilotAnswerCard({ answer }: { answer: CopilotAnswer }) {
         >
           Not enough verified data for a directional answer — the sections below
           show what is known and what&apos;s missing.
+        </div>
+      )}
+
+      {answer.decision_support && (
+        <div className="space-y-2 text-sm">
+          <p className="text-muted-foreground">
+            {answer.decision_support.coverage === "explained"
+              ? "General explanation · no account calculation"
+              : "Inputs needed · no candidates ranked"}
+          </p>
+          <details className="rounded-lg border border-border p-3">
+            <summary className="cursor-pointer font-medium">Analysis methods & counterpoints</summary>
+            <div className="mt-3 space-y-4">
+              {answer.decision_support.methods.map((method) => (
+                <article key={method.id} className="space-y-1">
+                  <h4 className="font-medium">{method.title}</h4>
+                  <p>{method.summary}</p>
+                  <ul className="list-disc pl-5">{method.checks.map((check) => <li key={check}>{check}</li>)}</ul>
+                  <p className="text-muted-foreground">Counterpoint: {method.counterpoint}</p>
+                  <p className="text-xs text-muted-foreground">{method.applicability}</p>
+                  <a href={method.url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">
+                    {method.author} · reviewed {method.reviewed_at}
+                  </a>
+                </article>
+              ))}
+              <p className="text-xs text-muted-foreground">Methods are separate from account evidence. Sources do not endorse a candidate.</p>
+            </div>
+          </details>
         </div>
       )}
 
@@ -179,7 +208,7 @@ function AnswerSection({
         <SectionTitle title={section.title} />
         {section.ai_generated && (
           <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-            AI-phrased · numbers verified
+            AI-phrased · numeric values checked against sources
           </span>
         )}
       </div>

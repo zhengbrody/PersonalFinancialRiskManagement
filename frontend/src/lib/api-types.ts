@@ -361,6 +361,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/copilot/decision-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start */
+        post: operations["start_api_v1_copilot_decision_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/decision-runs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read */
+        get: operations["read_api_v1_copilot_decision_runs__id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/decision-runs/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel */
+        post: operations["cancel_api_v1_copilot_decision_runs__id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/decision-runs/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume */
+        post: operations["resume_api_v1_copilot_decision_runs__id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/copilot/insights": {
         parameters: {
             query?: never;
@@ -2220,6 +2288,116 @@ export interface components {
             /** Observed Frequency */
             observed_frequency?: number | null;
         };
+        /** CandidateBatch */
+        CandidateBatch: {
+            baseline?: components["schemas"]["ComparisonSide"] | null;
+            /** Candidates */
+            candidates?: components["schemas"]["ChangeComparison"][];
+            /**
+             * Computed At
+             * Format: date-time
+             */
+            computed_at: string;
+            /**
+             * Coverage
+             * @enum {string}
+             */
+            coverage: "evaluated" | "insufficient_data" | "unsupported";
+            /** Excluded */
+            excluded?: {
+                [key: string]: string;
+            };
+            /** Judgment */
+            judgment: string;
+            /** Limitations */
+            limitations: string[];
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Preferred Result Id */
+            preferred_result_id?: string | null;
+            /**
+             * Snapshot Id
+             * Format: uuid
+             */
+            snapshot_id: string;
+            task: components["schemas"]["CandidateRequest"];
+        };
+        /** CandidateRequest */
+        CandidateRequest: {
+            /** Amount */
+            amount: number;
+            /** Confirmed */
+            confirmed: boolean;
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
+            /**
+             * Goal
+             * @enum {string}
+             */
+            goal: "increase_cash" | "reduce_margin";
+            /** Protected Holdings */
+            protected_holdings?: string[];
+        };
+        /** CandidateRunOut */
+        CandidateRunOut: {
+            /**
+             * Attempts
+             * @default 0
+             */
+            attempts?: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Error Code */
+            error_code?: ("analysis_failed" | "reauthentication_required" | "execution_expired" | "portfolio_changed") | null;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Lease Until */
+            lease_until?: string | null;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            result?: components["schemas"]["CandidateBatch"] | null;
+            /**
+             * Revision
+             * @default 0
+             */
+            revision?: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "queued" | "running" | "completed" | "failed" | "cancelled" | "interrupted";
+            /**
+             * Step
+             * @default queued
+             * @enum {string}
+             */
+            step?: "queued" | "capturing" | "evaluating" | "done";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /**
          * CashEquivalentHoldingOut
          * @description One holding counted toward the current-value margin offset.
@@ -2672,6 +2850,7 @@ export interface components {
              * @default false
              */
             data_only?: boolean;
+            decision_support?: components["schemas"]["DecisionSupport"] | null;
             /** Disclaimer */
             disclaimer?: string | null;
             /** Evidence */
@@ -3071,6 +3250,52 @@ export interface components {
             /** Previous */
             previous?: string | null;
         };
+        /** DecisionSupport */
+        DecisionSupport: {
+            /**
+             * Candidate Comparison Available
+             * @default false
+             */
+            candidate_comparison_available?: boolean;
+            /**
+             * Coverage
+             * @enum {string}
+             */
+            coverage: "unsupported" | "insufficient_data" | "explained" | "evaluated";
+            /** Limitations */
+            limitations?: string[];
+            /** Methods */
+            methods?: components["schemas"]["MethodReference"][];
+            /**
+             * Save Available
+             * @default false
+             * @constant
+             */
+            save_available?: false;
+            task: components["schemas"]["DecisionTask"];
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version?: 1;
+        };
+        /** DecisionTask */
+        DecisionTask: {
+            /** Confirmed Constraints */
+            confirmed_constraints?: {
+                [key: string]: string;
+            };
+            /** Goal */
+            goal?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "explanation" | "clarification" | "specified_comparison" | "candidate_request";
+            /** Missing Inputs */
+            missing_inputs?: string[];
+        };
         /** DigestPrefIn */
         DigestPrefIn: {
             /** Enabled */
@@ -3187,6 +3412,14 @@ export interface components {
         /** Envelope[BillingMeResponse] */
         Envelope_BillingMeResponse_: {
             data?: components["schemas"]["BillingMeResponse"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[CandidateRunOut] */
+        Envelope_CandidateRunOut_: {
+            data?: components["schemas"]["CandidateRunOut"] | null;
             error?: components["schemas"]["ErrorOut"] | null;
             meta: components["schemas"]["MetaOut"];
         } & {
@@ -4479,6 +4712,29 @@ export interface components {
             elapsed_ms?: number | null;
             /** Request Id */
             request_id: string;
+        };
+        /** MethodReference */
+        MethodReference: {
+            /** Applicability */
+            applicability: string;
+            /** Author */
+            author: string;
+            /** Checks */
+            checks: string[];
+            /** Counterpoint */
+            counterpoint: string;
+            /** Id */
+            id: string;
+            /** Reviewed At */
+            reviewed_at: string;
+            /** Summary */
+            summary: string;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
+            /** Version */
+            version: string;
         };
         /** ModelCardOut */
         ModelCardOut: {
@@ -7061,6 +7317,15 @@ export interface components {
             /** Source */
             source: string;
         };
+        /** StartCandidateRun */
+        StartCandidateRun: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            task: components["schemas"]["CandidateRequest"];
+        };
         /** StartRun */
         StartRun: {
             /**
@@ -7832,6 +8097,132 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_ComparisonVerification_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_api_v1_copilot_decision_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartCandidateRun"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_CandidateRunOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_api_v1_copilot_decision_runs__id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_CandidateRunOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_api_v1_copilot_decision_runs__id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_CandidateRunOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_api_v1_copilot_decision_runs__id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_CandidateRunOut_"];
                 };
             };
             /** @description Validation Error */

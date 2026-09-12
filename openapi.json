@@ -1092,6 +1092,256 @@
         "title": "CalibrationBinOut",
         "type": "object"
       },
+      "CandidateBatch": {
+        "additionalProperties": false,
+        "properties": {
+          "baseline": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComparisonSide"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeComparison"
+            },
+            "maxItems": 2,
+            "title": "Candidates",
+            "type": "array"
+          },
+          "computed_at": {
+            "format": "date-time",
+            "title": "Computed At",
+            "type": "string"
+          },
+          "coverage": {
+            "enum": [
+              "evaluated",
+              "insufficient_data",
+              "unsupported"
+            ],
+            "title": "Coverage",
+            "type": "string"
+          },
+          "excluded": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Excluded",
+            "type": "object"
+          },
+          "judgment": {
+            "title": "Judgment",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "preferred_result_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Result Id"
+          },
+          "snapshot_id": {
+            "format": "uuid",
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "task": {
+            "$ref": "#/components/schemas/CandidateRequest"
+          }
+        },
+        "required": [
+          "snapshot_id",
+          "portfolio_id",
+          "computed_at",
+          "task",
+          "coverage",
+          "judgment",
+          "limitations"
+        ],
+        "title": "CandidateBatch",
+        "type": "object"
+      },
+      "CandidateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 100000000.0,
+            "title": "Amount",
+            "type": "number"
+          },
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          },
+          "goal": {
+            "enum": [
+              "increase_cash",
+              "reduce_margin"
+            ],
+            "title": "Goal",
+            "type": "string"
+          },
+          "protected_holdings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Protected Holdings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "expected_portfolio_id",
+          "goal",
+          "amount",
+          "confirmed"
+        ],
+        "title": "CandidateRequest",
+        "type": "object"
+      },
+      "CandidateRunOut": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "default": 0,
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "analysis_failed",
+                  "reauthentication_required",
+                  "execution_expired",
+                  "portfolio_changed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "lease_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Until"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateBatch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed",
+              "cancelled",
+              "interrupted"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "step": {
+            "default": "queued",
+            "enum": [
+              "queued",
+              "capturing",
+              "evaluating",
+              "done"
+            ],
+            "title": "Step",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "portfolio_id",
+          "state",
+          "created_at",
+          "updated_at",
+          "expires_at"
+        ],
+        "title": "CandidateRunOut",
+        "type": "object"
+      },
       "CashEquivalentHoldingOut": {
         "description": "One holding counted toward the current-value margin offset.",
         "properties": {
@@ -2158,6 +2408,16 @@
             "default": false,
             "title": "Data Only",
             "type": "boolean"
+          },
+          "decision_support": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecisionSupport"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "disclaimer": {
             "anyOf": [
@@ -3347,6 +3607,106 @@
         "title": "DataQualityChange",
         "type": "object"
       },
+      "DecisionSupport": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_comparison_available": {
+            "default": false,
+            "title": "Candidate Comparison Available",
+            "type": "boolean"
+          },
+          "coverage": {
+            "enum": [
+              "unsupported",
+              "insufficient_data",
+              "explained",
+              "evaluated"
+            ],
+            "title": "Coverage",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "methods": {
+            "items": {
+              "$ref": "#/components/schemas/MethodReference"
+            },
+            "title": "Methods",
+            "type": "array"
+          },
+          "save_available": {
+            "const": false,
+            "default": false,
+            "title": "Save Available",
+            "type": "boolean"
+          },
+          "task": {
+            "$ref": "#/components/schemas/DecisionTask"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "task",
+          "coverage"
+        ],
+        "title": "DecisionSupport",
+        "type": "object"
+      },
+      "DecisionTask": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed_constraints": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Confirmed Constraints",
+            "type": "object"
+          },
+          "goal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal"
+          },
+          "kind": {
+            "enum": [
+              "explanation",
+              "clarification",
+              "specified_comparison",
+              "candidate_request"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "missing_inputs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Inputs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "DecisionTask",
+        "type": "object"
+      },
       "DigestPrefIn": {
         "properties": {
           "enabled": {
@@ -3750,6 +4110,39 @@
           "meta"
         ],
         "title": "Envelope[BillingMeResponse]",
+        "type": "object"
+      },
+      "Envelope_CandidateRunOut_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateRunOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[CandidateRunOut]",
         "type": "object"
       },
       "Envelope_ChangeComparison_": {
@@ -8074,6 +8467,68 @@
           "request_id"
         ],
         "title": "MetaOut",
+        "type": "object"
+      },
+      "MethodReference": {
+        "additionalProperties": false,
+        "properties": {
+          "applicability": {
+            "title": "Applicability",
+            "type": "string"
+          },
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "checks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "counterpoint": {
+            "title": "Counterpoint",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reviewed_at": {
+            "title": "Reviewed At",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "author",
+          "url",
+          "reviewed_at",
+          "version",
+          "summary",
+          "checks",
+          "counterpoint",
+          "applicability"
+        ],
+        "title": "MethodReference",
         "type": "object"
       },
       "ModelCardOut": {
@@ -15522,6 +15977,25 @@
         "title": "SourceRef",
         "type": "object"
       },
+      "StartCandidateRun": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "task": {
+            "$ref": "#/components/schemas/CandidateRequest"
+          }
+        },
+        "required": [
+          "id",
+          "task"
+        ],
+        "title": "StartCandidateRun",
+        "type": "object"
+      },
       "StartRun": {
         "additionalProperties": false,
         "properties": {
@@ -17097,6 +17571,176 @@
           }
         },
         "summary": "Verify Comparison",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/decision-runs": {
+      "post": {
+        "operationId": "start_api_v1_copilot_decision_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartCandidateRun"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CandidateRunOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/decision-runs/{id}": {
+      "get": {
+        "operationId": "read_api_v1_copilot_decision_runs__id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CandidateRunOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/decision-runs/{id}/cancel": {
+      "post": {
+        "operationId": "cancel_api_v1_copilot_decision_runs__id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CandidateRunOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/decision-runs/{id}/resume": {
+      "post": {
+        "operationId": "resume_api_v1_copilot_decision_runs__id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CandidateRunOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume",
         "tags": [
           "copilot"
         ]

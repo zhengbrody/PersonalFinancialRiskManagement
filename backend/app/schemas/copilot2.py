@@ -26,6 +26,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 from .confidence import DataConfidence
+from .decision_support import DecisionSupport
 
 INTENTS = (
     "portfolio_diagnosis",
@@ -121,3 +122,4 @@ class CopilotAnswer(BaseModel):
     sections: list[CopilotAnswerSection] = Field(default_factory=list)
     language: AnswerLanguage = "en"
     disclaimer: Optional[str] = None
+    decision_support: DecisionSupport | None = None

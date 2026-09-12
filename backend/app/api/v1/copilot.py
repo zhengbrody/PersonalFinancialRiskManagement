@@ -186,7 +186,10 @@ def copilot_ask_endpoint(
     # the same question on two pages could return a stale cross-context answer.
     # The per-user GENERATION is bumped when confirmed preferences change, so a
     # cached answer that folded the old preference evidence can't be re-served.
+    from ...core.config import get_settings
+
     cache_key = input_hash(
+        f"decision-v1:{get_settings().decision_support_enabled}|"
         f"{user.id}|g{user_generation(user.id)}|{body.message.strip()}"
         f"|{body.route or ''}|{(body.ticker or '').upper()}"
         f"|scope:{scope or 'legacy'}"

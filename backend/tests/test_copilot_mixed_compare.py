@@ -301,3 +301,13 @@ def test_explicit_risk_asset_override_is_not_shocked_as_cash():
 
     # $100k treated as cash instead of a risk asset is a $19k understatement.
     assert overridden.baseline_pnl == pytest.approx(auto.baseline_pnl - 19_000.0)
+
+
+@pytest.fixture(autouse=True)
+def _fixed_endpoint_clock(monkeypatch):
+    """Fixture prices are dated; wall-clock ageing must not change API tests."""
+    from types import SimpleNamespace
+
+    from backend.app.api.v1 import copilot_compare as api
+
+    monkeypatch.setattr(api, "datetime", SimpleNamespace(now=lambda tz: NOW))

@@ -98,6 +98,14 @@ class Settings:
     public_risk_check_enabled: bool = field(
         default_factory=lambda: _env_str("PUBLIC_RISK_CHECK_ENABLED", "false").lower() == "true"
     )
+    async_analysis_enabled: bool = field(
+        default_factory=lambda: _env_str("MINDMARKET_ASYNC_ANALYSIS_ENABLED", "false").lower()
+        == "true"
+    )
+    decision_support_enabled: bool = field(
+        default_factory=lambda: _env_str("MINDMARKET_DECISION_SUPPORT_ENABLED", "false").lower()
+        == "true"
+    )
     # Durable foreground checks require migration 0014 and an independent key.
     # Off by default: preparing code never provisions production storage.
     copilot_runs_enabled: bool = field(
