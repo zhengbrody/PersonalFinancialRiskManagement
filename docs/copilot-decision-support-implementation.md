@@ -156,3 +156,61 @@ are engineering verification, not training or evidence of investment returns.
   the exact migration was restored and all 9 database checks passed again.
 - Dedicated local Supabase containers were stopped after acceptance; no hosted
   database, production account or production application was modified.
+
+
+## D follow-up: bounded Research context (2026-09-12)
+
+Behind the existing default-off decision-support flag, ticker research now reuses
+the cached FactPack once per ticker (at most three for a comparison, within the
+existing tool budget). No new provider subscription, crawler, external page fetch
+or model training is introduced.
+
+The existing Copilot answer carries typed company observations for P/E, net margin,
+debt/equity and revenue CAGR. Each observation binds ticker, metric, unit, source
+block and provider timestamp. No financial reporting period is invented. The
+current FactPack cannot establish exact field-level origin when providers are
+mixed; this limitation is explicit. Timestamp freshness means a provider snapshot
+within one day, not freshness of the financial reporting period.
+
+Only finite, dated observations from recognized provider blocks enter numerical
+evidence. Missing/unknown/future timestamps, stale cache and mismatched tickers
+cannot promote research into directional model output. Question cards link to
+observation identifiers, with counterpoints and falsification checks based on the
+existing valuation/downside method cards. They are explicitly untested hypotheses,
+not bull/bear conclusions or evidence that an investment is suitable.
+
+Up to three deduplicated HTTPS news links are displayed as unverified metadata.
+No article body is retrieved; missing author/conflict details remain unknown.
+News titles, ratings, drivers and arbitrary provider prose do not enter the new
+numerical evidence or LLM prompt. These links cannot authorize tool execution,
+change candidate ranking, save a plan or modify the account.
+
+The panel stays in the same conversation and is compatible with old saved
+answers that have no research context. Ordinary ticker comparisons now bypass
+the reduction-confirmation route; explicit reduction comparisons retain it.
+
+Remaining D work: licensed document retrieval, exact filing/period provenance,
+verified claim-level citations, author/conflict/opposing-source verification,
+and account-specific thesis evaluation. This is not completion of the full D/E/F
+roadmap or the initial complete put-assignment acceptance scenario. No independent
+training dataset or fine-tuning job has been created.
+
+D validation:
+- Full backend CI suite: 1446 passed, 23 skipped, 88.72% coverage. Skipped
+  opt-in integration checks were not run for this read-only projection change.
+- After the final CAGR source-label correction, 34 focused routing/research
+  checks passed; required mypy passed for 47 schema/core files.
+- Frontend 604 tests and TypeScript passed after the final schema change.
+  Production Next build and desktop/mobile Research checks passed; the combined
+  candidate/research browser suite also passed all four checks.
+- An initial desktop candidate test filled the input before portfolio hydration
+  remounted it. Waiting for the loaded portfolio fixed the test setup; production
+  account-scope reset behavior remains unchanged.
+- Existing offline grounding evaluation: 50 cases, 722/722 assertions. This is
+  regression evidence, not model training or an investment-performance claim.
+- Seven mutation checks detected removed ticker/freshness/evidence/HTTPS/
+  external-prose/reference/derived-source guards. Exact files were restored.
+- Black checked the full repository; Ruff and the backend trust-boundary mypy
+  gate passed. Browser screenshots were inspected, including the mobile layout.
+- No live provider call, hosted database migration, deployment or paid training
+  job was performed. The implementation branch remains default-off.

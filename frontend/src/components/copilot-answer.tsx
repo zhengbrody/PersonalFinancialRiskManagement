@@ -1,6 +1,7 @@
 "use client";
 
 /** Shared, input-free renderer for the existing grounded six-section contract. */
+import { CopilotResearchPanel } from "./copilot-research";
 import { DataConfidence } from "@/components/data-confidence";
 import { Markdown } from "@/components/markdown";
 import type {
@@ -105,6 +106,8 @@ export function CopilotAnswerCard({ answer }: { answer: CopilotAnswer }) {
           </details>
         </div>
       )}
+
+      <CopilotResearchPanel research={answer.research_context ?? []} />
 
       {sections.length > 0 ? (
         <div className="space-y-3">

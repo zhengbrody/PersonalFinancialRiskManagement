@@ -26,6 +26,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 from .confidence import DataConfidence
+from .copilot_research import CopilotResearch
 from .decision_support import DecisionSupport
 
 INTENTS = (
@@ -123,3 +124,4 @@ class CopilotAnswer(BaseModel):
     language: AnswerLanguage = "en"
     disclaimer: Optional[str] = None
     decision_support: DecisionSupport | None = None
+    research_context: list[CopilotResearch] = Field(default_factory=list, max_length=3)

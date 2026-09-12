@@ -38,6 +38,7 @@ test("confirmed candidates and retrieval stay in one window", async ({ page }) =
     return route.fulfill({ json: envelope({ runs: stored ? [stored] : [], untrusted_records: 0, dispatched: 0, removed: 0 }) });
   });
   await page.goto("/copilot");
+  await expect(page.getByRole("button", { name: "Comparison portfolio", exact: true })).toBeVisible();
   await page.getByTestId("copilot-input").fill("Which stocks should I sell to use margin for selling puts?");
   await page.getByTestId("copilot-send").click();
   await expect(page.getByRole("button", { name: "Calculate candidates" })).toBeDisabled();

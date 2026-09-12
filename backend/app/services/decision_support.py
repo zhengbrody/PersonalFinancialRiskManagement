@@ -41,7 +41,9 @@ def classify_task(message: str) -> tuple[DecisionTask, str] | None:
             ),
             topic or "downside",
         )
-    if _COMPARE.search(message):
+    if _COMPARE.search(message) and re.search(
+        r"reduce|reducing|sell|selling|change|减仓|卖出|调整", message, re.I
+    ):
         return (
             DecisionTask(
                 kind="specified_comparison", missing_inputs=["holding", "amount", "proceeds"]

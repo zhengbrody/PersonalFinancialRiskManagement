@@ -934,7 +934,13 @@ def _ticker_exposure_evidence(
 
 
 def _gather(
-    intent: str, message: str, tickers: list[str], *, user, budget: "ToolBudget | None" = None
+    intent: str,
+    message: str,
+    tickers: list[str],
+    *,
+    user,
+    budget: "ToolBudget | None" = None,
+    research_context=None,
 ):
     """Returns (evidence, quality_floor). ``quality_floor`` is the grounding
     data's OWN quality (0..1) when the answer rests on the portfolio score /
@@ -949,8 +955,22 @@ def _gather(
         ev: list[EvidenceItem] = []
         floors: list[float] = []
         for tk in (tickers[:3] if intent == "compare_tickers" else tickers[:1]):
-            fp = safe(f"factpack:{tk}", lambda tk=tk: rf.build_fact_pack(tk))
-            if fp is not None:
+            builder = (
+                rf.build_fact_pack_cached if research_context is not None else rf.build_fact_pack
+            )
+            fp = safe(f"factpack:{tk}", lambda tk=tk: builder(tk))
+            if research_context is not None:
+                from .copilot_research import build_context, context_evidence
+
+                context = build_context(tk, fp)
+                research_context.append(context)
+                ev += _stamp(context_evidence(context), "factpack")
+                floors.append(
+                    float(fp.data_quality.coverage)
+                    if fp is not None and context.status == "available"
+                    else 0.0
+                )
+            elif fp is not None:
                 ev += _stamp(
                     _factpack_evidence(fp, prefix=tk if intent == "compare_tickers" else ""),
                     "factpack",
@@ -1789,7 +1809,13 @@ def answer(
     if ticker and ticker not in tickers:
         tickers = [ticker, *tickers][:5]
     intent = classify(message, tickers, route=route)
-    evidence, quality_floor = _gather(intent, message, tickers, user=user)
+    research_context = []
+    if get_settings().decision_support_enabled and intent in ("ticker_research", "compare_tickers"):
+        evidence, quality_floor = _gather(
+            intent, message, tickers, user=user, research_context=research_context
+        )
+    else:
+        evidence, quality_floor = _gather(intent, message, tickers, user=user)
     for i, e in enumerate(evidence):
         e.id = f"E{i + 1}"
     dc = _answer_confidence(evidence, quality_floor)
@@ -1838,4 +1864,5 @@ def answer(
         sections=sections,
         language=lang,
         disclaimer=_DISCLAIMER[lang],
+        research_context=research_context,
     )

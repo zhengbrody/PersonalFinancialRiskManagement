@@ -1,3 +1,4 @@
+import { copilotResearchSchema } from "./copilot-research";
 /**
  * Typed React Query hooks for backend endpoints.
  *
@@ -1364,6 +1365,7 @@ export const copilotAnswerSchema = z.looseObject({
   language: z.string().optional(),
   disclaimer: z.string().nullish(),
   decision_support: decisionSupportSchema.nullish(),
+  research_context: z.array(copilotResearchSchema).max(3).optional(),
 });
 export type CopilotAnswer = z.infer<typeof copilotAnswerSchema>;
 

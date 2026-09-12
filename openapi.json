@@ -2508,6 +2508,14 @@
             ],
             "title": "Model"
           },
+          "research_context": {
+            "items": {
+              "$ref": "#/components/schemas/CopilotResearch"
+            },
+            "maxItems": 3,
+            "title": "Research Context",
+            "type": "array"
+          },
           "sections": {
             "items": {
               "$ref": "#/components/schemas/CopilotAnswerSection"
@@ -2801,6 +2809,90 @@
           }
         },
         "title": "CopilotPreferencesOut",
+        "type": "object"
+      },
+      "CopilotResearch": {
+        "additionalProperties": false,
+        "properties": {
+          "can_rank_candidates": {
+            "const": false,
+            "default": false,
+            "title": "Can Rank Candidates",
+            "type": "boolean"
+          },
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "leads": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchLead"
+            },
+            "maxItems": 3,
+            "title": "Leads",
+            "type": "array"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "methods": {
+            "items": {
+              "$ref": "#/components/schemas/MethodReference"
+            },
+            "title": "Methods",
+            "type": "array"
+          },
+          "observations": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchObservation"
+            },
+            "maxItems": 4,
+            "title": "Observations",
+            "type": "array"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchQuestion"
+            },
+            "maxItems": 2,
+            "title": "Questions",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "available",
+              "partial",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ticker",
+          "captured_at",
+          "status",
+          "observations",
+          "questions",
+          "methods",
+          "limitations"
+        ],
+        "title": "CopilotResearch",
         "type": "object"
       },
       "CorrTopPair": {
@@ -12218,6 +12310,208 @@
           "data_confidence"
         ],
         "title": "ResearchCoverageOut",
+        "type": "object"
+      },
+      "ResearchLead": {
+        "additionalProperties": false,
+        "properties": {
+          "author": {
+            "title": "Author",
+            "type": "null"
+          },
+          "conflicts": {
+            "const": "not_disclosed_in_feed",
+            "default": "not_disclosed_in_feed",
+            "title": "Conflicts",
+            "type": "string"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "verification": {
+            "const": "metadata_only",
+            "default": "metadata_only",
+            "title": "Verification",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "url"
+        ],
+        "title": "ResearchLead",
+        "type": "object"
+      },
+      "ResearchObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "basis": {
+            "enum": [
+              "provider_projection",
+              "computed_from_series"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "metric": {
+            "title": "Metric",
+            "type": "string"
+          },
+          "provenance": {
+            "enum": [
+              "block_only",
+              "unavailable"
+            ],
+            "title": "Provenance",
+            "type": "string"
+          },
+          "reporting_period": {
+            "title": "Reporting Period",
+            "type": "null"
+          },
+          "scope": {
+            "const": "company_research",
+            "default": "company_research",
+            "title": "Scope",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source As Of"
+          },
+          "status": {
+            "enum": [
+              "available",
+              "missing",
+              "stale",
+              "undated"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "unit": {
+            "enum": [
+              "ratio",
+              "fraction"
+            ],
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "id",
+          "ticker",
+          "metric",
+          "value",
+          "unit",
+          "source",
+          "provenance",
+          "status",
+          "basis"
+        ],
+        "title": "ResearchObservation",
+        "type": "object"
+      },
+      "ResearchQuestion": {
+        "additionalProperties": false,
+        "properties": {
+          "counterpoint": {
+            "title": "Counterpoint",
+            "type": "string"
+          },
+          "hypothesis": {
+            "title": "Hypothesis",
+            "type": "string"
+          },
+          "invalidation_check": {
+            "title": "Invalidation Check",
+            "type": "string"
+          },
+          "method_id": {
+            "title": "Method Id",
+            "type": "string"
+          },
+          "observation_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Observation Ids",
+            "type": "array"
+          },
+          "status": {
+            "const": "not_tested",
+            "default": "not_tested",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "method_id",
+          "hypothesis",
+          "observation_ids",
+          "counterpoint",
+          "invalidation_check"
+        ],
+        "title": "ResearchQuestion",
         "type": "object"
       },
       "ResearchVerdict": {

@@ -2905,6 +2905,8 @@ export interface components {
             language?: "en" | "zh";
             /** Model */
             model?: string | null;
+            /** Research Context */
+            research_context?: components["schemas"]["CopilotResearch"][];
             /** Sections */
             sections?: components["schemas"]["CopilotAnswerSection"][];
             /** Tickers */
@@ -3006,6 +3008,43 @@ export interface components {
             risk_tolerance?: number | null;
             /** Updated At */
             updated_at?: string | null;
+        };
+        /** CopilotResearch */
+        CopilotResearch: {
+            /**
+             * Can Rank Candidates
+             * @default false
+             * @constant
+             */
+            can_rank_candidates?: false;
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /** Leads */
+            leads?: components["schemas"]["ResearchLead"][];
+            /** Limitations */
+            limitations: string[];
+            /** Methods */
+            methods: components["schemas"]["MethodReference"][];
+            /** Observations */
+            observations: components["schemas"]["ResearchObservation"][];
+            /** Questions */
+            questions: components["schemas"]["ResearchQuestion"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "partial" | "unavailable";
+            /** Ticker */
+            ticker: string;
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version?: 1;
         };
         /** CorrTopPair */
         CorrTopPair: {
@@ -6035,6 +6074,93 @@ export interface components {
             missing?: components["schemas"]["FieldProvenance"][];
             /** Ticker */
             ticker: string;
+        };
+        /** ResearchLead */
+        ResearchLead: {
+            /** Author */
+            author?: null;
+            /**
+             * Conflicts
+             * @default not_disclosed_in_feed
+             * @constant
+             */
+            conflicts?: "not_disclosed_in_feed";
+            /** Published At */
+            published_at?: string | null;
+            /** Publisher */
+            publisher?: string | null;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
+            /**
+             * Verification
+             * @default metadata_only
+             * @constant
+             */
+            verification?: "metadata_only";
+        };
+        /** ResearchObservation */
+        ResearchObservation: {
+            /**
+             * Basis
+             * @enum {string}
+             */
+            basis: "provider_projection" | "computed_from_series";
+            /** Id */
+            id: string;
+            /** Metric */
+            metric: string;
+            /**
+             * Provenance
+             * @enum {string}
+             */
+            provenance: "block_only" | "unavailable";
+            /** Reporting Period */
+            reporting_period?: null;
+            /**
+             * Scope
+             * @default company_research
+             * @constant
+             */
+            scope?: "company_research";
+            /** Source */
+            source: string;
+            /** Source As Of */
+            source_as_of?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "missing" | "stale" | "undated";
+            /** Ticker */
+            ticker: string;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "ratio" | "fraction";
+            /** Value */
+            value: number | null;
+        };
+        /** ResearchQuestion */
+        ResearchQuestion: {
+            /** Counterpoint */
+            counterpoint: string;
+            /** Hypothesis */
+            hypothesis: string;
+            /** Invalidation Check */
+            invalidation_check: string;
+            /** Method Id */
+            method_id: string;
+            /** Observation Ids */
+            observation_ids: string[];
+            /**
+             * Status
+             * @default not_tested
+             * @constant
+             */
+            status?: "not_tested";
         };
         /**
          * ResearchVerdict
