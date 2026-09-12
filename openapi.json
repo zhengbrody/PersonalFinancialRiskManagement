@@ -1227,6 +1227,41 @@
         "title": "CandidateRequest",
         "type": "object"
       },
+      "CandidateRunList": {
+        "additionalProperties": false,
+        "properties": {
+          "dispatched": {
+            "default": 0,
+            "maximum": 4.0,
+            "minimum": 0.0,
+            "title": "Dispatched",
+            "type": "integer"
+          },
+          "removed": {
+            "default": 0,
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Removed",
+            "type": "integer"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateRunOut"
+            },
+            "maxItems": 20,
+            "title": "Runs",
+            "type": "array"
+          },
+          "untrusted_records": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Untrusted Records",
+            "type": "integer"
+          }
+        },
+        "title": "CandidateRunList",
+        "type": "object"
+      },
       "CandidateRunOut": {
         "additionalProperties": false,
         "properties": {
@@ -1258,6 +1293,18 @@
               }
             ],
             "title": "Error Code"
+          },
+          "execution_deadline": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Deadline"
           },
           "expires_at": {
             "format": "date-time",
@@ -4110,6 +4157,39 @@
           "meta"
         ],
         "title": "Envelope[BillingMeResponse]",
+        "type": "object"
+      },
+      "Envelope_CandidateRunList_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateRunList"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[CandidateRunList]",
         "type": "object"
       },
       "Envelope_CandidateRunOut_": {
@@ -11485,6 +11565,21 @@
         "title": "ReasonCodeOut",
         "type": "object"
       },
+      "RecoverCandidateRuns": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_portfolio_id"
+        ],
+        "title": "RecoverCandidateRuns",
+        "type": "object"
+      },
       "ReferenceSummary": {
         "description": "Identity of the committed drift reference the live window is scored\nagainst (a 3-field summary, not the full quantile grids).",
         "properties": {
@@ -17577,6 +17672,47 @@
       }
     },
     "/api/v1/copilot/decision-runs": {
+      "get": {
+        "operationId": "recent_api_v1_copilot_decision_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "expected_portfolio_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Expected Portfolio Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CandidateRunList_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recent",
+        "tags": [
+          "copilot"
+        ]
+      },
       "post": {
         "operationId": "start_api_v1_copilot_decision_runs_post",
         "requestBody": {
@@ -17612,6 +17748,47 @@
           }
         },
         "summary": "Start",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/decision-runs/recover": {
+      "post": {
+        "operationId": "recover_api_v1_copilot_decision_runs_recover_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecoverCandidateRuns"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CandidateRunList_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recover",
         "tags": [
           "copilot"
         ]

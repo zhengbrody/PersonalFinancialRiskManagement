@@ -14,6 +14,7 @@ import logging
 import os
 import sys
 import time
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
@@ -155,6 +156,17 @@ def _maybe_init_sentry(settings) -> None:
         pass
 
 
+@asynccontextmanager
+async def _lifespan(app):
+    from .services.copilot_jobs import Dispatcher
+
+    app.state.copilot_dispatcher = Dispatcher()
+    try:
+        yield
+    finally:
+        app.state.copilot_dispatcher.shutdown()
+
+
 def create_app() -> FastAPI:
     """Build a fresh FastAPI app. Factory pattern lets tests spin
     up an isolated app with a swapped Settings instance, instead of
@@ -165,6 +177,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title=settings.app_name,
+        lifespan=_lifespan,
         version=settings.app_version,
         # OpenAPI docs are useful in dev; locked behind the deploy
         # boundary in production (Caddy can refuse /docs externally).

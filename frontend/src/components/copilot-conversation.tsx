@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { CopilotRecovery } from "@/components/copilot-recovery";
 import { CopilotCandidates } from "@/components/copilot-candidates";
 import { CopilotAnswerCard } from "@/components/copilot-answer";
 import { CopilotRiskCheck } from "@/components/copilot-risk-check";
@@ -248,6 +249,9 @@ function Conversation({
         ))}
         <div ref={anchor} />
       </div>
+      {portfolioId && token && thread.turns.some(turn => turn.answer?.decision_support?.candidate_comparison_available) && (
+        <CopilotRecovery key={portfolioId + token} token={token} portfolioId={portfolioId} />
+      )}
       {thread.turns.length > 0 && (
         <div className="px-3"><Button type="button" variant="outline" size="sm" disabled={disabled || !portfolioId}
           onClick={() => thread.openChange()}>Test a change</Button></div>

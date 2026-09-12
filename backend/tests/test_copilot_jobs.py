@@ -144,7 +144,7 @@ def test_api_duplicate_start_and_read_do_not_recompute(
     monkeypatch.setattr(jobs, "require_enabled", lambda: None)
     monkeypatch.setattr(jobs, "journal", lambda user: log)
     dispatch = Mock(return_value=True)
-    monkeypatch.setattr(jobs.dispatcher, "submit", dispatch)
+    monkeypatch.setattr(test_client.app.state.copilot_dispatcher, "submit", dispatch)
     headers = {"Authorization": f"Bearer {mint_token(sub=USER)}"}
     body = {"id": id, "task": task().model_dump(mode="json")}
     start = test_client.post("/api/v1/copilot/decision-runs", json=body, headers=headers)
@@ -235,9 +235,90 @@ def test_worker_waits_for_capacity_revalidates_then_publishes(monkeypatch, journ
     compute = Mock(side_effect=APIError(409, "portfolio_changed", "changed"))
     monkeypatch.setattr(jobs, "compute", compute)
     jobs.Dispatcher.run(SimpleNamespace(id=USER, access_token="transient"), id)
-    lane.acquire.assert_called_once_with(timeout=120)
+    lane.acquire.assert_called_once_with(timeout=1)
     lane.release.assert_called_once()
-    assert auth.call_count == 2  # includes revalidation AFTER queue wait
+    assert auth.call_count == 3  # before queue, after queue, before publishing failure
     assert compute.call_count == 1
     assert log.get(id).state == "failed"
     assert log.get(id).error_code == "portfolio_changed"
+
+
+def test_renewal_extends_lease_but_never_execution_budget(journal):
+    log, id, clock = journal
+    first = log.claim(id)
+    clock[0] += timedelta(seconds=90)
+    renewed = log.renew(id, first.revision, "evaluating")
+    assert renewed.lease_until > first.lease_until
+    assert renewed.execution_deadline == first.execution_deadline == NOW + jobs.MAX_EXECUTION
+    assert log.renew(id, first.revision) is None
+    assert log.renew(id, renewed.revision, "capturing") is None
+    clock[0] = NOW + timedelta(seconds=200)
+    last = log.renew(id, renewed.revision)
+    assert last.lease_until == first.execution_deadline
+    clock[0] = first.execution_deadline
+    assert log.renew(id, last.revision) is None
+    assert log.publish(id, last.revision).state == "interrupted"
+
+
+def test_shutdown_discards_transient_dispatches_and_refuses_new_work():
+    from types import SimpleNamespace
+
+    dispatcher = jobs.Dispatcher()
+    dispatcher.started = True  # deterministic queued-only case; no worker launched
+    user = SimpleNamespace(id=USER, access_token="must not persist")
+    assert dispatcher.submit(user, "queued")
+    dispatcher.shutdown()
+    assert dispatcher.queue.empty() and dispatcher.pending == set()
+    assert not dispatcher.submit(user, "later")
+
+
+def test_lease_loss_or_shutdown_prevents_publication(journal, monkeypatch):
+    from threading import Event
+    from types import SimpleNamespace
+
+    from backend.app.core import deps_auth
+
+    log, id, _ = journal
+    claimed = log.claim(id)
+    monkeypatch.setattr(deps_auth, "_decode", lambda *args: {})
+    shutdown = Event()
+    lease = jobs.ExecutionLease(log, claimed, SimpleNamespace(access_token="transient"), shutdown)
+    lease.pulse("evaluating")
+    shutdown.set()
+    with pytest.raises(jobs.ExecutionStopped):
+        lease.pulse()
+    assert lease.finish().state == "interrupted"
+    assert log.get(id).result is None
+
+
+def test_recovery_requeues_only_trusted_recoverable_jobs(journal, monkeypatch):
+    from types import SimpleNamespace
+
+    from backend.app.core import deps_auth
+
+    log, id, clock = journal
+    log.claim(id)
+    clock[0] += jobs.LEASE + timedelta(seconds=1)
+    monkeypatch.setattr(
+        log.store, "recent", lambda book: list(log.store.rows.values()), raising=False
+    )
+    monkeypatch.setattr(jobs, "journal", lambda user: log)
+    monkeypatch.setattr(jobs, "require_enabled", lambda: None)
+    monkeypatch.setattr(deps_auth, "_decode", lambda *args: {})
+    dispatcher = jobs.Dispatcher()
+    dispatcher.started = True
+    dispatched, untrusted = dispatcher.recover(SimpleNamespace(id=USER, access_token="fresh"), BOOK)
+    assert dispatched == 1 and untrusted == 0
+    assert log.get(id).state == "queued"
+    assert dispatcher.queue.qsize() == 1
+    dispatcher.shutdown()
+
+
+def test_recent_ignores_invalid_documents_and_untrusted_signatures(journal, monkeypatch):
+    log, id, _ = journal
+    valid = log.store.get(id)
+    rows = [valid, {**valid, "record": "[]"}, {**valid, "signature": "a" * 64}]
+    monkeypatch.setattr(log.store, "recent", lambda _: rows, raising=False)
+    records, untrusted = log.recent(BOOK)
+    assert [str(record.id) for record in records] == [id]
+    assert untrusted == 2

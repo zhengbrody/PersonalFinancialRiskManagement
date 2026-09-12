@@ -368,10 +368,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Recent */
+        get: operations["recent_api_v1_copilot_decision_runs_get"];
         put?: never;
         /** Start */
         post: operations["start_api_v1_copilot_decision_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/decision-runs/recover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Recover */
+        post: operations["recover_api_v1_copilot_decision_runs_recover_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2344,6 +2362,26 @@ export interface components {
             /** Protected Holdings */
             protected_holdings?: string[];
         };
+        /** CandidateRunList */
+        CandidateRunList: {
+            /**
+             * Dispatched
+             * @default 0
+             */
+            dispatched?: number;
+            /**
+             * Removed
+             * @default 0
+             */
+            removed?: number;
+            /** Runs */
+            runs?: components["schemas"]["CandidateRunOut"][];
+            /**
+             * Untrusted Records
+             * @default 0
+             */
+            untrusted_records?: number;
+        };
         /** CandidateRunOut */
         CandidateRunOut: {
             /**
@@ -2358,6 +2396,8 @@ export interface components {
             created_at: string;
             /** Error Code */
             error_code?: ("analysis_failed" | "reauthentication_required" | "execution_expired" | "portfolio_changed") | null;
+            /** Execution Deadline */
+            execution_deadline?: string | null;
             /**
              * Expires At
              * Format: date-time
@@ -3412,6 +3452,14 @@ export interface components {
         /** Envelope[BillingMeResponse] */
         Envelope_BillingMeResponse_: {
             data?: components["schemas"]["BillingMeResponse"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[CandidateRunList] */
+        Envelope_CandidateRunList_: {
+            data?: components["schemas"]["CandidateRunList"] | null;
             error?: components["schemas"]["ErrorOut"] | null;
             meta: components["schemas"]["MetaOut"];
         } & {
@@ -5766,6 +5814,14 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** RecoverCandidateRuns */
+        RecoverCandidateRuns: {
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
+        };
         /**
          * ReferenceSummary
          * @description Identity of the committed drift reference the live window is scored
@@ -8110,6 +8166,37 @@ export interface operations {
             };
         };
     };
+    recent_api_v1_copilot_decision_runs_get: {
+        parameters: {
+            query: {
+                expected_portfolio_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_CandidateRunList_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     start_api_v1_copilot_decision_runs_post: {
         parameters: {
             query?: never;
@@ -8130,6 +8217,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_CandidateRunOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recover_api_v1_copilot_decision_runs_recover_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecoverCandidateRuns"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_CandidateRunList_"];
                 };
             };
             /** @description Validation Error */

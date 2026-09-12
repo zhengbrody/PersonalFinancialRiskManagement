@@ -31,6 +31,12 @@ test("confirmed candidates and retrieval stay in one window", async ({ page }) =
     return route.fulfill({ json: envelope(stored) });
   });
   await page.route("**/api/v1/copilot/decision-runs/*", route => route.fulfill({ json: envelope(stored) }));
+  await page.route("**/api/v1/copilot/decision-runs?*", route =>
+    route.fulfill({ json: envelope({ runs: stored ? [stored] : [], untrusted_records: 0, dispatched: 0, removed: 0 }) }));
+  await page.route("**/api/v1/copilot/decision-runs/recover", route => {
+    expect(route.request().postDataJSON()).toEqual({ expected_portfolio_id: book });
+    return route.fulfill({ json: envelope({ runs: stored ? [stored] : [], untrusted_records: 0, dispatched: 0, removed: 0 }) });
+  });
   await page.goto("/copilot");
   await page.getByTestId("copilot-input").fill("Which stocks should I sell to use margin for selling puts?");
   await page.getByTestId("copilot-send").click();
@@ -48,4 +54,11 @@ test("confirmed candidates and retrieval stay in one window", async ({ page }) =
   await page.getByRole("button", { name: "Retrieve original run" }).click();
   await expect(page.getByRole("region", { name: "Change comparison" })).toBeVisible();
   expect(starts).toBe(1);
+  await page.getByText("Recent candidate analyses & recovery").click();
+  await page.getByRole("button", { name: "Refresh recent analyses" }).click();
+  await expect(page.getByText("1 recent analyses.")).toBeVisible();
+  await page.getByRole("button", { name: "Recover pending analyses" }).click();
+  await expect(page.getByText(/Recovery requested for 0/)).toBeVisible();
+  expect(starts).toBe(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

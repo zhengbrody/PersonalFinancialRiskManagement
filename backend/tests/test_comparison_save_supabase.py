@@ -101,6 +101,13 @@ def stack():
     if not sql("select to_regclass('public.risk_plans');"):
         sql((migrations / "0012_risk_ops.sql").read_text())
     sql((migrations / "0015_comparison_confirmations.sql").read_text())
+    if not sql("select to_regclass('public.copilot_runs');"):
+        sql((migrations / "0014_copilot_runs.sql").read_text())
+    for name in (
+        "0016_copilot_background.sql",
+        "0017_copilot_job_recovery.sql",
+    ):
+        sql((migrations / name).read_text())
     sql("notify pgrst, 'reload schema';")
 
     settings = {
@@ -110,6 +117,8 @@ def stack():
         "MINDMARKET_ENV": "staging",
         "MINDMARKET_COMPARISON_REPLAY_ENABLED": "true",
         "MINDMARKET_COMPARISON_SAVE_ENABLED": "true",
+        "MINDMARKET_DECISION_SUPPORT_ENABLED": "true",
+        "MINDMARKET_ASYNC_ANALYSIS_ENABLED": "true",
         "MINDMARKET_RISK_RUN_SIGNING_SECRET": secrets.token_urlsafe(48),
         "SENTRY_DSN": "",
     }
@@ -329,3 +338,48 @@ def test_real_http_requires_jwt_and_explicit_boolean_consent(stack, account):
     assert save(stack, owner, result, {**body, "confirmed": "true"}).status_code == 422
     url = f"{stack.base}/api/v1/copilot/compare-change/{result.result_id}/confirm"
     assert requests.post(url, json=body, timeout=15).status_code == 401
+
+
+def test_job_renewal_listing_cancel_and_cleanup_with_real_jwt(stack, account):
+    from backend.app.core.deps_auth import AuthedUser
+    from backend.app.schemas.copilot_candidates import CandidateRequest
+    from backend.app.schemas.copilot_runs import RunSnapshot
+    from backend.app.services import copilot_jobs as jobs
+
+    owner, other = account(), account()
+    token = owner.headers["Authorization"].removeprefix("Bearer ")
+    log = jobs.journal(AuthedUser(id=owner.user, email=None, raw_claims={}, access_token=token))
+    task = CandidateRequest(
+        expected_portfolio_id=owner.row["id"], goal="increase_cash", amount=500.0, confirmed=True
+    )
+    snapshot = RunSnapshot(
+        portfolio_id=owner.row["id"],
+        holdings={"SPY": {"shares": 10}},
+        cash_balance=1000,
+        margin_loan=0,
+        contributed_capital=0,
+        risk_preference=3,
+        preference_source="neutral_baseline",
+    )
+    record = log.reserve(str(uuid4()), task, snapshot, owner.row["comparison_revision"])
+    id = str(record.id)
+    claimed = log.claim(id)
+    assert claimed is not None
+    renewed = log.renew(id, claimed.revision, "evaluating")
+    assert renewed and renewed.execution_deadline == claimed.execution_deadline
+    assert log.renew(id, claimed.revision) is None
+    endpoint = stack.base + "/api/v1/copilot/decision-runs"
+    query = {"expected_portfolio_id": owner.row["id"]}
+    response = requests.get(endpoint, headers=owner.headers, params=query, timeout=15)
+    assert response.status_code == 200
+    assert [r["id"] for r in response.json()["data"]["runs"]] == [id]
+    response = requests.get(endpoint, headers=other.headers, params=query, timeout=15)
+    assert response.status_code == 200 and response.json()["data"]["runs"] == []
+    response = requests.post(endpoint + "/" + id + "/cancel", headers=owner.headers, timeout=15)
+    assert response.status_code == 200
+    assert log.publish(id, renewed.revision, error_code="analysis_failed").state == "cancelled"
+    stack.sql(f"update copilot_runs set created_at=now()-interval '2 days' where id='{id}';")
+    response = requests.post(endpoint + "/recover", headers=owner.headers, json=query, timeout=15)
+    assert response.status_code == 200
+    assert response.json()["data"]["removed"] == 1
+    assert response.json()["data"]["dispatched"] == 0
