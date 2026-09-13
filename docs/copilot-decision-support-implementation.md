@@ -372,3 +372,32 @@ This validates persisted-queue recovery, not a forced process crash during an
 active calculation. Live deployment restart/lease-expiry recovery, soak/load
 acceptance and provider latency remain open. Features remain disabled by default;
 no production migration, deployment, new data feed or model training was done.
+
+## 2026-09-13 — Running-process crash and lease-expiry acceptance
+
+The dedicated local Supabase harness can now SIGKILL and relaunch only its own
+ASGI subprocess. A test-only market barrier pauses a real dispatched calculation
+after the persisted `capturing` step. The application is killed without graceful
+shutdown and restarted using the same signing key, database and application
+version. Production lease duration (120 seconds) and both application/database
+clocks remain unchanged; no signed records or timestamps are edited to expedite
+the test.
+
+The new acceptance case verifies that recovery cannot dispatch while the old
+lease remains valid; expiry exposes an interrupted record with no result;
+unauthenticated recovery is denied; authenticated recovery completes on attempt
+two; a publication using the first attempt's stale revision cannot overwrite the
+completed result; and subsequent recovery dispatches nothing and retains the
+identical final result. Daily SPY prices remain synthetic, while Auth, RLS,
+journal CAS, process lifecycle and risk calculation are real.
+
+Validation: nine local Supabase cases passed in 131.26 seconds, including the
+actual lease wait; 53 focused worker/candidate/Put regressions passed. Black,
+Ruff and whitespace checks passed. Only acceptance harness/tests and this record
+changed; no production behavior, feature flags, database or deployment changed.
+
+B now has local evidence for both lost-queue and running-process crash recovery.
+Remaining release work includes version-changing/rolling deployment compatibility,
+signing-key continuity operations, multiple application instances, sustained load
+and live-provider latency. This same-version local process restart does not close
+those production acceptance items or the broader C/E financing scenario roadmap.

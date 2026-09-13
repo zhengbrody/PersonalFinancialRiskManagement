@@ -37,7 +37,7 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture(scope="module")
-def stack():
+def stack(tmp_path_factory):
     workdir = Path(os.environ["MINDMARKET_TEST_SUPABASE_WORKDIR"]).resolve()
     assert str(workdir) in (f"/tmp/{PROJECT}", f"/private/tmp/{PROJECT}")
     assert not (workdir / "supabase/.temp/project-ref").exists(), "Never use a linked project"
@@ -132,29 +132,33 @@ def stack():
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
     base = f"http://127.0.0.1:{port}"
-    env = {**os.environ, **settings}
+    control = tmp_path_factory.mktemp("worker-control")
+    env = {**os.environ, **settings, "MINDMARKET_TEST_WORKER_CONTROL": str(control)}
     with pytest.MonkeyPatch.context() as patch:
         for key, value in settings.items():
             patch.setenv(key, value)
         reset_settings_cache()
-        server = subprocess.Popen(
-            [
-                sys.executable,
-                "-m",
-                "uvicorn",
-                "backend.tests.supabase_worker_app:app",
-                "--host",
-                "127.0.0.1",
-                "--port",
-                str(port),
-                "--no-access-log",
-            ],
-            cwd=ROOT,
-            env=env,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        try:
+        server = None
+
+        def launch():
+            nonlocal server
+            server = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-m",
+                    "uvicorn",
+                    "backend.tests.supabase_worker_app:app",
+                    "--host",
+                    "127.0.0.1",
+                    "--port",
+                    str(port),
+                    "--no-access-log",
+                ],
+                cwd=ROOT,
+                env=env,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
             for _ in range(100):
                 assert server.poll() is None, "Isolated application failed to start"
                 try:
@@ -165,10 +169,27 @@ def stack():
                 time.sleep(0.2)
             else:
                 pytest.fail("Isolated application readiness timeout")
-            yield SimpleNamespace(url=url, keys=keys, base=base, sql=sql)
-        finally:
-            server.terminate()
+
+        def crash_restart():
+            server.kill()
             server.wait(timeout=15)
+            (control / "hold").unlink(missing_ok=True)
+            launch()
+
+        try:
+            launch()
+            yield SimpleNamespace(
+                url=url,
+                keys=keys,
+                base=base,
+                sql=sql,
+                control=control,
+                crash_restart=crash_restart,
+            )
+        finally:
+            if server is not None:
+                server.terminate()
+                server.wait(timeout=15)
             reset_settings_cache()
 
 
@@ -564,3 +585,81 @@ def test_real_background_computation_is_idempotent_and_preserves_account(stack, 
     ).json()[0]
     for field in ("holdings", "cash_balance", "margin_loan", "comparison_revision"):
         assert actual[field] == owner.row[field]
+
+
+def test_running_worker_survives_process_loss_after_real_lease_expiry(stack, account):
+    from backend.app.core.deps_auth import AuthedUser
+    from backend.app.services import copilot_jobs as jobs
+
+    owner = account()
+    endpoint = stack.base + "/api/v1/copilot/decision-runs"
+    run_id = str(uuid4())
+    body = {
+        "id": run_id,
+        "task": {
+            "expected_portfolio_id": owner.row["id"],
+            "goal": "increase_cash",
+            "amount": 500.0,
+            "confirmed": True,
+        },
+    }
+    query = {"expected_portfolio_id": owner.row["id"]}
+    path = endpoint + "/" + run_id
+    (stack.control / "entered").unlink(missing_ok=True)
+    (stack.control / "hold").touch()
+    try:
+        started = requests.post(endpoint, headers=owner.headers, json=body, timeout=15)
+        assert started.status_code == 200
+        for _ in range(100):
+            if (stack.control / "entered").exists():
+                break
+            time.sleep(0.1)
+        assert (stack.control / "entered").exists(), "Worker never reached market capture"
+        before = requests.get(path, headers=owner.headers, timeout=15).json()["data"]
+        assert before["state"] == "running" and before["step"] == "capturing"
+        assert before["attempts"] == 1 and before["result"] is None
+        # SIGKILL the owned application, without its graceful shutdown handler.
+        # Keep production's 120-second lease and database clock unchanged.
+        stack.crash_restart()
+        early = requests.post(endpoint + "/recover", headers=owner.headers, json=query, timeout=15)
+        assert early.status_code == 200
+        assert early.json()["data"]["dispatched"] == 0
+        deadline = time.monotonic() + 140
+        while time.monotonic() < deadline:
+            current = requests.get(path, headers=owner.headers, timeout=15).json()["data"]
+            if current["state"] == "interrupted":
+                break
+            assert current["state"] == "running" and current["attempts"] == 1
+            time.sleep(1)
+        assert current["state"] == "interrupted"
+        assert current["error_code"] == "execution_expired"
+        assert current["result"] is None
+        assert requests.post(endpoint + "/recover", json=query, timeout=15).status_code == 401
+        recovered = requests.post(
+            endpoint + "/recover", headers=owner.headers, json=query, timeout=15
+        )
+        assert recovered.status_code == 200
+        assert recovered.json()["data"]["dispatched"] == 1
+        for _ in range(100):
+            final = requests.get(path, headers=owner.headers, timeout=15).json()["data"]
+            if final["state"] not in ("queued", "running"):
+                break
+            time.sleep(0.2)
+        assert final["state"] == "completed", final
+        assert final["attempts"] == 2
+        assert final["result"]["baseline"]["cash"] == 1000
+        assert final["result"]["candidates"][0]["candidate"]["cash"] == 1500
+        # A stale publication from the first attempt cannot replace this result.
+        user = AuthedUser(
+            id=owner.user,
+            email=None,
+            raw_claims={},
+            access_token=owner.headers["Authorization"].removeprefix("Bearer "),
+        )
+        stale = jobs.journal(user).publish(run_id, before["revision"], error_code="analysis_failed")
+        assert stale.public().model_dump(mode="json") == final
+        again = requests.post(endpoint + "/recover", headers=owner.headers, json=query, timeout=15)
+        assert again.status_code == 200 and again.json()["data"]["dispatched"] == 0
+        assert requests.get(path, headers=owner.headers, timeout=15).json()["data"] == final
+    finally:
+        (stack.control / "hold").unlink(missing_ok=True)
