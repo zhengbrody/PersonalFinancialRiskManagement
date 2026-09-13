@@ -341,3 +341,34 @@ Remaining roadmap: production enablement and deployment/soak acceptance, exhaust
 history/pagination, verified live quote and broker integrations, financed/combined
 option scenarios, and scheduled review/outcome attribution. The full original
 margin-funded Put decision loop and full A–F roadmap remain incomplete.
+
+## 2026-09-13 — Authenticated worker calculation acceptance
+
+Extended the dedicated local Supabase suite from six to eight checks. The new
+parameterized HTTP scenario executes both normal submission and authenticated
+recovery of a persisted queued record that was never submitted to a process
+queue. Both paths use real Auth, JWT-scoped PostgREST/RLS, application lifespan,
+dispatcher, lease journal, risk calculations and signed comparison confirmation.
+Only daily market prices are replaced with a deterministic SPY fixture in a
+separate test-only ASGI entrypoint; production startup has no test switch.
+The local harness now installs the required 0009 preference migration and builds
+recovery snapshots with the same authenticated account resolver as production.
+
+Assertions cover completion in one attempt, matching no-action baseline,
+candidate cash, replay receipt confirmation, identical results on duplicate
+submission, cross-user read denial, and unchanged holdings/cash/debt/revision.
+A subsequent Put calculation must use the original recorded cash (1,000), not
+hypothetical candidate cash (1,500), and retain its 10,000 funding gap with the
+fixture's requested cash buffer. Existing Put save/retrieve/review checks remain
+part of this same local suite.
+
+Validation: all eight local Supabase acceptance cases passed (9.38s test time,
+excluding container startup); 53 focused worker/candidate/Put regression tests
+passed. Black, Ruff and diff whitespace checks passed. No frontend or production
+calculation code changed, so previous full-stack results above are historical,
+not newly rerun here. The runner stops only its dedicated local containers.
+
+This validates persisted-queue recovery, not a forced process crash during an
+active calculation. Live deployment restart/lease-expiry recovery, soak/load
+acceptance and provider latency remain open. Features remain disabled by default;
+no production migration, deployment, new data feed or model training was done.

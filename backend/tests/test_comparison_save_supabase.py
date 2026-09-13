@@ -98,6 +98,8 @@ def stack():
     migrations = ROOT / "supabase/migrations"
     for name in ("0001_init.sql", "0011_activate_portfolio.sql"):
         sql((migrations / name).read_text())
+    if not sql("select to_regclass('public.copilot_preferences');"):
+        sql((migrations / "0009_copilot_preferences.sql").read_text())
     if not sql("select to_regclass('public.risk_plans');"):
         sql((migrations / "0012_risk_ops.sql").read_text())
     sql((migrations / "0015_comparison_confirmations.sql").read_text())
@@ -140,7 +142,7 @@ def stack():
                 sys.executable,
                 "-m",
                 "uvicorn",
-                "backend.app.main:app",
+                "backend.tests.supabase_worker_app:app",
                 "--host",
                 "127.0.0.1",
                 "--port",
@@ -449,3 +451,116 @@ def test_real_put_capture_save_retry_list_and_review(stack, account):
     assert "cash_balance" in changed.json()["data"]["changed_fields"]
     retry = requests.post(path, headers=owner.headers, json=payload, timeout=15)
     assert retry.json()["data"] == saved.json()["data"]
+
+
+@pytest.mark.parametrize("dispatch", ["submit", "recover_persisted"])
+def test_real_background_computation_is_idempotent_and_preserves_account(stack, account, dispatch):
+    owner, other = account(), account()
+    endpoint = stack.base + "/api/v1/copilot/decision-runs"
+    body = {
+        "id": str(uuid4()),
+        "task": {
+            "expected_portfolio_id": owner.row["id"],
+            "goal": "increase_cash",
+            "amount": 500.0,
+            "protected_holdings": [],
+            "confirmed": True,
+        },
+    }
+    if dispatch == "recover_persisted":
+        from dataclasses import asdict
+
+        from backend.app.core.deps_auth import AuthedUser
+        from backend.app.schemas.copilot_candidates import CandidateRequest
+        from backend.app.schemas.copilot_runs import RunSnapshot
+        from backend.app.services import copilot_jobs as jobs
+        from libs.auth.active_portfolio import get_active_portfolio_context
+
+        user = AuthedUser(
+            id=owner.user,
+            email=None,
+            raw_claims={},
+            access_token=owner.headers["Authorization"].removeprefix("Bearer "),
+        )
+        # Persist without submitting to any process queue: models loss of the
+        # in-memory queue before dispatch. Recovery still requires the owner's JWT.
+        jobs.journal(user).reserve(
+            body["id"],
+            CandidateRequest(**body["task"]),
+            RunSnapshot(
+                **asdict(get_active_portfolio_context(access_token=user.access_token)),
+                risk_preference=3,
+                preference_source="neutral_baseline",
+            ),
+            owner.row["comparison_revision"],
+        )
+        started = requests.post(
+            endpoint + "/recover",
+            headers=owner.headers,
+            json={"expected_portfolio_id": owner.row["id"]},
+            timeout=15,
+        )
+        assert started.status_code == 200, started.text
+        assert started.json()["data"]["dispatched"] == 1
+    else:
+        started = requests.post(endpoint, headers=owner.headers, json=body, timeout=15)
+    assert started.status_code == 200, started.text
+    path = endpoint + "/" + body["id"]
+    for _ in range(100):
+        response = requests.get(path, headers=owner.headers, timeout=15)
+        assert response.status_code == 200
+        run = response.json()["data"]
+        if run["state"] not in ("queued", "running"):
+            break
+        time.sleep(0.2)
+    assert run["state"] == "completed", run
+    assert run["attempts"] == 1 and run["step"] == "done"
+    result = run["result"]
+    assert result["portfolio_id"] == owner.row["id"]
+    assert result["coverage"] == "evaluated"
+    assert result["baseline"]["cash"] == 1000
+    assert len(result["candidates"]) == 1
+    candidate = result["candidates"][0]
+    assert candidate["candidate"]["cash"] == 1500
+    assert candidate["baseline"] == result["baseline"]
+    assert candidate["replay_receipt"]["save_available"]
+    confirmation = requests.post(
+        stack.base + "/api/v1/copilot/compare-change/" + candidate["result_id"] + "/confirm",
+        headers=owner.headers,
+        json={
+            "expected_portfolio_id": owner.row["id"],
+            "confirmed": True,
+            "receipt": candidate["replay_receipt"],
+        },
+        timeout=30,
+    )
+    assert confirmation.status_code == 200, confirmation.text
+    from datetime import timedelta
+
+    from backend.tests.test_copilot_put import request as put_request
+
+    put = requests.post(
+        stack.base + "/api/v1/copilot/cash-secured-put",
+        headers=owner.headers,
+        json=put_request(
+            expected_portfolio_id=owner.row["id"],
+            expiry=datetime.now(timezone.utc).date() + timedelta(days=30),
+        ).model_dump(mode="json"),
+        timeout=15,
+    )
+    assert put.status_code == 200
+    assert put.json()["data"]["recorded_cash"] == 1000
+    assert put.json()["data"]["funding_status"] == "insufficient_cash"
+    assert put.json()["data"]["pre_trade_funding_gap"] == 10000
+    repeated = requests.post(endpoint, headers=owner.headers, json=body, timeout=15)
+    assert repeated.status_code == 200
+    assert repeated.json()["data"] == run
+    assert requests.get(path, headers=other.headers, timeout=15).status_code == 404
+    actual = requests.get(
+        stack.url + "/rest/v1/portfolios",
+        headers=owner.headers,
+        params={"id": "eq." + owner.row["id"], "select": "*"},
+        timeout=15,
+    ).json()[0]
+    for field in ("holdings", "cash_balance", "margin_loan", "comparison_revision"):
+        assert actual[field] == owner.row[field]
