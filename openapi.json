@@ -1595,6 +1595,16 @@
             "title": "Pre Trade Funding Gap",
             "type": "number"
           },
+          "receipt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComparisonReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "recorded_cash": {
             "title": "Recorded Cash",
             "type": "number"
@@ -2663,6 +2673,30 @@
           "confirmed"
         ],
         "title": "ConfirmComparison",
+        "type": "object"
+      },
+      "ConfirmPutPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/ComparisonReceipt"
+          }
+        },
+        "required": [
+          "expected_portfolio_id",
+          "confirmed",
+          "receipt"
+        ],
+        "title": "ConfirmPutPlan",
         "type": "object"
       },
       "CopilotAnswer": {
@@ -3992,6 +4026,11 @@
           "cash_secured_put_available": {
             "default": false,
             "title": "Cash Secured Put Available",
+            "type": "boolean"
+          },
+          "cash_secured_put_save_available": {
+            "default": false,
+            "title": "Cash Secured Put Save Available",
             "type": "boolean"
           },
           "coverage": {
@@ -5382,6 +5421,39 @@
         "title": "Envelope[PublicRiskCheckOut]",
         "type": "object"
       },
+      "Envelope_PutPlanReview_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PutPlanReview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[PutPlanReview]",
+        "type": "object"
+      },
       "Envelope_RegimeDetailResponse_": {
         "additionalProperties": true,
         "properties": {
@@ -5809,6 +5881,39 @@
           "meta"
         ],
         "title": "Envelope[SavedComparison]",
+        "type": "object"
+      },
+      "Envelope_SavedPutPlan_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedPutPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[SavedPutPlan]",
         "type": "object"
       },
       "Envelope_ScenariosOut_": {
@@ -6273,6 +6378,43 @@
           "meta"
         ],
         "title": "Envelope[dict]",
+        "type": "object"
+      },
+      "Envelope_list_SavedPutPlan__": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SavedPutPlan"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[list[SavedPutPlan]]",
         "type": "object"
       },
       "ErrorOut": {
@@ -11850,6 +11992,70 @@
         "title": "PutExpiryScenario",
         "type": "object"
       },
+      "PutPlanReview": {
+        "additionalProperties": false,
+        "properties": {
+          "changed_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed Fields",
+            "type": "array"
+          },
+          "holdings_changed_by_review": {
+            "const": false,
+            "default": false,
+            "title": "Holdings Changed By Review",
+            "type": "boolean"
+          },
+          "live_quote_checked": {
+            "const": false,
+            "default": false,
+            "title": "Live Quote Checked",
+            "type": "boolean"
+          },
+          "plan_id": {
+            "format": "uuid",
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "reviewed_at": {
+            "format": "date-time",
+            "title": "Reviewed At",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "requires_recalculation",
+              "assumptions_need_confirmation"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan_id",
+          "portfolio_id",
+          "reviewed_at",
+          "verdict",
+          "changed_fields",
+          "reasons"
+        ],
+        "title": "PutPlanReview",
+        "type": "object"
+      },
       "QualityBlock": {
         "properties": {
           "current_ratio": {
@@ -12902,6 +13108,21 @@
           "summary"
         ],
         "title": "ResearchVerdict",
+        "type": "object"
+      },
+      "ReviewPutPlanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_portfolio_id"
+        ],
+        "title": "ReviewPutPlanRequest",
         "type": "object"
       },
       "RiskAlert": {
@@ -15156,6 +15377,37 @@
           "result"
         ],
         "title": "SavedComparison",
+        "type": "object"
+      },
+      "SavedPutPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed_at": {
+            "format": "date-time",
+            "title": "Confirmed At",
+            "type": "string"
+          },
+          "plan_id": {
+            "format": "uuid",
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/CashSecuredPutResult"
+          }
+        },
+        "required": [
+          "plan_id",
+          "portfolio_id",
+          "confirmed_at",
+          "result"
+        ],
+        "title": "SavedPutPlan",
         "type": "object"
       },
       "ScenarioCellOut": {
@@ -18677,6 +18929,155 @@
           }
         },
         "summary": "Explicitly CONFIRM (save) Copilot preferences \u2014 the only write path",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/put-plans": {
+      "get": {
+        "operationId": "list_plans_api_v1_copilot_put_plans_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "expected_portfolio_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Expected Portfolio Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_SavedPutPlan__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Plans",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/put-plans/{plan_id}/review": {
+      "post": {
+        "operationId": "review_plan_api_v1_copilot_put_plans__plan_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Plan Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewPutPlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_PutPlanReview_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Plan",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/put-plans/{result_id}/confirm": {
+      "post": {
+        "operationId": "confirm_plan_api_v1_copilot_put_plans__result_id__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "result_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Result Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmPutPlan"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SavedPutPlan_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Plan",
         "tags": [
           "copilot"
         ]

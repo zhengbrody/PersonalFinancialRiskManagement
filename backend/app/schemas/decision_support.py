@@ -41,3 +41,4 @@ class DecisionSupport(BaseModel):
     save_available: Literal[False] = False
     candidate_comparison_available: bool = False
     cash_secured_put_available: bool = False
+    cash_secured_put_save_available: bool = False

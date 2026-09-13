@@ -506,6 +506,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/copilot/put-plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Plans */
+        get: operations["list_plans_api_v1_copilot_put_plans_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/put-plans/{plan_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review Plan */
+        post: operations["review_plan_api_v1_copilot_put_plans__plan_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/put-plans/{result_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm Plan */
+        post: operations["confirm_plan_api_v1_copilot_put_plans__result_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/copilot/runs": {
         parameters: {
             query?: never;
@@ -2557,6 +2608,7 @@ export interface components {
             portfolio_id: string;
             /** Pre Trade Funding Gap */
             pre_trade_funding_gap: number;
+            receipt?: components["schemas"]["ComparisonReceipt"] | null;
             /** Recorded Cash */
             recorded_cash: number;
             /**
@@ -2994,6 +3046,17 @@ export interface components {
         };
         /** ConfirmComparison */
         ConfirmComparison: {
+            /** Confirmed */
+            confirmed: boolean;
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
+            receipt: components["schemas"]["ComparisonReceipt"];
+        };
+        /** ConfirmPutPlan */
+        ConfirmPutPlan: {
             /** Confirmed */
             confirmed: boolean;
             /**
@@ -3470,6 +3533,11 @@ export interface components {
              */
             cash_secured_put_available?: boolean;
             /**
+             * Cash Secured Put Save Available
+             * @default false
+             */
+            cash_secured_put_save_available?: boolean;
+            /**
              * Coverage
              * @enum {string}
              */
@@ -3845,6 +3913,14 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** Envelope[PutPlanReview] */
+        Envelope_PutPlanReview_: {
+            data?: components["schemas"]["PutPlanReview"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
         /** Envelope[RegimeDetailResponse] */
         Envelope_RegimeDetailResponse_: {
             data?: components["schemas"]["RegimeDetailResponse"] | null;
@@ -3944,6 +4020,14 @@ export interface components {
         /** Envelope[SavedComparison] */
         Envelope_SavedComparison_: {
             data?: components["schemas"]["SavedComparison"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[SavedPutPlan] */
+        Envelope_SavedPutPlan_: {
+            data?: components["schemas"]["SavedPutPlan"] | null;
             error?: components["schemas"]["ErrorOut"] | null;
             meta: components["schemas"]["MetaOut"];
         } & {
@@ -4059,6 +4143,15 @@ export interface components {
             data?: {
                 [key: string]: unknown;
             } | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[list[SavedPutPlan]] */
+        Envelope_list_SavedPutPlan__: {
+            /** Data */
+            data?: components["schemas"]["SavedPutPlan"][] | null;
             error?: components["schemas"]["ErrorOut"] | null;
             meta: components["schemas"]["MetaOut"];
         } & {
@@ -5977,6 +6070,45 @@ export interface components {
             /** Underlying Price */
             underlying_price: number;
         };
+        /** PutPlanReview */
+        PutPlanReview: {
+            /** Changed Fields */
+            changed_fields: string[];
+            /**
+             * Holdings Changed By Review
+             * @default false
+             * @constant
+             */
+            holdings_changed_by_review?: false;
+            /**
+             * Live Quote Checked
+             * @default false
+             * @constant
+             */
+            live_quote_checked?: false;
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Reasons */
+            reasons: string[];
+            /**
+             * Reviewed At
+             * Format: date-time
+             */
+            reviewed_at: string;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "requires_recalculation" | "assumptions_need_confirmation";
+        };
         /** QualityBlock */
         QualityBlock: {
             /** Current Ratio */
@@ -6355,6 +6487,14 @@ export interface components {
             summary: string;
             /** What Would Change My Mind */
             what_would_change_my_mind?: string[];
+        };
+        /** ReviewPutPlanRequest */
+        ReviewPutPlanRequest: {
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
         };
         /** RiskAlert */
         RiskAlert: {
@@ -7101,6 +7241,25 @@ export interface components {
              * Format: uuid
              */
             result_id: string;
+        };
+        /** SavedPutPlan */
+        SavedPutPlan: {
+            /**
+             * Confirmed At
+             * Format: date-time
+             */
+            confirmed_at: string;
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            result: components["schemas"]["CashSecuredPutResult"];
         };
         /** ScenarioCellOut */
         ScenarioCellOut: {
@@ -8768,6 +8927,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_CopilotPreferencesCleared_"];
+                };
+            };
+        };
+    };
+    list_plans_api_v1_copilot_put_plans_get: {
+        parameters: {
+            query: {
+                expected_portfolio_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_SavedPutPlan__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_plan_api_v1_copilot_put_plans__plan_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewPutPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_PutPlanReview_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_plan_api_v1_copilot_put_plans__result_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                result_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmPutPlan"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SavedPutPlan_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

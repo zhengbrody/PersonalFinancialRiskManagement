@@ -14,6 +14,8 @@ from pydantic import (
     model_validator,
 )
 
+from .copilot_compare import ComparisonReceipt
+
 
 class CashSecuredPutRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -80,3 +82,4 @@ class CashSecuredPutResult(BaseModel):
         "https://www.optionseducation.org/strategies/all-strategies/cash-secured-put"
     ] = "https://www.optionseducation.org/strategies/all-strategies/cash-secured-put"
     save_available: Literal[False] = False
+    receipt: ComparisonReceipt | None = None

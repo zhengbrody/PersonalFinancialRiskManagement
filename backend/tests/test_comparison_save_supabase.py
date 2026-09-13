@@ -106,6 +106,7 @@ def stack():
     for name in (
         "0016_copilot_background.sql",
         "0017_copilot_job_recovery.sql",
+        "0018_put_plan_confirmations.sql",
     ):
         sql((migrations / name).read_text())
     sql("notify pgrst, 'reload schema';")
@@ -119,6 +120,8 @@ def stack():
         "MINDMARKET_COMPARISON_SAVE_ENABLED": "true",
         "MINDMARKET_DECISION_SUPPORT_ENABLED": "true",
         "MINDMARKET_ASYNC_ANALYSIS_ENABLED": "true",
+        "MINDMARKET_CASH_SECURED_PUT_ENABLED": "true",
+        "MINDMARKET_CASH_SECURED_PUT_SAVE_ENABLED": "true",
         "MINDMARKET_RISK_RUN_SIGNING_SECRET": secrets.token_urlsafe(48),
         "SENTRY_DSN": "",
     }
@@ -383,3 +386,66 @@ def test_job_renewal_listing_cancel_and_cleanup_with_real_jwt(stack, account):
     assert response.status_code == 200
     assert response.json()["data"]["removed"] == 1
     assert response.json()["data"]["dispatched"] == 0
+
+
+def test_real_put_capture_save_retry_list_and_review(stack, account):
+    from datetime import timedelta
+
+    from backend.tests.test_copilot_put import request as put_request
+
+    owner, other = account(), account()
+    body = put_request(
+        expected_portfolio_id=owner.row["id"],
+        expiry=datetime.now(timezone.utc).date() + timedelta(days=30),
+    ).model_dump(mode="json")
+    endpoint = stack.base + "/api/v1/copilot"
+    calc = requests.post(
+        endpoint + "/cash-secured-put", headers=owner.headers, json=body, timeout=15
+    )
+    assert calc.status_code == 200
+    result = calc.json()["data"]
+    assert result["receipt"]["save_available"]
+    payload = {
+        "expected_portfolio_id": owner.row["id"],
+        "confirmed": True,
+        "receipt": result["receipt"],
+    }
+    path = endpoint + "/put-plans/" + result["result_id"] + "/confirm"
+    saved = requests.post(path, headers=owner.headers, json=payload, timeout=15)
+    assert saved.status_code == 200
+    retry = requests.post(path, headers=owner.headers, json=payload, timeout=15)
+    assert retry.json()["data"] == saved.json()["data"]
+    query = {"expected_portfolio_id": owner.row["id"]}
+    listing = requests.get(endpoint + "/put-plans", headers=owner.headers, params=query, timeout=15)
+    assert [p["plan_id"] for p in listing.json()["data"]] == [result["result_id"]]
+    assert (
+        requests.get(
+            endpoint + "/put-plans", headers=other.headers, params=query, timeout=15
+        ).json()["data"]
+        == []
+    )
+    # Editable RiskPlan descriptions cannot replace the signed calculation.
+    edited = requests.patch(
+        stack.url + "/rest/v1/risk_plans?id=eq." + result["result_id"],
+        headers=owner.headers,
+        json={"expected_impact": {"fake_profit": 999999}},
+        timeout=15,
+    )
+    assert edited.status_code in (200, 204)
+    review_url = endpoint + "/put-plans/" + result["result_id"] + "/review"
+    reviewed = requests.post(review_url, headers=owner.headers, json=query, timeout=15)
+    assert (
+        reviewed.status_code == 200
+        and reviewed.json()["data"]["verdict"] == "assumptions_need_confirmation"
+    )
+    requests.patch(
+        stack.url + "/rest/v1/portfolios?id=eq." + owner.row["id"],
+        headers=owner.headers,
+        json={"cash_balance": 1200},
+        timeout=15,
+    ).raise_for_status()
+    changed = requests.post(review_url, headers=owner.headers, json=query, timeout=15)
+    assert changed.json()["data"]["verdict"] == "requires_recalculation"
+    assert "cash_balance" in changed.json()["data"]["changed_fields"]
+    retry = requests.post(path, headers=owner.headers, json=payload, timeout=15)
+    assert retry.json()["data"] == saved.json()["data"]

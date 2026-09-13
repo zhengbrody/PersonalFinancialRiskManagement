@@ -25,6 +25,7 @@ export const putResultSchema = z.object({
   })).min(1).max(7), limitations: z.array(z.string()),
   source_url: z.literal("https://www.optionseducation.org/strategies/all-strategies/cash-secured-put"),
   save_available: z.literal(false),
+  receipt: z.object({ record: z.string(), signature: z.string(), save_available: z.boolean() }).nullish(),
 }).superRefine((result, ctx) => {
   if (result.portfolio_id !== result.assumptions.expected_portfolio_id ||
       !result.assumptions.confirmed || !result.assumptions.gross_settled_usd_cash_confirmed ||

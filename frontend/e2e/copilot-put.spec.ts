@@ -18,13 +18,24 @@ test("cash-secured put stays hypothetical in the existing conversation", async (
     evidence: [], data_only: true, decision_support: {
       version: 1, task: { kind: "explanation", goal: null, missing_inputs: [], confirmed_constraints: {} },
       coverage: "explained", methods: [], limitations: [], save_available: false,
-      candidate_comparison_available: false, cash_secured_put_available: true,
+      candidate_comparison_available: false, cash_secured_put_available: true, cash_secured_put_save_available: true,
     },
   }) }));
   await page.route("**/api/v1/copilot/cash-secured-put", route => {
     expect(route.request().postDataJSON()).toEqual(result.assumptions);
-    return route.fulfill({ json: envelope(result) });
+    return route.fulfill({ json: envelope({ ...result, receipt: { record: "signed fixture", signature: "a".repeat(64), save_available: true } }) });
   });
+  const saved = { plan_id: result.result_id, portfolio_id: result.portfolio_id, confirmed_at: result.computed_at, result };
+  await page.route("**/api/v1/copilot/put-plans/*/confirm", route => {
+    expect(route.request().postDataJSON().confirmed).toBe(true);
+    return route.fulfill({ json: envelope(saved) });
+  });
+  await page.route("**/api/v1/copilot/put-plans?*", route => route.fulfill({ json: envelope([saved]) }));
+  await page.route("**/api/v1/copilot/put-plans/*/review", route => route.fulfill({ json: envelope({
+    plan_id: saved.plan_id, portfolio_id: saved.portfolio_id, reviewed_at: result.computed_at,
+    verdict: "requires_recalculation", changed_fields: ["cash_balance"], reasons: ["Account cash changed."],
+    live_quote_checked: false, holdings_changed_by_review: false,
+  }) }));
   await page.goto("/copilot");
   await expect(page.getByRole("button", { name: "Cash put portfolio", exact: true })).toBeVisible();
   await page.getByTestId("copilot-input").fill("What is a cash secured put?");
@@ -43,5 +54,16 @@ test("cash-secured put stays hypothetical in the existing conversation", async (
   await expect(page.getByText("-$1.00", { exact: true })).toBeVisible();
   await expect(page.getByTestId("copilot-input")).toHaveCount(1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByLabel("Save this original hypothetical Put calculation as a draft RiskPlan. This does not place a trade.").check();
+  await page.getByRole("button", { name: "Confirm save Put plan" }).click();
+  await expect(page.getByText("Original calculation saved. No holdings were changed.")).toBeVisible();
+  await page.getByText(/SPY Put · saved/).click();
+  await page.getByText("Original inputs & funding").click();
+  await expect(page.getByText("Premium per share", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Review current assumptions" }).click();
+  await expect(page.getByText("Recalculation required")).toBeVisible();
+  await page.getByRole("button", { name: "Load saved Put plans" }).click();
+  await expect(page.getByText(/1 verified saved Put plans/)).toBeVisible();
+  await page.getByRole("region", { name: "Saved put plans" }).screenshot({ path: test.info().outputPath("saved-put-review.png") });
   await page.getByRole("region", { name: "Cash-secured put result" }).screenshot({ path: test.info().outputPath("put-scenario.png") });
 });

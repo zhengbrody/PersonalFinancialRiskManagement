@@ -264,7 +264,7 @@ Remaining E scope: verified executable quotes/contracts, brokerage-specific
 collateral/settlement rules, leveraged funding, combined protection legs,
 exercise-event handling, existing holdings' scenario P&L and account concentration.
 The user's full “sell holdings then fund puts using margin” acceptance case is
-still not complete. Saving this new scenario and cross-time review belong to F.
+still not complete. The initial F implementation below adds confirmed original saving and manual assumption review. Automatic monitoring and realised-outcome attribution remain outside scope.
 
 E validation:
 - Backend CI suite: 1473 passed, 23 skipped, coverage 88.81%; opt-in external
@@ -281,3 +281,63 @@ E validation:
 - The mobile result screenshot was inspected. Synthetic tests use supplied
   assumptions, never real broker orders or personal portfolio data.
 - No live quote execution, database write, deployment or model training occurred.
+
+
+## F follow-up: confirmed Put plans and manual review (2026-09-12)
+
+MINDMARKET_CASH_SECURED_PUT_SAVE_ENABLED defaults off. When enabled with the
+independent run-signing secret and migration 0018, new Put calculations receive
+a purpose-separated HMAC receipt containing the original account, assumptions,
+result, capture time, account revision and implementation fingerprint. The
+receipt is not permission to save or trade.
+
+A separate explicit confirmation creates a draft in existing RiskPlan storage,
+with evidence in the existing immutable comparison_confirmations table.
+Migration 0018 adds a Put-specific SECURITY INVOKER transaction using the existing
+owner locks, RLS and revision trigger from 0015. No parallel table is introduced.
+A new save must be within fifteen minutes, match the account revision and active
+portfolio, use the same implementation and reproduce the exact original result.
+The transaction makes retries idempotent. An uncertain response tells the user
+to retry the same calculation; a previously committed result remains retrievable
+even after account changes or expiration of its original save window.
+
+Historical reads authenticate original bytes and bindings without recomputing
+under today's code. Editable RiskPlan notes/impact are never the source of the
+verified result. The original inputs, funding figures, calculation time and
+limitations are displayed inside the existing Copilot. Bounded history inspects
+at most forty owner/portfolio confirmation rows and returns at most twenty
+verified Put records; it is not a paginated or exhaustive archive. Legacy
+comparisons and unverifiable records are omitted. There is no global scan.
+
+Manual review reads current authenticated account data and checks scope/revision
+again before responding. It reports changed holdings, cash, debt, capital,
+revision, implementation or expiry status. It always requires either a new
+calculation or renewed confirmation of assumptions: unchanged account data does
+not verify a live premium, settled-cash status, open orders or suitability.
+Reviews do not mark a trade as executed, infer realised returns, change holdings
+or replace the signed original. Review results are shown with their timestamp;
+they are not persisted as an automatic monitoring history.
+
+RiskPlan's ordinary Health Score review is not used for these calculations;
+the panel points back to Copilot's authenticated original and assumption review.
+
+Validation:
+- Backend CI: 1481 passed, 27 skipped, coverage 88.69%. Opt-in skips were kept
+  separate from the explicit integration runs below.
+- Eight save/review unit/API checks and three actual isolated PostgreSQL checks
+  passed after restoring seven mutations (receipt integrity, age, implementation,
+  replay, revision-only changes, SQL clock and SQL revision guards).
+- Six actual local Supabase Auth/PostgREST acceptance checks passed, including
+  Put capture, confirmed save, retry, list, cross-owner isolation, mutable draft
+  edits and changed-cash review. Dedicated containers were stopped afterward.
+- Frontend 608 tests, TypeScript, lint and production Next build passed. Desktop
+  and mobile covered confirmation, saved input inspection, retrieval and review;
+  the mobile saved-plan screenshot was inspected.
+- Required mypy passed for 49 schema/core files; Black checked all 429 Python
+  files; Ruff passed. Existing offline eval passed 50 cases, 722/722 assertions.
+- No production migration, deployment, order or model training occurred.
+
+Remaining roadmap: production enablement and deployment/soak acceptance, exhaustive
+history/pagination, verified live quote and broker integrations, financed/combined
+option scenarios, and scheduled review/outcome attribution. The full original
+margin-funded Put decision loop and full A–F roadmap remain incomplete.

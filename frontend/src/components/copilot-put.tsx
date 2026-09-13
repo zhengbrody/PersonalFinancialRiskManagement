@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { CopilotPutPlans } from "./copilot-put-plans";
 import { Button } from "./ui/button";
 import { apiFetch } from "@/lib/api";
 import { putRequestSchema, putResultSchema, type PutResult } from "@/lib/copilot-put";
@@ -16,7 +17,7 @@ const labels: Record<keyof typeof initial, string> = {
   other_reserved_cash: "Other cash holds, excluding listed put collateral (USD)", cash_buffer: "Cash buffer to preserve (USD)",
 };
 
-export function CopilotPut({ token, portfolioId }: { token: string | null; portfolioId: string }) {
+export function CopilotPut({ token, portfolioId, plansEnabled = false }: { token: string | null; portfolioId: string; plansEnabled?: boolean }) {
   const [fields, setFields] = useState(initial);
   const [confirmed, setConfirmed] = useState(false);
   const [cashConfirmed, setCashConfirmed] = useState(false);
@@ -100,5 +101,6 @@ export function CopilotPut({ token, portfolioId }: { token: string | null; portf
       </ul></details>
       <a href={result.source_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">OIC: cash-secured put mechanics</a>
     </section>}
+    {plansEnabled && <CopilotPutPlans key={result?.result_id ?? "retrieve"} token={token} portfolioId={portfolioId} result={result} />}
   </details>;
 }

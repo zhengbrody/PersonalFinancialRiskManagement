@@ -206,7 +206,7 @@ function Conversation({
               <>
                 <CopilotAnswerCard answer={turn.answer} />
                 {portfolioId && turn.answer.decision_support?.cash_secured_put_available &&
-                  <CopilotPut key={portfolioId} token={token} portfolioId={portfolioId} />}
+                  <CopilotPut key={portfolioId} token={token} portfolioId={portfolioId} plansEnabled={turn.answer.decision_support.cash_secured_put_save_available} />}
                 {portfolioId && turn.answer.decision_support?.candidate_comparison_available &&
                   ["candidate_request", "clarification"].includes(turn.answer.decision_support.task.kind) &&
                   <CopilotCandidates token={token} portfolioId={portfolioId} scope={`${scope}:${turn.id}`} />}

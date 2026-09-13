@@ -95,6 +95,7 @@ function PlanCard({
   const [result, setResult] = useState<PlanReview | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   // A navigation/UX hint only, never proof that these editable blobs are trusted.
+  const capturedPut = plan.data_confidence?.kind === "cash_secured_put";
   const capturedComparison = plan.source === "copilot" && plan.data_confidence?.calculation_id === plan.id;
 
   function runReview() {
@@ -137,7 +138,9 @@ function PlanCard({
         </div>}
       </div>
 
-      {capturedComparison && <p className="mt-2 text-xs text-muted-foreground">Captured comparison. Its signed original is readable from the Copilot conversation that saved it, in that browser tab session; this panel shows the editable plan only. Comparing it with today&apos;s Health Score requires a matching calculation method; outcome review is not available yet.</p>}
+      {capturedComparison && !capturedPut && <p className="mt-2 text-xs text-muted-foreground">Captured comparison. Its signed original is readable from the Copilot conversation that saved it, in that browser tab session; this panel shows the editable plan only. Comparing it with today&apos;s Health Score requires a matching calculation method; outcome review is not available yet.</p>}
+
+      {capturedComparison && capturedPut && <p className="mt-2 text-xs text-muted-foreground">Saved hypothetical Put. Open Copilot → Test a cash-secured Put → Load saved Put plans to read the authenticated original and review current assumptions. This editable draft is not an executed trade.</p>}
 
       {result && (
         <div className="mt-2 space-y-1 rounded bg-muted/30 p-2">
