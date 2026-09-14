@@ -12,6 +12,7 @@ import socket
 import subprocess
 import sys
 import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -140,9 +141,8 @@ def stack(tmp_path_factory):
         reset_settings_cache()
         server = None
 
-        def launch():
-            nonlocal server
-            server = subprocess.Popen(
+        def spawn(listen_port):
+            child = subprocess.Popen(
                 [
                     sys.executable,
                     "-m",
@@ -151,7 +151,7 @@ def stack(tmp_path_factory):
                     "--host",
                     "127.0.0.1",
                     "--port",
-                    str(port),
+                    str(listen_port),
                     "--no-access-log",
                 ],
                 cwd=ROOT,
@@ -160,15 +160,39 @@ def stack(tmp_path_factory):
                 stderr=subprocess.DEVNULL,
             )
             for _ in range(100):
-                assert server.poll() is None, "Isolated application failed to start"
+                assert child.poll() is None, "Isolated application failed to start"
                 try:
-                    if requests.get(base + "/api/v1/health", timeout=1).status_code == 200:
+                    if (
+                        requests.get(
+                            f"http://127.0.0.1:{listen_port}/api/v1/health", timeout=1
+                        ).status_code
+                        == 200
+                    ):
                         break
                 except requests.ConnectionError:
                     pass
                 time.sleep(0.2)
             else:
+                child.terminate()
+                child.wait(timeout=15)
                 pytest.fail("Isolated application readiness timeout")
+            return child
+
+        def launch():
+            nonlocal server
+            server = spawn(port)
+
+        @contextmanager
+        def peer():
+            with socket.socket() as sock:
+                sock.bind(("127.0.0.1", 0))
+                peer_port = sock.getsockname()[1]
+            child = spawn(peer_port)
+            try:
+                yield f"http://127.0.0.1:{peer_port}"
+            finally:
+                child.terminate()
+                child.wait(timeout=15)
 
         def crash_restart():
             server.kill()
@@ -185,6 +209,7 @@ def stack(tmp_path_factory):
                 sql=sql,
                 control=control,
                 crash_restart=crash_restart,
+                peer=peer,
             )
         finally:
             if server is not None:
@@ -663,3 +688,131 @@ def test_running_worker_survives_process_loss_after_real_lease_expiry(stack, acc
         assert requests.get(path, headers=owner.headers, timeout=15).json()["data"] == final
     finally:
         (stack.control / "hold").unlink(missing_ok=True)
+
+
+def test_two_instances_claim_once_under_repeated_concurrent_submission(stack, account):
+    from concurrent.futures import ThreadPoolExecutor
+
+    owner = account()
+    captures = stack.control / "captures"
+    initial_captures = len(captures.read_text().splitlines()) if captures.exists() else 0
+    with stack.peer() as peer:
+        endpoints = [base + "/api/v1/copilot/decision-runs" for base in (stack.base, peer)]
+        for round_index in range(3):
+            body = {
+                "id": str(uuid4()),
+                "task": {
+                    "expected_portfolio_id": owner.row["id"],
+                    "goal": "increase_cash",
+                    "amount": 500.0,
+                    "confirmed": True,
+                },
+            }
+            (stack.control / "entered").unlink(missing_ok=True)
+            (stack.control / "hold").touch()
+            try:
+                with ThreadPoolExecutor(max_workers=8) as pool:
+                    responses = list(
+                        pool.map(
+                            lambda i: requests.post(
+                                endpoints[i % 2], headers=owner.headers, json=body, timeout=30
+                            ),
+                            range(8),
+                        )
+                    )
+                assert all(r.status_code == 200 for r in responses), [
+                    r.status_code for r in responses
+                ]
+                for _ in range(100):
+                    if (stack.control / "entered").exists():
+                        break
+                    time.sleep(0.1)
+                assert (stack.control / "entered").exists()
+                # Repeated recovery on both processes must not claim an active lease.
+                for endpoint in endpoints:
+                    response = requests.post(
+                        endpoint + "/recover",
+                        headers=owner.headers,
+                        json={"expected_portfolio_id": owner.row["id"]},
+                        timeout=15,
+                    )
+                    assert response.status_code == 200
+                    assert response.json()["data"]["dispatched"] == 0
+                assert len(captures.read_text().splitlines()) == initial_captures + round_index + 1
+            finally:
+                (stack.control / "hold").unlink(missing_ok=True)
+            for _ in range(100):
+                final = requests.get(
+                    endpoints[0] + "/" + body["id"], headers=owner.headers, timeout=15
+                ).json()["data"]
+                if final["state"] not in ("queued", "running"):
+                    break
+                time.sleep(0.2)
+            assert final["state"] == "completed", final
+            assert final["attempts"] == 1
+            assert final["result"]["candidates"][0]["candidate"]["cash"] == 1500
+            for endpoint in endpoints:
+                repeated = requests.post(endpoint, headers=owner.headers, json=body, timeout=15)
+                assert repeated.status_code == 200 and repeated.json()["data"] == final
+        assert len(captures.read_text().splitlines()) == initial_captures + 3
+
+
+def test_two_instance_burst_drains_durable_jobs_beyond_memory_capacity(stack, account):
+    from concurrent.futures import ThreadPoolExecutor
+
+    owner = account()
+    captures = stack.control / "captures"
+    initial = len(captures.read_text().splitlines()) if captures.exists() else 0
+    bodies = [
+        {
+            "id": str(uuid4()),
+            "task": {
+                "expected_portfolio_id": owner.row["id"],
+                "goal": "increase_cash",
+                "amount": 500.0,
+                "confirmed": True,
+            },
+        }
+        for _ in range(12)
+    ]
+    with stack.peer() as peer:
+        endpoints = [base + "/api/v1/copilot/decision-runs" for base in (stack.base, peer)]
+        (stack.control / "hold").touch()
+        try:
+            with ThreadPoolExecutor(max_workers=12) as pool:
+                responses = list(
+                    pool.map(
+                        lambda i: requests.post(
+                            endpoints[i % 2], headers=owner.headers, json=bodies[i], timeout=30
+                        ),
+                        range(12),
+                    )
+                )
+            assert all(r.status_code == 200 for r in responses), [r.status_code for r in responses]
+            listing = requests.get(
+                endpoints[0],
+                headers=owner.headers,
+                params={"expected_portfolio_id": owner.row["id"]},
+                timeout=15,
+            ).json()["data"]["runs"]
+            assert {r["id"] for r in listing} == {b["id"] for b in bodies}
+            assert all(r["state"] in ("queued", "running") for r in listing)
+            assert sum(r["state"] == "queued" for r in listing) >= 10
+        finally:
+            (stack.control / "hold").unlink(missing_ok=True)
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            listing = requests.get(
+                endpoints[0],
+                headers=owner.headers,
+                params={"expected_portfolio_id": owner.row["id"]},
+                timeout=15,
+            ).json()["data"]["runs"]
+            if all(r["state"] == "completed" for r in listing):
+                break
+            assert all(r["state"] in ("queued", "running", "completed") for r in listing)
+            time.sleep(0.5)
+        assert len(listing) == 12 and all(r["state"] == "completed" for r in listing)
+        assert all(r["attempts"] == 1 for r in listing)
+        assert len({r["result"]["snapshot_id"] for r in listing}) == 12
+        assert len(captures.read_text().splitlines()) == initial + 12

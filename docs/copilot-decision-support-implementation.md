@@ -401,3 +401,44 @@ Remaining release work includes version-changing/rolling deployment compatibilit
 signing-key continuity operations, multiple application instances, sustained load
 and live-provider latency. This same-version local process restart does not close
 those production acceptance items or the broader C/E financing scenario roadmap.
+
+## 2026-09-14 — Two-instance contention and queue overflow acceptance
+
+The isolated acceptance harness now starts a second owned application subprocess
+on a separate loopback port with the same local database and signing key. Both
+processes execute the real dispatcher, JWT/RLS requests and journal transitions.
+The synthetic market adapter records only process IDs in a fixture-owned file so
+assertions count actual market captures, not just final states.
+
+Two additional acceptance cases passed:
+- Three rounds of eight concurrent submissions of the same run ID, split across
+  both processes. While market capture is held, recovery on either process cannot
+  dispatch the leased job. Each round has exactly one capture and one attempt;
+  both processes return the identical completed result on subsequent submission.
+- Twelve distinct simultaneous jobs exceed the two processes' combined eight
+  in-memory dispatch slots. All twelve remain visible in durable storage while
+  capture is held. After release they drain without another explicit recovery
+  request, with twelve distinct results, one attempt and one capture per job.
+
+Validation: all eleven real local Supabase acceptance cases passed in 145.19s,
+including the unchanged real lease-expiry crash test. Sixty targeted worker,
+comparison replay/save and Put-plan regressions passed, including version drift
+and key-change rejection. Black, Ruff and whitespace checks passed. Only test
+harness code and documentation changed; production flags remain unchanged.
+
+Release compatibility boundaries:
+- All serving processes must share the existing signing key. There is no key-ring
+  migration implemented here; changing the key makes older signatures unverifiable.
+- A calculation implementation fingerprint change requires a fresh calculation
+  before first confirmation. Saved Put history remains readable and its manual
+  review flags implementation changes; it is not silently recomputed as history.
+- These processes used the same application version. Actual mixed-version rolling
+  deployment, signed-record schema compatibility and rollback must still be
+  checked against the specific release pair before enabling that rollout.
+- This is bounded contention/burst acceptance with synthetic prices, not a soak,
+  production capacity claim or live-provider latency measurement. Queue limits
+  are per process; this does not introduce a global multi-instance resource cap.
+
+The local B acceptance now covers lost queue, active-process crash/expiry,
+multiple-instance claim contention and durable queue overflow. Sustained load,
+release-pair deployment acceptance and the full C/E financing scenario remain open.

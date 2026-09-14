@@ -22,6 +22,8 @@ def synthetic_prices(symbols, *, days=365, provenance=None, **kwargs):
     if set(symbols) != {"SPY"}:
         raise ValueError("Acceptance prices exist only for SPY")
     control = Path(os.environ["MINDMARKET_TEST_WORKER_CONTROL"])
+    with (control / "captures").open("a") as captures:
+        captures.write(f"{os.getpid()}\n")
     if (control / "hold").exists():
         (control / "entered").touch()
         deadline = time.monotonic() + 180
