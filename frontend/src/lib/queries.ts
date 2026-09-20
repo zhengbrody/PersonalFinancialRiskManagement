@@ -1351,6 +1351,7 @@ export const decisionSupportSchema = z.object({
   candidate_comparison_available: z.boolean().default(false),
   cash_secured_put_available: z.boolean().default(false),
   cash_secured_put_save_available: z.boolean().default(false),
+  funding_scenarios_available: z.boolean().default(false),
 });
 
 export const copilotAnswerSchema = z.looseObject({

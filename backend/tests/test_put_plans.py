@@ -172,3 +172,58 @@ def test_revision_only_change_requires_recalculation(capture):
     checked = service.review(saved, snap, context, uuid4(), now=NOW)
     assert checked.verdict == "requires_recalculation"
     assert checked.changed_fields == ["portfolio_revision"]
+
+
+def test_history_scans_past_invalid_rows_and_binds_cursor(capture, monkeypatch):
+    _, result, _, receipt, rows = capture
+    service.confirm("jwt", USER, BOOK, str(result.result_id), receipt)
+    valid = next(iter(rows.values()))
+    records = [{**valid, "plan_id": str(UUID(int=i)), "signature": "0" * 64} for i in range(1, 22)]
+    records.append(valid)
+    records.sort(key=lambda row: row["plan_id"])
+
+    class Query:
+        def __init__(self):
+            self.after = None
+
+        def table(self, _):
+            return self
+
+        def select(self, _):
+            return self
+
+        def eq(self, name, value):
+            assert (name, value) in [("user_id", USER), ("portfolio_id", BOOK)]
+            return self
+
+        def order(self, name):
+            assert name == "plan_id"
+            return self
+
+        def gt(self, name, value):
+            assert name == "plan_id"
+            self.after = value
+            return self
+
+        def limit(self, count):
+            assert count == 21
+            return self
+
+        def execute(self):
+            return SimpleNamespace(
+                data=[r for r in records if not self.after or r["plan_id"] > self.after][:21]
+            )
+
+    monkeypatch.setattr(service, "_client", lambda _: Query())
+    page = service.history("jwt", USER, BOOK)
+    assert not page.plans and page.skipped_records == 20 and page.next_cursor
+    second = service.history("jwt", USER, BOOK, page.next_cursor)
+    assert [p.plan_id for p in second.plans] == [result.result_id]
+    assert second.next_cursor is None and second.skipped_records == 1
+    for owner, book, cursor in [
+        (OTHER, BOOK, page.next_cursor),
+        (USER, str(uuid4()), page.next_cursor),
+        (USER, BOOK, page.next_cursor + "a"),
+    ]:
+        with pytest.raises(APIError, match="Reload"):
+            service.history("jwt", owner, book, cursor)

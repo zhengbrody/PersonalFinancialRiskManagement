@@ -122,6 +122,9 @@ def build_context(ticker, fp, *, now=None):
             invalidation_check="Inspect cash flow, debt maturities and downside earnings. Missing funding information leaves this hypothesis unresolved.",
         ),
     ]
+    methods = select_methods("valuation", now=now)
+    active_ids = {method.id for method in methods}
+    questions = [question for question in questions if question.method_id in active_ids]
     leads, seen = [], set()
     for item in (fp.news[:6] if fp else []):
         url = safe_research_url(item.url)
@@ -150,8 +153,13 @@ def build_context(ticker, fp, *, now=None):
         observations=observations,
         questions=questions,
         leads=leads,
-        methods=select_methods("valuation"),
-        limitations=[
+        methods=methods,
+        limitations=(
+            ["One or more method reviews are unavailable; their questions are withheld."]
+            if len(methods) < 2
+            else []
+        )
+        + [
             "Existing Research providers are reused; this is not a new data feed or model training.",
             "Sources are attributed at data-block level. Exact field origin and financial reporting periods are not established.",
             "Freshness describes the provider snapshot timestamp, not the underlying financial reporting period.",

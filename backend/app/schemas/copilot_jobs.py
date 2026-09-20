@@ -31,7 +31,11 @@ class CandidateRunOut(BaseModel):
     result: CandidateBatch | None = None
     error_code: (
         Literal[
-            "analysis_failed", "reauthentication_required", "execution_expired", "portfolio_changed"
+            "analysis_failed",
+            "reauthentication_required",
+            "execution_expired",
+            "portfolio_changed",
+            "execution_version_changed",
         ]
         | None
     ) = None
@@ -57,6 +61,7 @@ class CandidateRunOut(BaseModel):
 
 class CandidateRunRecord(CandidateRunOut):
     version: Literal[2] = 2
+    implementation: str | None = None
     user_id: UUID
     snapshot: RunSnapshot
     portfolio_revision: UUID

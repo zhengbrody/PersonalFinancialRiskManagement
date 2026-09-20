@@ -110,6 +110,7 @@ def stack(tmp_path_factory):
         "0016_copilot_background.sql",
         "0017_copilot_job_recovery.sql",
         "0018_put_plan_confirmations.sql",
+        "0019_funding_plan_confirmations.sql",
     ):
         sql((migrations / name).read_text())
     sql("notify pgrst, 'reload schema';")
@@ -125,6 +126,8 @@ def stack(tmp_path_factory):
         "MINDMARKET_ASYNC_ANALYSIS_ENABLED": "true",
         "MINDMARKET_CASH_SECURED_PUT_ENABLED": "true",
         "MINDMARKET_CASH_SECURED_PUT_SAVE_ENABLED": "true",
+        "MINDMARKET_FUNDING_SCENARIOS_ENABLED": "true",
+        "MINDMARKET_FUNDING_SCENARIOS_SAVE_ENABLED": "true",
         "MINDMARKET_RISK_RUN_SIGNING_SECRET": secrets.token_urlsafe(48),
         "SENTRY_DSN": "",
     }
@@ -472,6 +475,17 @@ def test_real_put_capture_save_retry_list_and_review(stack, account):
         ).json()["data"]
         == []
     )
+    history = requests.get(
+        endpoint + "/put-plans/history", headers=owner.headers, params=query, timeout=15
+    )
+    assert history.status_code == 200, history.text
+    assert [p["plan_id"] for p in history.json()["data"]["plans"]] == [result["result_id"]]
+    assert history.json()["data"]["next_cursor"] is None
+    other_history = requests.get(
+        endpoint + "/put-plans/history", headers=other.headers, params=query, timeout=15
+    )
+    assert other_history.status_code == 200
+    assert other_history.json()["data"]["plans"] == []
     # Editable RiskPlan descriptions cannot replace the signed calculation.
     edited = requests.patch(
         stack.url + "/rest/v1/risk_plans?id=eq." + result["result_id"],
@@ -816,3 +830,143 @@ def test_two_instance_burst_drains_durable_jobs_beyond_memory_capacity(stack, ac
         assert all(r["attempts"] == 1 for r in listing)
         assert len({r["result"]["snapshot_id"] for r in listing}) == 12
         assert len(captures.read_text().splitlines()) == initial + 12
+        durations = [
+            (
+                datetime.fromisoformat(run["updated_at"].replace("Z", "+00:00"))
+                - datetime.fromisoformat(run["created_at"].replace("Z", "+00:00"))
+            ).total_seconds()
+            for run in listing
+        ]
+        assert len(durations) == 12 and all(value >= 0 for value in durations)
+        summary = {
+            "scope": "Local synthetic two-instance acceptance; not production performance or long-duration soak",
+            "measure": "Persisted creation to terminal update; includes queue wait and deliberate test hold",
+            "unit": "seconds",
+            "sample_count": len(durations),
+            "completed_count": 12,
+            "single_attempt_count": 12,
+            "p50": float(np.percentile(durations, 50)),
+            "p95": float(np.percentile(durations, 95)),
+            "maximum": max(durations),
+        }
+        (stack.control / "latency.json").write_text(json.dumps(summary, indent=2) + "\n")
+        print("LOCAL_SYNTHETIC_LATENCY=" + json.dumps(summary))
+
+
+def test_real_combined_funding_capture_confirm_read_and_review(stack, account):
+    from datetime import timedelta
+
+    from backend.tests.test_copilot_put import request as put_request
+
+    owner, other = account(), account()
+    book = owner.row["id"]
+    account_url = stack.url + "/rest/v1/portfolios?id=eq." + book
+    requests.patch(
+        account_url, headers=owner.headers, json={"margin_loan": 300}, timeout=15
+    ).raise_for_status()
+    before = requests.get(account_url, headers=owner.headers, timeout=15).json()[0]
+    endpoint = stack.base + "/api/v1/copilot"
+    started = requests.post(
+        endpoint + "/decision-runs",
+        headers=owner.headers,
+        json={
+            "id": str(uuid4()),
+            "task": {
+                "expected_portfolio_id": book,
+                "goal": "increase_cash",
+                "amount": 500.0,
+                "protected_holdings": [],
+                "confirmed": True,
+            },
+        },
+        timeout=15,
+    )
+    assert started.status_code == 200, started.text
+    id = started.json()["data"]["id"]
+    for _ in range(100):
+        run = requests.get(
+            endpoint + "/decision-runs/" + id, headers=owner.headers, timeout=15
+        ).json()["data"]
+        if run["state"] not in ("running", "queued"):
+            break
+        time.sleep(0.2)
+    assert run["state"] == "completed", run
+    candidate = run["result"]["candidates"][0]
+    payload = {
+        "expected_portfolio_id": book,
+        "source_result_id": candidate["result_id"],
+        "receipt": candidate["replay_receipt"],
+        "protected_holdings": [],
+        "sale_fees": 1.0,
+        "risk": {
+            "annual_borrowing_rate": 0.08,
+            "scenarios": [{"label": "Explicit common expiry", "prices": {"SPY": 50.0}}],
+        },
+        "confirmed": True,
+        "put": put_request(
+            expected_portfolio_id=book,
+            expiry=datetime.now(timezone.utc).date() + timedelta(days=30),
+        ).model_dump(mode="json"),
+    }
+    response = requests.post(
+        endpoint + "/funding-scenarios", headers=owner.headers, json=payload, timeout=30
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()["data"]
+    baseline, keep, repay = result["alternatives"]
+    assert baseline["cash_before_put"] == 1000 and baseline["margin_remaining"] == 300
+    assert (keep["cash_before_put"], keep["margin_remaining"]) == (1499, 300)
+    assert (repay["cash_before_put"], repay["margin_remaining"], repay["debt_repaid"]) == (
+        1199,
+        0,
+        300,
+    )
+    assert keep["status"] == "financing_rules_required"
+    assert repay["status"] == "insufficient_cash"
+    assert result["receipt"]["save_available"]
+    assert result["broker_buying_power"] is None
+    account_risk = result["account_risk"]
+    assert account_risk["assumptions"] == payload["risk"]
+    assert account_risk["portfolio_id"] == book
+    assert account_risk["source_result_id"] == candidate["result_id"]
+    risk_baseline, risk_keep, risk_repay = account_risk["scenarios"][0]["outcomes"]
+    assert risk_baseline["assignment_shares"] == {}
+    assert risk_keep["assignment_shares"] == risk_repay["assignment_shares"] == {"SPY": 100}
+    assert risk_baseline["interest_cost"] > 0
+    assert risk_repay["interest_cost"] == 0
+    path = endpoint + "/funding-plans/" + result["result_id"]
+    consent = {"expected_portfolio_id": book, "confirmed": True, "receipt": result["receipt"]}
+    saved = requests.post(path + "/confirm", headers=owner.headers, json=consent, timeout=30)
+    assert saved.status_code == 200, saved.text
+    expected_saved = saved.json()["data"]
+    assert expected_saved["result"]["account_risk"] == account_risk
+    retry = requests.post(path + "/confirm", headers=owner.headers, json=consent, timeout=30)
+    assert retry.json()["data"] == expected_saved
+    query = {"expected_portfolio_id": book}
+    read = requests.get(path, headers=owner.headers, params=query, timeout=15)
+    assert read.status_code == 200 and read.json()["data"] == expected_saved
+    review = requests.post(path + "/review", headers=owner.headers, json=query, timeout=15)
+    assert review.status_code == 200, review.text
+    assert review.json()["data"]["verdict"] == "assumptions_need_confirmation"
+    for method, url, kwargs in (
+        (requests.get, path, {"params": query}),
+        (requests.post, path + "/confirm", {"json": consent}),
+        (requests.post, path + "/review", {"json": query}),
+    ):
+        assert method(url, headers=other.headers, timeout=15, **kwargs).status_code in (404, 409)
+    after = requests.get(account_url, headers=owner.headers, timeout=15).json()[0]
+    for field in ("holdings", "cash_balance", "margin_loan", "comparison_revision"):
+        assert after[field] == before[field]
+    requests.patch(
+        account_url, headers=owner.headers, json={"cash_balance": 900}, timeout=15
+    ).raise_for_status()
+    changed = requests.post(path + "/review", headers=owner.headers, json=query, timeout=15)
+    assert changed.status_code == 200
+    assert changed.json()["data"]["verdict"] == "requires_recalculation"
+    assert {"cash_balance", "portfolio_revision"} <= set(changed.json()["data"]["changed_fields"])
+    stale = requests.post(
+        endpoint + "/funding-scenarios", headers=owner.headers, json=payload, timeout=30
+    )
+    assert stale.status_code == 409
+    retry = requests.post(path + "/confirm", headers=owner.headers, json=consent, timeout=30)
+    assert retry.json()["data"] == expected_saved

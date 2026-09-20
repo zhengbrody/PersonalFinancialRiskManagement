@@ -42,3 +42,4 @@ class DecisionSupport(BaseModel):
     candidate_comparison_available: bool = False
     cash_secured_put_available: bool = False
     cash_secured_put_save_available: bool = False
+    funding_scenarios_available: bool = False

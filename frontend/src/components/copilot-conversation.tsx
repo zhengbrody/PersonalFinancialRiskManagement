@@ -10,6 +10,7 @@ import { CopilotCandidates } from "@/components/copilot-candidates";
 import { CopilotAnswerCard } from "@/components/copilot-answer";
 import { CopilotRiskCheck } from "@/components/copilot-risk-check";
 import { CopilotChangeForm, CopilotChangeResult } from "@/components/copilot-change";
+import { CopilotFundingPlans } from "./copilot-funding-plans";
 import { useAuth } from "@/lib/auth-context";
 import { usePortfolioContext } from "@/lib/portfolio-context";
 import { useCopilotThread } from "@/lib/use-copilot-thread";
@@ -19,9 +20,11 @@ export type CopilotConversationVariant = "page" | "floating";
 export function CopilotConversation({
   variant = "page",
   initialQuestion,
+  fundingPlanId,
 }: {
   variant?: CopilotConversationVariant;
   initialQuestion?: string;
+  fundingPlanId?: string;
 }) {
   const { user, accessToken } = useAuth();
   const { activePortfolioId, current, switchingId, isLoading } =
@@ -38,6 +41,7 @@ export function CopilotConversation({
       switching={!!switchingId || isLoading}
       variant={variant}
       initialQuestion={initialQuestion}
+      fundingPlanId={fundingPlanId}
     />
   );
 }
@@ -50,6 +54,7 @@ function Conversation({
   switching,
   variant,
   initialQuestion,
+  fundingPlanId,
 }: {
   scope: string;
   token: string | null;
@@ -58,6 +63,7 @@ function Conversation({
   switching: boolean;
   variant: CopilotConversationVariant;
   initialQuestion?: string;
+  fundingPlanId?: string;
 }) {
   const thread = useCopilotThread(scope, portfolioId, token);
   const [draft, setDraft] = useState(initialQuestion ?? "");
@@ -151,6 +157,7 @@ function Conversation({
             </div>
           </div>
         )}
+        {fundingPlanId && portfolioId && token && !switching && <CopilotFundingPlans planId={fundingPlanId} portfolioId={portfolioId} token={token} />}
         {thread.turns.map((turn) => (
           <div key={turn.id} className="min-w-0 space-y-3">
             <div className="ml-auto w-fit max-w-[90%] whitespace-pre-wrap break-words rounded-2xl bg-primary/10 px-4 py-3 text-sm">
@@ -209,7 +216,7 @@ function Conversation({
                   <CopilotPut key={portfolioId} token={token} portfolioId={portfolioId} plansEnabled={turn.answer.decision_support.cash_secured_put_save_available} />}
                 {portfolioId && turn.answer.decision_support?.candidate_comparison_available &&
                   ["candidate_request", "clarification"].includes(turn.answer.decision_support.task.kind) &&
-                  <CopilotCandidates token={token} portfolioId={portfolioId} scope={`${scope}:${turn.id}`} />}
+                  <CopilotCandidates token={token} portfolioId={portfolioId} scope={`${scope}:${turn.id}`} fundingEnabled={turn.answer.decision_support.funding_scenarios_available} />}
               </>
             )}
             {turn.kind !== "change" && ["failed", "cancelled", "interrupted"].includes(turn.status) && (
@@ -267,7 +274,7 @@ function Conversation({
         className={
           floating
             ? "space-y-2 border-t border-border bg-background p-3"
-            : "sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-20 space-y-2 rounded-xl border border-border bg-background/95 p-3 backdrop-blur lg:bottom-4"
+            : "z-20 space-y-2 rounded-xl border border-border bg-background/95 p-3 backdrop-blur lg:sticky lg:bottom-4"
         }
       >
         {newResult && (

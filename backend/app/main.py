@@ -210,10 +210,12 @@ def create_app() -> FastAPI:
     app.include_router(billing.router)
     app.include_router(copilot.router)
     app.include_router(copilot_compare.router)
-    from .api.v1 import copilot_jobs, copilot_put
+    from .api.v1 import copilot_jobs, copilot_put, funding_plans, funding_scenarios
 
     app.include_router(copilot_jobs.router)
     app.include_router(copilot_put.router)
+    app.include_router(funding_scenarios.router)
+    app.include_router(funding_plans.router)
     app.include_router(copilot_runs.router)
     app.include_router(quant.router)
     app.include_router(options.router)

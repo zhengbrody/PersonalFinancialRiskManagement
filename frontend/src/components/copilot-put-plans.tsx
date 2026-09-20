@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { apiFetch } from "@/lib/api";
 import { putResultSchema, type PutResult } from "@/lib/copilot-put";
+import { planReviewSchema, usePlanSessionReview } from "@/lib/use-plan-session-review";
 import { Button } from "./ui/button";
 
 const savedSchema = z.object({
@@ -13,12 +14,7 @@ const savedSchema = z.object({
     ctx.addIssue({ code: "custom", message: "Saved put scope mismatch" });
   }
 });
-const reviewSchema = z.object({
-  plan_id: z.string().uuid(), portfolio_id: z.string().uuid(), reviewed_at: z.string(),
-  verdict: z.enum(["requires_recalculation", "assumptions_need_confirmation"]),
-  changed_fields: z.array(z.string()), reasons: z.array(z.string()),
-  live_quote_checked: z.literal(false), holdings_changed_by_review: z.literal(false),
-});
+const reviewSchema = planReviewSchema;
 type Saved = z.infer<typeof savedSchema>;
 type Review = z.infer<typeof reviewSchema>;
 
@@ -28,12 +24,21 @@ export function CopilotPutPlans({ token, portfolioId, result }: {
   const [confirmed, setConfirmed] = useState(false);
   const [plans, setPlans] = useState<Saved[]>([]);
   const [reviews, setReviews] = useState<Record<string, Review>>({});
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const monitor = usePlanSessionReview({ token, portfolioId, planIds: plans.map(plan => plan.plan_id), kind: "put-plans",
+    onChanged: value => setReviews(previous => ({ ...previous, [value.plan_id]: value })) });
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const controller = useRef<AbortController | null>(null);
   useEffect(() => () => controller.current?.abort(), []);
+  useEffect(() => {
+    controller.current?.abort();
+    setPlans([]); setReviews({}); setNextCursor(null);
+    setConfirmed(false); setNotice("");
+  }, [token, portfolioId]);
+  useEffect(() => { setConfirmed(false); }, [result]);
 
-  async function run(action: "save" | "list" | "review", planId?: string) {
+  async function run(action: "save" | "list" | "more" | "review", planId?: string) {
     if (action === "save" && (!confirmed || !result?.receipt?.save_available)) return;
     const abort = new AbortController();
     controller.current?.abort(); controller.current = abort;
@@ -53,13 +58,18 @@ export function CopilotPutPlans({ token, portfolioId, result }: {
           setPlans(previous => [saved, ...previous.filter(plan => plan.plan_id !== saved.plan_id)]);
           setNotice("Original calculation saved. No holdings were changed.");
         }
-      } else if (action === "list") {
-        const schema = z.array(savedSchema).max(20);
-        const rows = schema.parse(await apiFetch(`${base}?expected_portfolio_id=${portfolioId}`, {
+      } else if (action === "list" || action === "more") {
+        const schema = z.object({ plans: z.array(savedSchema).max(20), next_cursor: z.string().nullable(), skipped_records: z.number().int().nonnegative() });
+        const cursor = action === "more" && nextCursor ? `&cursor=${encodeURIComponent(nextCursor)}` : "";
+        const page = schema.parse(await apiFetch(`${base}/history?expected_portfolio_id=${portfolioId}${cursor}`, {
           method: "GET", authToken: token ?? undefined, signal: abort.signal, schema,
         }));
-        if (rows.some(plan => plan.portfolio_id !== portfolioId)) throw new Error("Saved portfolio mismatch.");
-        if (!abort.signal.aborted) { setPlans(rows); setNotice(`${rows.length} verified saved Put plans shown. This is a bounded history, not a complete archive.`); }
+        if (page.plans.some(plan => plan.portfolio_id !== portfolioId)) throw new Error("Saved portfolio mismatch.");
+        if (!abort.signal.aborted) {
+          setPlans(previous => action === "list" ? page.plans : [...previous, ...page.plans.filter(plan => !previous.some(old => old.plan_id === plan.plan_id))]);
+          setNextCursor(page.next_cursor);
+          setNotice(`Verified history in stable plan order. ${page.skipped_records} unrelated or unverifiable records skipped. ${page.next_cursor ? "More records available." : "End of history; reload for newly saved plans."}`);
+        }
       } else if (planId) {
         const review = reviewSchema.parse(await apiFetch(`${base}/${planId}/review`, {
           method: "POST", authToken: token ?? undefined, signal: abort.signal, schema: reviewSchema,
@@ -80,6 +90,10 @@ export function CopilotPutPlans({ token, portfolioId, result }: {
       <Button type="button" size="sm" disabled={busy || !confirmed || !token} onClick={() => void run("save")}>Confirm save Put plan</Button>
     </>}
     <Button type="button" variant="outline" size="sm" disabled={busy || !token} onClick={() => void run("list")}>Load saved Put plans</Button>
+    {nextCursor && <Button type="button" variant="outline" size="sm" disabled={busy || !token} onClick={() => void run("more")}>Load more Put plans</Button>}
+    <label className="flex gap-2 text-xs"><input type="checkbox" checked={monitor.enabled} disabled={!token || plans.length === 0} onChange={e => monitor.setEnabled(e.target.checked)} />
+      Review loaded plans (first 20) every minute while signed in and this window is visible. This session only; no quotes, trades or return attribution.</label>
+    {monitor.notice && <p role="status">{monitor.notice}</p>}
     {notice && <p role="status">{notice}</p>}
     {plans.map(plan => <details key={plan.plan_id} className="rounded border border-border p-3">
       <summary className="cursor-pointer">{plan.result.assumptions.underlying} Put · saved {plan.confirmed_at}</summary>

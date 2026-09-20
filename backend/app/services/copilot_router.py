@@ -1771,6 +1771,11 @@ def answer(
             "margin",
         }
         support.cash_secured_put_save_available = get_settings().cash_secured_put_save_enabled
+        support.funding_scenarios_available = (
+            get_settings().funding_scenarios_enabled
+            and get_settings().copilot_comparison_replay_enabled
+            and get_settings().cash_secured_put_enabled
+        )
         dc = _answer_confidence([], None)
         sections = _build_sections(
             intent="explain_metric" if task.kind == "explanation" else "action_plan",

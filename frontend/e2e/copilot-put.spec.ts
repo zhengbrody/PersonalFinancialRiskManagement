@@ -30,7 +30,7 @@ test("cash-secured put stays hypothetical in the existing conversation", async (
     expect(route.request().postDataJSON().confirmed).toBe(true);
     return route.fulfill({ json: envelope(saved) });
   });
-  await page.route("**/api/v1/copilot/put-plans?*", route => route.fulfill({ json: envelope([saved]) }));
+  await page.route("**/api/v1/copilot/put-plans/history?*", route => route.fulfill({ json: envelope({ plans: [saved], next_cursor: null, skipped_records: 0 }) }));
   await page.route("**/api/v1/copilot/put-plans/*/review", route => route.fulfill({ json: envelope({
     plan_id: saved.plan_id, portfolio_id: saved.portfolio_id, reviewed_at: result.computed_at,
     verdict: "requires_recalculation", changed_fields: ["cash_balance"], reasons: ["Account cash changed."],
@@ -48,7 +48,7 @@ test("cash-secured put stays hypothetical in the existing conversation", async (
     "Estimated total fees (USD)": "1", "Other cash holds, excluding listed put collateral (USD)": "0",
     "Cash buffer to preserve (USD)": "1000",
   })) await page.getByLabel(label, { exact: true }).fill(value);
-  for (const box of await page.getByRole("checkbox").all()) await box.check();
+  for (const box of await page.getByRole("checkbox").all()) { if (await box.isEnabled()) await box.check(); }
   await page.getByRole("button", { name: "Calculate put scenario" }).click();
   await expect(page.getByText("Cash covered under your confirmed assumptions")).toBeVisible();
   await expect(page.getByText("-$1.00", { exact: true })).toBeVisible();
@@ -63,7 +63,7 @@ test("cash-secured put stays hypothetical in the existing conversation", async (
   await page.getByRole("button", { name: "Review current assumptions" }).click();
   await expect(page.getByText("Recalculation required")).toBeVisible();
   await page.getByRole("button", { name: "Load saved Put plans" }).click();
-  await expect(page.getByText(/1 verified saved Put plans/)).toBeVisible();
+  await expect(page.getByText(/Verified history in stable plan order/)).toBeVisible();
   await page.getByRole("region", { name: "Saved put plans" }).screenshot({ path: test.info().outputPath("saved-put-review.png") });
   await page.getByRole("region", { name: "Cash-secured put result" }).screenshot({ path: test.info().outputPath("put-scenario.png") });
 });

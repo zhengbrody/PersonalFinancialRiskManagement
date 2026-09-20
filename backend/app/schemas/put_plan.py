@@ -39,3 +39,10 @@ class PutPlanReview(BaseModel):
     reasons: list[str]
     live_quote_checked: Literal[False] = False
     holdings_changed_by_review: Literal[False] = False
+
+
+class SavedPutPlanPage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    plans: list[SavedPutPlan]
+    next_cursor: str | None = None
+    skipped_records: int = 0

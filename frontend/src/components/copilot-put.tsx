@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { initialPutFields, putFieldLabels } from "@/lib/put-fields";
 import { CopilotPutPlans } from "./copilot-put-plans";
 import { Button } from "./ui/button";
 import { apiFetch } from "@/lib/api";
@@ -8,14 +9,8 @@ import { putRequestSchema, putResultSchema, type PutResult } from "@/lib/copilot
 
 const money = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 const perShare = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 6 });
-const initial = { underlying: "", expiry: "", strike: "", premium_per_share: "", assumed_spot: "",
-  contracts: "1", fees_total: "", other_reserved_cash: "", cash_buffer: "" };
-const labels: Record<keyof typeof initial, string> = {
-  underlying: "Put underlying", expiry: "Put expiry", strike: "Strike (USD per share)",
-  premium_per_share: "Assumed premium (USD per share)", assumed_spot: "Assumed underlying price (USD)",
-  contracts: "Contracts (100 shares each)", fees_total: "Estimated total fees (USD)",
-  other_reserved_cash: "Other cash holds, excluding listed put collateral (USD)", cash_buffer: "Cash buffer to preserve (USD)",
-};
+const initial = initialPutFields;
+const labels = putFieldLabels;
 
 export function CopilotPut({ token, portfolioId, plansEnabled = false }: { token: string | null; portfolioId: string; plansEnabled?: boolean }) {
   const [fields, setFields] = useState(initial);

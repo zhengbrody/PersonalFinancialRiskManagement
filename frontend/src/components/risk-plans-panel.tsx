@@ -6,6 +6,7 @@
  * A plan is an analysis to revisit — nothing here changes holdings.
  */
 
+import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -95,6 +96,7 @@ function PlanCard({
   const [result, setResult] = useState<PlanReview | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   // A navigation/UX hint only, never proof that these editable blobs are trusted.
+  const capturedFunding = plan.data_confidence?.kind === "funding_scenarios";
   const capturedPut = plan.data_confidence?.kind === "cash_secured_put";
   const capturedComparison = plan.source === "copilot" && plan.data_confidence?.calculation_id === plan.id;
 
@@ -138,7 +140,9 @@ function PlanCard({
         </div>}
       </div>
 
-      {capturedComparison && !capturedPut && <p className="mt-2 text-xs text-muted-foreground">Captured comparison. Its signed original is readable from the Copilot conversation that saved it, in that browser tab session; this panel shows the editable plan only. Comparing it with today&apos;s Health Score requires a matching calculation method; outcome review is not available yet.</p>}
+      {capturedComparison && !capturedPut && !capturedFunding && <p className="mt-2 text-xs text-muted-foreground">Captured comparison. Its signed original is readable from the Copilot conversation that saved it, in that browser tab session; this panel shows the editable plan only. Comparing it with today&apos;s Health Score requires a matching calculation method; outcome review is not available yet.</p>}
+
+      {capturedComparison && capturedFunding && <p className="mt-2 text-xs text-muted-foreground">Saved hypothetical funding comparison. <Link className="underline" href={`/copilot?funding_plan=${encodeURIComponent(plan.id)}`}>Read the signed original and review assumptions in Copilot</Link>. Select its original portfolio first. This draft is not an executed trade.</p>}
 
       {capturedComparison && capturedPut && <p className="mt-2 text-xs text-muted-foreground">Saved hypothetical Put. Open Copilot → Test a cash-secured Put → Load saved Put plans to read the authenticated original and review current assumptions. This editable draft is not an executed trade.</p>}
 

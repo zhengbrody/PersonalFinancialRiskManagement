@@ -176,6 +176,7 @@ def test_worker_uses_frozen_account_one_fetch_and_revision_guard(monkeypatch):
         user_id=USER,
         portfolio_id=BOOK,
         portfolio_revision=revision,
+        implementation=jobs.execution_fingerprint(),
         task=task(),
         snapshot=RunSnapshot(
             **asdict(context), risk_preference=3, preference_source="neutral_baseline"
@@ -322,3 +323,23 @@ def test_recent_ignores_invalid_documents_and_untrusted_signatures(journal, monk
     records, untrusted = log.recent(BOOK)
     assert [str(record.id) for record in records] == [id]
     assert untrusted == 2
+
+
+@pytest.mark.parametrize("drift", [None, "different-version"])
+def test_version_drift_cannot_claim_but_old_record_remains_readable(journal, drift):
+    log, id, _ = journal
+    row, original = log.read(id)
+    changed = original.model_copy(update={"implementation": drift})
+    log.store.rows[id] = runs.encode(changed, log.key)
+    assert log.get(id).state == "queued"
+    assert log.claim(id) is None
+    stopped = log.get(id)
+    assert stopped.state == "failed" and stopped.error_code == "execution_version_changed"
+    assert stopped.attempts == 0 and stopped.result is None
+
+
+def test_execution_rechecks_version_before_any_provider_access(journal):
+    log, id, _ = journal
+    record = log.get(id).model_copy(update={"implementation": "different-version"})
+    with pytest.raises(APIError, match="version changed"):
+        jobs.compute(record, None)

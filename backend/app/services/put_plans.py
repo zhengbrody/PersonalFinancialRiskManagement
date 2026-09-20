@@ -286,3 +286,53 @@ def list_saved(token, user_id, portfolio_id):
         except (APIError, KeyError):
             continue  # Legacy comparisons and untrusted rows cannot become Put evidence.
     return sorted(saved, key=lambda plan: plan.confirmed_at, reverse=True)[:20]
+
+
+def history(token, user_id, portfolio_id, cursor=None):
+    """Bounded keyset scan; every page authenticates records, including old captures.
+
+    UUID order is deliberately not advertised as chronological order. New inserts
+    may require a fresh traversal; unlike offset pagination, deletes do not shift it.
+    """
+    from ..schemas.put_plan import SavedPutPlanPage
+
+    require_enabled()
+    after = None
+    if cursor:
+        try:
+            after, signature = cursor.split(".")
+            after = str(UUID(after))
+            payload = f"{user_id}:{portfolio_id}:{after}"
+            expected = hmac.new(key("history"), payload.encode(), hashlib.sha256).hexdigest()
+            if not hmac.compare_digest(expected, signature):
+                raise ValueError("Signature")
+        except (ValueError, TypeError):
+            raise APIError(422, "invalid_history_cursor", "Reload saved-plan history.") from None
+    try:
+        query = (
+            _client(token)
+            .table("comparison_confirmations")
+            .select("user_id,portfolio_id,plan_id,record,signature")
+            .eq("user_id", user_id)
+            .eq("portfolio_id", portfolio_id)
+            .order("plan_id")
+        )
+        if after:
+            query = query.gt("plan_id", after)
+        rows = query.limit(21).execute().data or []
+    except Exception:
+        raise APIError(503, "put_plans_unavailable", "Saved-plan storage is unavailable.") from None
+    plans = []
+    skipped = 0
+    for row in rows[:20]:
+        try:
+            plans.append(verify_row(row, user_id, portfolio_id, row["plan_id"])[0])
+        except (APIError, KeyError):
+            skipped += 1
+    next_cursor = None
+    if len(rows) > 20:
+        last = str(UUID(rows[19]["plan_id"]))
+        payload = f"{user_id}:{portfolio_id}:{last}"
+        signature = hmac.new(key("history"), payload.encode(), hashlib.sha256).hexdigest()
+        next_cursor = f"{last}.{signature}"
+    return SavedPutPlanPage(plans=plans, next_cursor=next_cursor, skipped_records=skipped)

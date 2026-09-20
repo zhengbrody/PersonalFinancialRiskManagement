@@ -4,14 +4,20 @@ from copy import deepcopy
 from dataclasses import asdict
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 
 from ...core.config import get_settings
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import APIError, ok
 from ...schemas.copilot_put import CashSecuredPutRequest, CashSecuredPutResult
 from ...schemas.envelope import Envelope
-from ...schemas.put_plan import ConfirmPutPlan, PutPlanReview, ReviewPutPlanRequest, SavedPutPlan
+from ...schemas.put_plan import (
+    ConfirmPutPlan,
+    PutPlanReview,
+    ReviewPutPlanRequest,
+    SavedPutPlan,
+    SavedPutPlanPage,
+)
 from ...services import comparison_save, copilot_put, copilot_scope, put_plans
 from . import risk
 
@@ -66,6 +72,17 @@ def list_plans(
         ],
         request=request,
     )
+
+
+@router.get("/put-plans/history", response_model=Envelope[SavedPutPlanPage])
+def plan_history(
+    expected_portfolio_id: UUID,
+    request: Request,
+    cursor: str | None = Query(default=None, max_length=101),
+    user: AuthedUser = Depends(require_user),
+):
+    result = put_plans.history(user.access_token, user.id, str(expected_portfolio_id), cursor)
+    return ok(result.model_dump(mode="json"), request=request)
 
 
 @router.post("/put-plans/{plan_id}/review", response_model=Envelope[PutPlanReview])

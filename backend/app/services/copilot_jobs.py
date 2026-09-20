@@ -6,11 +6,14 @@ resume request with a freshly verified JWT. Nothing publishes after the lease
 expires; Python/provider code itself is not preemptible. No automatic trades.
 """
 
+import hashlib
 import json
 import logging
 from copy import deepcopy
 from dataclasses import asdict
 from datetime import timedelta
+from functools import lru_cache
+from pathlib import Path
 from queue import Empty, Full, Queue
 from threading import Event, Lock, Thread
 from uuid import UUID
@@ -24,6 +27,23 @@ RETENTION = timedelta(days=1)
 LEASE = timedelta(seconds=120)
 MAX_EXECUTION = timedelta(minutes=5)
 _log = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=1)
+def execution_fingerprint():
+    from . import comparison_replay, copilot_candidates
+
+    digest = hashlib.sha256(comparison_replay.implementation_fingerprint().encode())
+    schemas = Path(__file__).parents[1] / "schemas"
+    for source in (
+        __file__,
+        copilot_candidates.__file__,
+        schemas / "copilot_jobs.py",
+        schemas / "copilot_candidates.py",
+        schemas / "copilot_runs.py",
+    ):
+        digest.update(Path(source).read_bytes())
+    return digest.hexdigest()
 
 
 def key():
@@ -114,6 +134,7 @@ class JobJournal:
             snapshot=snapshot,
             portfolio_revision=revision,
             task=task,
+            implementation=execution_fingerprint(),
             state="queued",
             created_at=now,
             updated_at=now,
@@ -128,6 +149,11 @@ class JobJournal:
     def claim(self, id):
         row, record = self.read(id)
         if record.state != "queued" or record.attempts >= 2:
+            return None
+        if record.implementation != execution_fingerprint():
+            self.change(
+                row, record, state="failed", step="done", error_code="execution_version_changed"
+            )
             return None
         claimed = CandidateRunRecord.model_validate(
             {
@@ -243,6 +269,12 @@ def journal(user):
 
 
 def compute(record, user, progress=None):
+    if record.implementation != execution_fingerprint():
+        raise APIError(
+            409,
+            "execution_version_changed",
+            "The calculation version changed; start a fresh analysis.",
+        )
     from libs.auth.active_portfolio import ActivePortfolioContext
 
     from . import (
@@ -485,8 +517,9 @@ class Dispatcher:
                     log.interrupt(id, lease.record.revision)
                 except Exception as exc:
                     code = (
-                        "portfolio_changed"
-                        if isinstance(exc, APIError) and exc.code == "portfolio_changed"
+                        exc.code
+                        if isinstance(exc, APIError)
+                        and exc.code in {"portfolio_changed", "execution_version_changed"}
                         else "analysis_failed"
                     )
                     lease.finish(error_code=code)

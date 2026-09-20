@@ -67,4 +67,7 @@ class CopilotResearch(BaseModel):
             raise ValueError("Research observation scope mismatch")
         if any(id not in ids for question in self.questions for id in question.observation_ids):
             raise ValueError("Research question has an unknown observation")
+        method_ids = {method.id for method in self.methods}
+        if any(question.method_id not in method_ids for question in self.questions):
+            raise ValueError("Research question has an unavailable method")
         return self

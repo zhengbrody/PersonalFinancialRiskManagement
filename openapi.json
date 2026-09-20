@@ -1284,7 +1284,8 @@
                   "analysis_failed",
                   "reauthentication_required",
                   "execution_expired",
-                  "portfolio_changed"
+                  "portfolio_changed",
+                  "execution_version_changed"
                 ],
                 "type": "string"
               },
@@ -2675,6 +2676,30 @@
         "title": "ConfirmComparison",
         "type": "object"
       },
+      "ConfirmFundingPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/ComparisonReceipt"
+          }
+        },
+        "required": [
+          "expected_portfolio_id",
+          "confirmed",
+          "receipt"
+        ],
+        "title": "ConfirmFundingPlan",
+        "type": "object"
+      },
       "ConfirmPutPlan": {
         "additionalProperties": false,
         "properties": {
@@ -4043,6 +4068,11 @@
             "title": "Coverage",
             "type": "string"
           },
+          "funding_scenarios_available": {
+            "default": false,
+            "title": "Funding Scenarios Available",
+            "type": "boolean"
+          },
           "limitations": {
             "items": {
               "type": "string"
@@ -4891,6 +4921,72 @@
           "meta"
         ],
         "title": "Envelope[EfficientFrontierOut]",
+        "type": "object"
+      },
+      "Envelope_FundingPlanReview_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundingPlanReview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[FundingPlanReview]",
+        "type": "object"
+      },
+      "Envelope_FundingScenarioResult_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundingScenarioResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[FundingScenarioResult]",
         "type": "object"
       },
       "Envelope_HistoricalScenariosOut_": {
@@ -5883,6 +5979,72 @@
         "title": "Envelope[SavedComparison]",
         "type": "object"
       },
+      "Envelope_SavedFundingPlan_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedFundingPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[SavedFundingPlan]",
+        "type": "object"
+      },
+      "Envelope_SavedPutPlanPage_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedPutPlanPage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[SavedPutPlanPage]",
+        "type": "object"
+      },
       "Envelope_SavedPutPlan_": {
         "additionalProperties": true,
         "properties": {
@@ -6499,6 +6661,229 @@
         "title": "EvidenceItem",
         "type": "object"
       },
+      "ExpiryAccountOutcome": {
+        "additionalProperties": false,
+        "properties": {
+          "assignment_cash_paid": {
+            "title": "Assignment Cash Paid",
+            "type": "number"
+          },
+          "assignment_shares": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Assignment Shares",
+            "type": "object"
+          },
+          "cash_after_interest": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cash After Interest"
+          },
+          "cash_before_interest": {
+            "title": "Cash Before Interest",
+            "type": "number"
+          },
+          "conditional_debt_if_gap_financed": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conditional Debt If Gap Financed"
+          },
+          "funding_gap": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Funding Gap"
+          },
+          "funding_gap_before_interest": {
+            "title": "Funding Gap Before Interest",
+            "type": "number"
+          },
+          "gross_leverage_if_gap_financed": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gross Leverage If Gap Financed"
+          },
+          "incremental_pnl_vs_no_action": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Incremental Pnl Vs No Action"
+          },
+          "initial_net_equity": {
+            "title": "Initial Net Equity",
+            "type": "number"
+          },
+          "interest_cost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interest Cost"
+          },
+          "kind": {
+            "enum": [
+              "no_action",
+              "sale_keep_cash_and_put",
+              "sale_repay_margin_and_put"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "largest_position_weight": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Largest Position Weight"
+          },
+          "net_equity_after_interest": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Equity After Interest"
+          },
+          "net_equity_before_interest": {
+            "title": "Net Equity Before Interest",
+            "type": "number"
+          },
+          "position_values": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Position Values",
+            "type": "object"
+          },
+          "positions": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Positions",
+            "type": "object"
+          },
+          "principal_debt": {
+            "title": "Principal Debt",
+            "type": "number"
+          },
+          "stock_assets": {
+            "title": "Stock Assets",
+            "type": "number"
+          },
+          "total_pnl": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Pnl"
+          },
+          "total_pnl_before_interest": {
+            "title": "Total Pnl Before Interest",
+            "type": "number"
+          }
+        },
+        "required": [
+          "kind",
+          "positions",
+          "position_values",
+          "stock_assets",
+          "initial_net_equity",
+          "cash_before_interest",
+          "cash_after_interest",
+          "principal_debt",
+          "interest_cost",
+          "net_equity_before_interest",
+          "net_equity_after_interest",
+          "total_pnl_before_interest",
+          "total_pnl",
+          "incremental_pnl_vs_no_action",
+          "assignment_shares",
+          "assignment_cash_paid",
+          "funding_gap_before_interest",
+          "funding_gap",
+          "conditional_debt_if_gap_financed",
+          "largest_position_weight",
+          "gross_leverage_if_gap_financed"
+        ],
+        "title": "ExpiryAccountOutcome",
+        "type": "object"
+      },
+      "ExpiryAccountScenario": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/ExpiryAccountOutcome"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "Outcomes",
+            "type": "array"
+          },
+          "prices": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Prices",
+            "type": "object"
+          }
+        },
+        "required": [
+          "label",
+          "prices",
+          "outcomes"
+        ],
+        "title": "ExpiryAccountScenario",
+        "type": "object"
+      },
       "ExpiryBucketOut": {
         "additionalProperties": true,
         "properties": {
@@ -6531,6 +6916,32 @@
           "net_notional"
         ],
         "title": "ExpiryBucketOut",
+        "type": "object"
+      },
+      "ExpiryPriceScenario": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "prices": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "maxProperties": 120,
+            "minProperties": 1,
+            "title": "Prices",
+            "type": "object"
+          }
+        },
+        "required": [
+          "label",
+          "prices"
+        ],
+        "title": "ExpiryPriceScenario",
         "type": "object"
       },
       "ExplainContributor": {
@@ -7505,6 +7916,529 @@
           "ret"
         ],
         "title": "FrontierPoint",
+        "type": "object"
+      },
+      "FundingAlternative": {
+        "additionalProperties": false,
+        "properties": {
+          "assignment_cash_shortfall": {
+            "default": 0,
+            "title": "Assignment Cash Shortfall",
+            "type": "number"
+          },
+          "cash_before_put": {
+            "title": "Cash Before Put",
+            "type": "number"
+          },
+          "debt_repaid": {
+            "title": "Debt Repaid",
+            "type": "number"
+          },
+          "expiry_funding": {
+            "items": {
+              "$ref": "#/components/schemas/FundingExpiryFunding"
+            },
+            "maxItems": 7,
+            "title": "Expiry Funding",
+            "type": "array"
+          },
+          "hypothetical_debt_if_shortfall_financed": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hypothetical Debt If Shortfall Financed"
+          },
+          "initial_incremental_equity": {
+            "title": "Initial Incremental Equity",
+            "type": "number"
+          },
+          "kind": {
+            "enum": [
+              "no_action",
+              "sale_keep_cash_and_put",
+              "sale_repay_margin_and_put"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "margin_remaining": {
+            "title": "Margin Remaining",
+            "type": "number"
+          },
+          "pre_put_largest_position_weight": {
+            "title": "Pre Put Largest Position Weight",
+            "type": "number"
+          },
+          "pre_put_var_1d_95_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pre Put Var 1D 95 Usd"
+          },
+          "put": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CashSecuredPutResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sale_proceeds_net": {
+            "title": "Sale Proceeds Net",
+            "type": "number"
+          },
+          "shares_sold": {
+            "title": "Shares Sold",
+            "type": "number"
+          },
+          "status": {
+            "enum": [
+              "no_action",
+              "covered_under_assumptions",
+              "insufficient_cash",
+              "financing_rules_required"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "cash_before_put",
+          "margin_remaining",
+          "debt_repaid",
+          "sale_proceeds_net",
+          "shares_sold",
+          "initial_incremental_equity",
+          "status",
+          "pre_put_largest_position_weight",
+          "pre_put_var_1d_95_usd"
+        ],
+        "title": "FundingAlternative",
+        "type": "object"
+      },
+      "FundingExpiryFunding": {
+        "additionalProperties": false,
+        "properties": {
+          "assignment_cash_shortfall": {
+            "title": "Assignment Cash Shortfall",
+            "type": "number"
+          },
+          "hypothetical_debt_if_shortfall_financed": {
+            "title": "Hypothetical Debt If Shortfall Financed",
+            "type": "number"
+          },
+          "interest_cost": {
+            "title": "Interest Cost",
+            "type": "null"
+          },
+          "underlying_price": {
+            "title": "Underlying Price",
+            "type": "number"
+          }
+        },
+        "required": [
+          "underlying_price",
+          "assignment_cash_shortfall",
+          "hypothetical_debt_if_shortfall_financed"
+        ],
+        "title": "FundingExpiryFunding",
+        "type": "object"
+      },
+      "FundingPlanReview": {
+        "additionalProperties": false,
+        "properties": {
+          "changed_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed Fields",
+            "type": "array"
+          },
+          "holdings_changed_by_review": {
+            "const": false,
+            "default": false,
+            "title": "Holdings Changed By Review",
+            "type": "boolean"
+          },
+          "live_quote_checked": {
+            "const": false,
+            "default": false,
+            "title": "Live Quote Checked",
+            "type": "boolean"
+          },
+          "plan_id": {
+            "format": "uuid",
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "reviewed_at": {
+            "format": "date-time",
+            "title": "Reviewed At",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "requires_recalculation",
+              "assumptions_need_confirmation"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan_id",
+          "portfolio_id",
+          "reviewed_at",
+          "verdict",
+          "changed_fields",
+          "reasons"
+        ],
+        "title": "FundingPlanReview",
+        "type": "object"
+      },
+      "FundingRiskAssumptions": {
+        "additionalProperties": false,
+        "properties": {
+          "annual_borrowing_rate": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annual Borrowing Rate"
+          },
+          "scenarios": {
+            "items": {
+              "$ref": "#/components/schemas/ExpiryPriceScenario"
+            },
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Scenarios",
+            "type": "array"
+          }
+        },
+        "required": [
+          "scenarios"
+        ],
+        "title": "FundingRiskAssumptions",
+        "type": "object"
+      },
+      "FundingRiskResult": {
+        "additionalProperties": false,
+        "properties": {
+          "assumptions": {
+            "$ref": "#/components/schemas/FundingRiskAssumptions"
+          },
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "days_of_interest": {
+            "minimum": 0.0,
+            "title": "Days Of Interest",
+            "type": "integer"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "methodology_version": {
+            "const": "funding-common-expiry-v1",
+            "default": "funding-common-expiry-v1",
+            "title": "Methodology Version",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "preferred_alternative": {
+            "title": "Preferred Alternative",
+            "type": "null"
+          },
+          "scenarios": {
+            "items": {
+              "$ref": "#/components/schemas/ExpiryAccountScenario"
+            },
+            "title": "Scenarios",
+            "type": "array"
+          },
+          "source_result_id": {
+            "format": "uuid",
+            "title": "Source Result Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "portfolio_id",
+          "source_result_id",
+          "captured_at",
+          "assumptions",
+          "days_of_interest",
+          "scenarios",
+          "limitations"
+        ],
+        "title": "FundingRiskResult",
+        "type": "object"
+      },
+      "FundingScenarioAssumptions": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          },
+          "protected_holdings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Protected Holdings",
+            "type": "array"
+          },
+          "put": {
+            "$ref": "#/components/schemas/CashSecuredPutRequest"
+          },
+          "risk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundingRiskAssumptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sale_fees": {
+            "maximum": 100000.0,
+            "minimum": 0.0,
+            "multipleOf": 0.01,
+            "title": "Sale Fees",
+            "type": "number"
+          },
+          "source_result_id": {
+            "format": "uuid",
+            "title": "Source Result Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_portfolio_id",
+          "source_result_id",
+          "put",
+          "sale_fees",
+          "confirmed"
+        ],
+        "title": "FundingScenarioAssumptions",
+        "type": "object"
+      },
+      "FundingScenarioRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          },
+          "protected_holdings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Protected Holdings",
+            "type": "array"
+          },
+          "put": {
+            "$ref": "#/components/schemas/CashSecuredPutRequest"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/ComparisonReceipt"
+          },
+          "risk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundingRiskAssumptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sale_fees": {
+            "maximum": 100000.0,
+            "minimum": 0.0,
+            "multipleOf": 0.01,
+            "title": "Sale Fees",
+            "type": "number"
+          },
+          "source_result_id": {
+            "format": "uuid",
+            "title": "Source Result Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_portfolio_id",
+          "source_result_id",
+          "put",
+          "sale_fees",
+          "confirmed",
+          "receipt"
+        ],
+        "title": "FundingScenarioRequest",
+        "type": "object"
+      },
+      "FundingScenarioResult": {
+        "additionalProperties": false,
+        "properties": {
+          "account_risk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundingRiskResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "alternatives": {
+            "items": {
+              "$ref": "#/components/schemas/FundingAlternative"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "Alternatives",
+            "type": "array"
+          },
+          "assumptions": {
+            "$ref": "#/components/schemas/FundingScenarioAssumptions"
+          },
+          "broker_buying_power": {
+            "title": "Broker Buying Power",
+            "type": "null"
+          },
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "computed_at": {
+            "format": "date-time",
+            "title": "Computed At",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "methodology_version": {
+            "const": "funding-scenarios-v1",
+            "default": "funding-scenarios-v1",
+            "title": "Methodology Version",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "preferred_alternative": {
+            "title": "Preferred Alternative",
+            "type": "null"
+          },
+          "receipt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComparisonReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "result_id": {
+            "format": "uuid",
+            "title": "Result Id",
+            "type": "string"
+          },
+          "sale_price": {
+            "title": "Sale Price",
+            "type": "number"
+          },
+          "sale_ticker": {
+            "title": "Sale Ticker",
+            "type": "string"
+          },
+          "snapshot_digest": {
+            "title": "Snapshot Digest",
+            "type": "string"
+          },
+          "source_result_id": {
+            "format": "uuid",
+            "title": "Source Result Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "computed_at",
+          "portfolio_id",
+          "source_result_id",
+          "snapshot_digest",
+          "captured_at",
+          "assumptions",
+          "sale_ticker",
+          "sale_price",
+          "alternatives",
+          "limitations"
+        ],
+        "title": "FundingScenarioResult",
         "type": "object"
       },
       "GreeksOut": {
@@ -13110,6 +14044,21 @@
         "title": "ResearchVerdict",
         "type": "object"
       },
+      "ReviewFundingPlanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_portfolio_id"
+        ],
+        "title": "ReviewFundingPlanRequest",
+        "type": "object"
+      },
       "ReviewPutPlanRequest": {
         "additionalProperties": false,
         "properties": {
@@ -15379,6 +16328,37 @@
         "title": "SavedComparison",
         "type": "object"
       },
+      "SavedFundingPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed_at": {
+            "format": "date-time",
+            "title": "Confirmed At",
+            "type": "string"
+          },
+          "plan_id": {
+            "format": "uuid",
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/FundingScenarioResult"
+          }
+        },
+        "required": [
+          "plan_id",
+          "portfolio_id",
+          "confirmed_at",
+          "result"
+        ],
+        "title": "SavedFundingPlan",
+        "type": "object"
+      },
       "SavedPutPlan": {
         "additionalProperties": false,
         "properties": {
@@ -15408,6 +16388,39 @@
           "result"
         ],
         "title": "SavedPutPlan",
+        "type": "object"
+      },
+      "SavedPutPlanPage": {
+        "additionalProperties": false,
+        "properties": {
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "plans": {
+            "items": {
+              "$ref": "#/components/schemas/SavedPutPlan"
+            },
+            "title": "Plans",
+            "type": "array"
+          },
+          "skipped_records": {
+            "default": 0,
+            "title": "Skipped Records",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "plans"
+        ],
+        "title": "SavedPutPlanPage",
         "type": "object"
       },
       "ScenarioCellOut": {
@@ -18833,6 +19846,206 @@
         ]
       }
     },
+    "/api/v1/copilot/funding-plans/{result_id}": {
+      "get": {
+        "operationId": "read_api_v1_copilot_funding_plans__result_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "result_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Result Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_portfolio_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Expected Portfolio Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SavedFundingPlan_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/funding-plans/{result_id}/confirm": {
+      "post": {
+        "operationId": "confirm_api_v1_copilot_funding_plans__result_id__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "result_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Result Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmFundingPlan"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SavedFundingPlan_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/funding-plans/{result_id}/review": {
+      "post": {
+        "operationId": "review_api_v1_copilot_funding_plans__result_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "result_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Result Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewFundingPlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_FundingPlanReview_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/funding-scenarios": {
+      "post": {
+        "operationId": "calculate_api_v1_copilot_funding_scenarios_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FundingScenarioRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_FundingScenarioResult_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Calculate",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
     "/api/v1/copilot/insights": {
       "get": {
         "description": "Server-computed, deterministic, credit-free. Materiality thresholds +\none-per-kind dedup + stable episode ids (client dismissal survives while a\ncondition persists). Thin data \u2192 only the data-quality insight. FAIL-SOFT:\nany internal failure degrades to an empty list, never a 500.",
@@ -18972,6 +20185,66 @@
           }
         },
         "summary": "List Plans",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/put-plans/history": {
+      "get": {
+        "operationId": "plan_history_api_v1_copilot_put_plans_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "expected_portfolio_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Expected Portfolio Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 101,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SavedPutPlanPage_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Plan History",
         "tags": [
           "copilot"
         ]

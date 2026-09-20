@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { CopilotPutPlans } from "./copilot-put-plans";
 import { putResultSchema } from "@/lib/copilot-put";
 import fixture from "@/test-fixtures/copilot-put.json";
@@ -7,7 +7,7 @@ import fixture from "@/test-fixtures/copilot-put.json";
 const result = putResultSchema.parse({ ...fixture, receipt: { record: "signed fixture", signature: "a".repeat(64), save_available: true } });
 const saved = { plan_id: fixture.result_id, portfolio_id: fixture.portfolio_id, confirmed_at: fixture.computed_at, result: fixture };
 const envelope = (data: unknown) => new Response(JSON.stringify({ data, error: null, meta: { request_id: "fixture" } }));
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
 it("saves only after separate consent, then reviews without claiming ongoing validity", async () => {
   const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(envelope(saved)).mockResolvedValueOnce(envelope({
@@ -18,7 +18,7 @@ it("saves only after separate consent, then reviews without claiming ongoing val
   render(<CopilotPutPlans token="test" portfolioId={fixture.portfolio_id} result={result} />);
   expect(fetcher).not.toHaveBeenCalled();
   expect(screen.getByRole("button", { name: "Confirm save Put plan" })).toBeDisabled();
-  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("checkbox", { name: /Save this original/ }));
   fireEvent.click(screen.getByRole("button", { name: "Confirm save Put plan" }));
   await screen.findByText("Original calculation saved. No holdings were changed.");
   expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual({
@@ -34,11 +34,73 @@ it("an uncertain save can retry the exact original result", async () => {
   const fetcher = vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("Saving was not confirmed. Retry this same result."))
     .mockResolvedValueOnce(envelope(saved));
   render(<CopilotPutPlans token="test" portfolioId={fixture.portfolio_id} result={result} />);
-  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("checkbox", { name: /Save this original/ }));
   fireEvent.click(screen.getByRole("button", { name: "Confirm save Put plan" }));
   await screen.findByText(/Saving was not confirmed/);
   fireEvent.click(screen.getByRole("button", { name: "Confirm save Put plan" }));
   await screen.findByText("Original calculation saved. No holdings were changed.");
   expect(fetcher.mock.calls[0][0]).toBe(fetcher.mock.calls[1][0]);
   expect(fetcher.mock.calls[0][1]?.body).toBe(fetcher.mock.calls[1][1]?.body);
+});
+
+it("loads successive verified pages and reviews only with session consent", async () => {
+  const review = { plan_id: saved.plan_id, portfolio_id: saved.portfolio_id, reviewed_at: fixture.computed_at,
+    verdict: "requires_recalculation", changed_fields: ["cash_balance"], reasons: ["Confirm quotes."],
+    live_quote_checked: false, holdings_changed_by_review: false };
+  const fetcher = vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(envelope({ plans: [], next_cursor: "next", skipped_records: 20 }))
+    .mockResolvedValueOnce(envelope({ plans: [saved], next_cursor: null, skipped_records: 0 }))
+    .mockResolvedValueOnce(envelope(review));
+  const { unmount } = render(<CopilotPutPlans token="test" portfolioId={fixture.portfolio_id} result={null} />);
+  fireEvent.click(screen.getByRole("button", { name: "Load saved Put plans" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Load more Put plans" }));
+  await screen.findByText(/SPY Put · saved/);
+  expect(String(fetcher.mock.calls[1][0])).toContain("cursor=next");
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  fireEvent.click(screen.getByRole("checkbox", { name: /Review loaded plans/ }));
+  await screen.findByText(/Saved Put assumptions changed/);
+  expect(fetcher).toHaveBeenCalledTimes(3);
+  unmount();
+});
+
+
+it("keeps unchanged reviews quiet, pauses hidden windows and stops on opt-out", async () => {
+  const review = { plan_id: saved.plan_id, portfolio_id: saved.portfolio_id, reviewed_at: fixture.computed_at,
+    verdict: "assumptions_need_confirmation", changed_fields: [], reasons: ["Confirm quotes."],
+    live_quote_checked: false, holdings_changed_by_review: false };
+  const fetcher = vi.spyOn(globalThis, "fetch").mockImplementation(async () => envelope(review));
+  fetcher.mockResolvedValueOnce(envelope({ plans: [saved], next_cursor: null, skipped_records: 0 }));
+  render(<CopilotPutPlans token="test" portfolioId={fixture.portfolio_id} result={null} />);
+  fireEvent.click(screen.getByRole("button", { name: "Load saved Put plans" }));
+  await screen.findByText(/SPY Put · saved/);
+  vi.useFakeTimers();
+  await act(async () => { fireEvent.click(screen.getByRole("checkbox", { name: /Review loaded plans/ })); });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+  expect(fetcher).toHaveBeenCalledTimes(3);
+  expect(screen.queryByText(/Saved Put assumptions changed/)).not.toBeInTheDocument();
+  vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+  await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+  expect(fetcher).toHaveBeenCalledTimes(3);
+  fireEvent.click(screen.getByRole("checkbox", { name: /Review loaded plans/ }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+  expect(fetcher).toHaveBeenCalledTimes(3);
+});
+
+
+it("does not start the next plan review after the window becomes hidden", async () => {
+  const secondId = "33333333-3333-4333-8333-333333333333";
+  const second = { ...saved, plan_id: secondId, result: { ...fixture, result_id: secondId } };
+  const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(envelope({ plans: [saved, second], next_cursor: null, skipped_records: 0 }))
+    .mockImplementationOnce(async () => {
+      vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+      return envelope({ plan_id: saved.plan_id, portfolio_id: saved.portfolio_id, reviewed_at: fixture.computed_at,
+        verdict: "assumptions_need_confirmation", changed_fields: [], reasons: ["Confirm quotes."],
+        live_quote_checked: false, holdings_changed_by_review: false });
+    });
+  render(<CopilotPutPlans token="test" portfolioId={fixture.portfolio_id} result={null} />);
+  fireEvent.click(screen.getByRole("button", { name: "Load saved Put plans" }));
+  await screen.findByText(/Verified history/);
+  await act(async () => { fireEvent.click(screen.getByRole("checkbox", { name: /Review loaded plans/ })); });
+  expect(fetcher).toHaveBeenCalledTimes(2);
 });
