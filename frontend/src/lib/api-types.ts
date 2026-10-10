@@ -2015,6 +2015,46 @@ export interface components {
             balance: number;
         };
         /**
+         * ApprovedArtifactOut
+         * @description sha256 of the bytes the serving model was loaded from vs the approved
+         *     hash. ``match`` is None when no approved hash was recorded (unknown).
+         */
+        ApprovedArtifactOut: {
+            /** Approved Sha256 */
+            approved_sha256?: string | null;
+            /** Approved Source */
+            approved_source?: string | null;
+            /** Loaded Sha256 */
+            loaded_sha256?: string | null;
+            /** Match */
+            match?: boolean | null;
+            provenance?: components["schemas"]["ArtifactProvenanceOut"] | null;
+        };
+        /**
+         * ArtifactProvenanceOut
+         * @description What the delivery pipeline recorded about the run that produced the
+         *     committed artifact. NOT the latest pipeline result — that is not knowable
+         *     from the serving box.
+         */
+        ArtifactProvenanceOut: {
+            /** Gates */
+            gates?: {
+                [key: string]: boolean;
+            };
+            /** Gates Passed */
+            gates_passed?: boolean | null;
+            /** Matches Meta */
+            matches_meta?: boolean | null;
+            /** Recorded At */
+            recorded_at?: string | null;
+            /** Run Id */
+            run_id?: string | null;
+            /** Run Url */
+            run_url?: string | null;
+            /** Source Commit */
+            source_commit?: string | null;
+        };
+        /**
          * AttributionResponse
          * @description The success payload for ``POST /api/v1/quant/attribution``.
          */
@@ -4373,6 +4413,7 @@ export interface components {
          *     status == ok. Read-only context; never advice.
          */
         MLHealthOut: {
+            approved_artifact?: components["schemas"]["ApprovedArtifactOut"] | null;
             /**
              * Artifact Loaded
              * @default false
@@ -4384,6 +4425,7 @@ export interface components {
             features?: {
                 [key: string]: components["schemas"]["FeatureDriftOut"];
             };
+            freshness?: components["schemas"]["ModelFreshnessOut"] | null;
             /** Last Updated */
             last_updated?: string | null;
             /**
@@ -4559,6 +4601,27 @@ export interface components {
             importance?: number | null;
             /** Name */
             name: string;
+        };
+        /**
+         * ModelFreshnessOut
+         * @description Model age vs the staleness threshold (MINDMARKET_ML_STALE_DAYS).
+         *     fresh | stale | unknown — an axis SEPARATE from the drift verdict.
+         */
+        ModelFreshnessOut: {
+            /** Age Days */
+            age_days?: number | null;
+            /**
+             * Status
+             * @default unknown
+             */
+            status?: string;
+            /**
+             * Threshold Days
+             * @default 21
+             */
+            threshold_days?: number;
+            /** Trained At */
+            trained_at?: string | null;
         };
         /**
          * MomentumBlock

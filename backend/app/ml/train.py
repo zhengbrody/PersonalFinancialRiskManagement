@@ -24,6 +24,7 @@ baseline so "is this better than guessing?" is explicit.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import logging
 import subprocess
@@ -87,6 +88,10 @@ def _fit(c: TrainConfig, X: pd.DataFrame, y: pd.Series) -> HistGradientBoostingC
         m = _make_model(c)
         m.set_params(early_stopping=False)
         return m.fit(X, y)
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _git_sha() -> Optional[str]:
@@ -247,6 +252,14 @@ def train_and_save(
         "feature_importances": importances,
         "feature_medians": medians,
         "data_coverage": ml_data.data_coverage(raw),
+        # Identity of the artifacts THIS run wrote. /ml/health compares the
+        # serving model's bytes against this (via regime_provenance.json when
+        # the delivery pipeline recorded one) to prove production serves the
+        # approved artifact. The meta cannot hash itself.
+        "artifact_sha256": {
+            "model": _sha256(MODEL_PATH),
+            "reference": _sha256(REFERENCE_PATH),
+        },
     }
     META_PATH.write_text(json.dumps(meta, indent=2))
     if track:

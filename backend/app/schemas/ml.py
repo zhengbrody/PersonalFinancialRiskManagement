@@ -74,6 +74,41 @@ class ReferenceSummary(BaseModel):
     features: int = 0
 
 
+class ModelFreshnessOut(BaseModel):
+    """Model age vs the staleness threshold (MINDMARKET_ML_STALE_DAYS).
+    fresh | stale | unknown — an axis SEPARATE from the drift verdict."""
+
+    status: str = "unknown"
+    age_days: Optional[float] = None
+    threshold_days: float = 21.0
+    trained_at: Optional[str] = None
+
+
+class ArtifactProvenanceOut(BaseModel):
+    """What the delivery pipeline recorded about the run that produced the
+    committed artifact. NOT the latest pipeline result — that is not knowable
+    from the serving box."""
+
+    source_commit: Optional[str] = None
+    run_id: Optional[str] = None
+    run_url: Optional[str] = None
+    recorded_at: Optional[str] = None
+    gates_passed: Optional[bool] = None
+    gates: dict[str, bool] = Field(default_factory=dict)
+    matches_meta: Optional[bool] = None
+
+
+class ApprovedArtifactOut(BaseModel):
+    """sha256 of the bytes the serving model was loaded from vs the approved
+    hash. ``match`` is None when no approved hash was recorded (unknown)."""
+
+    loaded_sha256: Optional[str] = None
+    approved_sha256: Optional[str] = None
+    approved_source: Optional[str] = None  # provenance | meta | None
+    match: Optional[bool] = None
+    provenance: Optional[ArtifactProvenanceOut] = None
+
+
 class MLHealthOut(BaseModel):
     """GET /api/v1/ml/health — model/artifact identity + drift status.
 
@@ -100,3 +135,6 @@ class MLHealthOut(BaseModel):
     live_window_days: int = 0
     note: Optional[str] = None
     last_updated: Optional[str] = None
+    # Additive, independent of `status`/`overall_status`.
+    freshness: Optional[ModelFreshnessOut] = None
+    approved_artifact: Optional[ApprovedArtifactOut] = None

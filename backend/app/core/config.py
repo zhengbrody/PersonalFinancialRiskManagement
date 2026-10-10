@@ -225,6 +225,14 @@ class Settings:
         default_factory=lambda: _env_float("ANTHROPIC_CRITICAL_PCT", 0.08)
     )
 
+    # /api/v1/ml/health `freshness`: the served regime model is reported STALE
+    # once it is older than this many days. Independent of the drift verdict
+    # (a stale model can be drift-healthy, and vice versa). Weekly retrains +
+    # one human review/merge/deploy cycle fit comfortably inside 21 days.
+    ml_model_stale_days: float = field(
+        default_factory=lambda: _env_float("MINDMARKET_ML_STALE_DAYS", 21.0)
+    )
+
     # FMP (Financial Modeling Prep) key for the equity dossier fetch. Optional:
     # when blank the dossier still builds from the free (yfinance) legs and FMP
     # premium fields are simply null — Ticker Research degrades, never 500s.
