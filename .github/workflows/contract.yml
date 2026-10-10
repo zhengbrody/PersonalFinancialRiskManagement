@@ -22,6 +22,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Dispatched on bot-opened retrain PR branches (see ci.yml / train-regime.yml).
+  workflow_dispatch: {}
 
 permissions:
   contents: read
