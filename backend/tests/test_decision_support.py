@@ -88,3 +88,79 @@ def test_unrelated_question_keeps_existing_router(enabled, monkeypatch):
     monkeypatch.setattr(router, "_gather", gather)
     assert router.answer("What is my Sharpe ratio?", user=object()).decision_support is None
     gather.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "question,intent",
+    [
+        ("Is my portfolio diversified enough?", "portfolio_diagnosis"),
+        ("我的组合分散吗？", "portfolio_diagnosis"),
+        ("帮我看看我的 put 敞口", "portfolio_diagnosis"),
+        ("explain my margin", "explain_metric"),
+    ],
+)
+def test_personal_diagnostics_reach_the_grounded_router(enabled, monkeypatch, question, intent):
+    # A personal question that only MENTIONS a topic has deterministic tools
+    # behind it (concentration, option exposure, leverage). It must not be
+    # intercepted with a reduction-candidate clarification.
+    gather = Mock(return_value=([], None))
+    monkeypatch.setattr(router, "_gather", gather)
+    answer = router.answer(question, user=object())
+    assert answer.decision_support is None
+    assert answer.intent == intent
+    gather.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "question,interest,term,goal_prompt",
+    [
+        ("Can I sell puts on AAPL with my current cash?", False, "strike", "confirm the goal"),
+        (
+            "How much margin interest will I pay if I sell a put on SPY?",
+            True,
+            "strike",
+            "confirm the goal",
+        ),
+        (
+            "What happens if my put gets assigned and I don't have enough cash?",
+            False,
+            "strike",
+            "confirm the goal",
+        ),
+        ("如果我卖 AAPL 的 put 被指派，现金不够怎么办？", False, "行权价", "明确目标"),
+        ("卖 put 的利息成本我该怎么算？", True, "行权价", "明确目标"),
+    ],
+)
+def test_put_funding_question_names_its_missing_inputs(
+    enabled, monkeypatch, question, interest, term, goal_prompt
+):
+    monkeypatch.setattr(router, "_gather", Mock(side_effect=AssertionError("no fetch")))
+    answer = router.answer(question, user=object())
+    support = answer.decision_support
+    assert support.task.kind == "clarification" and support.coverage == "insufficient_data"
+    missing = set(support.task.missing_inputs)
+    assert {
+        "put_contract_terms",
+        "settled_cash_and_other_holds",
+        "existing_option_positions",
+        "broker_margin_rules",
+    } <= missing
+    assert ({"borrowing_apr", "financing_horizon"} <= missing) is interest
+    direct = answer.sections[0].markdown
+    assert term in direct  # the clarification names the Put inputs it needs
+    assert goal_prompt not in direct  # not the reduction-goal boilerplate
+    assert ("APR" in direct or "年利率" in direct) is interest
+    assert "unknown" in direct or "未知" in direct  # broker rules never default to eligible
+    assert answer.evidence == []
+
+
+def test_chinese_sell_which_phrasings_are_candidate_requests(enabled, monkeypatch):
+    monkeypatch.setattr(router, "_gather", Mock(side_effect=AssertionError("no fetch")))
+    for question in (
+        "我该卖掉哪些股票来还融资？",
+        "卖出哪些持仓能降低融资？",
+        "减掉哪些股票比较好？",
+    ):
+        support = router.answer(question, user=object()).decision_support
+        assert support.task.kind == "candidate_request", question
+        assert {"goal", "budget", "protected_holdings"} <= set(support.task.missing_inputs)

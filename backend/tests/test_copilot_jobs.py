@@ -30,6 +30,9 @@ class MemoryStore:
         self.rows[row["id"]] = deepcopy(row)
         return True
 
+    def active(self):
+        return [deepcopy(r) for r in self.rows.values() if r["state"] in ("queued", "running")]
+
     def transition(self, old, new):
         if self.lose_cas or self.rows[old["id"]]["signature"] != old["signature"]:
             return False
@@ -343,3 +346,186 @@ def test_execution_rechecks_version_before_any_provider_access(journal):
     record = log.get(id).model_copy(update={"implementation": "different-version"})
     with pytest.raises(APIError, match="version changed"):
         jobs.compute(record, None)
+
+
+# ---- signing purpose, fair dispatch, truthful start, database-clock interrupt ----
+
+
+def test_job_records_use_a_purpose_key_not_the_raw_root(monkeypatch, journal):
+    import hashlib
+    import hmac
+
+    from backend.app.core.config import reset_settings_cache
+
+    root = "job-signing-root-0000000000000000000000000"
+    monkeypatch.setenv("MINDMARKET_RISK_RUN_SIGNING_SECRET", root)
+    reset_settings_cache()
+    try:
+        derived = jobs.key()
+        assert derived != root.encode()
+        assert (
+            derived
+            == hmac.new(root.encode(), b"mindmarket:copilot-job:v2", hashlib.sha256).digest()
+        )
+        log, id, _ = journal
+        record = log.get(id)
+        raw_signed = runs.encode(record, root.encode())  # a record MACed with the raw root
+        with pytest.raises(APIError) as exc:
+            runs.decode(raw_signed, derived, USER, id, record_type=jobs.CandidateRunRecord)
+        assert exc.value.code == "untrusted_run"
+        # Version-one foreground runs keep the raw root (existing stored runs).
+        monkeypatch.setenv("MINDMARKET_COPILOT_RUNS_ENABLED", "true")
+        reset_settings_cache()
+        assert runs.signing_key() == root.encode()
+    finally:
+        reset_settings_cache()
+
+
+def test_dispatch_is_fair_per_owner_and_bounded_globally():
+    from types import SimpleNamespace
+
+    dispatcher = jobs.Dispatcher()
+    dispatcher.started = True
+    a, b = SimpleNamespace(id="owner-a", access_token="t"), SimpleNamespace(
+        id="owner-b", access_token="t"
+    )
+    assert dispatcher.submit(a, "a1")
+    assert dispatcher.submit(a, "a1"), "re-submitting the same job is idempotent"
+    assert not dispatcher.has_capacity(a) and not dispatcher.submit(a, "a2")
+    assert dispatcher.has_capacity(b) and dispatcher.submit(b, "b1")
+    for owner in ("c", "d"):
+        assert dispatcher.submit(SimpleNamespace(id=owner, access_token="t"), owner + "1")
+    late = SimpleNamespace(id="e", access_token="t")
+    assert not dispatcher.has_capacity(late) and not dispatcher.submit(late, "e1")
+    dispatcher.shutdown()
+
+
+def test_active_count_counts_only_live_trusted_jobs(journal):
+    log, id, clock = journal
+    assert log.active_count() == 1  # the queued reservation
+    assert log.active_count(exclude=id) == 0
+    log.claim(id)
+    assert log.active_count() == 1  # running with a live lease
+    clock[0] += jobs.LEASE + timedelta(seconds=1)
+    assert log.active_count() == 0  # lease expired: no longer holding anything
+    clock[0] -= jobs.LEASE + timedelta(seconds=1)
+    log.store.rows[id]["signature"] = "a" * 64
+    assert log.active_count() == 0  # untrusted rows are not counted
+
+
+def test_reader_does_not_interrupt_when_the_database_refuses(journal):
+    """The application clock only PROPOSES expiry; migration 0020 lets the
+    database refuse while its own clock still sees a live lease."""
+    log, id, clock = journal
+    claimed = log.claim(id)
+    clock[0] += jobs.LEASE + timedelta(seconds=1)  # app clock runs fast
+    log.store.lose_cas = True  # database refuses the interruption
+    current = log.get(id)
+    assert current.state == "running" and current.revision == claimed.revision
+
+
+def test_resume_is_refused_while_another_job_is_active(journal):
+    log, id, clock = journal
+    log.claim(id)
+    clock[0] += jobs.LEASE + timedelta(seconds=1)
+    assert log.get(id).state == "interrupted"
+    other = log.reserve(str(uuid4()), task(), log.read(id)[1].snapshot, uuid4())
+    assert other.state == "queued"
+    with pytest.raises(APIError) as exc:
+        log.resume(id)
+    assert exc.value.status == 429 and exc.value.code == "too_many_active_runs"
+    assert log.get(id).state == "interrupted"
+
+
+def test_storage_integrity_refusals_keep_their_meaning():
+    from types import SimpleNamespace
+
+    store = jobs.JobStore.__new__(jobs.JobStore)
+    store.user_id = USER
+    for text, code in (
+        ("P0001 copilot_job_limit", "too_many_active_runs"),
+        ("P0001 copilot_job_replay", "run_conflict"),
+        ("P0001 copilot_job_rollback", "run_conflict"),
+        ("connection reset", "run_storage_unavailable"),
+    ):
+
+        def build(text=text):
+            return SimpleNamespace(execute=lambda: (_ for _ in ()).throw(RuntimeError(text)))
+
+        with pytest.raises(APIError) as exc:
+            store._guarded(build)
+        assert exc.value.code == code
+
+
+@pytest.fixture
+def start_api(test_client, mint_token, monkeypatch, journal):
+    from unittest.mock import Mock
+
+    from backend.app.api.v1 import risk
+    from backend.app.services import comparison_save, risk_profile
+
+    log, existing, _ = journal
+    monkeypatch.setattr(jobs, "require_enabled", lambda: None)
+    monkeypatch.setattr(jobs, "journal", lambda user: log)
+    snapshot = log.read(existing)[1].snapshot
+    from libs.auth.active_portfolio import ActivePortfolioContext
+
+    context = ActivePortfolioContext(
+        str(snapshot.portfolio_id),
+        snapshot.holdings,
+        snapshot.cash_balance,
+        snapshot.margin_loan,
+        snapshot.contributed_capital,
+    )
+    monkeypatch.setattr(risk, "_resolve_active_context_or_raise", lambda user: context)
+    monkeypatch.setattr(
+        risk_profile,
+        "resolve_risk_preference",
+        lambda user: Mock(value=3, source="neutral_baseline", confirmed_at=None),
+    )
+    monkeypatch.setattr(comparison_save, "portfolio_revision", lambda *a: uuid4())
+    dispatcher = test_client.app.state.copilot_dispatcher
+    headers = {"Authorization": f"Bearer {mint_token(sub=USER)}"}
+
+    def post(id):
+        body = {"id": id, "task": task().model_dump(mode="json")}
+        return test_client.post("/api/v1/copilot/decision-runs", json=body, headers=headers)
+
+    return log, existing, dispatcher, post
+
+
+def test_start_refuses_a_second_active_job_without_writing(start_api, monkeypatch):
+    log, existing, dispatcher, post = start_api
+    reserve = []
+    monkeypatch.setattr(log, "reserve", lambda *a: reserve.append(a))
+    response = post(str(uuid4()))
+    assert response.status_code == 429
+    assert response.json()["error"]["code"] == "too_many_active_runs"
+    assert reserve == []
+
+
+def test_start_never_reports_queued_when_nothing_will_run_it(start_api, monkeypatch):
+    log, existing, dispatcher, post = start_api
+    log.cancel(existing)  # free the owner's active slot
+    # Queue full before reserving: nothing is written.
+    monkeypatch.setattr(dispatcher, "has_capacity", lambda user: False)
+    new_id = str(uuid4())
+    response = post(new_id)
+    assert response.status_code == 429
+    error = response.json()["error"]
+    assert error["code"] == "analysis_queue_full" and "Nothing was saved" in error["message"]
+    assert new_id not in log.store.rows
+    # Capacity looked free, but the slot was taken before submit: saved, not started.
+    monkeypatch.setattr(dispatcher, "has_capacity", lambda user: True)
+    monkeypatch.setattr(dispatcher, "submit", lambda user, id: False)
+    response = post(new_id)
+    assert response.status_code == 429
+    assert "Saved as queued but not started" in response.json()["error"]["message"]
+    assert log.get(new_id).state == "queued"
+    # Retrying the SAME id once a slot frees dispatches it, without duplicating.
+    submitted = []
+    monkeypatch.setattr(dispatcher, "submit", lambda user, id: submitted.append(id) or True)
+    response = post(new_id)
+    assert response.status_code == 200 and response.json()["data"]["state"] == "queued"
+    assert submitted == [new_id]
+    assert sum(1 for r in log.store.rows if r == new_id) == 1

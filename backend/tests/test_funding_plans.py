@@ -187,3 +187,147 @@ def test_signed_but_unreproducible_common_expiry_rejected(capture, field):
     with pytest.raises(APIError):
         service.confirm("jwt", USER, BOOK, id, altered)
     assert not rows
+
+
+def test_review_endpoint_reads_only_and_persists_nothing(capture, monkeypatch):
+    from dataclasses import asdict
+    from uuid import UUID
+
+    from starlette.requests import Request
+
+    from backend.app.api.v1 import funding_plans as api
+    from backend.app.schemas.funding_plan import ReviewFundingPlanRequest
+    from backend.app.services import copilot_scope
+    from backend.tests.test_put_plans import ReadOnlyClient
+    from libs.auth import active_portfolio
+
+    source, result, receipt, rows = capture
+    plan_id = str(result.result_id)
+    service.confirm("jwt", USER, BOOK, plan_id, receipt)
+    stored_before = deepcopy(rows)
+    context = source.account.context()
+    client = ReadOnlyClient(
+        {"portfolios": [{"comparison_revision": str(source.portfolio_revision)}]}
+    )
+    monkeypatch.setattr(comparison_save, "_client", lambda token: client)
+    monkeypatch.setattr(service, "_client", lambda token: client)
+    monkeypatch.setattr(
+        active_portfolio, "get_active_portfolio_context", lambda access_token: context
+    )
+    monkeypatch.setattr(
+        copilot_scope,
+        "resolve_scope",
+        lambda token, expected: copilot_scope.context_digest(asdict(context)),
+    )
+    user = SimpleNamespace(id=USER, access_token="jwt")
+    request_ = Request({"type": "http", "headers": []})
+
+    response = api.review(
+        UUID(plan_id), ReviewFundingPlanRequest(expected_portfolio_id=UUID(BOOK)), request_, user
+    )
+
+    assert response.status_code == 200
+    assert client.writes == []
+    assert rows == stored_before
+
+
+def test_save_window_is_anchored_at_the_original_reduction_capture(inputs, monkeypatch):
+    """Adding Put assumptions later must not restart the fifteen-minute clock.
+
+    Source reduction captured at T0; the combined scenario is composed at
+    T0+10min (allowed: the source is still fresh); saving at T0+15min+1s is
+    rejected even though the combined result itself is only ~5 minutes old.
+    """
+    source, body = inputs
+    monkeypatch.setenv(
+        "MINDMARKET_RISK_RUN_SIGNING_SECRET", "funding-test-signing-0000000000000000000000"
+    )
+    reset_settings_cache()
+    monkeypatch.setattr(service, "require_enabled", lambda: None)
+    rows = {}
+    monkeypatch.setattr(comparison_save, "_existing", lambda token, user, id: rows.get(id))
+    composed_at = NOW + timedelta(minutes=10)
+    result = service.funding_scenarios.calculate(source, body, now=composed_at)
+    receipt = service.issue(USER, source, body, result)
+    snap = service.read(receipt, USER, BOOK, str(result.result_id))
+    assert snap.captured_at == source.captured_at == NOW
+    assert snap.result.computed_at == composed_at
+
+    monkeypatch.setattr(service.replay, "utcnow", lambda: NOW + timedelta(minutes=15, seconds=1))
+    with pytest.raises(APIError, match="funding_plan_expired"):
+        service.confirm("jwt", USER, BOOK, str(result.result_id), receipt)
+    assert not rows
+    # Inside the window measured from the ORIGINAL capture, the same save proceeds
+    # past the expiry gate (the next gate is the implementation fingerprint, so a
+    # different error here would mean the clock was re-anchored).
+    monkeypatch.setattr(service.replay, "utcnow", lambda: NOW + timedelta(minutes=14, seconds=59))
+    monkeypatch.setattr(service, "fingerprint", lambda: "sentinel-past-the-expiry-gate")
+    with pytest.raises(APIError, match="funding_implementation_changed"):
+        service.confirm("jwt", USER, BOOK, str(result.result_id), receipt)
+
+
+def test_commit_then_lost_response_retry_returns_the_one_saved_plan(capture, monkeypatch):
+    _, result, receipt, rows = capture
+    id = str(result.result_id)
+    real_client = service._client("jwt")
+    calls = []
+
+    class LostResponse:
+        def rpc(self, name, args):
+            calls.append(name)
+            real_client.rpc(name, args)
+            return self
+
+        def execute(self):
+            real_client.execute()
+            raise ConnectionError("socket closed before the response")
+
+    monkeypatch.setattr(service, "_client", lambda token: LostResponse())
+    with pytest.raises(APIError) as exc:
+        service.confirm("jwt", USER, BOOK, id, receipt)
+    assert exc.value.status == 503 and exc.value.code == "funding_save_unconfirmed"
+    assert len(rows) == 1 and len(calls) == 1
+
+    retried = service.confirm("jwt", USER, BOOK, id, receipt)
+    assert len(calls) == 1 and len(rows) == 1 and retried.result == result
+    assert service.get_saved("jwt", USER, BOOK, id)[0] == retried
+
+
+def test_proof_stamped_outside_the_window_is_never_written(capture, monkeypatch):
+    _, result, receipt, rows = capture
+    clock = {"now": NOW + timedelta(seconds=899)}
+    monkeypatch.setattr(service.replay, "utcnow", lambda: clock["now"])
+    real = service.funding_scenarios.calculate
+
+    def slow_replay(*args, **kwargs):
+        clock["now"] = NOW + timedelta(seconds=901)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(service.funding_scenarios, "calculate", slow_replay)
+    with pytest.raises(APIError) as exc:
+        service.confirm("jwt", USER, BOOK, str(result.result_id), receipt)
+    assert exc.value.code == "funding_plan_expired"
+    assert rows == {}
+
+
+def test_confirm_authenticates_the_receipt_before_taking_the_lane(capture, monkeypatch):
+    from unittest.mock import Mock
+
+    from starlette.requests import Request
+
+    from backend.app.api.v1 import funding_plans as api
+    from backend.app.schemas.funding_plan import ConfirmFundingPlan
+
+    _, result, receipt, rows = capture
+    capacity = Mock()
+    capacity.acquire.return_value = True
+    monkeypatch.setattr(api.risk, "_check_capacity", capacity)
+    req = Request({"type": "http", "headers": []})
+    forged = receipt.model_copy(update={"signature": "a" * 64})
+    for user_id, proof in ((USER, forged), (str(uuid4()), receipt)):
+        body = ConfirmFundingPlan(expected_portfolio_id=BOOK, confirmed=True, receipt=proof)
+        with pytest.raises(APIError) as exc:
+            api.confirm(result.result_id, body, req, SimpleNamespace(id=user_id, access_token="j"))
+        assert exc.value.code == "untrusted_funding_plan"
+    capacity.acquire.assert_not_called()
+    assert rows == {}

@@ -197,6 +197,15 @@ def confirm(token, user_id, portfolio_id, result_id, receipt):
         confirmed_at=shared.utcnow(),
         receipt=receipt.model_copy(update={"save_available": False}),
     )
+    # Re-check the window on the proof that will actually be stored. Replay
+    # time sits between the gate above and this timestamp; a proof outside the
+    # window could still commit (the database clock may lag ours) and then be
+    # rejected by verify_row on every later read -- a saved plan reported as a
+    # failure forever. Refuse before writing instead.
+    if not 0 <= (proof.confirmed_at - snap.captured_at).total_seconds() <= 900:
+        raise APIError(
+            409, "put_plan_expired", "Recalculate before saving; this capture has expired."
+        )
     raw, signature = signed(proof, "confirmation")
     try:
         rows = (

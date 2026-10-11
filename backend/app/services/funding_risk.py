@@ -222,6 +222,7 @@ def calculate(snapshot, funding_assumptions, risk_assumptions, *, now, funding_r
             "Interest is simple actual/365 on each branch's initial debt from capture date to expiry. Unknown rates leave debt-bearing net equity, net P&L and exact funding gaps unknown. Zero-debt branches incur no interest.",
             "Conditional borrowing covers cash and reserve deficits at expiry only; it adds matching cash and debt, has no retroactive interest, and does not imply broker approval or available credit.",
             "Largest-position weight uses total stock value after assignment, excluding cash. Leverage assumes deficit financing; ratios are unavailable when net equity is unknown or nonpositive.",
+            "Retained cash earns nothing here: no sweep, money-market or Treasury yield is credited, so alternatives that keep more cash are not credited with interest income.",
             "Taxes, dividends, changes in reserved cash, intraperiod price paths, margin calls and execution/settlement uncertainty are excluded. Financing feasibility remains unverified and no alternative is ranked.",
         ],
     )

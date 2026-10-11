@@ -188,8 +188,24 @@ def copilot_ask_endpoint(
     # cached answer that folded the old preference evidence can't be re-served.
     from ...core.config import get_settings
 
+    # The decision-support answer embeds which capabilities are AVAILABLE
+    # (candidate comparison / Put / save / funding). Those come from feature
+    # flags, so every flag that shapes the answer must be in the key — else a
+    # flag flip serves a stale "unavailable" for the cache TTL.
+    st = get_settings()
+    flag_fp = "".join(
+        "1" if f else "0"
+        for f in (
+            st.decision_support_enabled,
+            st.async_analysis_enabled,
+            st.cash_secured_put_enabled,
+            st.cash_secured_put_save_enabled,
+            st.funding_scenarios_enabled,
+            st.copilot_comparison_replay_enabled,
+        )
+    )
     cache_key = input_hash(
-        f"decision-v1:{get_settings().decision_support_enabled}|"
+        f"decision-v1:{flag_fp}|"
         f"{user.id}|g{user_generation(user.id)}|{body.message.strip()}"
         f"|{body.route or ''}|{(body.ticker or '').upper()}"
         f"|scope:{scope or 'legacy'}"

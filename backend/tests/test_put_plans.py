@@ -227,3 +227,135 @@ def test_history_scans_past_invalid_rows_and_binds_cursor(capture, monkeypatch):
     ]:
         with pytest.raises(APIError, match="Reload"):
             service.history("jwt", owner, book, cursor)
+
+
+class ReadOnlyClient:
+    """A PostgREST stand-in that answers SELECT chains and refuses every write.
+
+    ``review`` endpoints promise to change nothing. The promise is cheap to
+    break silently -- one extra ``.update()`` in a seam would still return 200
+    -- so the proof is structural: any call that is not part of a select chain
+    raises, and the raise is a *test* failure, not an APIError the handler
+    could swallow into a 503.
+    """
+
+    WRITES = ("insert", "update", "upsert", "delete", "rpc")
+
+    def __init__(self, answers):
+        self.answers, self.writes, self._table = answers, [], None
+
+    def table(self, name):
+        self._table = name
+        return self
+
+    def select(self, *_):
+        return self
+
+    def eq(self, *_):
+        return self
+
+    def limit(self, *_):
+        return self
+
+    def order(self, *_):
+        return self
+
+    def execute(self):
+        return SimpleNamespace(data=self.answers.get(self._table, []))
+
+    def __getattr__(self, name):
+        if name in self.WRITES:
+            self.writes.append((self._table, name))
+            raise AssertionError(f"review issued a write: {self._table}.{name}")
+        raise AttributeError(name)
+
+
+def test_review_endpoint_reads_only_and_persists_nothing(capture, monkeypatch):
+    from starlette.requests import Request
+
+    from backend.app.api.v1 import copilot_put as api
+    from backend.app.schemas.put_plan import ReviewPutPlanRequest
+    from libs.auth import active_portfolio
+
+    context, result, revision, receipt, rows = capture
+    plan_id = str(result.result_id)
+    service.confirm("jwt", USER, BOOK, plan_id, receipt)
+    stored_before = deepcopy(rows)
+    revision_row = [{"comparison_revision": str(revision)}]
+    client = ReadOnlyClient({"portfolios": revision_row})
+    # The fixture's ``_existing`` reads the ``rows`` dict; every other database
+    # seam the handler touches (portfolio_revision, risk_plans._client) goes
+    # through this one strict client.
+    monkeypatch.setattr(comparison_save, "_client", lambda token: client)
+    monkeypatch.setattr(service, "_client", lambda token: client)
+    monkeypatch.setattr(
+        active_portfolio, "get_active_portfolio_context", lambda access_token: context
+    )
+    monkeypatch.setattr(
+        copilot_scope,
+        "resolve_scope",
+        lambda token, expected: copilot_scope.context_digest(asdict(context)),
+    )
+    user = SimpleNamespace(id=USER, access_token="jwt")
+    body = ReviewPutPlanRequest(expected_portfolio_id=UUID(BOOK))
+    request_ = Request({"type": "http", "headers": []})
+
+    response = api.review_plan(UUID(plan_id), body, request_, user)
+
+    assert response.status_code == 200
+    assert client.writes == []
+    assert rows == stored_before
+
+
+def test_commit_then_lost_response_retry_returns_the_one_saved_plan(capture, monkeypatch):
+    """The database committed but the response never arrived. The user must be
+    told the outcome is unknown (never "failed"), and retrying the SAME result
+    must return the stored plan without a second write."""
+    _, result, _, receipt, rows = capture
+    id = str(result.result_id)
+    real_client = service._client("jwt")
+    calls = []
+
+    class LostResponse:
+        def rpc(self, name, args):
+            calls.append(name)
+            real_client.rpc(name, args)
+            return self
+
+        def execute(self):
+            real_client.execute()  # the row IS written ...
+            raise ConnectionError("socket closed before the response")  # ... reply lost
+
+    monkeypatch.setattr(service, "_client", lambda token: LostResponse())
+    with pytest.raises(APIError) as exc:
+        service.confirm("jwt", USER, BOOK, id, receipt)
+    assert exc.value.status == 503 and exc.value.code == "put_save_unconfirmed"
+    assert "may already be saved" in exc.value.message
+    assert len(rows) == 1 and len(calls) == 1
+
+    retried = service.confirm("jwt", USER, BOOK, id, receipt)
+    assert len(calls) == 1, "retry must read the committed row, not write again"
+    assert len(rows) == 1 and retried.result == result
+    assert service.get_saved("jwt", USER, BOOK, id)[0] == retried
+
+
+def test_proof_stamped_outside_the_window_is_never_written(capture, monkeypatch):
+    """Replay runs between the expiry gate and the proof timestamp. A proof
+    that left the window during replay must not reach the database: a commit
+    there would be unreadable forever (verify_row enforces the same window)."""
+    from datetime import timedelta
+
+    _, result, _, receipt, rows = capture
+    clock = {"now": NOW + timedelta(seconds=899)}
+    monkeypatch.setattr(service.shared, "utcnow", lambda: clock["now"])
+    real = service.copilot_put.calculate
+
+    def slow_replay(*args, **kwargs):
+        clock["now"] = NOW + timedelta(seconds=901)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(service.copilot_put, "calculate", slow_replay)
+    with pytest.raises(APIError) as exc:
+        service.confirm("jwt", USER, BOOK, str(result.result_id), receipt)
+    assert exc.value.code == "put_plan_expired"
+    assert rows == {}

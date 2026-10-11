@@ -76,6 +76,12 @@ def start(body: StartCandidateRun, request: Request, user: AuthedUser = Depends(
         context = risk._resolve_active_context_or_raise(user)
         if context.portfolio_id != str(body.task.expected_portfolio_id):
             raise APIError(409, "portfolio_changed", "Select the requested portfolio.")
+        # Cheap refusals before anything is written: one active job per owner,
+        # and no reservation the dispatcher could not start right now.
+        if log.active_count() >= jobs.MAX_ACTIVE_PER_USER:
+            raise jobs.too_many_active()
+        if not _dispatcher(request).has_capacity(user):
+            raise jobs.queue_full(saved=False)
         profile = risk_profile.resolve_risk_preference(user)
         revision = comparison_save.portfolio_revision(
             user.access_token, user.id, context.portfolio_id
@@ -89,8 +95,10 @@ def start(body: StartCandidateRun, request: Request, user: AuthedUser = Depends(
         record = log.reserve(id, body.task, snapshot, revision)
     if record.task != body.task:
         raise APIError(409, "run_conflict", "This run ID belongs to different constraints.")
-    if record.state == "queued":
-        _dispatcher(request).submit(user, id)
+    if record.state == "queued" and not _dispatcher(request).submit(user, id):
+        # Truthful: the record is durably queued but nothing will run it until a
+        # retry of this same id (idempotent) or an explicit recovery.
+        raise jobs.queue_full(saved=True)
     return ok(record.public().model_dump(mode="json"), request=request)
 
 
@@ -105,8 +113,8 @@ def read(id: UUID, request: Request, user: AuthedUser = Depends(require_user)):
 def resume(id: UUID, request: Request, user: AuthedUser = Depends(require_user)):
     jobs.require_enabled()
     record = jobs.journal(user).resume(str(id))
-    if record.state == "queued":
-        _dispatcher(request).submit(user, str(id))
+    if record.state == "queued" and not _dispatcher(request).submit(user, str(id)):
+        raise jobs.queue_full(saved=True)
     return ok(record.public().model_dump(mode="json"), request=request)
 
 

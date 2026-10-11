@@ -31,6 +31,9 @@ def confirm(
     if not body.confirmed:
         raise APIError(422, "confirmation_required", "Confirm saving this original scenario.")
     funding_plans.require_enabled()
+    # Authenticate the receipt (HMAC + owner/book/result scope) BEFORE taking
+    # the single analysis lane: a forged or foreign receipt must not occupy it.
+    funding_plans.read(body.receipt, user.id, str(body.expected_portfolio_id), str(result_id))
     if not risk._check_capacity.acquire(blocking=False):
         raise APIError(503, "risk_busy", "Risk computation is busy. Retry this same result.")
     try:

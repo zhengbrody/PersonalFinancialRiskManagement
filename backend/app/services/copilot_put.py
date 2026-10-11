@@ -53,7 +53,10 @@ def calculate(context, body, digest, *, now=None):
         if not isinstance(holding, dict):
             _bad("Every holding must have identified position data.")
         kind = str(holding.get("asset_type") or "public_security").lower()
-        if kind not in {"public_security", "stock", "etf", "cash", "option"}:
+        # "equity" is what libs.auth.active_portfolio stamps on every UI-entered
+        # stock without an explicit type (the same set copilot_compare accepts);
+        # rejecting it refused nearly every real account with a plain stock.
+        if kind not in {"public_security", "equity", "stock", "etf", "cash", "option"}:
             _bad("Unsupported assets require separate settlement and funding handling.")
         if str(holding.get("currency") or "USD").upper() != "USD":
             _bad("Non-USD positions require currency-specific funding.")
@@ -75,7 +78,8 @@ def calculate(context, body, digest, *, now=None):
         _bad(
             "Existing option legs other than short puts require a combined exercise and delivery-obligation model."
         )
-    # No hedge offsets: long puts do not remove gross physical assignment funding.
+    # Every existing leg reaching this point is a short put (long legs and calls
+    # were rejected above), so each one reserves its full gross strike cash.
     existing_reserve = _money(
         sum(
             spec.strike * abs(spec.quantity) * 100

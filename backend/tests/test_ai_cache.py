@@ -251,3 +251,47 @@ def test_user_generation_unit():
     ai_cache.bump_user_generation("")  # no-op, never raises
     ai_cache.reset_all()
     assert ai_cache.user_generation("u1") == 0
+
+
+def test_ask_cache_key_covers_every_capability_flag(test_client, mint_token, monkeypatch):
+    """A decision-support answer embeds which capabilities are AVAILABLE
+    (Put / save / funding / candidates). Flipping any of those flags must be a
+    cache MISS — otherwise a newly enabled feature is reported "unavailable"
+    for the whole TTL."""
+    from backend.app.api.v1 import copilot as copilot_api
+    from backend.app.core.config import reset_settings_cache
+    from backend.app.services import copilot_router
+
+    calls = {"n": 0}
+
+    def fake_answer(message, *, user, llm_callable, route=None, ticker=None):
+        calls["n"] += 1
+        return _FakeAsk()
+
+    monkeypatch.setattr(copilot_router, "answer", fake_answer)
+    monkeypatch.setattr(copilot_api, "get_llm_callable", lambda *a, **k: (lambda **_: "x"))
+    monkeypatch.setattr(copilot_api, "_record_ask_cost", lambda *a, **k: None)
+    body = {"message": "Should I sell a cash-secured put?"}
+
+    def flip(name: str, value: str) -> None:
+        monkeypatch.setenv(name, value)
+        reset_settings_cache()
+
+    flip("MINDMARKET_DECISION_SUPPORT_ENABLED", "true")
+    test_client.post("/api/v1/copilot/ask", json=body, headers=_auth(mint_token))
+    test_client.post("/api/v1/copilot/ask", json=body, headers=_auth(mint_token))
+    assert calls["n"] == 1  # identical flags → cache hit
+
+    for i, flag in enumerate(
+        (
+            "MINDMARKET_ASYNC_ANALYSIS_ENABLED",
+            "MINDMARKET_CASH_SECURED_PUT_ENABLED",
+            "MINDMARKET_CASH_SECURED_PUT_SAVE_ENABLED",
+            "MINDMARKET_FUNDING_SCENARIOS_ENABLED",
+            "MINDMARKET_COMPARISON_REPLAY_ENABLED",
+        ),
+        start=2,
+    ):
+        flip(flag, "true")
+        test_client.post("/api/v1/copilot/ask", json=body, headers=_auth(mint_token))
+        assert calls["n"] == i, f"flipping {flag} must miss the cache"

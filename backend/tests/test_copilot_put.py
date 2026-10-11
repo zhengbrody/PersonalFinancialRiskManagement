@@ -222,3 +222,25 @@ def test_put_capability_is_advertised_only_when_enabled(monkeypatch):
         ).decision_support.cash_secured_put_available
     finally:
         reset_settings_cache()
+
+
+def test_ui_entered_stock_holdings_are_fundable():
+    # The production normaliser labels any UI-entered non-ETF stock "equity";
+    # the funding engine must accept the same long stock/ETF set the comparison does.
+    from libs.auth.active_portfolio import _normalise_portfolio_row
+
+    holdings, margin = _normalise_portfolio_row(
+        {"holdings": {"AAPL": {"shares": 10, "avg_cost": 150}, "SPY": {"shares": 5}}}
+    )
+    assert holdings["AAPL"]["asset_type"] == "equity"
+    out = calculate(
+        ActivePortfolioContext(BOOK, holdings, 11000, margin, 0), request(), "s", now=NOW
+    )
+    assert out.funding_status == "covered_under_assumptions"
+    with pytest.raises(APIError, match="Unsupported assets"):
+        calculate(
+            account(holdings={"BTC-USD": {"shares": 1, "asset_type": "crypto"}}),
+            request(),
+            "s",
+            now=NOW,
+        )

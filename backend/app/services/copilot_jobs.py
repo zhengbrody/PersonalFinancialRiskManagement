@@ -1,12 +1,14 @@
 """Bounded background candidate execution using the original run store and HMAC.
 
-One daemon worker per process; at most four dispatches (including active). JWTs
+One daemon worker per process; at most four dispatches (including active) and
+one active job per owner (also enforced in the database). JWTs
 are transient memory only, released on completion. Recovery requires an explicit
 resume request with a freshly verified JWT. Nothing publishes after the lease
 expires; Python/provider code itself is not preemptible. No automatic trades.
 """
 
 import hashlib
+import hmac
 import json
 import logging
 from copy import deepcopy
@@ -24,6 +26,13 @@ from ..schemas.copilot_jobs import CandidateRunRecord
 from . import copilot_runs as runs
 
 RETENTION = timedelta(days=1)
+# One active (queued, or running with a live lease) background job per owner.
+# Each job can hold the single process-wide analysis lane for up to
+# MAX_EXECUTION, so this bounds how long one person can occupy it. The database
+# enforces the same limit under a per-owner lock (migration 0020).
+MAX_ACTIVE_PER_USER = 1
+# In-memory dispatch slots across all owners (including the running one).
+MAX_DISPATCH = 4
 LEASE = timedelta(seconds=120)
 MAX_EXECUTION = timedelta(minutes=5)
 _log = logging.getLogger(__name__)
@@ -46,11 +55,17 @@ def execution_fingerprint():
     return digest.hexdigest()
 
 
+# Domain-separated purpose key. Version-two job records must not share a MAC
+# key with version-one foreground runs (which sign with the raw root) or with
+# any other record type derived from the same root secret.
+_KEY_PURPOSE = b"mindmarket:copilot-job:v2"
+
+
 def key():
     secret = get_settings().risk_run_signing_secret.encode()
     if len(secret) < 32:
         raise APIError(503, "jobs_unavailable", "Background analysis signing is not configured.")
-    return secret
+    return hmac.new(secret, _KEY_PURPOSE, hashlib.sha256).digest()
 
 
 def require_enabled():
@@ -76,9 +91,43 @@ class JobStore(runs.RunStore):
         )
         return int(value or 0)
 
+    def active(self):
+        return self._execute(
+            lambda: self.client.table("copilot_runs")
+            .select("*")
+            .eq("user_id", self.user_id)
+            .in_("state", ["queued", "running"])
+            .order("created_at", desc=True)
+            .limit(20)
+        )
+
+    def _guarded(self, build):
+        """Map the database's own integrity refusals to their real meaning
+        instead of a generic storage outage."""
+        try:
+            return build().execute().data or []
+        except Exception as exc:
+            text = str(exc)
+            if "copilot_job_limit" in text:
+                raise too_many_active() from None
+            if "copilot_job_replay" in text or "copilot_job_rollback" in text:
+                raise APIError(
+                    409, "run_conflict", "This analysis record cannot be reused. Start a new one."
+                ) from None
+            self._unavailable(exc)
+
+    def reserve(self, row):
+        return bool(
+            self._guarded(
+                lambda: self.client.table("copilot_runs").upsert(
+                    row, on_conflict="id", ignore_duplicates=True
+                )
+            )
+        )
+
     def transition(self, old, new):
         return bool(
-            self._execute(
+            self._guarded(
                 lambda: self.client.rpc(
                     "transition_copilot_job",
                     {
@@ -91,6 +140,30 @@ class JobStore(runs.RunStore):
                 )
             )
         )
+
+
+def too_many_active():
+    return APIError(
+        429,
+        "too_many_active_runs",
+        "You already have a background analysis queued or running. Open it or cancel it "
+        "before starting another.",
+    )
+
+
+def queue_full(saved: bool):
+    return APIError(
+        429,
+        "analysis_queue_full",
+        (
+            (
+                "Saved as queued but not started: the analysis queue is full. Retry this same "
+                "request shortly; it will not be duplicated."
+            )
+            if saved
+            else "The analysis queue is full. Nothing was saved; try again shortly."
+        ),
+    )
 
 
 class JobJournal:
@@ -122,8 +195,35 @@ class JobJournal:
     def get(self, id):
         row, record = self.read(id)
         if record.state == "running" and record.lease_until <= self.clock():
+            # A proposal only: the database interrupts a running job solely when
+            # ITS clock agrees the lease expired (migration 0020). If it refuses,
+            # change() returns the still-running stored record unchanged.
             return self.change(row, record, state="interrupted", error_code="execution_expired")
         return record
+
+    def active_count(self, exclude=None):
+        """Verified active jobs for this owner: queued, or running with a live
+        lease. Untrusted or legacy rows are not counted (they cannot run)."""
+        now, count = self.clock(), 0
+        for row in self.store.active():
+            if exclude is not None and str(row.get("id")) == str(exclude):
+                continue
+            try:
+                document = json.loads(row["record"])
+                if not isinstance(document, dict) or document.get("version") != 2:
+                    continue
+                record = runs.decode(
+                    row, self.key, self.user_id, row["id"], record_type=CandidateRunRecord
+                )
+            except (APIError, ValueError, KeyError, TypeError):
+                continue
+            if record.expires_at <= now:
+                continue
+            if record.state == "queued" or (
+                record.state == "running" and record.lease_until and record.lease_until > now
+            ):
+                count += 1
+        return count
 
     def reserve(self, id, task, snapshot, revision):
         now = self.clock()
@@ -251,6 +351,8 @@ class JobJournal:
     def resume(self, id):
         record = self.get(id)
         if record.state == "interrupted" and record.attempts < 2:
+            if self.active_count(exclude=id) >= MAX_ACTIVE_PER_USER:
+                raise too_many_active()
             row, record = self.read(id)
             return self.change(
                 row,
@@ -265,7 +367,12 @@ class JobJournal:
 
 
 def journal(user):
-    return JobJournal(JobStore(user.access_token, user.id), key(), user.id)
+    # Key first: without the signing secret no stored record can be verified, so
+    # the honest answer is "not configured" (503 jobs_unavailable) before any
+    # storage client exists. Evaluating the store first turned a missing key
+    # into a misleading run_storage_unavailable and opened a client for nothing.
+    signing_key = key()
+    return JobJournal(JobStore(user.access_token, user.id), signing_key, user.id)
 
 
 def compute(record, user, progress=None):
@@ -406,12 +513,24 @@ class ExecutionLease:
 
 class Dispatcher:
     def __init__(self):
-        self.queue = Queue(maxsize=4)
+        self.queue = Queue(maxsize=MAX_DISPATCH)
         self.pending = set()
         self.lock = Lock()
         self.started = False
         self.stopping = Event()
         self.worker = None
+
+    def _free(self, user_id):
+        return (
+            not self.stopping.is_set()
+            and len(self.pending) < MAX_DISPATCH
+            and sum(1 for owner, _ in self.pending if owner == user_id) < MAX_ACTIVE_PER_USER
+        )
+
+    def has_capacity(self, user):
+        """Whether a NEW job for this owner could be dispatched right now."""
+        with self.lock:
+            return self._free(user.id)
 
     def submit(self, user, id):
         identity = (user.id, id)
@@ -420,7 +539,8 @@ class Dispatcher:
                 return False
             if identity in self.pending:
                 return True
-            if len(self.pending) >= 4:
+            # Fair share: one owner cannot fill every slot (and then the lane).
+            if not self._free(user.id):
                 return False
             try:
                 self.queue.put_nowait((user, id))
@@ -457,10 +577,15 @@ class Dispatcher:
         dispatched = 0
         for record in reversed(records):
             if record.state == "interrupted" and record.attempts < 2:
-                record = log.resume(str(record.id))
+                try:
+                    record = log.resume(str(record.id))
+                except APIError as exc:
+                    if exc.code != "too_many_active_runs":
+                        raise
+                    continue  # another job is active; leave this one interrupted
             if record.state == "queued" and self.submit(user, str(record.id)):
                 dispatched += 1
-            if dispatched >= 4:
+            if dispatched >= MAX_DISPATCH:
                 break
         return dispatched, untrusted
 

@@ -197,6 +197,10 @@ def confirm(token, user_id, portfolio_id, result_id, receipt):
         confirmed_at=replay.utcnow(),
         receipt=receipt.model_copy(update={"save_available": False}),
     )
+    # Same window verify_row enforces on every later read: never store a proof
+    # this module would afterwards refuse to authenticate (see put_plans).
+    if not 0 <= (proof.confirmed_at - snap.captured_at).total_seconds() <= 900:
+        raise APIError(409, "funding_plan_expired", "Capture new scenarios before saving.")
     raw, signature = signing.sign(proof, DOMAIN, "confirmation")
     try:
         rows = (

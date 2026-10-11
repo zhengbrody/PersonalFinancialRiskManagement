@@ -106,13 +106,13 @@ def evaluate(context, task: CandidateRequest, prices, sources, *, now=None, opti
         raise RuntimeError("Candidate baseline mismatch")
 
     # No scalar score that hides tradeoffs. Prefer only an improvement over
-    # both no-action and peers in ALL measured risk dimensions.
+    # both no-action and peers in ALL measured risk dimensions. Every entry is
+    # a LOSS-DIRECTION magnitude (lower is better): `cvar_1d_95_usd` is already
+    # a nonnegative dollar loss (`portfolio_scoring` clamps `-tail.mean()` at
+    # zero), so it must NOT be negated — negating it inverted the dominance
+    # test and let a candidate with a LARGER tail loss read as "no worse".
     def vector(side):
-        return [
-            side.annual_volatility,
-            side.largest_position_weight,
-            None if side.cvar_1d_95_usd is None else -side.cvar_1d_95_usd,
-        ]
+        return [side.annual_volatility, side.largest_position_weight, side.cvar_1d_95_usd]
 
     preferred = None
     if baseline and not specs:

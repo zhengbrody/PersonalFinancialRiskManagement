@@ -10,7 +10,13 @@ from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import APIError, ok
 from ...schemas.envelope import Envelope
 from ...schemas.funding_scenarios import FundingScenarioRequest, FundingScenarioResult
-from ...services import comparison_replay, comparison_save, copilot_scope, funding_scenarios
+from ...services import (
+    comparison_replay,
+    comparison_save,
+    copilot_scope,
+    funding_plans,
+    funding_scenarios,
+)
 from . import risk
 
 router = APIRouter(prefix="/api/v1/copilot", tags=["copilot"])
@@ -29,6 +35,11 @@ def calculate(
         raise APIError(
             503, "funding_scenarios_disabled", "Combined funding scenarios are not enabled."
         )
+    save = getattr(settings, "funding_scenarios_save_enabled", False)
+    if save:
+        # Cheap gate before the analysis lane: a save-enabled deployment with no
+        # signing secret must not compute and then refuse to issue the receipt.
+        funding_plans.require_enabled()
     expected = str(body.expected_portfolio_id)
     snapshot = comparison_replay.read_receipt(
         body.receipt, user.id, expected, str(body.source_result_id)
@@ -53,9 +64,6 @@ def calculate(
     copilot_scope.verify_scope(user.access_token, expected, digest)
     if comparison_save.portfolio_revision(user.access_token, user.id, expected) != revision:
         raise APIError(409, "portfolio_changed", "The account changed during calculation.")
-    if getattr(settings, "funding_scenarios_save_enabled", False):
-        from ...services import funding_plans
-
-        funding_plans.require_enabled()
+    if save:
         result.receipt = funding_plans.issue(user.id, snapshot, body, result)
     return ok(result.model_dump(mode="json"), request=request)

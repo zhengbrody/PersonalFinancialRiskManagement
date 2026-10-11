@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from backend.app.core.responses import APIError
 from backend.app.schemas.copilot_compare import CompareChange
 from backend.app.schemas.copilot_put import CashSecuredPutRequest
 from backend.app.schemas.funding_scenarios import FundingScenarioAssumptions
@@ -299,3 +300,227 @@ def test_expiry_prices_require_explicit_finite_numbers(invalid):
 
     with pytest.raises(ValidationError):
         ExpiryPriceScenario(label="invalid", prices={"SPY": invalid})
+
+
+def _option(underlying, strike, expiry, kind, quantity, side):
+    date = datetime.strptime(expiry, "%Y-%m-%d")
+    symbol = f"{underlying}{date:%y%m%d}{kind[0].upper()}{round(strike * 1000):08d}"
+    return symbol, {
+        "shares": quantity,
+        "asset_type": "option",
+        "underlying": underlying,
+        "strike": strike,
+        "expiry": expiry,
+        "option_type": kind,
+        "option_side": side,
+        "contract_multiplier": 100,
+    }
+
+
+def _capture(monkeypatch, *, options, cash, debt, sell="A", amount=500.0, put=None):
+    """Real capture/replay path with synthetic quotes; no monkeypatched specs."""
+    monkeypatch.setattr(
+        comparison_replay,
+        "get_settings",
+        lambda: SimpleNamespace(
+            copilot_comparison_replay_enabled=True,
+            risk_run_signing_secret="funding-oracle-synthetic-key-000000000000000000",
+        ),
+    )
+    holdings = {
+        "A": {"shares": 10, "asset_type": "stock"},
+        "B": {"shares": 20, "asset_type": "etf"},
+        "Y": {"shares": 8, "asset_type": "stock"},
+    }
+    holdings.update(dict(options))
+    context = ActivePortfolioContext(BOOK, holdings, cash, debt, 0)
+    dates = pd.bdate_range(end=NOW.date(), periods=101)
+    scale = np.exp(0.0001 * (np.arange(101) - 100))
+    spots = {"A": 100, "B": 50, "X": 40, "Y": 25}
+    prices = pd.DataFrame({t: s * scale for t, s in spots.items()}, index=dates)
+
+    def chain(underlying, expiry, kind, strike):
+        date = datetime.strptime(expiry, "%Y-%m-%d")
+        symbol = f"{underlying}{date:%y%m%d}{kind[0].upper()}{round(strike * 1000):08d}"
+        return {"contract_symbol": symbol, "strike": strike, "bid": 1.9, "ask": 2.1}
+
+    rows = comparison_options.capture_options(
+        comparison_options.option_specs(context.holdings, now=NOW),
+        prices.iloc[-1].to_dict(),
+        now=NOW,
+        chain_fn=chain,
+    )
+    comparison = copilot_compare.compare_change(
+        context,
+        CompareChange(expected_portfolio_id=BOOK, ticker=sell, amount=amount, proceeds="cash"),
+        prices,
+        {},
+        now=NOW,
+        option_results=rows,
+    )
+    receipt = comparison_replay.issue_receipt(
+        USER, context, prices, rows, {}, comparison, portfolio_revision=UUID(BOOK)
+    )
+    snapshot = comparison_replay.read_receipt(receipt, USER, BOOK, str(comparison.result_id))
+    assumptions = FundingScenarioAssumptions(
+        expected_portfolio_id=BOOK,
+        source_result_id=comparison.result_id,
+        protected_holdings=[],
+        sale_fees=7.5,
+        confirmed=True,
+        put=CashSecuredPutRequest(
+            **{
+                "expected_portfolio_id": BOOK,
+                "underlying": "B",
+                "expiry": EXPIRY,
+                "strike": 40.0,
+                "premium_per_share": 2.5,
+                "assumed_spot": 50.0,
+                "contracts": 2,
+                "fees_total": 3.0,
+                "other_reserved_cash": 100.0,
+                "cash_buffer": 50.0,
+                "confirmed": True,
+                "gross_settled_usd_cash_confirmed": True,
+                "standard_contract_confirmed": True,
+                **(put or {}),
+            }
+        ),
+    )
+    return snapshot, assumptions
+
+
+@pytest.mark.parametrize("debt", [300, 1000])
+def test_partial_repayment_two_contracts_and_reserves_against_closed_form(monkeypatch, debt):
+    """Hand ledger: C=1000, D=debt, sell $500 of A (5 sh) fee 7.5, existing 2x X30P
+    marked 2.00, new 2x B40P at 2.50 fee 3.0, reserve 150, APR 9%, T=30d, all assigned."""
+    from backend.app.schemas.funding_risk import FundingRiskAssumptions
+    from backend.app.services import funding_risk, funding_scenarios
+
+    snapshot, assumptions = _capture(
+        monkeypatch, options=[_option("X", 30, EXPIRY, "put", -2, "sell")], cash=1000, debt=debt
+    )
+    funding = funding_scenarios.calculate(snapshot, assumptions, now=NOW)
+    result = funding_risk.calculate(
+        snapshot,
+        assumptions,
+        FundingRiskAssumptions(
+            scenarios=[{"label": "down", "prices": {"A": 90, "B": 35, "X": 25, "Y": 25}}],
+            annual_borrowing_rate=0.09,
+        ),
+        now=NOW,
+        funding_result=funding,
+    )
+    D = Decimal(debt)
+    net = Decimal("492.5")  # 500 - 7.5
+    repaid = min(net, D)
+    # Initial equity: 1000 + 1000 + 200 stock, +1000 cash, -400 put mark, -debt.
+    initial = Decimal(2200 + 1000 - 400) - D
+    # Terminal stock book: A 90, B 35, Y 25, X 25 (200 X delivered at 30 in every row).
+    base_assets = Decimal(10 * 90 + 20 * 35 + 8 * 25 + 200 * 25)  # 6800
+    cand_assets = Decimal(5 * 90 + 220 * 35 + 8 * 25 + 200 * 25)  # 13350
+    base_cash = Decimal(1000 - 6000)
+    keep_cash = Decimal(1000) + net + Decimal(497) - Decimal(6000 + 8000)
+    repay_cash = keep_cash - repaid
+
+    def interest(principal):
+        return principal * Decimal("0.09") * 30 / 365
+
+    expected = {
+        "no_action": (base_assets, base_cash, D),
+        "sale_keep_cash_and_put": (cand_assets, keep_cash, D),
+        "sale_repay_margin_and_put": (cand_assets, repay_cash, D - repaid),
+    }
+    outcomes = {row.kind: row for row in result.scenarios[0].outcomes}
+    for kind, (assets, cash, principal) in expected.items():
+        row = outcomes[kind]
+        cost = Decimal(0) if principal == 0 else interest(principal)
+        equity = assets + cash - principal - cost
+        assert row.initial_net_equity == float(initial)
+        assert row.stock_assets == float(assets)
+        assert row.cash_before_interest == float(cash)
+        assert row.principal_debt == float(principal)
+        assert row.interest_cost == float(cost.quantize(Decimal("0.01")))
+        assert row.total_pnl == pytest.approx(float(equity - initial), abs=0.0051)
+        assert row.assignment_cash_paid == (6000.0 if kind == "no_action" else 14000.0)
+        gap = Decimal(150) - (cash - cost)
+        assert row.funding_gap == pytest.approx(float(gap), abs=0.0051)
+        assert row.gross_leverage_if_gap_financed == pytest.approx(
+            float((assets + cash - cost + gap) / equity), rel=1e-9
+        )
+        assert row.largest_position_weight == pytest.approx(
+            float((Decimal(5000) if kind == "no_action" else Decimal(7700)) / assets), rel=1e-9
+        )
+    # Sold-stock opportunity cost (+50 on 5 shares of A falling 100->90), sale
+    # fee (-7.5), and the new Put's net premium minus intrinsic (497 - 1000)
+    # are the ONLY differences between keeping cash and no action.
+    keep, base = outcomes["sale_keep_cash_and_put"], outcomes["no_action"]
+    assert keep.total_pnl_before_interest - base.total_pnl_before_interest == pytest.approx(
+        50 - 7.5 - 503
+    )
+    assert keep.incremental_pnl_vs_no_action == pytest.approx(
+        keep.total_pnl - base.total_pnl, abs=0.0051
+    )
+
+
+def test_negative_equity_with_positive_assets_has_no_ratios(monkeypatch):
+    from backend.app.schemas.funding_risk import FundingRiskAssumptions
+    from backend.app.services import funding_risk, funding_scenarios
+
+    snapshot, assumptions = _capture(
+        monkeypatch, options=[_option("X", 30, EXPIRY, "put", -2, "sell")], cash=1000, debt=300
+    )
+    result = funding_risk.calculate(
+        snapshot,
+        assumptions,
+        FundingRiskAssumptions(
+            scenarios=[{"label": "crash", "prices": {"A": 90, "B": 5, "X": 5, "Y": 25}}],
+            annual_borrowing_rate=0.09,
+        ),
+        now=NOW,
+        funding_result=funding_scenarios.calculate(snapshot, assumptions, now=NOW),
+    )
+    for row in result.scenarios[0].outcomes:
+        assert row.stock_assets > 0
+        assert row.net_equity_after_interest < 0
+        assert row.largest_position_weight is None
+        assert row.gross_leverage_if_gap_financed is None
+        # Unknown ratios do not erase the known dollar figures.
+        assert row.total_pnl is not None and row.funding_gap is not None
+
+
+@pytest.mark.parametrize(
+    "options,code",
+    [
+        (
+            [
+                _option("X", 30, EXPIRY, "put", -1, "sell"),
+                _option("X", 25, "2026-11-20", "put", -1, "sell"),
+            ],
+            "mixed_expiry_unsupported",
+        ),
+        ([_option("X", 30, EXPIRY, "put", 1, "buy")], "put_scenario_unavailable"),
+        ([_option("Y", 30, EXPIRY, "call", -1, "sell")], "put_scenario_unavailable"),
+        (
+            [
+                _option("X", 30, EXPIRY, "put", -1, "sell"),
+                _option("X", 25, EXPIRY, "put", 1, "buy"),
+            ],
+            "put_scenario_unavailable",
+        ),
+    ],
+    ids=["mixed-expiry-short-puts", "protective-long-put", "covered-call", "vertical-put-spread"],
+)
+def test_unsupported_option_books_are_rejected_as_a_whole(monkeypatch, options, code):
+    """Real holdings through capture -> replay -> composition. No leg is dropped,
+    no hedge offset is credited: the whole request stops with a named reason."""
+    from backend.app.schemas.funding_risk import FundingRiskAssumptions
+    from backend.app.services import funding_scenarios
+
+    snapshot, assumptions = _capture(monkeypatch, options=options, cash=20000, debt=300)
+    assumptions.risk = FundingRiskAssumptions(
+        scenarios=[{"label": "flat", "prices": {"A": 100, "B": 50, "X": 40, "Y": 25}}]
+    )
+    with pytest.raises(APIError) as error:
+        funding_scenarios.calculate(snapshot, assumptions, now=NOW)
+    assert error.value.code == code
