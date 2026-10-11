@@ -11,6 +11,12 @@ describe("classifyRunStartFailure", () => {
     const failure = classifyRunStartFailure(new ApiError(429, "too_many_active_runs", "You already have a background analysis queued or running."));
     expect(failure.kind).toBe("active_elsewhere");
   });
+  it("trusts the structured saved flag over the message text", () => {
+    // Message says one thing, the flag says the other: the flag wins.
+    expect(classifyRunStartFailure(new ApiError(429, "analysis_queue_full", SAVED, { saved: false })).kind).toBe("queue_full_not_saved");
+    expect(classifyRunStartFailure(new ApiError(429, "analysis_queue_full", "Queue full.", { saved: true }))).toMatchObject({ kind: "queued_not_started", certain: true });
+  });
+
   it("separates 'nothing was saved' from 'saved as queued'", () => {
     expect(classifyRunStartFailure(new ApiError(429, "analysis_queue_full", NOT_SAVED)).kind).toBe("queue_full_not_saved");
     const saved = classifyRunStartFailure(new ApiError(429, "analysis_queue_full", SAVED));

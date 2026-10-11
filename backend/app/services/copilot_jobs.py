@@ -163,6 +163,9 @@ def queue_full(saved: bool):
             if saved
             else "The analysis queue is full. Nothing was saved; try again shortly."
         ),
+        # Machine-readable: clients must not parse the message to know whether a
+        # queued record exists for this run id.
+        details={"saved": saved},
     )
 
 

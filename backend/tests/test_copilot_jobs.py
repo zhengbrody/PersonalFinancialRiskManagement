@@ -514,6 +514,7 @@ def test_start_never_reports_queued_when_nothing_will_run_it(start_api, monkeypa
     assert response.status_code == 429
     error = response.json()["error"]
     assert error["code"] == "analysis_queue_full" and "Nothing was saved" in error["message"]
+    assert error["details"] == {"saved": False}
     assert new_id not in log.store.rows
     # Capacity looked free, but the slot was taken before submit: saved, not started.
     monkeypatch.setattr(dispatcher, "has_capacity", lambda user: True)
@@ -521,6 +522,7 @@ def test_start_never_reports_queued_when_nothing_will_run_it(start_api, monkeypa
     response = post(new_id)
     assert response.status_code == 429
     assert "Saved as queued but not started" in response.json()["error"]["message"]
+    assert response.json()["error"]["details"] == {"saved": True}
     assert log.get(new_id).state == "queued"
     # Retrying the SAME id once a slot frees dispatches it, without duplicating.
     submitted = []

@@ -58,10 +58,12 @@ export function classifyRunStartFailure(error: unknown): RunStartFailure {
     return { kind: "active_elsewhere", message: "Another background analysis is already queued or running for your account. Open it from recent analyses, or cancel it, before starting another. Nothing new was saved." };
   }
   if (error.code === "analysis_queue_full") {
-    if (/nothing was saved/i.test(error.message)) {
+    // Prefer the structured flag; fall back to the message for older servers.
+    const savedFlag = typeof error.details?.saved === "boolean" ? (error.details.saved as boolean) : null;
+    if (savedFlag === false || (savedFlag === null && /nothing was saved/i.test(error.message))) {
       return { kind: "queue_full_not_saved", message: "The analysis queue is full. Nothing was saved and nothing is running. Try again in a moment." };
     }
-    const certain = /^saved as queued/i.test(error.message);
+    const certain = savedFlag === true || /^saved as queued/i.test(error.message);
     return {
       kind: "queued_not_started", certain,
       message: certain
