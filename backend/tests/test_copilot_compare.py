@@ -306,3 +306,13 @@ def test_largest_position_weight_uses_the_invested_basis_not_gross(context, pric
     # The pre-fix figure divided by gross (invested + cash) — strictly smaller.
     assert baseline.largest_position_weight > max(values.values()) / (invested + 20000)
     assert baseline.cash == pytest.approx(20000)
+
+
+@pytest.fixture(autouse=True)
+def _fixed_endpoint_clock(monkeypatch):
+    """Fixture prices are dated; wall-clock ageing must not change API tests."""
+    from types import SimpleNamespace
+
+    from backend.app.api.v1 import copilot_compare as api
+
+    monkeypatch.setattr(api, "datetime", SimpleNamespace(now=lambda tz: NOW))
