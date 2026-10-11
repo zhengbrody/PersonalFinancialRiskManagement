@@ -155,6 +155,12 @@ def test_meta_carries_provenance(tmp_artifacts):
     assert "git_sha" in meta
     on_disk = json.loads((tmp_artifacts / "regime_meta.json").read_text())
     assert on_disk["config"] == meta["config"]
+    # The hashes /ml/health falls back to must be of the bytes THIS run wrote.
+    import hashlib
+
+    for key, name in (("model", "regime_model.joblib"), ("reference", "regime_reference.json")):
+        written = hashlib.sha256((tmp_artifacts / name).read_bytes()).hexdigest()
+        assert on_disk["artifact_sha256"][key] == written
 
 
 def test_cache_dir_round_trip_skips_fetcher(tmp_artifacts, tmp_path):

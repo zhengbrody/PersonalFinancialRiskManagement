@@ -79,3 +79,20 @@ jobs:
         else
           gh issue create --title "$title" --body "$body"
         fi
+
+    # The alert loop must also close itself: before this step an issue stayed
+    # open after the smoke went green again (#179, and #249 opened 2026-09-20
+    # after a single red night). One green run closes the open issue with a
+    # recovery comment; the next red run opens a fresh one.
+    - name: Auto-close the tracking issue on recovery
+      if: success()
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        title="Nightly real-auth prod smoke FAILED"
+        num=$(gh issue list --state open --limit 200 --json number,title \
+              --jq "[.[] | select(.title == \"$title\")] | .[0].number // empty" || true)
+        if [ -n "$num" ]; then
+          gh issue comment "$num" --body "Recovered — run ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID} passed. Closing automatically."
+          gh issue close "$num"
+        fi

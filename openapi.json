@@ -469,6 +469,147 @@
         "title": "AnthropicTopupRequest",
         "type": "object"
       },
+      "ApprovedArtifactOut": {
+        "description": "sha256 of the bytes the serving model was loaded from vs the approved\nhash. ``match`` is None when no approved hash was recorded (unknown).",
+        "properties": {
+          "approved_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved Sha256"
+          },
+          "approved_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved Source"
+          },
+          "loaded_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loaded Sha256"
+          },
+          "match": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match"
+          },
+          "provenance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ArtifactProvenanceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "ApprovedArtifactOut",
+        "type": "object"
+      },
+      "ArtifactProvenanceOut": {
+        "description": "What the delivery pipeline recorded about the run that produced the\ncommitted artifact. NOT the latest pipeline result \u2014 that is not knowable\nfrom the serving box.",
+        "properties": {
+          "gates": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Gates",
+            "type": "object"
+          },
+          "gates_passed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gates Passed"
+          },
+          "matches_meta": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matches Meta"
+          },
+          "recorded_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded At"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "run_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Url"
+          },
+          "source_commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Commit"
+          }
+        },
+        "title": "ArtifactProvenanceOut",
+        "type": "object"
+      },
       "AttributionResponse": {
         "description": "The success payload for ``POST /api/v1/quant/attribution``.",
         "properties": {
@@ -7698,6 +7839,16 @@
       "MLHealthOut": {
         "description": "GET /api/v1/ml/health \u2014 model/artifact identity + drift status.\n\n``status``: ok | not_ready | unavailable (service tiers).\n``overall_status``: healthy | watch | drift \u2014 worst feature/prediction\nverdict, each judged against its own calibrated null (live-window PSI vs\nthe distribution of historical same-length training windows) \u2014 null unless\nstatus == ok. Read-only context; never advice.",
         "properties": {
+          "approved_artifact": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApprovedArtifactOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "artifact_loaded": {
             "default": false,
             "title": "Artifact Loaded",
@@ -7720,6 +7871,16 @@
             },
             "title": "Features",
             "type": "object"
+          },
+          "freshness": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelFreshnessOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "last_updated": {
             "anyOf": [
@@ -8341,6 +8502,45 @@
           "name"
         ],
         "title": "ModelFeatureOut",
+        "type": "object"
+      },
+      "ModelFreshnessOut": {
+        "description": "Model age vs the staleness threshold (MINDMARKET_ML_STALE_DAYS).\nfresh | stale | unknown \u2014 an axis SEPARATE from the drift verdict.",
+        "properties": {
+          "age_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Days"
+          },
+          "status": {
+            "default": "unknown",
+            "title": "Status",
+            "type": "string"
+          },
+          "threshold_days": {
+            "default": 21.0,
+            "title": "Threshold Days",
+            "type": "number"
+          },
+          "trained_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trained At"
+          }
+        },
+        "title": "ModelFreshnessOut",
         "type": "object"
       },
       "MomentumBlock": {
