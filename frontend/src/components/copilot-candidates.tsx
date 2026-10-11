@@ -7,6 +7,7 @@ import { CopilotChangeResult } from "./copilot-change";
 import { apiFetch } from "@/lib/api";
 import { candidateRunSchema, type CandidateRun } from "@/lib/copilot-candidates";
 import { savedComparisonSchema, type ChangeComparison, type SavedComparison } from "@/lib/copilot-compare";
+import { classifySaveFailure, COMPARISON_MISSING_CODE, COMPARISON_SETTLED_CODES } from "@/lib/copilot-save-outcome";
 
 /** A confirmed task inside the original conversation, never a second chat input. */
 export function CopilotCandidates({ token, portfolioId, scope, fundingEnabled = false }: {
@@ -21,6 +22,7 @@ export function CopilotCandidates({ token, portfolioId, scope, fundingEnabled = 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
+  const amountInput = useRef<HTMLInputElement | null>(null);
   const storageKey = `${scope}:candidate-run`;
   const base = "/api/v1/copilot/decision-runs";
   useEffect(() => {
@@ -77,7 +79,7 @@ export function CopilotCandidates({ token, portfolioId, scope, fundingEnabled = 
       onChange={e => { setGoal(e.target.value as typeof goal); setConfirmed(false); setRun(null); }}>
       <option value="increase_cash">Increase account cash</option><option value="reduce_margin">Reduce margin debt</option>
     </select></label>
-    <label className="block text-sm">Reduction amount (USD)<input type="number" min="0.01" step="0.01" max="100000000" className="mt-1 block w-full rounded border bg-background p-2" value={amount} disabled={busy}
+    <label className="block text-sm">Reduction amount (USD)<input ref={amountInput} type="number" min="0.01" step="0.01" max="100000000" className="mt-1 block w-full rounded border bg-background p-2" value={amount} disabled={busy}
       onChange={e => { setAmount(e.target.value); setConfirmed(false); setRun(null); }} /></label>
     <label className="block text-sm">Holdings to preserve (tickers, optional)<input className="mt-1 block w-full rounded border bg-background p-2" value={protectedNames} disabled={busy}
       onChange={e => { setProtectedNames(e.target.value); setConfirmed(false); setRun(null); }} /></label>
@@ -95,7 +97,7 @@ export function CopilotCandidates({ token, portfolioId, scope, fundingEnabled = 
       <p className="text-xs text-muted-foreground">Captured goal: {run.result.task.goal.replace(/_/g, " ")} · reduction ${run.result.task.amount.toLocaleString("en-US")} · preserve: {run.result.task.protected_holdings.join(", ") || "none specified"}.</p>
       <p>{run.result.judgment}</p>
       <p className="text-sm font-medium">Keep unchanged: no sale, no new option obligation.</p>
-      {run.result.candidates.map(result => <Candidate key={result.result_id} result={result} token={token} fundingEnabled={fundingEnabled} protectedHoldings={run.result!.task.protected_holdings} preferred={run.result?.preferred_result_id === result.result_id} onRevise={() => { setConfirmed(false); document.querySelector<HTMLInputElement>('[aria-label="Candidate comparison"] input[type="number"]')?.focus(); }} />)}
+      {run.result.candidates.map(result => <Candidate key={result.result_id} result={result} token={token} fundingEnabled={fundingEnabled} protectedHoldings={run.result!.task.protected_holdings} preferred={run.result?.preferred_result_id === result.result_id} onRevise={() => { setConfirmed(false); amountInput.current?.focus(); }} />)}
       <details><summary>Exclusions and limits</summary><ul className="list-disc pl-5 text-sm">
         {Object.entries(run.result.excluded).map(([t, why]) => <li key={t}>{t}: {why}</li>)}
         {run.result.limitations.map(text => <li key={text}>{text}</li>)}
@@ -106,6 +108,9 @@ export function CopilotCandidates({ token, portfolioId, scope, fundingEnabled = 
 
 function Candidate({ result, token, preferred, onRevise, fundingEnabled, protectedHoldings }: { result: ChangeComparison; token: string | null; preferred: boolean; onRevise: () => void; fundingEnabled: boolean; protectedHoldings: string[] }) {
   const [saved, setSaved] = useState<SavedComparison>();
+  // True only while the last write/read-back left the server state unknown;
+  // a definite pre-commit rejection never marks a remembered save as doubtful.
+  const [needsCheck, setNeedsCheck] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
   async function save(read = false) {
@@ -118,16 +123,29 @@ function Candidate({ result, token, preferred, onRevise, fundingEnabled, protect
         ...(!read ? { body: { expected_portfolio_id: result.portfolio_id, receipt: result.replay_receipt, confirmed: true } } : {}),
       });
       const checked = savedComparisonSchema.parse(response);
-      if (checked.result_id !== result.result_id || checked.portfolio_id !== result.portfolio_id) throw new Error("Saved result scope mismatch.");
-      setSaved(checked);
-    } catch { setError("Save status could not be confirmed. Check the saved result before retrying."); }
+      if (checked.result_id !== result.result_id || checked.portfolio_id !== result.portfolio_id || checked.plan_id !== result.result_id || checked.result.result_id !== result.result_id) throw new Error("Saved result scope mismatch.");
+      setSaved(checked); setNeedsCheck(false);
+    } catch (e) {
+      const failure = classifySaveFailure(e, {
+        settled: COMPARISON_SETTLED_CODES, missing: COMPARISON_MISSING_CODE, retrieve: read,
+        uncertainSave: "Saving was not confirmed. Check the saved record or retry this same result; a draft may already exist.",
+        uncertainRead: "The saved record could not be read. Check again; this did not change anything.",
+        vanished: "No saved record exists for this calculation. It may have been deleted with its plan. Save again while the capture is still valid.",
+      });
+      if (failure.vanished) setSaved(undefined);
+      setNeedsCheck(!failure.definite && !!saved);
+      setError(failure.message);
+    }
     finally { setPending(false); }
   }
+  // A conditional preference is only meaningful when every compared risk
+  // dimension is known on both sides; a mixed book reports some as null.
+  const comparable = [result.baseline, result.candidate].every(side => side.annual_volatility !== null && side.var_1d_95_usd !== null && side.cvar_1d_95_usd !== null);
   return <div className="space-y-2">
-    {preferred && <p className="text-sm font-medium">Conditionally preferred among evaluated alternatives</p>}
+    {preferred && comparable && <p className="text-sm font-medium">Conditionally preferred among evaluated alternatives</p>}
     <CopilotChangeResult result={result} disabled={pending} onRevise={onRevise}
       onSave={result.replay_receipt?.save_available ? () => void save() : undefined}
-      onRetrieveSaved={() => void save(true)} saved={saved} savePending={pending} saveError={error} savedNeedsCheck={!!error} />
+      onRetrieveSaved={() => void save(true)} saved={saved} savePending={pending} saveError={error} savedNeedsCheck={needsCheck} />
     {fundingEnabled && result.replay_receipt && <CopilotFunding source={result} token={token} protectedHoldings={protectedHoldings} />}
   </div>;
 }

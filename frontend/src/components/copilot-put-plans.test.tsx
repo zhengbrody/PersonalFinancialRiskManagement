@@ -104,3 +104,38 @@ it("does not start the next plan review after the window becomes hidden", async 
   await act(async () => { fireEvent.click(screen.getByRole("checkbox", { name: /Review loaded plans/ })); });
   expect(fetcher).toHaveBeenCalledTimes(2);
 });
+
+const rejection = (status: number, code: string, message: string) =>
+  new Response(JSON.stringify({ data: null, error: { code, message }, meta: { request_id: "fixture" } }), { status });
+
+it("a network failure during save is shown as an unknown outcome, not as its transport message", async () => {
+  vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new TypeError("Failed to fetch"));
+  render(<CopilotPutPlans token="test" portfolioId={fixture.portfolio_id} result={result} />);
+  fireEvent.click(screen.getByRole("checkbox", { name: /Save this original/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm save Put plan" }));
+  const notice = await screen.findByRole("status");
+  expect(notice).toHaveTextContent(/Saving was not confirmed.*a draft may already exist/);
+  expect(notice).not.toHaveTextContent("Failed to fetch");
+  expect(screen.queryByText(/Original calculation saved/)).not.toBeInTheDocument();
+});
+
+it("a pre-commit rejection of a Put save is definite and carries the server's reason", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(rejection(409, "put_plan_expired", "Recalculate before saving; this capture has expired."));
+  render(<CopilotPutPlans token="test" portfolioId={fixture.portfolio_id} result={result} />);
+  fireEvent.click(screen.getByRole("checkbox", { name: /Save this original/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm save Put plan" }));
+  expect(await screen.findByRole("status")).toHaveTextContent("Recalculate before saving; this capture has expired.");
+  expect(screen.queryByText(/was not confirmed/)).not.toBeInTheDocument();
+});
+
+it("a save that settles after the portfolio switched is not shown under the new book", async () => {
+  let settle!: (response: Response) => void;
+  vi.spyOn(globalThis, "fetch").mockImplementationOnce(() => new Promise<Response>(resolve => { settle = resolve; }));
+  const view = render(<CopilotPutPlans token="test" portfolioId={fixture.portfolio_id} result={result} />);
+  fireEvent.click(screen.getByRole("checkbox", { name: /Save this original/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm save Put plan" }));
+  view.rerender(<CopilotPutPlans token="test" portfolioId="22222222-2222-4222-8222-222222222222" result={result} />);
+  await act(async () => { settle(envelope(saved)); });
+  expect(screen.queryByText(/Original calculation saved/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/SPY Put · saved/)).not.toBeInTheDocument();
+});

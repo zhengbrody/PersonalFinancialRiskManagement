@@ -105,3 +105,49 @@ it("funding session consent expires on login change and unmount aborts monitorin
   await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
   expect(fetcher).toHaveBeenCalledTimes(2);
 });
+
+const rejection = (status: number, code: string, message: string) =>
+  new Response(JSON.stringify({ data: null, error: { code, message }, meta: { request_id: "fixture" } }), { status });
+
+it("reports a pre-commit rejection of a funding save with the server's reason, not as unconfirmed", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(rejection(409, "funding_plan_expired", "Capture new scenarios before saving."));
+  render(<CopilotFundingPlans result={result} token="fixture" portfolioId={result.portfolio_id} />);
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm save funding plan" }));
+  expect(await screen.findByRole("status")).toHaveTextContent("Capture new scenarios before saving.");
+  expect(screen.queryByText(/unconfirmed|Verified original funding plan/)).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Review funding assumptions" })).not.toBeInTheDocument();
+});
+
+it("keeps a post-commit or unknown failure uncertain instead of echoing it as definite", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(rejection(409, "untrusted_funding_plan", "Saved funding evidence could not be authenticated."));
+  render(<CopilotFundingPlans result={result} token="fixture" portfolioId={result.portfolio_id} />);
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm save funding plan" }));
+  expect(await screen.findByRole("status")).toHaveTextContent(/Save status is unconfirmed.*a draft may already exist/);
+});
+
+it("stops claiming a saved funding plan once the read-back reports it missing", async () => {
+  const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(envelope(saved));
+  render(<CopilotFundingPlans planId={result.result_id} token="fixture" portfolioId={result.portfolio_id} />);
+  fireEvent.click(screen.getByRole("button", { name: "Retrieve saved funding plan" }));
+  await screen.findByText("Verified original funding plan. No holdings or orders changed.");
+  expect(screen.getByRole("button", { name: "Review funding assumptions" })).toBeVisible();
+  fetcher.mockResolvedValueOnce(rejection(404, "funding_plan_missing", "Saved funding plan not found."));
+  fireEvent.click(screen.getByRole("button", { name: "Retrieve saved funding plan" }));
+  await screen.findByText(/No saved funding plan exists/);
+  expect(screen.queryByRole("button", { name: "Review funding assumptions" })).not.toBeInTheDocument();
+  expect(screen.queryByText(/^Saved /)).not.toBeInTheDocument();
+});
+
+it("a save that settles after the login or portfolio changed is not shown in the new scope", async () => {
+  let settle!: (response: Response) => void;
+  vi.spyOn(globalThis, "fetch").mockImplementationOnce(() => new Promise<Response>(resolve => { settle = resolve; }));
+  const view = render(<CopilotFundingPlans result={result} token="fixture" portfolioId={result.portfolio_id} />);
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm save funding plan" }));
+  view.rerender(<CopilotFundingPlans result={result} token="other-login" portfolioId={result.portfolio_id} />);
+  await act(async () => { settle(envelope(saved)); });
+  expect(screen.queryByText("Verified original funding plan. No holdings or orders changed.")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Review funding assumptions" })).not.toBeInTheDocument();
+});

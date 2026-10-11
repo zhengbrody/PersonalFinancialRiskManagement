@@ -69,7 +69,7 @@ export function CopilotFunding({ source, token, protectedHoldings }: {
     <p className="mt-3 text-sm">Use the captured {source.assumptions.ticker} reduction of {money(source.assumptions.amount)} to compare keeping cash and repaying debt. Nothing changes in your account.</p>
     <p className="mt-2 text-xs text-muted-foreground">Confirm manual option assumptions. Broker buying power and order eligibility are unknown. Existing option protection is preserved; unsupported combinations require another analysis.</p>
     <form className="mt-3 space-y-3" onSubmit={event => { event.preventDefault(); void calculate(); }}>
-      <fieldset disabled={busy} className="space-y-3">
+      <fieldset disabled={busy} className="min-w-0 space-y-3">
         <div className="grid gap-3 sm:grid-cols-2">{Object.entries(putFieldLabels).map(([key, label]) =>
           <label key={key} className="min-w-0 text-xs">{label}<input aria-label={`Funding ${label}`} required
             type={key === "underlying" ? "text" : key === "expiry" ? "date" : "number"}

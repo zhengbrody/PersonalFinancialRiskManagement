@@ -5,6 +5,7 @@ import { z } from "zod";
 import { apiFetch } from "@/lib/api";
 import { putResultSchema, type PutResult } from "@/lib/copilot-put";
 import { planReviewSchema, usePlanSessionReview } from "@/lib/use-plan-session-review";
+import { classifySaveFailure, PUT_PLAN_SETTLED_CODES } from "@/lib/copilot-save-outcome";
 import { Button } from "./ui/button";
 
 const savedSchema = z.object({
@@ -79,7 +80,16 @@ export function CopilotPutPlans({ token, portfolioId, result }: {
         if (!abort.signal.aborted) setReviews(previous => ({ ...previous, [planId]: review }));
       }
     } catch (error) {
-      if (!abort.signal.aborted) setNotice(error instanceof Error ? error.message : "The operation was not confirmed. Retry the same result.");
+      if (abort.signal.aborted) return;
+      if (action !== "save") { setNotice(error instanceof Error ? error.message : "The request did not complete. Nothing was changed."); return; }
+      // Deny-list: only a provably pre-commit rejection is reported as definite;
+      // anything else (network, timeout, unknown code, post-commit check) may
+      // have left a saved draft behind and must stay retryable with the SAME result.
+      setNotice(classifySaveFailure(error, {
+        settled: PUT_PLAN_SETTLED_CODES, retrieve: false,
+        uncertainSave: "Saving was not confirmed. Load saved Put plans to check, or retry this same result; a draft may already exist.",
+        uncertainRead: "", vanished: "",
+      }).message);
     } finally { if (controller.current === abort) setBusy(false); }
   }
 

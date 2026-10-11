@@ -122,11 +122,19 @@ test("check, inspect evidence and option bounds without leaving the conversation
     name: "Mobile primary navigation",
   });
   if (await mobileNav.isVisible()) {
-    const submit = await page
-      .getByRole("button", { name: "Ask", exact: true })
-      .boundingBox();
+    // Occlusion, not position: the composer sits at the end of a long result
+    // page, so measure it where the user would tap it (scrolled into view) and
+    // let Playwright's actionability check prove the fixed bottom nav does not
+    // intercept the tap. A trial click performs every actionability check
+    // (visible, stable, enabled, receives pointer events) without submitting.
+    const ask = page.getByRole("button", { name: "Ask", exact: true });
+    await page.getByTestId("copilot-input").fill("Explain the largest driver");
+    await ask.scrollIntoViewIfNeeded();
+    const submit = await ask.boundingBox();
     const nav = await mobileNav.boundingBox();
     expect(submit!.y + submit!.height).toBeLessThanOrEqual(nav!.y);
+    await ask.click({ trial: true });
+    await page.getByTestId("copilot-input").fill("");
   }
   await page.reload();
   await expect(page.getByText("Review model coverage")).toBeVisible();

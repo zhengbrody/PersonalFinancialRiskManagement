@@ -5,6 +5,7 @@ import { z } from "zod";
 import { apiFetch } from "@/lib/api";
 import { fundingResultSchema, type FundingResult } from "@/lib/copilot-funding";
 import { planReviewSchema, usePlanSessionReview } from "@/lib/use-plan-session-review";
+import { classifySaveFailure, FUNDING_PLAN_MISSING_CODE, FUNDING_PLAN_SETTLED_CODES } from "@/lib/copilot-save-outcome";
 import { FundingAccountRisk } from "./funding-account-risk";
 import { Button } from "./ui/button";
 
@@ -47,7 +48,20 @@ export function CopilotFundingPlans({ result = null, planId, portfolioId, token 
           (result && JSON.stringify(value.result) !== JSON.stringify({ ...result, receipt: null }))) throw new Error("Saved result does not match the original calculation.");
         if (!abort.signal.aborted) { setSaved(value); setNotice("Verified original funding plan. No holdings or orders changed."); }
       }
-    } catch (e) { if (!abort.signal.aborted) setNotice(action === "save" ? "Save status is unconfirmed. Retrieve the original or retry the same result." : e instanceof Error ? e.message : "Could not verify the plan."); }
+    } catch (e) {
+      if (abort.signal.aborted) return;
+      if (action === "review") { setNotice(e instanceof Error ? e.message : "Could not review the plan."); return; }
+      const failure = classifySaveFailure(e, {
+        settled: FUNDING_PLAN_SETTLED_CODES, missing: FUNDING_PLAN_MISSING_CODE, retrieve: action === "read",
+        uncertainSave: "Save status is unconfirmed. Retrieve the original or retry the same result; a draft may already exist.",
+        uncertainRead: "The saved funding plan could not be read. Check again; this did not change anything.",
+        vanished: "No saved funding plan exists for this calculation. It may have been deleted with its plan.",
+      });
+      // A definite 404 on the read path means the plan is gone: stop showing a
+      // remembered record as if it still existed.
+      if (failure.vanished) { setSaved(null); setReview(null); }
+      setNotice(failure.message);
+    }
     finally { if (active.current === abort) setBusy(false); }
   }
   return <section aria-label="Saved funding plan" className="mt-3 space-y-3 rounded-lg border border-border p-3 text-sm">

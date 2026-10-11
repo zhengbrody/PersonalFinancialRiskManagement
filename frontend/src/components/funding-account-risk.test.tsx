@@ -3,9 +3,11 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { CopilotFunding } from "./copilot-funding";
 import { CopilotFundingPlans } from "./copilot-funding-plans";
 import { changeComparisonSchema } from "@/lib/copilot-compare";
-import { fundingResultSchema } from "@/lib/copilot-funding";
+import { fundingAccountRiskSchema, fundingResultSchema } from "@/lib/copilot-funding";
+import { FundingAccountRisk } from "./funding-account-risk";
 import { putFieldLabels } from "@/lib/put-fields";
 import fixture from "@/test-fixtures/copilot-funding-risk.json";
+const riskFixture = fixture;
 const source = changeComparisonSchema.parse(fixture.source);
 const envelope = (data: unknown) => new Response(JSON.stringify({ data, error: null, meta: { request_id: "test" } }));
 afterEach(() => vi.restoreAllMocks());
@@ -54,4 +56,12 @@ it("retrieves original account-wide evidence in saved funding plans", async () =
   fireEvent.click(screen.getByText("Original funding inputs and results"));
   expect(screen.getByLabelText("Account-wide expiry scenarios")).toBeVisible();
   expect(screen.getByText("Explicit downside")).toBeVisible();
+});
+
+it("renders the assumed borrowing rate without binary-float noise", () => {
+  const risk = fundingAccountRiskSchema.parse({ ...riskFixture.result.account_risk,
+    assumptions: { ...riskFixture.result.account_risk.assumptions, annual_borrowing_rate: 0.07 } });
+  render(<FundingAccountRisk risk={risk} />);
+  expect(screen.getByText(/Assumed annual borrowing rate: 7%\./)).toBeVisible();
+  expect(screen.queryByText(/7\.0000/)).not.toBeInTheDocument();
 });

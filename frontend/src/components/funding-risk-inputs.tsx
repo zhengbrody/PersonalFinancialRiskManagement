@@ -30,9 +30,9 @@ export function FundingRiskInputs({ expiry, disabled, onChange, requiredSymbols 
   function updateScenario(index: number, patch: Partial<RiskInputDraft>) {
     setScenarios(previous => previous.map((scenario, at) => at === index ? { ...scenario, ...patch } : scenario));
   }
-  return <section aria-label="Optional account expiry scenarios" className="space-y-3 rounded border border-border p-3 text-sm">
+  return <section aria-label="Optional account expiry scenarios" className="min-w-0 space-y-3 rounded border border-border p-3 text-sm">
     <label className="flex gap-2"><input type="checkbox" checked={enabled} disabled={disabled} onChange={event => setEnabled(event.target.checked)} />Include explicit account-wide expiry price scenarios</label>
-    {enabled && <fieldset disabled={disabled} className="space-y-3">
+    {enabled && <fieldset disabled={disabled} className="min-w-0 space-y-3">
       <p>Common expiry: {expiry || "Choose the Put expiry above"}. Enter a price for every existing stock and every option underlying, including the proposed Put underlying. The server checks complete coverage.</p>
       <p>These prices are your assumptions, not forecasts. Missing prices are never filled in. Existing positions share this scenario date; incompatible option expiries must be resolved separately.</p>
       <label className="block">Annual borrowing rate (%) — leave blank if unknown<input aria-label="Annual borrowing rate (%)" type="number" min="0" max="100" step="any" value={rate} onChange={event => setRate(event.target.value)} className="ml-2 rounded border border-input bg-background p-1" /></label>

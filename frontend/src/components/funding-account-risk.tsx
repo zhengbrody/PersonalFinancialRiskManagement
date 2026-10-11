@@ -1,10 +1,13 @@
 import type { FundingAccountRisk } from "@/lib/copilot-funding";
 const usd = (value: number | null) => value === null ? "Unknown" : value.toLocaleString("en-US", { style: "currency", currency: "USD" });
+// Ratios round-trip through JSON as binary floats (0.07 * 100 = 7.000000000000001);
+// display at most four decimals so the user sees the rate they typed, never noise.
+const percent = (value: number) => `${(value * 100).toLocaleString("en-US", { maximumFractionDigits: 4 })}%`;
 const names = { no_action: "Keep unchanged", sale_keep_cash_and_put: "Reduce holding, retain cash, add Put", sale_repay_margin_and_put: "Reduce holding, repay debt, add Put" };
 export function FundingAccountRisk({ risk }: { risk: FundingAccountRisk }) {
   return <section aria-label="Account-wide expiry scenarios" className="space-y-3 text-sm">
     <h4 className="font-semibold">Account-wide expiry scenarios</h4>
-    <p>Assumed annual borrowing rate: {risk.assumptions.annual_borrowing_rate === null ? "Unknown" : `${risk.assumptions.annual_borrowing_rate * 100}%`}. Interest period: {risk.days_of_interest} days. These are hypothetical account outcomes, not forecasts or broker approval.</p>
+    <p>Assumed annual borrowing rate: {risk.assumptions.annual_borrowing_rate === null ? "Unknown" : percent(risk.assumptions.annual_borrowing_rate)}. Interest period: {risk.days_of_interest} days. These are hypothetical account outcomes, not forecasts or broker approval.</p>
     {risk.scenarios.map(scenario => <section key={scenario.label} className="space-y-2 rounded border border-border p-2">
       <h5 className="font-medium">{scenario.label}</h5><p>Assumed expiry prices: {Object.entries(scenario.prices).map(([ticker, price]) => `${ticker} ${usd(price)}`).join(", ")}</p>
       {scenario.outcomes.map(row => <div key={row.kind} className="rounded border border-border p-2"><h6>{names[row.kind]}</h6>
