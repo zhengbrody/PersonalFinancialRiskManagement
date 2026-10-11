@@ -5,7 +5,8 @@ import { Button } from "./ui/button";
 import { CopilotFunding } from "./copilot-funding";
 import { CopilotChangeResult } from "./copilot-change";
 import { apiFetch } from "@/lib/api";
-import { candidateRunSchema, type CandidateRun } from "@/lib/copilot-candidates";
+import { candidateRunSchema, classifyRunStartFailure, type CandidateRun, type CandidateTask } from "@/lib/copilot-candidates";
+import { requestRecentAnalyses } from "./copilot-recovery";
 import { savedComparisonSchema, type ChangeComparison, type SavedComparison } from "@/lib/copilot-compare";
 import { classifySaveFailure, COMPARISON_MISSING_CODE, COMPARISON_SETTLED_CODES } from "@/lib/copilot-save-outcome";
 
@@ -21,32 +22,47 @@ export function CopilotCandidates({ token, portfolioId, scope, fundingEnabled = 
   const [runId, setRunId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set only when the server durably queued this id but could not start it.
+  const [retryOffer, setRetryOffer] = useState<{ id: string; operation: "start" | "resume"; task?: CandidateTask } | null>(null);
+  const [activeElsewhere, setActiveElsewhere] = useState(false);
   const controller = useRef<AbortController | null>(null);
   const amountInput = useRef<HTMLInputElement | null>(null);
   const storageKey = `${scope}:candidate-run`;
   const base = "/api/v1/copilot/decision-runs";
   useEffect(() => {
     try { setRunId(sessionStorage.getItem(storageKey)); } catch { /* storage optional */ }
+    setRetryOffer(null); setActiveElsewhere(false);
     return () => controller.current?.abort();
   }, [storageKey]);
+  function remember(id: string | null) {
+    try { if (id) sessionStorage.setItem(storageKey, id); else sessionStorage.removeItem(storageKey); } catch { /* server record still accessible */ }
+  }
 
-  async function execute(operation: "start" | "read" | "resume" | "cancel") {
+  async function execute(operation: "start" | "read" | "resume" | "cancel" | "retry") {
     if (busy) return;
-    const id = operation === "start" ? crypto.randomUUID() : runId;
+    const offer = operation === "retry" ? retryOffer : null;
+    if (operation === "retry" && !offer) return;
+    const id = operation === "start" ? crypto.randomUUID() : offer ? offer.id : runId;
     if (!id) return;
+    // What actually goes over the wire: a retry repeats the refused request with
+    // the SAME id (and, for a start, the SAME captured task) so the server treats
+    // it idempotently instead of reserving a second job.
+    const request = offer ? offer.operation : operation as Exclude<typeof operation, "retry">;
+    const task: CandidateTask | undefined = request !== "start" ? undefined : offer?.task ?? {
+      expected_portfolio_id: portfolioId, goal, amount: Number(amount),
+      protected_holdings: protectedNames.split(/[,\s]+/).filter(Boolean).map(t => t.toUpperCase()), confirmed,
+    };
+    const previousId = runId;
     const abort = new AbortController();
     controller.current?.abort(); controller.current = abort;
-    setBusy(true); setError(null); setRunId(id);
-    try { sessionStorage.setItem(storageKey, id); } catch { /* server record still accessible */ }
+    setBusy(true); setError(null); setRunId(id); setRetryOffer(null); setActiveElsewhere(false);
+    remember(id);
     const timeout = setTimeout(() => abort.abort(), 125000);
     try {
-      const next = await apiFetch<CandidateRun>(operation === "start" ? base : `${base}/${id}${["resume", "cancel"].includes(operation) ? `/${operation}` : ""}`, {
-        method: operation === "read" ? "GET" : "POST", authToken: token ?? undefined,
+      const next = await apiFetch<CandidateRun>(request === "start" ? base : `${base}/${id}${["resume", "cancel"].includes(request) ? `/${request}` : ""}`, {
+        method: request === "read" ? "GET" : "POST", authToken: token ?? undefined,
         signal: abort.signal, schema: candidateRunSchema,
-        ...(operation === "start" ? { body: { id, task: {
-          expected_portfolio_id: portfolioId, goal, amount: Number(amount),
-          protected_holdings: protectedNames.split(/[,\s]+/).filter(Boolean).map(t => t.toUpperCase()), confirmed,
-        } } } : {}),
+        ...(request === "start" ? { body: { id, task } } : {}),
       });
       const accept = (value: CandidateRun) => {
         if (value.id !== id || value.portfolio_id !== portfolioId) throw new Error("Analysis does not match this portfolio.");
@@ -66,9 +82,28 @@ export function CopilotCandidates({ token, portfolioId, scope, fundingEnabled = 
         accept(latest); state = latest.state;
       }
     } catch (e) {
-      if (controller.current === abort) setError(abort.signal.aborted
-        ? "Stopped waiting. Retrieve the original run to check its status; this does not cancel server computation."
-        : e instanceof Error ? e.message : "Unable to check analysis status.");
+      if (controller.current !== abort) return;
+      if (abort.signal.aborted) {
+        setError("Stopped waiting. Retrieve the original run to check its status; this does not cancel server computation.");
+        return;
+      }
+      const failure = request === "start" || request === "resume" ? classifyRunStartFailure(e) : { kind: "other" as const };
+      // A refused reservation (start path only) left no record behind for this id.
+      const forget = () => { const keep = operation === "start" ? previousId : null; setRunId(keep); remember(keep); };
+      if (failure.kind === "active_elsewhere") {
+        if (request === "start") forget();
+        setActiveElsewhere(true); setError(failure.message);
+      } else if (failure.kind === "queue_full_not_saved") {
+        forget(); setError(failure.message);
+      } else if (failure.kind === "queued_not_started") {
+        // Never claim it is running: drop any stale state and offer the same-id retry.
+        setRun(null); setRetryOffer({ id, operation: request === "start" ? "start" : "resume", task });
+        setError(failure.message);
+      } else if (failure.kind === "run_conflict") {
+        forget(); setRun(null); setError(failure.message);
+      } else {
+        setError(e instanceof Error ? e.message : "Unable to check analysis status.");
+      }
     } finally { clearTimeout(timeout); if (controller.current === abort) setBusy(false); }
   }
 
@@ -92,7 +127,12 @@ export function CopilotCandidates({ token, portfolioId, scope, fundingEnabled = 
       {busy && <Button size="sm" variant="outline" onClick={() => controller.current?.abort()}>Stop waiting</Button>}
     </div>
     {error && <p role="alert" className="text-sm">{error}</p>}
-    {run && <p role="status" className="text-sm">Analysis: {run.state}{run.error_code ? ` · ${run.error_code.replace(/_/g, " ")}` : ""}. {run.state === "queued" ? "Waiting for capacity. Resume can redispatch this same run after an interruption." : ""}</p>}
+    {retryOffer && retryOffer.id === runId && <div className="flex flex-wrap items-center gap-2">
+      <Button size="sm" disabled={busy || !token} onClick={() => void execute("retry")}>Try starting again</Button>
+      {retryOffer.task && <span className="text-xs text-muted-foreground">Same request: {retryOffer.task.goal.replace(/_/g, " ")} · ${retryOffer.task.amount.toLocaleString("en-US")} · preserve {retryOffer.task.protected_holdings.join(", ") || "none"}.</span>}
+    </div>}
+    {activeElsewhere && <Button size="sm" variant="outline" disabled={busy} onClick={() => requestRecentAnalyses(portfolioId)}>View recent analyses</Button>}
+    {run && <p role="status" className="text-sm">Analysis: {run.state}{run.error_code ? ` · ${run.error_code.replace(/_/g, " ")}` : ""}. {run.state === "queued" ? "Queued, not started yet. If it stays queued, Resume tries to start this same run again." : ""}</p>}
     {run?.result && <div className="space-y-3">
       <p className="text-xs text-muted-foreground">Captured goal: {run.result.task.goal.replace(/_/g, " ")} · reduction ${run.result.task.amount.toLocaleString("en-US")} · preserve: {run.result.task.protected_holdings.join(", ") || "none specified"}.</p>
       <p>{run.result.judgment}</p>
@@ -113,19 +153,28 @@ function Candidate({ result, token, preferred, onRevise, fundingEnabled, protect
   const [needsCheck, setNeedsCheck] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string>();
+  const active = useRef<AbortController | null>(null);
+  // Scope change (new result, other login, other book) or unmount: stop
+  // listening to the old request so a late answer can never land here.
+  useEffect(() => () => { active.current?.abort(); active.current = null; setPending(false); },
+    [result.result_id, result.portfolio_id, token]);
   async function save(read = false) {
     if (pending) return;
+    const abort = new AbortController();
+    active.current?.abort(); active.current = abort;
     setPending(true); setError(undefined);
     const base = `/api/v1/copilot/compare-change/${result.result_id}`;
     try {
       const response = await apiFetch(read ? `${base}/saved?expected_portfolio_id=${result.portfolio_id}` : `${base}/confirm`, {
-        method: read ? "GET" : "POST", authToken: token ?? undefined, schema: savedComparisonSchema,
+        method: read ? "GET" : "POST", authToken: token ?? undefined, schema: savedComparisonSchema, signal: abort.signal,
         ...(!read ? { body: { expected_portfolio_id: result.portfolio_id, receipt: result.replay_receipt, confirmed: true } } : {}),
       });
       const checked = savedComparisonSchema.parse(response);
       if (checked.result_id !== result.result_id || checked.portfolio_id !== result.portfolio_id || checked.plan_id !== result.result_id || checked.result.result_id !== result.result_id) throw new Error("Saved result scope mismatch.");
+      if (abort.signal.aborted) return;
       setSaved(checked); setNeedsCheck(false);
     } catch (e) {
+      if (abort.signal.aborted) return;
       const failure = classifySaveFailure(e, {
         settled: COMPARISON_SETTLED_CODES, missing: COMPARISON_MISSING_CODE, retrieve: read,
         uncertainSave: "Saving was not confirmed. Check the saved record or retry this same result; a draft may already exist.",
@@ -136,7 +185,7 @@ function Candidate({ result, token, preferred, onRevise, fundingEnabled, protect
       setNeedsCheck(!failure.definite && !!saved);
       setError(failure.message);
     }
-    finally { setPending(false); }
+    finally { if (active.current === abort) { active.current = null; setPending(false); } }
   }
   // A conditional preference is only meaningful when every compared risk
   // dimension is known on both sides; a mixed book reports some as null.

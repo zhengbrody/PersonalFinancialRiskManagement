@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { CopilotPutPlans } from "./copilot-put-plans";
 import { putResultSchema } from "@/lib/copilot-put";
 import fixture from "@/test-fixtures/copilot-put.json";
@@ -138,4 +138,23 @@ it("a save that settles after the portfolio switched is not shown under the new 
   await act(async () => { settle(envelope(saved)); });
   expect(screen.queryByText(/Original calculation saved/)).not.toBeInTheDocument();
   expect(screen.queryByText(/SPY Put · saved/)).not.toBeInTheDocument();
+});
+
+it("moves focus to the save outcome instead of dropping it to the page body", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(envelope(saved));
+  render(<CopilotPutPlans token="test" portfolioId={fixture.portfolio_id} result={result} />);
+  fireEvent.click(screen.getByRole("checkbox", { name: /Save this original/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm save Put plan" }));
+  const outcome = await screen.findByText("Original calculation saved. No holdings were changed.");
+  await waitFor(() => expect(outcome).toHaveFocus());
+  expect(document.body).not.toHaveFocus();
+});
+
+it("focuses a definite expired-capture rejection so the user re-runs the calculation", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(rejection(409, "put_plan_expired", "Recalculate before saving; this capture has expired."));
+  render(<CopilotPutPlans token="test" portfolioId={fixture.portfolio_id} result={result} />);
+  fireEvent.click(screen.getByRole("checkbox", { name: /Save this original/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm save Put plan" }));
+  const outcome = await screen.findByText("Recalculate before saving; this capture has expired.");
+  await waitFor(() => expect(outcome).toHaveFocus());
 });

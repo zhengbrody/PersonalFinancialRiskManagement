@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { CopilotFundingPlans } from "./copilot-funding-plans";
 import { fundingResultSchema } from "@/lib/copilot-funding";
 import fixture from "@/test-fixtures/copilot-funding.json";
@@ -150,4 +150,26 @@ it("a save that settles after the login or portfolio changed is not shown in the
   await act(async () => { settle(envelope(saved)); });
   expect(screen.queryByText("Verified original funding plan. No holdings or orders changed.")).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Review funding assumptions" })).not.toBeInTheDocument();
+});
+
+const rejected = (status: number, code: string, message: string) =>
+  new Response(JSON.stringify({ data: null, error: { code, message }, meta: { request_id: "fixture" } }), { status });
+
+it("moves focus to the save outcome instead of dropping it to the page body", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(envelope(saved));
+  render(<CopilotFundingPlans result={result} token="fixture" portfolioId={result.portfolio_id} />);
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm save funding plan" }));
+  const outcome = await screen.findByText("Verified original funding plan. No holdings or orders changed.");
+  await waitFor(() => expect(outcome).toHaveFocus());
+});
+
+it("treats an expired capture as a definite refusal and focuses it", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(rejected(409, "funding_plan_expired", "Capture new scenarios before saving."));
+  render(<CopilotFundingPlans result={result} token="fixture" portfolioId={result.portfolio_id} />);
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "Confirm save funding plan" }));
+  const outcome = await screen.findByText("Capture new scenarios before saving.");
+  await waitFor(() => expect(outcome).toHaveFocus());
+  expect(screen.queryByText(/Save status is unconfirmed/)).not.toBeInTheDocument();
 });

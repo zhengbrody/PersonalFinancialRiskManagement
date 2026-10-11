@@ -66,6 +66,17 @@ export function CopilotChangeResult({ result, disabled, onRevise, onVerify, veri
     if (confirmOpen) consentRef.current?.focus();
     else if (restoreFocus.current) { restoreFocus.current = false; saveRef.current?.focus(); }
   }, [confirmOpen]);
+  // "Confirm and save draft" (or "Check saved record") disables or removes the
+  // control that had focus; when the outcome arrives, move focus to it so a
+  // keyboard/screen-reader user lands on what happened instead of <body>.
+  const awaitingOutcome = useRef(false);
+  const errorRef = useRef<HTMLParagraphElement | null>(null);
+  const savedRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!awaitingOutcome.current || savePending) return;
+    const target = saveError ? errorRef.current : saved ? savedRef.current : null;
+    if (target) { awaitingOutcome.current = false; target.focus(); }
+  }, [savePending, saveError, saved]);
   return (
     <section aria-label="Change comparison" className="space-y-4 rounded-2xl border border-border bg-card p-4">
       <div><h3 className="font-semibold">Keep unchanged vs your assumption</h3>
@@ -122,21 +133,21 @@ export function CopilotChangeResult({ result, disabled, onRevise, onVerify, veri
         <p className="text-xs text-muted-foreground">{verification.notice}</p>
       </div>}
       {result.replay_receipt?.save_available && onSave && !saved && <div className="space-y-2 rounded-lg border border-border p-3">
-        {!confirmOpen ? <Button ref={saveRef} disabled={disabled} onClick={() => { setConsent(false); setConfirmOpen(true); }}>Save as draft plan</Button> : <form className="space-y-3" aria-label="Confirm draft plan" onSubmit={(e) => { e.preventDefault(); if (consent && !disabled) { setConfirmOpen(false); setConsent(false); onSave(); } }}>
+        {!confirmOpen ? <Button ref={saveRef} disabled={disabled} onClick={() => { setConsent(false); setConfirmOpen(true); }}>Save as draft plan</Button> : <form className="space-y-3" aria-label="Confirm draft plan" onSubmit={(e) => { e.preventDefault(); if (consent && !disabled) { awaitingOutcome.current = true; setConfirmOpen(false); setConsent(false); onSave(); } }}>
           <p className="text-sm">Save this assumption and the server-verified captured calculation, not a trade. The server will check the portfolio version and reject a new save after 15 minutes; this does not refresh quotes.</p>
           <label htmlFor={consentId} className="flex items-start gap-2 text-sm"><input ref={consentRef} id={consentId} type="checkbox" checked={consent} disabled={disabled} onChange={(e) => setConsent(e.target.checked)} />I confirm saving this hypothetical comparison as a draft. My holdings will not change.</label>
           <div className="flex flex-wrap gap-2"><Button type="submit" disabled={disabled || !consent}>Confirm and save draft</Button><Button type="button" variant="outline" disabled={disabled} onClick={() => { setConsent(false); restoreFocus.current = true; setConfirmOpen(false); }}>Cancel save</Button></div>
         </form>}
       </div>}
       {savePending && <p role="status" className="text-sm">Checking saved calculation…</p>}
-      {saveError && <p role="alert" className="text-sm">{saveError}</p>}
-      {saved && <div role="status" className="space-y-1 rounded-lg border border-border p-3 text-sm">
+      {saveError && <p ref={errorRef} tabIndex={-1} role="alert" className="text-sm">{saveError}</p>}
+      {saved && <div ref={savedRef} tabIndex={-1} role="status" className="space-y-1 rounded-lg border border-border p-3 text-sm">
         <p>{savedNeedsCheck ? "This tab remembers a saved plan. Check its server record to confirm it still exists." : `Draft saved · ${new Date(saved.confirmed_at).toLocaleString()}`}</p>
         {!savedNeedsCheck && <p>{saved.notice}</p>}
         <p className="break-all text-xs text-muted-foreground">Plan {saved.plan_id}</p>
         <Link href="/analyze?view=plan" className="inline-block text-sm underline">Open saved risk plans</Link>
       </div>}
-      {(saved || saveError) && onRetrieveSaved && <Button variant="outline" disabled={disabled} onClick={onRetrieveSaved}>Check saved record</Button>}
+      {(saved || saveError) && onRetrieveSaved && <Button variant="outline" disabled={disabled} onClick={() => { awaitingOutcome.current = true; onRetrieveSaved(); }}>Check saved record</Button>}
       <p className="text-xs text-muted-foreground">Recomputing captures fresh inputs for both sides. {saved && !savedNeedsCheck ? "The draft keeps the original calculation; edits to plan notes do not update its evidence." : "A comparison alone does not save a risk plan."}</p>
     </section>
   );

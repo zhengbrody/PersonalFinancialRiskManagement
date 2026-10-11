@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { CopilotCandidates } from "./copilot-candidates";
 import { CopilotAnswerCard } from "./copilot-answer";
 import type { CopilotAnswer } from "@/lib/queries";
@@ -168,4 +168,66 @@ it("an unknown read-back of a remembered save marks it as needing a check, not a
   expect(await screen.findByRole("alert")).toHaveTextContent(/could not be read.*did not change anything/);
   expect(screen.getByText(/remembers a saved plan\. Check its server record/)).toBeVisible();
   expect(screen.queryByText(/Draft saved/)).not.toBeInTheDocument();
+});
+
+it("moves focus to the save outcome after 'Confirm and save draft', not to the page body", async () => {
+  const fetcher = vi.spyOn(globalThis, "fetch");
+  await calculateCandidate(fetcher);
+  const run = JSON.parse(String(fetcher.mock.calls[0][1]?.body));
+  fetcher.mockResolvedValueOnce(envelope(savedCandidate(completedRun(run.id, run.task).result.candidates[0])));
+  await confirmSave();
+  const outcome = (await screen.findByText(/Draft saved/)).closest("[role=status]") as HTMLElement;
+  await waitFor(() => expect(outcome).toHaveFocus());
+});
+
+it("focuses a definite save refusal too", async () => {
+  const fetcher = vi.spyOn(globalThis, "fetch");
+  await calculateCandidate(fetcher);
+  fetcher.mockResolvedValueOnce(failure(409, "comparison_expired", "Capture a fresh comparison before saving."));
+  await confirmSave();
+  const alert = await screen.findByRole("alert");
+  await waitFor(() => expect(alert).toHaveFocus());
+});
+
+it("aborts an in-flight candidate save on unmount and ignores its late answer", async () => {
+  const fetcher = vi.spyOn(globalThis, "fetch");
+  await calculateCandidate(fetcher);
+  let signal: AbortSignal | undefined;
+  let settle!: (response: Response) => void;
+  fetcher.mockImplementationOnce((_url, options) => { signal = options?.signal ?? undefined; return new Promise<Response>(resolve => { settle = resolve; }); });
+  const errors = vi.spyOn(console, "error");
+  await confirmSave();
+  await waitFor(() => expect(signal).toBeDefined());
+  expect(signal!.aborted).toBe(false);
+  cleanup();
+  expect(signal!.aborted).toBe(true);
+  settle(failure(409, "comparison_expired", "late"));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(errors).not.toHaveBeenCalled();
+});
+
+it("aborts an in-flight candidate save when the login changes", async () => {
+  const fetcher = vi.spyOn(globalThis, "fetch");
+  const view = await (async () => {
+    fetcher.mockImplementationOnce(async (_url, options) => {
+      const body = JSON.parse(String(options?.body));
+      return envelope(completedRun(body.id, body.task));
+    });
+    const rendered = render(<CopilotCandidates token="test" portfolioId={book} scope="scope" />);
+    fireEvent.change(screen.getByLabelText("Reduction amount (USD)"), { target: { value: "500" } });
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Calculate candidates" }));
+    await screen.findByRole("region", { name: "Change comparison" });
+    return rendered;
+  })();
+  let signal: AbortSignal | undefined;
+  let settle!: (response: Response) => void;
+  fetcher.mockImplementationOnce((_url, options) => { signal = options?.signal ?? undefined; return new Promise<Response>(resolve => { settle = resolve; }); });
+  await confirmSave();
+  await waitFor(() => expect(signal).toBeDefined());
+  view.rerender(<CopilotCandidates token="other" portfolioId={book} scope="scope" />);
+  expect(signal!.aborted).toBe(true);
+  settle(envelope({}));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(screen.queryByText(/Draft saved|was not confirmed/)).not.toBeInTheDocument();
 });

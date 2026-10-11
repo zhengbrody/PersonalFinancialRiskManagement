@@ -31,6 +31,11 @@ export function CopilotPutPlans({ token, portfolioId, result }: {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const controller = useRef<AbortController | null>(null);
+  // The confirm button is disabled while saving, so focus would fall to <body>;
+  // land keyboard/screen-reader users on the outcome message instead.
+  const noticeRef = useRef<HTMLParagraphElement | null>(null);
+  const [outcome, setOutcome] = useState(0);
+  useEffect(() => { if (outcome) noticeRef.current?.focus(); }, [outcome]);
   useEffect(() => () => controller.current?.abort(), []);
   useEffect(() => {
     controller.current?.abort();
@@ -58,6 +63,7 @@ export function CopilotPutPlans({ token, portfolioId, result }: {
         if (!abort.signal.aborted) {
           setPlans(previous => [saved, ...previous.filter(plan => plan.plan_id !== saved.plan_id)]);
           setNotice("Original calculation saved. No holdings were changed.");
+          setOutcome(n => n + 1);
         }
       } else if (action === "list" || action === "more") {
         const schema = z.object({ plans: z.array(savedSchema).max(20), next_cursor: z.string().nullable(), skipped_records: z.number().int().nonnegative() });
@@ -90,6 +96,7 @@ export function CopilotPutPlans({ token, portfolioId, result }: {
         uncertainSave: "Saving was not confirmed. Load saved Put plans to check, or retry this same result; a draft may already exist.",
         uncertainRead: "", vanished: "",
       }).message);
+      setOutcome(n => n + 1);
     } finally { if (controller.current === abort) setBusy(false); }
   }
 
@@ -104,7 +111,7 @@ export function CopilotPutPlans({ token, portfolioId, result }: {
     <label className="flex gap-2 text-xs"><input type="checkbox" checked={monitor.enabled} disabled={!token || plans.length === 0} onChange={e => monitor.setEnabled(e.target.checked)} />
       Review loaded plans (first 20) every minute while signed in and this window is visible. This session only; no quotes, trades or return attribution.</label>
     {monitor.notice && <p role="status">{monitor.notice}</p>}
-    {notice && <p role="status">{notice}</p>}
+    {notice && <p ref={noticeRef} tabIndex={-1} role="status">{notice}</p>}
     {plans.map(plan => <details key={plan.plan_id} className="rounded border border-border p-3">
       <summary className="cursor-pointer">{plan.result.assumptions.underlying} Put · saved {plan.confirmed_at}</summary>
       <div className="mt-2 space-y-2 text-xs">

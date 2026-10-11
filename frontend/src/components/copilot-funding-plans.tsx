@@ -25,6 +25,10 @@ export function CopilotFundingPlans({ result = null, planId, portfolioId, token 
   const monitor = usePlanSessionReview({ token, portfolioId, scopeKey: id ?? "", planIds: saved ? [saved.plan_id] : [], kind: "funding-plans", onChanged: setReview });
   const [busy, setBusy] = useState(false);
   const active = useRef<AbortController | null>(null);
+  // The confirm button is disabled while saving; move focus to the outcome.
+  const noticeRef = useRef<HTMLParagraphElement | null>(null);
+  const [outcome, setOutcome] = useState(0);
+  useEffect(() => { if (outcome) noticeRef.current?.focus(); }, [outcome]);
   useEffect(() => {
     setSaved(null); setReview(null); setConfirmed(false); setNotice(""); setBusy(false);
     return () => active.current?.abort();
@@ -46,7 +50,7 @@ export function CopilotFundingPlans({ result = null, planId, portfolioId, token 
         });
         if (value.plan_id !== id || value.portfolio_id !== portfolioId ||
           (result && JSON.stringify(value.result) !== JSON.stringify({ ...result, receipt: null }))) throw new Error("Saved result does not match the original calculation.");
-        if (!abort.signal.aborted) { setSaved(value); setNotice("Verified original funding plan. No holdings or orders changed."); }
+        if (!abort.signal.aborted) { setSaved(value); setNotice("Verified original funding plan. No holdings or orders changed."); if (action === "save") setOutcome(n => n + 1); }
       }
     } catch (e) {
       if (abort.signal.aborted) return;
@@ -61,6 +65,7 @@ export function CopilotFundingPlans({ result = null, planId, portfolioId, token 
       // remembered record as if it still existed.
       if (failure.vanished) { setSaved(null); setReview(null); }
       setNotice(failure.message);
+      if (action === "save") setOutcome(n => n + 1);
     }
     finally { if (active.current === abort) setBusy(false); }
   }
@@ -68,7 +73,7 @@ export function CopilotFundingPlans({ result = null, planId, portfolioId, token 
     {result?.receipt?.save_available && <><label className="flex gap-2"><input type="checkbox" disabled={busy} checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />Save these original funding assumptions as a draft RiskPlan. This does not execute a trade.</label>
       <Button size="sm" disabled={busy || !confirmed || !token} onClick={() => void run("save")}>Confirm save funding plan</Button></>}
     <Button size="sm" variant="outline" disabled={busy || !token || !id} onClick={() => void run("read")}>Retrieve saved funding plan</Button>
-    {notice && <p role="status">{notice}</p>}
+    {notice && <p ref={noticeRef} tabIndex={-1} role="status">{notice}</p>}
     {saved && <><p>Saved {saved.confirmed_at}. Original account capture {saved.result.captured_at}.</p>
       <details><summary>Original funding inputs and results</summary><p>Reduce {saved.result.sale_ticker} · fees {usd(saved.result.assumptions.sale_fees)} · Put {saved.result.assumptions.put.underlying} {saved.result.assumptions.put.expiry} · strike {usd(saved.result.assumptions.put.strike)} · {saved.result.assumptions.put.contracts} contract(s).</p>
         <ul className="space-y-2">{saved.result.alternatives.map(row => <li key={row.kind}>{row.kind.replace(/_/g, " ")}: cash {usd(row.cash_before_put)}, debt {usd(row.margin_remaining)}, assignment reserve shortfall {usd(row.assignment_cash_shortfall)}. {row.status.replace(/_/g, " ")}.</li>)}</ul>

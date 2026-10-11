@@ -41,4 +41,15 @@ describe("classifySaveFailure", () => {
     for (const code of ["funding_plan_conflict", "untrusted_funding_plan", "funding_save_unconfirmed"]) expect(FUNDING_PLAN_SETTLED_CODES).not.toContain(code);
     for (const code of ["put_plan_conflict", "untrusted_put_plan", "put_save_unconfirmed"]) expect(PUT_PLAN_SETTLED_CODES).not.toContain(code);
   });
+
+  // The expiry re-check sits after the "already saved" lookup and before the
+  // confirm RPC (backend/app/services/{put,funding}_plans.py: confirm), so an
+  // expired capture is provably pre-commit: definite, re-run the calculation.
+  it.each([
+    ["put_plan_expired", PUT_PLAN_SETTLED_CODES],
+    ["funding_plan_expired", FUNDING_PLAN_SETTLED_CODES],
+  ])("reports %s as a definite pre-commit refusal", (code, settled) => {
+    const failure = classifySaveFailure(new ApiError(409, code, "Recalculate before saving."), { settled, retrieve: false, ...messages });
+    expect(failure).toEqual({ definite: true, vanished: false, message: "Recalculate before saving." });
+  });
 });
