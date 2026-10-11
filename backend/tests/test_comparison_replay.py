@@ -350,3 +350,13 @@ def test_scenario_shock_constants_must_match_exactly():
     assert not replay._same({"shocks": {"SPY": -0.2}}, {"shocks": {"SPY": -0.2000000001}})
     # The P&L those shocks produce IS Black-Scholes output, so it may drift.
     assert replay._same({"baseline_pnl": -2732.29}, {"baseline_pnl": -2732.2900000001})
+
+
+@pytest.fixture(autouse=True)
+def _fixed_endpoint_clock(monkeypatch):
+    """Fixture prices are dated; wall-clock ageing must not change API tests."""
+    from types import SimpleNamespace
+
+    from backend.app.api.v1 import copilot_compare as api
+
+    monkeypatch.setattr(api, "datetime", SimpleNamespace(now=lambda tz: NOW))
