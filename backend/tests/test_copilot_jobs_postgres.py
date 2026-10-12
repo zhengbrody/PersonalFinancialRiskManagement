@@ -371,9 +371,14 @@ def test_column_only_state_change_is_refused(migrated, book):
 
 
 def test_job_limit_cannot_be_called_for_another_user(migrated, book):
-    result = migrated(f"select enforce_copilot_job_limit('{OTHER}', gen_random_uuid());", USER, check=False)
+    result = migrated(
+        f"select enforce_copilot_job_limit('{OTHER}', gen_random_uuid());", USER, check=False
+    )
     assert result.returncode != 0 and "copilot_job_forbidden" in result.stderr
-    assert migrated(f"select enforce_copilot_job_limit('{USER}', gen_random_uuid());", USER).returncode == 0
+    assert (
+        migrated(f"select enforce_copilot_job_limit('{USER}', gen_random_uuid());", USER).returncode
+        == 0
+    )
 
 
 def test_portfolio_deletion_cascades_through_a_fresh_job(migrated, book):

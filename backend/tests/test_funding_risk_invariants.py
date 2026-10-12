@@ -525,7 +525,6 @@ def test_formerly_unsupported_books_are_valued_without_dropping_legs(monkeypatch
         assert ("residual_rate_missing" in {n.code for n in row.not_computable}) == residual
 
 
-
 @pytest.mark.parametrize("x_price", [20, 40])
 def test_settlement_into_short_stock_is_flagged_and_blocks_ranking(x_price):
     """Hand ledger on the engine's own valuation step (the request path rejects
