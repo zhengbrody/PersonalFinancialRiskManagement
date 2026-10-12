@@ -136,7 +136,7 @@ export function CopilotCandidates({ token, portfolioId, scope, fundingEnabled = 
         if (resumed.state.portfolio_id !== portfolioId || resumed.state.task_id !== state?.task_id) throw new Error("Task does not match this portfolio.");
         onTask?.({ outcome: "unrelated", state: resumed.state, token: resumed.token });
         setNotice(RESUME_NOTICE[resumed.outcome]);
-        if (resumed.outcome === "stale_account_changed") { setRun(null); setConfirmed(false); return; }
+        if (resumed.outcome === "stale_account_changed" || resumed.outcome === "superseded") { setRun(null); setConfirmed(false); return; }
         if (resumed.run) { setRunId(resumed.run.id); await poll(resumed.run.id, abort, resumed.run); }
         return;
       }
@@ -273,6 +273,7 @@ const RESUME_NOTICE: Record<TaskResume["outcome"], string> = {
   run_failed: "The calculation for this version did not complete. Calculate again when ready.",
   expired: "This task expired. Ask again to start a new one.",
   closed: "This task was closed.",
+  superseded: "A newer confirmed version of this task was started elsewhere, so this version's result is not shown or continued.",
 };
 
 function Candidate({ result, token, preferred, onRevise, fundingEnabled, protectedHoldings }: { result: ChangeComparison; token: string | null; preferred: boolean; onRevise: () => void; fundingEnabled: boolean; protectedHoldings: string[] }) {

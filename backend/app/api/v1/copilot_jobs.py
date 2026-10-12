@@ -66,9 +66,17 @@ def start(body: StartCandidateRun, request: Request, user: AuthedUser = Depends(
         raise APIError(
             422, "constraints_unconfirmed", "Confirm your constraints before calculating."
         )
-    if body.task_state is not None:
-        _bind_confirmed_task(body, user)
     log = jobs.journal(user)
+    task_ref = None
+    if body.task_state is not None:
+        bound = _bind_confirmed_task(body, user)
+        task_ref = (bound.task_id, bound.confirmed.version)
+        if log.newer_task_version(bound.portfolio_id, *task_ref):
+            raise APIError(
+                409,
+                "task_state_superseded",
+                "A newer confirmed version of this task has already been started.",
+            )
     id = str(body.id)
     try:
         record = log.get(id)
@@ -97,7 +105,7 @@ def start(body: StartCandidateRun, request: Request, user: AuthedUser = Depends(
             preference_source=profile.source,
             preference_confirmed_at=profile.confirmed_at,
         )
-        record = log.reserve(id, body.task, snapshot, revision)
+        record = log.reserve(id, body.task, snapshot, revision, task_ref)
     if record.task != body.task:
         raise APIError(409, "run_conflict", "This run ID belongs to different constraints.")
     if record.state == "queued" and not _dispatcher(request).submit(user, id):
@@ -130,6 +138,7 @@ def _bind_confirmed_task(body, user):
             "task_state_mismatch",
             "This calculation does not match the confirmed version of the task.",
         )
+    return record
 
 
 @router.get("/{id}", response_model=Envelope[CandidateRunOut])

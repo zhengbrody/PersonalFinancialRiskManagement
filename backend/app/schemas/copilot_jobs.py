@@ -78,6 +78,11 @@ class CandidateRunRecord(CandidateRunOut):
     snapshot: RunSnapshot
     portfolio_revision: UUID
     task: CandidateRequest
+    # Optional (additive): the decision task + confirmed version this run was
+    # started for. Lets the server refuse a superseded version (older token)
+    # after a newer confirmed version has been started. Legacy records: None.
+    task_id: UUID | None = None
+    task_version: int | None = Field(default=None, ge=1)
 
     @model_validator(mode="after")
     def scope_matches(self) -> Self:

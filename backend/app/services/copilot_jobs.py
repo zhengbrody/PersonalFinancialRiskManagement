@@ -228,7 +228,34 @@ class JobJournal:
                 count += 1
         return count
 
-    def reserve(self, id, task, snapshot, revision):
+    def newer_task_version(self, portfolio_id, task_id, version):
+        """True when a verified stored run for the same decision task carries a
+        higher confirmed version. Bounded: the owner's recent rows only (same
+        scan as recent()). Unverifiable rows are ignored, never trusted."""
+        for row in self.store.recent(str(portfolio_id)):
+            try:
+                document = json.loads(row["record"])
+                if not isinstance(document, dict) or document.get("version") != 2:
+                    continue
+                record = runs.decode(
+                    row, self.key, self.user_id, row["id"], record_type=CandidateRunRecord
+                )
+            except (APIError, ValueError, KeyError, TypeError):
+                continue
+            if (
+                record.task_id is not None
+                and str(record.task_id) == str(task_id)
+                and (record.task_version or 0) > version
+            ):
+                return True
+        return False
+
+    def superseded(self, record):
+        return record.task_id is not None and self.newer_task_version(
+            record.portfolio_id, record.task_id, record.task_version or 0
+        )
+
+    def reserve(self, id, task, snapshot, revision, task_ref=None):
         now = self.clock()
         record = CandidateRunRecord(
             id=UUID(id),
@@ -242,6 +269,8 @@ class JobJournal:
             created_at=now,
             updated_at=now,
             expires_at=now + RETENTION,
+            task_id=task_ref[0] if task_ref else None,
+            task_version=task_ref[1] if task_ref else None,
         )
         inserted = self.store.reserve(runs.encode(record, self.key))
         actual = record if inserted else self.get(id)
@@ -353,7 +382,7 @@ class JobJournal:
 
     def resume(self, id):
         record = self.get(id)
-        if record.state == "interrupted" and record.attempts < 2:
+        if record.state == "interrupted" and record.attempts < 2 and not self.superseded(record):
             if self.active_count(exclude=id) >= MAX_ACTIVE_PER_USER:
                 raise too_many_active()
             row, record = self.read(id)

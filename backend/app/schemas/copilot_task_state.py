@@ -162,6 +162,9 @@ ResumeOutcome = Literal[
     "run_failed",
     "expired",
     "closed",
+    # A newer confirmed version of this task has been started: the older
+    # version's run is never presented or continued.
+    "superseded",
 ]
 
 

@@ -381,3 +381,16 @@ def test_portfolio_deletion_cascades_through_a_fresh_job(migrated, book):
     client_insert(migrated, fresh_doc())
     migrated(f"delete from portfolios where id='{BOOK}';", USER)
     assert migrated("select count(*) from copilot_runs;", USER).stdout.strip() == "0"
+
+
+def test_transition_cannot_rebind_a_run_to_another_task_version(migrated, book):
+    seed(migrated, "delete from copilot_runs;")
+    doc = fresh_doc(task_id=str(uuid4()), task_version=1)
+    client_insert(migrated, doc)
+    raised = {**doc, "state": "cancelled", "revision": 1, "task_version": 9}
+    result = migrated(
+        f"select count(*) from transition_copilot_job('{doc['id']}',repeat('a',64),"
+        f"{literal(json.dumps(raised))},repeat('b',64),'cancelled');",
+        USER,
+    )
+    assert result.stdout.strip() == "0"

@@ -9298,7 +9298,7 @@ export interface components {
              * Outcome
              * @enum {string}
              */
-            outcome: "needs_input" | "ready_to_confirm" | "continuing" | "completed" | "stale_account_changed" | "run_missing" | "run_failed" | "expired" | "closed";
+            outcome: "needs_input" | "ready_to_confirm" | "continuing" | "completed" | "stale_account_changed" | "run_missing" | "run_failed" | "expired" | "closed" | "superseded";
             run?: components["schemas"]["CandidateRunOut"] | null;
             state: components["schemas"]["TaskStateView"];
             token: components["schemas"]["TaskStateToken"];

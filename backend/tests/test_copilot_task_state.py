@@ -441,6 +441,50 @@ def test_resume_same_account_continues_interrupted_run(api, monkeypatch):
     )
 
 
+def test_two_tabs_older_confirmed_version_is_superseded_server_side(api, monkeypatch):
+    """Tab A starts version 1 (r1); tab B re-confirms (version 2) and starts r2.
+    The version-1 token still verifies, but the server must never present,
+    re-dispatch or restart r1 for it."""
+    token_v1, r1 = started_task(api, monkeypatch)
+    claimed = api.log.claim(r1)
+    api.log.interrupt(r1, claimed.revision)  # resumable, so a redispatch is possible
+    r2 = uuid4()
+    v2 = api.post(
+        "task-state/confirm",
+        confirm_body(tasks.TaskStateToken(**token_v1), r2, amount=600.0),
+    ).json()["data"]
+    assert v2["state"]["confirmed"]["version"] == 2
+    start_v2 = {
+        "id": str(r2),
+        "task": task().model_copy(update={"amount": 600.0}).model_dump(mode="json"),
+        "task_state": v2["token"],
+    }
+    assert api.post("decision-runs", start_v2).status_code == 200
+    api.log.cancel(str(r2))  # no active job left: only supersession can block r1
+    stored = api.log.get(str(r2))
+    assert (str(stored.task_id), stored.task_version) == (v2["state"]["task_id"], 2)
+
+    submit = Mock(return_value=True)
+    monkeypatch.setattr(api.client.app.state.copilot_dispatcher, "submit", submit)
+    data = api.post(
+        "task-state/resume", {"task_state": token_v1, "expected_portfolio_id": BOOK}
+    ).json()["data"]
+    assert data["outcome"] == "superseded" and data["run"] is None and not data["dispatched"]
+    restart = {"id": r1, "task": task().model_dump(mode="json"), "task_state": token_v1}
+    response = api.post("decision-runs", restart)
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "task_state_superseded"
+    # The generic run resume (and recovery) never re-queues a superseded run.
+    generic = api.post(f"decision-runs/{r1}/resume", {})
+    assert generic.json()["data"]["state"] == "interrupted"
+    submit.assert_not_called()
+    # The current version still resumes normally.
+    current = api.post(
+        "task-state/resume", {"task_state": v2["token"], "expected_portfolio_id": BOOK}
+    ).json()["data"]
+    assert current["outcome"] == "run_failed"
+
+
 def test_resume_other_user_and_expiry(api, monkeypatch, mint_token):
     foreign = tasks.issue(opened(user=OTHER))
     response = api.post(

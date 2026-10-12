@@ -20544,7 +20544,8 @@
               "run_missing",
               "run_failed",
               "expired",
-              "closed"
+              "closed",
+              "superseded"
             ],
             "title": "Outcome",
             "type": "string"

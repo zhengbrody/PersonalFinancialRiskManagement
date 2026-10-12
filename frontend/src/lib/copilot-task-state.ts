@@ -47,7 +47,7 @@ export const taskStateEnvelopeSchema = z.object({
 });
 
 export const taskResumeSchema = z.object({
-  outcome: z.enum(["needs_input", "ready_to_confirm", "continuing", "completed", "stale_account_changed", "run_missing", "run_failed", "expired", "closed"]),
+  outcome: z.enum(["needs_input", "ready_to_confirm", "continuing", "completed", "stale_account_changed", "run_missing", "run_failed", "expired", "closed", "superseded"]),
   state: taskStateViewSchema,
   token: taskStateTokenSchema,
   run: candidateRunSchema.nullable(),

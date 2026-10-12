@@ -513,6 +513,21 @@ Start binding: `StartCandidateRun.task_state` (optional, additive). When given,
 the run id and parameters must equal the current, non-stale confirmed version
 (`task_state_mismatch` otherwise, nothing reserved).
 
+Supersession (server-side, 2026-10-12): the token is stateless, so a version-1
+token keeps verifying after version 2 is confirmed. A run started with a
+`task_state` therefore records `task_id` + `task_version` inside its signed v2
+job record (optional, additive fields; legacy records carry `null`). Before any
+start, task resume or generic run resume/recovery, the server scans the owner's
+recent v2 records for the portfolio (the same bounded 40-row scan as the run
+list) and, if a verified record for the same task carries a higher version,
+refuses: start → `409 task_state_superseded` (nothing reserved), task resume →
+outcome `superseded` (no run presented, nothing dispatched), generic resume /
+recovery → the interrupted run is left as is. Migration 0020's transition RPC
+also keeps both fields immutable. Limits: supersession is enforced against
+*stored* runs, so it begins once the newer version is started (between confirm
+and start an older version can still start); an owner who deletes their own
+newer row (allowed after the insert window) removes the evidence.
+
 Recovery: `POST /copilot/task-state/resume` requires the current JWT, re-verifies
 the token and that its portfolio is the active one, then reads the run via the
 caller-scoped journal (RLS, no service role, no persisted JWT) and compares the
@@ -543,7 +558,9 @@ prop update aborted the in-flight start); fixed and pinned by a unit regression.
   tickers in chat are not recognised (ask → form).
 - Changing `schemas/copilot_jobs.py` changes the job execution fingerprint, so
   queued pre-upgrade jobs fail with `execution_version_changed` after deploy (the
-  existing, documented behaviour).
+  existing, documented behaviour). The 2026-10-12 `task_id`/`task_version`
+  fields changed that schema, so the fingerprint changed again; nothing is
+  deployed with the async flag on, so no queued job is affected.
 - Flags unchanged (decision support + async remain default off); no migration.
 
 ## 2026-10-10 — D: checkable research hypotheses (local, default-off)

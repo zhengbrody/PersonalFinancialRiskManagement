@@ -33,6 +33,11 @@ class MemoryStore:
     def active(self):
         return [deepcopy(r) for r in self.rows.values() if r["state"] in ("queued", "running")]
 
+    def recent(self, portfolio_id):
+        # Same shape and bound as JobStore.recent: this owner's rows, newest first.
+        rows = [r for r in self.rows.values() if str(r["portfolio_id"]) == str(portfolio_id)]
+        return [deepcopy(r) for r in reversed(rows)][:40]
+
     def transition(self, old, new):
         if self.lose_cas or self.rows[old["id"]]["signature"] != old["signature"]:
             return False

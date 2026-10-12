@@ -94,6 +94,10 @@ def resume(body: ResumeTask, request: Request, user: AuthedUser = Depends(requir
         return out("stale_account_changed", record)
 
     log = jobs.journal(user)
+    if log.newer_task_version(record.portfolio_id, record.task_id, confirmed.version):
+        # Another tab confirmed (and started) a newer version: this token's run
+        # is superseded and is neither presented nor re-dispatched.
+        return out("superseded", record)
     try:
         run = log.get(str(confirmed.run_id))
     except APIError as exc:

@@ -174,6 +174,8 @@ BEGIN
     OR new_doc->'snapshot' IS DISTINCT FROM old_doc->'snapshot'
     OR new_doc->'portfolio_revision' IS DISTINCT FROM old_doc->'portfolio_revision'
     OR new_doc->'expires_at' IS DISTINCT FROM old_doc->'expires_at'
+    OR new_doc->'task_id' IS DISTINCT FROM old_doc->'task_id'
+    OR new_doc->'task_version' IS DISTINCT FROM old_doc->'task_version'
     THEN RETURN; END IF;
   IF old_row.state NOT IN ('queued', 'running', 'interrupted') THEN RETURN; END IF;
   old_lease := (old_doc->>'lease_until')::timestamptz;
