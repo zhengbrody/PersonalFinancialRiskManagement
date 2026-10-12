@@ -119,3 +119,28 @@ test.describe("real auth smoke (live Supabase + backend)", () => {
     await expect(scoreTile).toHaveText(/^\d{1,4}$/, { timeout: 60_000 });
   });
 });
+
+test.describe("real saved-plan history (live Supabase + backend)", () => {
+  test.skip(
+    !EMAIL || !PASSWORD,
+    "Set E2E_REAL_EMAIL + E2E_REAL_PASSWORD and run with playwright.real.config.ts to enable.",
+  );
+
+  test("Copilot lists saved plans from the account itself, with no client storage", async ({ page }) => {
+    // Enabled 2026-10-12 (backend MINDMARKET_PLAN_HISTORY_ENABLED + build-time
+    // NEXT_PUBLIC_PLAN_HISTORY_ENABLED). The card reads signed evidence through
+    // the caller's JWT; a disabled backend, a missing migration or broken RLS
+    // surfaces here as an error instead of the list or the honest empty state.
+    test.setTimeout(90_000);
+    await login(page);
+    await page.goto("/copilot");
+    const card = page.getByRole("group", { name: "Saved plans" }).or(page.locator('details[aria-label="Saved plans"]'));
+    await expect(card.first()).toBeVisible({ timeout: 30_000 });
+    await card.first().locator("summary").click();
+    await page.getByRole("button", { name: /Load saved plans|Reload saved plans/ }).click();
+    await expect(
+      page.getByText("No verified saved plans for this portfolio.").or(page.getByText(/signature verified/).first()),
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/Saved-plan history is not enabled|storage is unavailable/)).toHaveCount(0);
+  });
+});
