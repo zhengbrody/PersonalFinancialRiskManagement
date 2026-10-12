@@ -531,3 +531,30 @@ def test_start_never_reports_queued_when_nothing_will_run_it(start_api, monkeypa
     assert response.status_code == 200 and response.json()["data"]["state"] == "queued"
     assert submitted == [new_id]
     assert sum(1 for r in log.store.rows if r == new_id) == 1
+
+
+def test_concurrent_duplicate_of_the_same_run_is_idempotent_not_a_second_job(
+    start_api, monkeypatch
+):
+    """Two instances receive the SAME request: ours looks it up (404), then the
+    other instance reserves that id before our active-job pre-check runs. That
+    record is this request, not another active job: answer 200 with it."""
+    log, existing, dispatcher, post = start_api
+    log.cancel(existing)  # the owner has no other active job
+    snapshot = log.read(existing)[1].snapshot
+    new_id = str(uuid4())
+    original_get, raced = log.get, []
+
+    def racing_get(id):
+        if id == new_id and not raced:
+            raced.append(id)
+            log.reserve(new_id, task(), snapshot, uuid4())  # the other instance wins
+            raise APIError(404, "run_not_found", "Run not found.")
+        return original_get(id)
+
+    monkeypatch.setattr(log, "get", racing_get)
+    monkeypatch.setattr(dispatcher, "submit", lambda user, id: True)
+    response = post(new_id)
+    assert raced == [new_id]
+    assert response.status_code == 200, response.json()
+    assert response.json()["data"]["id"] == new_id

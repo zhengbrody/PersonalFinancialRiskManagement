@@ -41,22 +41,26 @@ def bind_loopback():
             self.sock.settimeout(30)
             self.sock.connect(host[7:])
 
-    def api(method, path, payload=None):
+    def raw(method, path, body=None, content_type="application/json"):
         connection = DockerConnection("localhost", timeout=30)
         try:
-            connection.request(
-                method,
-                "/v1.45" + path,
-                json.dumps(payload) if payload is not None else None,
-                {"Content-Type": "application/json"},
-            )
+            connection.request(method, "/v1.45" + path, body, {"Content-Type": content_type})
             response = connection.getresponse()
             data = response.read()
             if response.status >= 300:
                 raise RuntimeError(f"Local Docker operation failed ({response.status})")
-            return json.loads(data) if data else None
+            return data
         finally:
             connection.close()
+
+    def api(method, path, payload=None):
+        data = raw(method, path, json.dumps(payload) if payload is not None else None)
+        return json.loads(data) if data else None
+
+    # Files the CLI writes into a container after creating it (newer CLIs put
+    # Kong's self-signed TLS pair here). A recreated container would lose them
+    # and crash-loop, so carry them across as a tar archive.
+    carried = {"kong": ("/home/kong", "/home")}
 
     # The CLI currently publishes on all interfaces, even with a bridge default
     # bind address. Recreate only these two owned containers with the same
@@ -82,9 +86,19 @@ def bind_loopback():
             "HostConfig": host_config,
             "NetworkingConfig": {"EndpointsConfig": networks},
         }
+        archive = None
+        if kind in carried:
+            archive = raw("GET", f"/containers/{name}/archive?path={carried[kind][0]}")
         api("POST", f"/containers/{name}/stop?t=15")
         api("DELETE", f"/containers/{name}?v=false")
         api("POST", f"/containers/create?name={name}", payload)
+        if archive is not None:
+            raw(
+                "PUT",
+                f"/containers/{name}/archive?path={carried[kind][1]}",
+                archive,
+                "application/x-tar",
+            )
         api("POST", f"/containers/{name}/start")
 
 

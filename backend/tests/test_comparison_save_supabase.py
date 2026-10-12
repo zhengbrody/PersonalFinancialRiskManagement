@@ -111,6 +111,7 @@ def stack(tmp_path_factory):
         "0017_copilot_job_recovery.sql",
         "0018_put_plan_confirmations.sql",
         "0019_funding_plan_confirmations.sql",
+        "0020_copilot_job_integrity.sql",
     ):
         sql((migrations / name).read_text())
     sql("notify pgrst, 'reload schema';")
@@ -772,13 +773,13 @@ def test_two_instances_claim_once_under_repeated_concurrent_submission(stack, ac
 
 
 def test_two_instance_burst_drains_durable_jobs_beyond_memory_capacity(stack, account):
+    """One owner may hold one active job (0020 + dispatcher fairness); twelve
+    owners bursting across two instances must still all drain from durable
+    storage even though only four dispatches fit in memory per process."""
     from concurrent.futures import ThreadPoolExecutor
 
-    owner = account()
-    captures = stack.control / "captures"
-    initial = len(captures.read_text().splitlines()) if captures.exists() else 0
-    bodies = [
-        {
+    def body_for(owner):
+        return {
             "id": str(uuid4()),
             "task": {
                 "expected_portfolio_id": owner.row["id"],
@@ -787,8 +788,11 @@ def test_two_instance_burst_drains_durable_jobs_beyond_memory_capacity(stack, ac
                 "confirmed": True,
             },
         }
-        for _ in range(12)
-    ]
+
+    captures = stack.control / "captures"
+    initial = len(captures.read_text().splitlines()) if captures.exists() else 0
+    owners = [account() for _ in range(12)]
+    bodies = [body_for(owner) for owner in owners]
     with stack.peer() as peer:
         endpoints = [base + "/api/v1/copilot/decision-runs" for base in (stack.base, peer)]
         (stack.control / "hold").touch()
@@ -797,45 +801,62 @@ def test_two_instance_burst_drains_durable_jobs_beyond_memory_capacity(stack, ac
                 responses = list(
                     pool.map(
                         lambda i: requests.post(
-                            endpoints[i % 2], headers=owner.headers, json=bodies[i], timeout=30
+                            endpoints[i % 2], headers=owners[i].headers, json=bodies[i], timeout=30
                         ),
                         range(12),
                     )
                 )
-            assert all(r.status_code == 200 for r in responses), [r.status_code for r in responses]
-            listing = requests.get(
-                endpoints[0],
-                headers=owner.headers,
-                params={"expected_portfolio_id": owner.row["id"]},
-                timeout=15,
-            ).json()["data"]["runs"]
-            assert {r["id"] for r in listing} == {b["id"] for b in bodies}
-            assert all(r["state"] in ("queued", "running") for r in listing)
-            assert sum(r["state"] == "queued" for r in listing) >= 10
+            # Each owner's single job is durably reserved; a refusal from a full
+            # in-memory queue must say the record WAS saved, never "queued and running".
+            for response in responses:
+                if response.status_code != 200:
+                    error = response.json()["error"]
+                    assert response.status_code == 429, response.status_code
+                    assert error["code"] == "analysis_queue_full"
+                    assert error["details"] == {"saved": True}
+            # A second, different job for an owner who already has one is refused
+            # by the database-enforced limit, and nothing is written for it.
+            extra = body_for(owners[0])
+            refused = requests.post(endpoints[1], headers=owners[0].headers, json=extra, timeout=15)
+            assert refused.status_code == 429
+            assert refused.json()["error"]["code"] == "too_many_active_runs"
         finally:
             (stack.control / "hold").unlink(missing_ok=True)
-        deadline = time.monotonic() + 60
+        # Recovery (as each owner, with their own login) drains everything that
+        # did not fit in memory; nothing is lost and nothing runs twice.
+        deadline = time.monotonic() + 90
+        states = {}
         while time.monotonic() < deadline:
-            listing = requests.get(
-                endpoints[0],
-                headers=owner.headers,
-                params={"expected_portfolio_id": owner.row["id"]},
-                timeout=15,
-            ).json()["data"]["runs"]
-            if all(r["state"] == "completed" for r in listing):
+            for i, owner in enumerate(owners):
+                query = {"expected_portfolio_id": owner.row["id"]}
+                requests.post(
+                    endpoints[i % 2] + "/recover", headers=owner.headers, json=query, timeout=15
+                )
+                states[i] = requests.get(
+                    endpoints[0] + "/" + bodies[i]["id"], headers=owner.headers, timeout=15
+                ).json()["data"]
+            if all(s["state"] == "completed" for s in states.values()):
                 break
-            assert all(r["state"] in ("queued", "running", "completed") for r in listing)
             time.sleep(0.5)
-        assert len(listing) == 12 and all(r["state"] == "completed" for r in listing)
-        assert all(r["attempts"] == 1 for r in listing)
-        assert len({r["result"]["snapshot_id"] for r in listing}) == 12
+        assert all(
+            s["state"] == "completed" and s["attempts"] == 1 for s in states.values()
+        ), states
+        listing = requests.get(
+            endpoints[0],
+            headers=owners[0].headers,
+            params={"expected_portfolio_id": owners[0].row["id"]},
+            timeout=15,
+        ).json()["data"]["runs"]
+        assert extra["id"] not in {r["id"] for r in listing}
+        runs = list(states.values())
+        assert len({r["result"]["snapshot_id"] for r in runs}) == 12
         assert len(captures.read_text().splitlines()) == initial + 12
         durations = [
             (
                 datetime.fromisoformat(run["updated_at"].replace("Z", "+00:00"))
                 - datetime.fromisoformat(run["created_at"].replace("Z", "+00:00"))
             ).total_seconds()
-            for run in listing
+            for run in runs
         ]
         assert len(durations) == 12 and all(value >= 0 for value in durations)
         summary = {
@@ -926,7 +947,17 @@ def test_real_combined_funding_capture_confirm_read_and_review(stack, account):
     assert result["receipt"]["save_available"]
     assert result["broker_buying_power"] is None
     account_risk = result["account_risk"]
-    assert account_risk["assumptions"] == payload["risk"]
+    echoed = account_risk["assumptions"]
+    # Every field we sent is echoed unchanged; fields added later echo their
+    # conservative defaults (no objective, no ranking consent, unknown broker rules).
+    for key, value in payload["risk"].items():
+        if key == "scenarios":
+            assert [{k: s[k] for k in ("label", "prices")} for s in echoed[key]] == value
+            assert all(s.get("settlement_prices") == {} for s in echoed[key])
+        else:
+            assert echoed[key] == value, key
+    assert echoed["objective"] is None and echoed["objective_confirmed"] is False
+    assert echoed["broker_rules_provider"] == "unknown"
     assert account_risk["portfolio_id"] == book
     assert account_risk["source_result_id"] == candidate["result_id"]
     risk_baseline, risk_keep, risk_repay = account_risk["scenarios"][0]["outcomes"]

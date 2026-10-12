@@ -80,7 +80,10 @@ def start(body: StartCandidateRun, request: Request, user: AuthedUser = Depends(
             raise APIError(409, "portfolio_changed", "Select the requested portfolio.")
         # Cheap refusals before anything is written: one active job per owner,
         # and no reservation the dispatcher could not start right now.
-        if log.active_count() >= jobs.MAX_ACTIVE_PER_USER:
+        # Exclude this id: a concurrent duplicate of the SAME request (another
+        # instance may have reserved it after our lookup) is idempotent, not a
+        # second active job.
+        if log.active_count(exclude=id) >= jobs.MAX_ACTIVE_PER_USER:
             raise jobs.too_many_active()
         if not _dispatcher(request).has_capacity(user):
             raise jobs.queue_full(saved=False)
