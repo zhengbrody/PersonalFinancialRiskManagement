@@ -1,4 +1,5 @@
 import { copilotResearchSchema } from "./copilot-research";
+import { taskStateEnvelopeSchema } from "./copilot-task-state";
 /**
  * Typed React Query hooks for backend endpoints.
  *
@@ -1369,6 +1370,7 @@ export const copilotAnswerSchema = z.looseObject({
   disclaimer: z.string().nullish(),
   decision_support: decisionSupportSchema.nullish(),
   research_context: z.array(copilotResearchSchema).max(3).optional(),
+  task_state: taskStateEnvelopeSchema.nullish(),
 });
 export type CopilotAnswer = z.infer<typeof copilotAnswerSchema>;
 

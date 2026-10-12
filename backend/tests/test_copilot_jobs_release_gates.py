@@ -63,6 +63,24 @@ ROUTES = [
     ),
     ("GET", f"/api/v1/copilot/funding-plans/{RID}?expected_portfolio_id={BOOK}", None),
     ("POST", f"/api/v1/copilot/funding-plans/{RID}/review", {"expected_portfolio_id": BOOK}),
+    (
+        "POST",
+        "/api/v1/copilot/task-state/confirm",
+        {
+            "task_state": {"record": "{}", "signature": "a" * 64},
+            "expected_portfolio_id": BOOK,
+            "goal": "increase_cash",
+            "amount": 500.0,
+            "protected_holdings": [],
+            "run_id": RID,
+            "confirmed": True,
+        },
+    ),
+    (
+        "POST",
+        "/api/v1/copilot/task-state/resume",
+        {"task_state": {"record": "{}", "signature": "a" * 64}, "expected_portfolio_id": BOOK},
+    ),
 ]
 
 

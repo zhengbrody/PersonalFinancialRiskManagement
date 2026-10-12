@@ -2724,6 +2724,117 @@
         "title": "ConfirmPutPlan",
         "type": "object"
       },
+      "ConfirmTaskParameters": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 100000000.0,
+            "title": "Amount",
+            "type": "number"
+          },
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          },
+          "goal": {
+            "enum": [
+              "increase_cash",
+              "reduce_margin"
+            ],
+            "title": "Goal",
+            "type": "string"
+          },
+          "protected_holdings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Protected Holdings",
+            "type": "array"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "task_state": {
+            "$ref": "#/components/schemas/TaskStateToken"
+          }
+        },
+        "required": [
+          "task_state",
+          "expected_portfolio_id",
+          "goal",
+          "amount",
+          "run_id",
+          "confirmed"
+        ],
+        "title": "ConfirmTaskParameters",
+        "type": "object"
+      },
+      "ConfirmedParameters": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 100000000.0,
+            "title": "Amount",
+            "type": "number"
+          },
+          "confirmed_at": {
+            "format": "date-time",
+            "title": "Confirmed At",
+            "type": "string"
+          },
+          "goal": {
+            "enum": [
+              "increase_cash",
+              "reduce_margin"
+            ],
+            "title": "Goal",
+            "type": "string"
+          },
+          "protected_holdings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Protected Holdings",
+            "type": "array"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "version": {
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "goal",
+          "amount",
+          "confirmed_at",
+          "run_id"
+        ],
+        "title": "ConfirmedParameters",
+        "type": "object"
+      },
       "CopilotAnswer": {
         "properties": {
           "answer_markdown": {
@@ -2817,6 +2928,16 @@
             "title": "Sections",
             "type": "array"
           },
+          "task_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskStateEnvelope"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "tickers": {
             "items": {
               "type": "string"
@@ -2901,6 +3022,16 @@
               }
             ],
             "title": "Route"
+          },
+          "task_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskStateToken"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "ticker": {
             "anyOf": [
@@ -6373,6 +6504,72 @@
           "meta"
         ],
         "title": "Envelope[SmartMoneyOut]",
+        "type": "object"
+      },
+      "Envelope_TaskResumeOut_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskResumeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[TaskResumeOut]",
+        "type": "object"
+      },
+      "Envelope_TaskStateEnvelope_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskStateEnvelope"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[TaskStateEnvelope]",
         "type": "object"
       },
       "Envelope_TickerNewsResponse_": {
@@ -14044,6 +14241,25 @@
         "title": "ResearchVerdict",
         "type": "object"
       },
+      "ResumeTask": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          },
+          "task_state": {
+            "$ref": "#/components/schemas/TaskStateToken"
+          }
+        },
+        "required": [
+          "task_state",
+          "expected_portfolio_id"
+        ],
+        "title": "ResumeTask",
+        "type": "object"
+      },
       "ReviewFundingPlanRequest": {
         "additionalProperties": false,
         "properties": {
@@ -17646,6 +17862,29 @@
         "title": "ShareCardResolveOut",
         "type": "object"
       },
+      "SignedTaskToken": {
+        "additionalProperties": false,
+        "description": "Same wire shape as copilot_task_state.TaskStateToken (kept here to avoid\nan import cycle); verified server-side before use.",
+        "properties": {
+          "record": {
+            "maxLength": 8192,
+            "minLength": 2,
+            "title": "Record",
+            "type": "string"
+          },
+          "signature": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Signature",
+            "type": "string"
+          }
+        },
+        "required": [
+          "record",
+          "signature"
+        ],
+        "title": "SignedTaskToken",
+        "type": "object"
+      },
       "SimulateHolding": {
         "description": "One row of the proposed (hypothetical) book, for the Simulate button.",
         "properties": {
@@ -17964,6 +18203,16 @@
           },
           "task": {
             "$ref": "#/components/schemas/CandidateRequest"
+          },
+          "task_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SignedTaskToken"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -18157,6 +18406,331 @@
           "next_step"
         ],
         "title": "SuggestedAction",
+        "type": "object"
+      },
+      "TaskAssumptions": {
+        "additionalProperties": false,
+        "description": "What the user said. ``None`` = not stated; ``[]`` = stated 'none'.",
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100000000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "goal": {
+            "anyOf": [
+              {
+                "enum": [
+                  "increase_cash",
+                  "reduce_margin"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal"
+          },
+          "protected_holdings": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protected Holdings"
+          },
+          "stated_at_turn": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "enum": [
+                "goal",
+                "amount",
+                "protected_holdings"
+              ]
+            },
+            "title": "Stated At Turn",
+            "type": "object"
+          }
+        },
+        "title": "TaskAssumptions",
+        "type": "object"
+      },
+      "TaskResumeOut": {
+        "additionalProperties": false,
+        "properties": {
+          "dispatched": {
+            "default": false,
+            "title": "Dispatched",
+            "type": "boolean"
+          },
+          "outcome": {
+            "enum": [
+              "needs_input",
+              "ready_to_confirm",
+              "continuing",
+              "completed",
+              "stale_account_changed",
+              "run_missing",
+              "run_failed",
+              "expired",
+              "closed"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateRunOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/TaskStateView"
+          },
+          "token": {
+            "$ref": "#/components/schemas/TaskStateToken"
+          }
+        },
+        "required": [
+          "outcome",
+          "state",
+          "token"
+        ],
+        "title": "TaskResumeOut",
+        "type": "object"
+      },
+      "TaskStateEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "enum": [
+              "started",
+              "continued",
+              "ambiguous",
+              "unrelated",
+              "turn_limit",
+              "closed",
+              "expired",
+              "discarded"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskStateView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "token": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskStateToken"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "TaskStateEnvelope",
+        "type": "object"
+      },
+      "TaskStateToken": {
+        "additionalProperties": false,
+        "description": "Opaque to the client: echoed back verbatim; only the server can mint it.",
+        "properties": {
+          "record": {
+            "maxLength": 8192,
+            "minLength": 2,
+            "title": "Record",
+            "type": "string"
+          },
+          "signature": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Signature",
+            "type": "string"
+          }
+        },
+        "required": [
+          "record",
+          "signature"
+        ],
+        "title": "TaskStateToken",
+        "type": "object"
+      },
+      "TaskStateView": {
+        "additionalProperties": false,
+        "properties": {
+          "ambiguities": {
+            "items": {
+              "enum": [
+                "amount_multiple",
+                "amount_percent",
+                "amount_unanchored",
+                "amount_out_of_range",
+                "goal_conflict",
+                "goal_unsupported",
+                "goal_negated",
+                "protected_without_ticker",
+                "ticker_without_instruction"
+              ],
+              "type": "string"
+            },
+            "title": "Ambiguities",
+            "type": "array"
+          },
+          "assumptions": {
+            "$ref": "#/components/schemas/TaskAssumptions"
+          },
+          "clarification_turns": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Clarification Turns",
+            "type": "integer"
+          },
+          "confirmed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfirmedParameters"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "candidate_request",
+              "clarification"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "max_clarification_turns": {
+            "minimum": 1.0,
+            "title": "Max Clarification Turns",
+            "type": "integer"
+          },
+          "missing_inputs": {
+            "items": {
+              "enum": [
+                "goal",
+                "amount",
+                "protected_holdings"
+              ],
+              "type": "string"
+            },
+            "title": "Missing Inputs",
+            "type": "array"
+          },
+          "pending_question": {
+            "anyOf": [
+              {
+                "enum": [
+                  "goal",
+                  "amount",
+                  "protected_holdings"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Question"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "needs_input",
+              "ready_to_confirm",
+              "confirmed",
+              "closed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "superseded_run_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Superseded Run Ids",
+            "type": "array"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "task_id",
+          "portfolio_id",
+          "kind",
+          "status",
+          "max_clarification_turns",
+          "created_at",
+          "updated_at",
+          "expires_at"
+        ],
+        "title": "TaskStateView",
         "type": "object"
       },
       "TickerNewsResponse": {
@@ -20478,6 +21052,90 @@
           }
         },
         "summary": "Cancel Run",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/task-state/confirm": {
+      "post": {
+        "description": "The ONLY way a parameter becomes confirmed: an explicit typed submission.",
+        "operationId": "confirm_api_v1_copilot_task_state_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmTaskParameters"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_TaskStateEnvelope_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/task-state/resume": {
+      "post": {
+        "description": "Re-authenticate, re-bind and either continue from the durable confirmed\nrun or report that the account changed (old result stale).",
+        "operationId": "resume_api_v1_copilot_task_state_resume_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeTask"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_TaskResumeOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume",
         "tags": [
           "copilot"
         ]

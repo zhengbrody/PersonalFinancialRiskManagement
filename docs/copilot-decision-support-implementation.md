@@ -442,3 +442,106 @@ Release compatibility boundaries:
 The local B acceptance now covers lost queue, active-process crash/expiry,
 multiple-instance claim contention and durable queue overflow. Sustained load,
 release-pair deployment acceptance and the full C/E financing scenario remain open.
+
+## 2026-10-11 — A/B: multi-turn task state, clarification and recovery
+
+### Audit (state before this change, base `91b35f0`)
+
+- **Classification is per message and stateless.** `decision_support.classify_task`
+  (`backend/app/services/decision_support.py:66-105`) maps ONE message to
+  `explanation / clarification / specified_comparison / candidate_request` and a
+  fixed `missing_inputs` list (`:56-63`: goal/budget/protected_holdings, Put
+  terms, broker rules, APR). `describe_task` (`:108-198`) turns that into prose.
+- **What it asks for** is prose only; no value from the message was ever kept.
+  `DecisionTask.confirmed_constraints` (`schemas/decision_support.py:15-16`) existed
+  but nothing populated it.
+- **Where clarification answers were kept: nowhere.** `copilot_router.answer`
+  (`services/copilot_router.py:1749-1810`) handled each `/ask` independently;
+  `CopilotAskRequest` (`schemas/copilot2.py:97-106`) had no task context; the
+  endpoint cache key (`api/v1/copilot.py:207-212`) was message-only. A follow-up
+  ("keep NVDA") was routed as a brand-new question and usually fell through to
+  the generic router — the same window did NOT continue the task.
+- **Typed constraints lived only in browser memory.** `CopilotCandidates`
+  (`frontend/src/components/copilot-candidates.tsx:16-19`) held goal/amount/
+  protected in React state (lost on reload); only the run id was persisted
+  (`:26-31`). The form was re-rendered under every qualifying turn.
+- **Confirmed parameters = the run record.** `/decision-runs` start
+  (`api/v1/copilot_jobs.py:63-102`) required `task.confirmed` (StrictBool) and
+  stored the immutable `CandidateRequest` in the signed v2 record
+  (`schemas/copilot_jobs.py:62-68`); a different task under the same id → 409
+  (`services/copilot_jobs.py:245`). There was no version concept across edits.
+- **Account data** is captured server-side at reservation (`RunSnapshot`,
+  `api/v1/copilot_jobs.py:85-95`) and the worker re-checks the portfolio revision
+  before and after computing (`services/copilot_jobs.py:396-445`).
+- **Background execution** already ran on a daemon worker thread
+  (`Dispatcher.submit`, `services/copilot_jobs.py:535-554`), but no test proved
+  the HTTP response precedes the computation (existing tests mocked `submit`).
+
+### Implemented
+
+Typed task state (`schemas/copilot_task_state.py`, `services/copilot_task_state.py`)
+with three strictly separate parts:
+
+| Part | Source | Trust |
+| --- | --- | --- |
+| `assumptions` (goal, amount, protected_holdings + turn stated) | parsed from the user's own chat message by fixed rules | prefill only; never a parameter, never consent |
+| `confirmed` (version, goal, amount, protected, run_id, stale) | `POST /copilot/task-state/confirm` from the typed form with `confirmed: true` | versioned; new parameters → version+1, previous run superseded |
+| account data | `RunSnapshot` captured server-side from the authenticated active portfolio | unchanged; never from client text |
+
+Storage: no new table. The record is an HMAC-signed token (existing
+`signed_plan_records`, domain `copilot-task`, purpose `state`, same root secret,
+8 KB cap) held in the client's user+portfolio session partition and echoed back.
+The server verifies signature, owner, portfolio and expiry on every use; a bad,
+foreign-user or other-portfolio token on `/ask` is *discarded* (never blocks the
+question). Durable confirmed inputs remain the v2 run record in `copilot_runs`.
+
+Follow-up decision (deterministic; no LLM): `follow_up()` →
+`continued` (≥1 slot parsed unambiguously; merged as assumption) · `ambiguous`
+(percent, multiple amounts, bare number when amount wasn't asked, cash+margin,
+buying power, negation, keep-without-ticker, ticker-without-keep → asks a fixed
+question, changes nothing) · `unrelated` (no slot, or a different task kind such
+as an explanation / Put / Test a change → normal router, task kept) ·
+`turn_limit` (max 3 chat clarifications, then the form) · `closed` (cancel) ·
+`expired` (30 min idle, 2 h cap; confirmed tasks live 1 day like their run).
+Amounts require an explicit currency anchor unless the pending question is the
+amount AND the message is only a number. Confirmed parameters are never changed
+by chat. Research/news text never reaches the extractor (only `body.message`).
+Follow-up replies are deterministic and echo no user figure in prose; the typed
+panel shows assumptions labelled "not confirmed".
+
+Start binding: `StartCandidateRun.task_state` (optional, additive). When given,
+the run id and parameters must equal the current, non-stale confirmed version
+(`task_state_mismatch` otherwise, nothing reserved).
+
+Recovery: `POST /copilot/task-state/resume` requires the current JWT, re-verifies
+the token and that its portfolio is the active one, then reads the run via the
+caller-scoped journal (RLS, no service role, no persisted JWT) and compares the
+current portfolio revision with the run's captured revision. Changed → marks the
+version stale, returns `stale_account_changed`, dispatches nothing; a stale
+version can only be replaced by an explicit re-confirm (version+1, new run id).
+Same → `completed` / `run_failed` / `continuing` (interrupted/queued runs go
+through the existing `JobJournal.resume` + dispatcher with its per-owner limit,
+queue bound, lease and five-minute execution budget). Missing run →
+`run_missing` with confirmed inputs kept.
+
+Frontend: one typed form per open task, at the latest turn holding it, inside the
+existing conversation and single input. Two panels: "You said · not confirmed"
+(dashed) and "Confirmed parameters · version n" (accent), plus stale/superseded
+notices and the clarification counter. Unconfirmed form edits are kept in session
+storage per task; reload restores the thread, the task and the draft. Calculate
+confirms server-side first, then starts exactly that version; "Resume task with
+current login" calls resume. The e2e run found a real defect (a confirmed-version
+prop update aborted the in-flight start); fixed and pinned by a unit regression.
+
+### Limits
+
+- Continuity covers the reduction-candidate task (goal/amount/protected). Put,
+  financing-rule and APR clarifications remain single-turn prose.
+- The token is client-held: losing session storage (new tab/device) loses the
+  open task; durable runs remain listable via the existing recovery panel.
+- Assumption parsing is lexical (EN/ZH patterns, uppercase tickers); lowercase
+  tickers in chat are not recognised (ask → form).
+- Changing `schemas/copilot_jobs.py` changes the job execution fingerprint, so
+  queued pre-upgrade jobs fail with `execution_version_changed` after deploy (the
+  existing, documented behaviour).
+- Flags unchanged (decision support + async remain default off); no migration.

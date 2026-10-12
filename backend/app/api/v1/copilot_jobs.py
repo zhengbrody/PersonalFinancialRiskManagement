@@ -66,6 +66,8 @@ def start(body: StartCandidateRun, request: Request, user: AuthedUser = Depends(
         raise APIError(
             422, "constraints_unconfirmed", "Confirm your constraints before calculating."
         )
+    if body.task_state is not None:
+        _bind_confirmed_task(body, user)
     log = jobs.journal(user)
     id = str(body.id)
     try:
@@ -100,6 +102,31 @@ def start(body: StartCandidateRun, request: Request, user: AuthedUser = Depends(
         # retry of this same id (idempotent) or an explicit recovery.
         raise jobs.queue_full(saved=True)
     return ok(record.public().model_dump(mode="json"), request=request)
+
+
+def _bind_confirmed_task(body, user):
+    from ...schemas.copilot_task_state import TaskStateToken
+    from ...services import copilot_runs
+    from ...services import copilot_task_state as tasks
+
+    record = tasks.verify(TaskStateToken.model_validate(body.task_state.model_dump()), user.id)
+    confirmed = record.confirmed
+    if (
+        confirmed is None
+        or confirmed.stale
+        or record.status == "closed"
+        or tasks.is_expired(record, copilot_runs.utcnow())
+        or str(record.portfolio_id) != str(body.task.expected_portfolio_id)
+        or confirmed.run_id != body.id
+        or confirmed.goal != body.task.goal
+        or confirmed.amount != body.task.amount
+        or sorted(confirmed.protected_holdings) != sorted(body.task.protected_holdings)
+    ):
+        raise APIError(
+            409,
+            "task_state_mismatch",
+            "This calculation does not match the confirmed version of the task.",
+        )
 
 
 @router.get("/{id}", response_model=Envelope[CandidateRunOut])

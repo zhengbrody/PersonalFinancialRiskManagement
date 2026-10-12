@@ -6,65 +6,151 @@ import { CopilotFunding } from "./copilot-funding";
 import { CopilotChangeResult } from "./copilot-change";
 import { apiFetch } from "@/lib/api";
 import { candidateRunSchema, type CandidateRun } from "@/lib/copilot-candidates";
+import { taskResumeSchema, taskStateEnvelopeSchema, type TaskResume, type TaskStateEnvelope } from "@/lib/copilot-task-state";
 import { savedComparisonSchema, type ChangeComparison, type SavedComparison } from "@/lib/copilot-compare";
 import { classifySaveFailure, COMPARISON_MISSING_CODE, COMPARISON_SETTLED_CODES } from "@/lib/copilot-save-outcome";
 
+type Goal = "increase_cash" | "reduce_margin";
+const GOAL_LABEL: Record<Goal, string> = { increase_cash: "Increase account cash", reduce_margin: "Reduce margin debt" };
+type Draft = { goal: Goal; amount: string; protectedNames: string };
+
+function readDraft(key: string): Draft | null {
+  try { const raw = sessionStorage.getItem(key); return raw ? JSON.parse(raw) as Draft : null; } catch { return null; }
+}
+
+/** Initial form values: what the user typed in this form (unconfirmed draft),
+ *  else the current confirmed version, else what they said in chat. */
+function initialDraft(key: string, task?: TaskStateEnvelope | null): Draft {
+  const stored = readDraft(key);
+  if (stored) return stored;
+  const confirmed = task?.state?.confirmed;
+  if (confirmed && !confirmed.stale) return { goal: confirmed.goal, amount: String(confirmed.amount), protectedNames: confirmed.protected_holdings.join(", ") };
+  const said = task?.state?.assumptions;
+  return {
+    goal: said?.goal ?? (confirmed?.goal ?? "increase_cash"),
+    amount: said?.amount != null ? String(said.amount) : confirmed ? String(confirmed.amount) : "",
+    protectedNames: (said?.protected_holdings ?? confirmed?.protected_holdings ?? []).join(", "),
+  };
+}
+
 /** A confirmed task inside the original conversation, never a second chat input. */
-export function CopilotCandidates({ token, portfolioId, scope, fundingEnabled = false }: {
+export function CopilotCandidates({ token, portfolioId, scope, fundingEnabled = false, task, onTask }: {
   token: string | null; portfolioId: string; scope: string; fundingEnabled?: boolean;
+  task?: TaskStateEnvelope | null; onTask?: (task: TaskStateEnvelope) => void;
 }) {
-  const [goal, setGoal] = useState<"increase_cash" | "reduce_margin">("increase_cash");
-  const [amount, setAmount] = useState("");
-  const [protectedNames, setProtectedNames] = useState("");
+  const state = task?.state ?? null;
+  const taskKey = state ? `${scope}:task:${state.task_id}` : scope;
+  const storageKey = `${taskKey}:candidate-run`;
+  const draftKey = `${taskKey}:candidate-draft`;
+  const [draft, setDraftState] = useState<Draft>(() => initialDraft(draftKey, task));
+  const { goal, amount, protectedNames } = draft;
   const [confirmed, setConfirmed] = useState(false);
   const [run, setRun] = useState<CandidateRun | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
   const amountInput = useRef<HTMLInputElement | null>(null);
-  const storageKey = `${scope}:candidate-run`;
   const base = "/api/v1/copilot/decision-runs";
+  const assumptionKey = JSON.stringify(state?.assumptions ?? null);
   useEffect(() => {
-    try { setRunId(sessionStorage.getItem(storageKey)); } catch { /* storage optional */ }
-    return () => controller.current?.abort();
-  }, [storageKey]);
+    try {
+      const stored = sessionStorage.getItem(storageKey);
+      const current = state?.confirmed?.run_id ?? null;
+      // A run superseded by a newer confirmed version is never shown as current.
+      setRunId(state ? current : stored);
+    } catch { /* storage optional */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey, state?.confirmed?.run_id]);
+  // Abort only on unmount: a confirmed-version change mid-request (our own
+  // confirmation) must not cancel the start it is about to issue.
+  useEffect(() => () => controller.current?.abort(), []);
+  useEffect(() => {
+    // New chat assumptions prefill the form only while the user hasn't typed here.
+    if (state && !readDraft(draftKey)) setDraftState(initialDraft(draftKey, task));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assumptionKey, draftKey]);
 
-  async function execute(operation: "start" | "read" | "resume" | "cancel") {
+  function edit(next: Partial<Draft>) {
+    const value = { ...draft, ...next };
+    setDraftState(value); setConfirmed(false); setRun(null);
+    try { sessionStorage.setItem(draftKey, JSON.stringify(value)); } catch { /* optional */ }
+  }
+  const protectedList = protectedNames.split(/[,\s]+/).filter(Boolean).map(t => t.toUpperCase());
+  const current = state?.confirmed ?? null;
+  const editedSinceConfirm = !!current && (current.goal !== goal || current.amount !== Number(amount) ||
+    [...current.protected_holdings].sort().join() !== [...protectedList].sort().join());
+
+  async function poll(id: string, abort: AbortController, first: CandidateRun) {
+    const accept = (value: CandidateRun) => {
+      if (value.id !== id || value.portfolio_id !== portfolioId) throw new Error("Analysis does not match this portfolio.");
+      if (!abort.signal.aborted) setRun(value);
+    };
+    accept(first);
+    let runState = first.state;
+    while (runState === "running" || runState === "queued") {
+      await new Promise<void>((resolve, reject) => {
+        const finish = () => { abort.signal.removeEventListener("abort", stop); resolve(); };
+        const timer = setTimeout(finish, 2500);
+        const stop = () => { clearTimeout(timer); reject(new Error("Stopped waiting")); };
+        abort.signal.addEventListener("abort", stop, { once: true });
+        if (abort.signal.aborted) stop();
+      });
+      const latest = await apiFetch<CandidateRun>(`${base}/${id}`, { authToken: token ?? undefined, signal: abort.signal, schema: candidateRunSchema });
+      accept(latest); runState = latest.state;
+    }
+  }
+
+  async function execute(operation: "start" | "read" | "resume" | "cancel" | "task-resume") {
     if (busy) return;
-    const id = operation === "start" ? crypto.randomUUID() : runId;
-    if (!id) return;
     const abort = new AbortController();
     controller.current?.abort(); controller.current = abort;
-    setBusy(true); setError(null); setRunId(id);
-    try { sessionStorage.setItem(storageKey, id); } catch { /* server record still accessible */ }
+    setBusy(true); setError(null); setNotice(null);
     const timeout = setTimeout(() => abort.abort(), 125000);
     try {
+      if (operation === "task-resume" && task?.token) {
+        // Re-authenticates with the CURRENT login and re-checks the account revision.
+        const resumed = await apiFetch<TaskResume>("/api/v1/copilot/task-state/resume", {
+          method: "POST", authToken: token ?? undefined, signal: abort.signal, schema: taskResumeSchema,
+          body: { task_state: task.token, expected_portfolio_id: portfolioId },
+        });
+        if (resumed.state.portfolio_id !== portfolioId || resumed.state.task_id !== state?.task_id) throw new Error("Task does not match this portfolio.");
+        onTask?.({ outcome: "unrelated", state: resumed.state, token: resumed.token });
+        setNotice(RESUME_NOTICE[resumed.outcome]);
+        if (resumed.outcome === "stale_account_changed") { setRun(null); setConfirmed(false); return; }
+        if (resumed.run) { setRunId(resumed.run.id); await poll(resumed.run.id, abort, resumed.run); }
+        return;
+      }
+      let id = operation === "start" ? crypto.randomUUID() : runId;
+      if (!id) return;
+      let body: Record<string, unknown> | undefined;
+      if (operation === "start") {
+        const typed = { expected_portfolio_id: portfolioId, goal, amount: Number(amount), protected_holdings: protectedList, confirmed };
+        if (task?.token) {
+          // The typed confirmation is recorded server-side first (versioned);
+          // the calculation is then bound to exactly that version.
+          const next = await apiFetch<TaskStateEnvelope>("/api/v1/copilot/task-state/confirm", {
+            method: "POST", authToken: token ?? undefined, signal: abort.signal, schema: taskStateEnvelopeSchema,
+            body: { task_state: task.token, expected_portfolio_id: portfolioId, goal, amount: Number(amount), protected_holdings: protectedList, run_id: id, confirmed },
+          });
+          const version = next.state?.confirmed;
+          if (!version || !next.token || next.state?.portfolio_id !== portfolioId) throw new Error("Confirmation does not match this portfolio.");
+          onTask?.(next);
+          try { sessionStorage.removeItem(draftKey); } catch { /* optional */ }
+          id = version.run_id;
+          body = { id, task: { ...typed, goal: version.goal, amount: version.amount, protected_holdings: version.protected_holdings }, task_state: next.token };
+        } else {
+          body = { id, task: typed };
+        }
+      }
+      setRunId(id);
+      try { sessionStorage.setItem(storageKey, id); } catch { /* server record still accessible */ }
       const next = await apiFetch<CandidateRun>(operation === "start" ? base : `${base}/${id}${["resume", "cancel"].includes(operation) ? `/${operation}` : ""}`, {
         method: operation === "read" ? "GET" : "POST", authToken: token ?? undefined,
-        signal: abort.signal, schema: candidateRunSchema,
-        ...(operation === "start" ? { body: { id, task: {
-          expected_portfolio_id: portfolioId, goal, amount: Number(amount),
-          protected_holdings: protectedNames.split(/[,\s]+/).filter(Boolean).map(t => t.toUpperCase()), confirmed,
-        } } } : {}),
+        signal: abort.signal, schema: candidateRunSchema, ...(body ? { body } : {}),
       });
-      const accept = (value: CandidateRun) => {
-        if (value.id !== id || value.portfolio_id !== portfolioId) throw new Error("Analysis does not match this portfolio.");
-        if (!abort.signal.aborted) setRun(value);
-      };
-      accept(next);
-      let state = next.state;
-      while (state === "running" || state === "queued") {
-        await new Promise<void>((resolve, reject) => {
-          const finish = () => { abort.signal.removeEventListener("abort", stop); resolve(); };
-          const timer = setTimeout(finish, 2500);
-          const stop = () => { clearTimeout(timer); reject(new Error("Stopped waiting")); };
-          abort.signal.addEventListener("abort", stop, { once: true });
-          if (abort.signal.aborted) stop();
-        });
-        const latest = await apiFetch<CandidateRun>(`${base}/${id}`, { authToken: token ?? undefined, signal: abort.signal, schema: candidateRunSchema });
-        accept(latest); state = latest.state;
-      }
+      await poll(id, abort, next);
     } catch (e) {
       if (controller.current === abort) setError(abort.signal.aborted
         ? "Stopped waiting. Retrieve the original run to check its status; this does not cancel server computation."
@@ -72,25 +158,52 @@ export function CopilotCandidates({ token, portfolioId, scope, fundingEnabled = 
     } finally { clearTimeout(timeout); if (controller.current === abort) setBusy(false); }
   }
 
+  const said = state?.assumptions;
+  const saidAnything = !!said && (said.goal != null || said.amount != null || said.protected_holdings != null);
   return <section aria-label="Candidate comparison" className="space-y-3 rounded-xl border border-border p-4">
     <h3 className="font-semibold">Compare constrained alternatives</h3>
     <p className="text-sm text-muted-foreground">Keeping the portfolio unchanged is always an option. This compares existing holdings; it does not calculate a new put or broker buying power.</p>
+    {state && <div className="grid gap-2 text-sm sm:grid-cols-2">
+      <div aria-label="Assumptions from chat" className="rounded-lg border border-dashed border-border p-3">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">You said · not confirmed</p>
+        {saidAnything ? <ul className="mt-1 space-y-0.5">
+          {said?.goal && <li>Goal: {GOAL_LABEL[said.goal]}</li>}
+          {said?.amount != null && <li>Amount: ${said.amount.toLocaleString("en-US")}</li>}
+          {said?.protected_holdings != null && <li>Keep: {said.protected_holdings.join(", ") || "none"}</li>}
+        </ul> : <p className="mt-1 text-muted-foreground">Nothing stated yet.</p>}
+        {state.status !== "confirmed" && state.missing_inputs.length > 0 && <p className="mt-1 text-muted-foreground">Still needed: {state.missing_inputs.map(s => s.replace(/_/g, " ")).join(", ")}. Reply in the chat or fill in the form.</p>}
+        <p className="mt-1 text-xs text-muted-foreground">Chat clarifications {state.clarification_turns} of {state.max_clarification_turns}.</p>
+      </div>
+      <div aria-label="Confirmed parameters" className="rounded-lg border border-primary/40 bg-primary/5 p-3">
+        <p className="text-xs font-medium uppercase tracking-wide text-primary">Confirmed parameters{current ? ` · version ${current.version}` : ""}</p>
+        {current ? <ul className="mt-1 space-y-0.5">
+          <li>Goal: {GOAL_LABEL[current.goal]}</li>
+          <li>Amount: ${current.amount.toLocaleString("en-US")}</li>
+          <li>Keep: {current.protected_holdings.join(", ") || "none"}</li>
+        </ul> : <p className="mt-1 text-muted-foreground">None yet. Nothing is calculated until you confirm below.</p>}
+        {current?.stale && <p className="mt-1 font-medium">Account changed since this version was calculated; its result is stale. Re-confirm to calculate again.</p>}
+        {state.superseded_run_ids.length > 0 && <p className="mt-1 text-xs text-muted-foreground">Earlier versions are superseded and no longer shown as current.</p>}
+      </div>
+    </div>}
     <label className="block text-sm">Goal<select aria-label="Comparison goal" className="mt-1 block w-full rounded border bg-background p-2" value={goal} disabled={busy}
-      onChange={e => { setGoal(e.target.value as typeof goal); setConfirmed(false); setRun(null); }}>
-      <option value="increase_cash">Increase account cash</option><option value="reduce_margin">Reduce margin debt</option>
+      onChange={e => edit({ goal: e.target.value as Goal })}>
+      <option value="increase_cash">{GOAL_LABEL.increase_cash}</option><option value="reduce_margin">{GOAL_LABEL.reduce_margin}</option>
     </select></label>
     <label className="block text-sm">Reduction amount (USD)<input ref={amountInput} type="number" min="0.01" step="0.01" max="100000000" className="mt-1 block w-full rounded border bg-background p-2" value={amount} disabled={busy}
-      onChange={e => { setAmount(e.target.value); setConfirmed(false); setRun(null); }} /></label>
+      onChange={e => edit({ amount: e.target.value })} /></label>
     <label className="block text-sm">Holdings to preserve (tickers, optional)<input className="mt-1 block w-full rounded border bg-background p-2" value={protectedNames} disabled={busy}
-      onChange={e => { setProtectedNames(e.target.value); setConfirmed(false); setRun(null); }} /></label>
+      onChange={e => edit({ protectedNames: e.target.value })} /></label>
+    {editedSinceConfirm && !current?.stale && <p className="text-sm">Edited since version {current?.version}. Confirming creates version {(current?.version ?? 0) + 1}; the earlier result is then superseded.</p>}
     <label className="flex gap-2 text-sm"><input type="checkbox" checked={confirmed} disabled={busy} onChange={e => setConfirmed(e.target.checked)} />I confirm this goal, amount and holdings to preserve for this comparison.</label>
     <div className="flex flex-wrap gap-2">
       <Button size="sm" disabled={busy || !confirmed || !Number.isFinite(Number(amount)) || Number(amount) <= 0 || !token} onClick={() => void execute("start")}>Calculate candidates</Button>
+      {state?.confirmed && <Button size="sm" variant="outline" disabled={busy || !token} onClick={() => void execute("task-resume")}>Resume task with current login</Button>}
       {runId && <><Button size="sm" variant="outline" disabled={busy} onClick={() => void execute("read")}>Retrieve original run</Button>
-        <Button size="sm" variant="outline" disabled={busy || !!run && !["queued", "interrupted"].includes(run.state)} onClick={() => void execute("resume")}>Resume with current login</Button>
+        {!state && <Button size="sm" variant="outline" disabled={busy || !!run && !["queued", "interrupted"].includes(run.state)} onClick={() => void execute("resume")}>Resume with current login</Button>}
         <Button size="sm" variant="outline" disabled={busy || !!run && !["queued", "running", "interrupted"].includes(run.state)} onClick={() => void execute("cancel")}>Cancel server analysis</Button></>}
       {busy && <Button size="sm" variant="outline" onClick={() => controller.current?.abort()}>Stop waiting</Button>}
     </div>
+    {notice && <p role="status" className="text-sm">{notice}</p>}
     {error && <p role="alert" className="text-sm">{error}</p>}
     {run && <p role="status" className="text-sm">Analysis: {run.state}{run.error_code ? ` · ${run.error_code.replace(/_/g, " ")}` : ""}. {run.state === "queued" ? "Waiting for capacity. Resume can redispatch this same run after an interruption." : ""}</p>}
     {run?.result && <div className="space-y-3">
@@ -105,6 +218,18 @@ export function CopilotCandidates({ token, portfolioId, scope, fundingEnabled = 
     </div>}
   </section>;
 }
+
+const RESUME_NOTICE: Record<TaskResume["outcome"], string> = {
+  needs_input: "Task restored. Some inputs are still needed.",
+  ready_to_confirm: "Task restored. Review and confirm to calculate.",
+  continuing: "Resumed with your current login. The same confirmed version is continuing.",
+  completed: "Restored the result for the confirmed version. The account has not changed since it was calculated.",
+  stale_account_changed: "Your account changed since this version was calculated, so its result is stale and was not continued. Re-confirm to calculate again.",
+  run_missing: "No stored calculation was found for this version. Your confirmed inputs are kept; calculate again.",
+  run_failed: "The calculation for this version did not complete. Calculate again when ready.",
+  expired: "This task expired. Ask again to start a new one.",
+  closed: "This task was closed.",
+};
 
 function Candidate({ result, token, preferred, onRevise, fundingEnabled, protectedHoldings }: { result: ChangeComparison; token: string | null; preferred: boolean; onRevise: () => void; fundingEnabled: boolean; protectedHoldings: string[] }) {
   const [saved, setSaved] = useState<SavedComparison>();

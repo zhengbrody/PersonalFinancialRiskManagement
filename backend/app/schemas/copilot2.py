@@ -27,6 +27,7 @@ from pydantic import BaseModel, Field
 
 from .confidence import DataConfidence
 from .copilot_research import CopilotResearch
+from .copilot_task_state import TaskStateEnvelope, TaskStateToken
 from .decision_support import DecisionSupport
 
 INTENTS = (
@@ -104,6 +105,10 @@ class CopilotAskRequest(BaseModel):
     # never become evidence the answer can cite.
     route: Optional[str] = Field(default=None, max_length=120)
     ticker: Optional[str] = Field(default=None, max_length=20)
+    # Echo of the server-issued task token for an open decision task. Untrusted
+    # until verified (signature, owner, portfolio, expiry); a follow-up message
+    # can only add ASSUMPTIONS to it, never confirm a parameter.
+    task_state: Optional[TaskStateToken] = None
 
 
 class CopilotAnswer(BaseModel):
@@ -125,3 +130,4 @@ class CopilotAnswer(BaseModel):
     disclaimer: Optional[str] = None
     decision_support: DecisionSupport | None = None
     research_context: list[CopilotResearch] = Field(default_factory=list, max_length=3)
+    task_state: Optional[TaskStateEnvelope] = None

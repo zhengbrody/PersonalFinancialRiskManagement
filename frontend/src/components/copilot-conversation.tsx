@@ -74,6 +74,8 @@ function Conversation({
   const previousPrefill = useRef(initialQuestion);
   const floating = variant === "floating";
   const disabled = thread.pending || !thread.ready || switching;
+  const candidatesAvailable = thread.turns.some((t) => t.answer?.decision_support?.candidate_comparison_available);
+  const fundingAvailable = thread.turns.some((t) => t.answer?.decision_support?.funding_scenarios_available);
 
   useEffect(() => {
     if (initialQuestion !== previousPrefill.current) {
@@ -214,7 +216,12 @@ function Conversation({
                 <CopilotAnswerCard answer={turn.answer} />
                 {portfolioId && turn.answer.decision_support?.cash_secured_put_available &&
                   <CopilotPut key={portfolioId} token={token} portfolioId={portfolioId} plansEnabled={turn.answer.decision_support.cash_secured_put_save_available} />}
-                {portfolioId && turn.answer.decision_support?.candidate_comparison_available &&
+                {portfolioId && thread.task?.turnId === turn.id && candidatesAvailable ? (
+                  // One typed form for the open multi-turn task, at its latest turn.
+                  <CopilotCandidates key={thread.task.task.state?.task_id} token={token} portfolioId={portfolioId} scope={scope}
+                    fundingEnabled={fundingAvailable} task={thread.task.task}
+                    onTask={(next) => thread.updateTask(turn.id, next)} />
+                ) : portfolioId && !turn.answer.task_state?.state && turn.answer.decision_support?.candidate_comparison_available &&
                   ["candidate_request", "clarification"].includes(turn.answer.decision_support.task.kind) &&
                   <CopilotCandidates token={token} portfolioId={portfolioId} scope={`${scope}:${turn.id}`} fundingEnabled={turn.answer.decision_support.funding_scenarios_available} />}
               </>

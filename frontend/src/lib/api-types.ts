@@ -693,6 +693,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/copilot/task-state/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm
+         * @description The ONLY way a parameter becomes confirmed: an explicit typed submission.
+         */
+        post: operations["confirm_api_v1_copilot_task_state_confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/task-state/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume
+         * @description Re-authenticate, re-bind and either continue from the durable confirmed
+         *     run or report that the account changed (old result stale).
+         */
+        post: operations["resume_api_v1_copilot_task_state_resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/data/health": {
         parameters: {
             query?: never;
@@ -3162,6 +3203,60 @@ export interface components {
             expected_portfolio_id: string;
             receipt: components["schemas"]["ComparisonReceipt"];
         };
+        /** ConfirmTaskParameters */
+        ConfirmTaskParameters: {
+            /** Amount */
+            amount: number;
+            /** Confirmed */
+            confirmed: boolean;
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
+            /**
+             * Goal
+             * @enum {string}
+             */
+            goal: "increase_cash" | "reduce_margin";
+            /** Protected Holdings */
+            protected_holdings?: string[];
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            task_state: components["schemas"]["TaskStateToken"];
+        };
+        /** ConfirmedParameters */
+        ConfirmedParameters: {
+            /** Amount */
+            amount: number;
+            /**
+             * Confirmed At
+             * Format: date-time
+             */
+            confirmed_at: string;
+            /**
+             * Goal
+             * @enum {string}
+             */
+            goal: "increase_cash" | "reduce_margin";
+            /** Protected Holdings */
+            protected_holdings?: string[];
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * Stale
+             * @default false
+             */
+            stale?: boolean;
+            /** Version */
+            version: number;
+        };
         /** CopilotAnswer */
         CopilotAnswer: {
             /** Answer Markdown */
@@ -3196,6 +3291,7 @@ export interface components {
             research_context?: components["schemas"]["CopilotResearch"][];
             /** Sections */
             sections?: components["schemas"]["CopilotAnswerSection"][];
+            task_state?: components["schemas"]["TaskStateEnvelope"] | null;
             /** Tickers */
             tickers?: string[];
         };
@@ -3231,6 +3327,7 @@ export interface components {
             message: string;
             /** Route */
             route?: string | null;
+            task_state?: components["schemas"]["TaskStateToken"] | null;
             /** Ticker */
             ticker?: string | null;
         };
@@ -4233,6 +4330,22 @@ export interface components {
         /** Envelope[SmartMoneyOut] */
         Envelope_SmartMoneyOut_: {
             data?: components["schemas"]["SmartMoneyOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[TaskResumeOut] */
+        Envelope_TaskResumeOut_: {
+            data?: components["schemas"]["TaskResumeOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[TaskStateEnvelope] */
+        Envelope_TaskStateEnvelope_: {
+            data?: components["schemas"]["TaskStateEnvelope"] | null;
             error?: components["schemas"]["ErrorOut"] | null;
             meta: components["schemas"]["MetaOut"];
         } & {
@@ -6918,6 +7031,15 @@ export interface components {
             /** What Would Change My Mind */
             what_would_change_my_mind?: string[];
         };
+        /** ResumeTask */
+        ResumeTask: {
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
+            task_state: components["schemas"]["TaskStateToken"];
+        };
         /** ReviewFundingPlanRequest */
         ReviewFundingPlanRequest: {
             /**
@@ -8172,6 +8294,17 @@ export interface components {
             card: components["schemas"]["ShareCardPayload"];
         };
         /**
+         * SignedTaskToken
+         * @description Same wire shape as copilot_task_state.TaskStateToken (kept here to avoid
+         *     an import cycle); verified server-side before use.
+         */
+        SignedTaskToken: {
+            /** Record */
+            record: string;
+            /** Signature */
+            signature: string;
+        };
+        /**
          * SimulateHolding
          * @description One row of the proposed (hypothetical) book, for the Simulate button.
          */
@@ -8299,6 +8432,7 @@ export interface components {
              */
             id: string;
             task: components["schemas"]["CandidateRequest"];
+            task_state?: components["schemas"]["SignedTaskToken"] | null;
         };
         /** StartRun */
         StartRun: {
@@ -8366,6 +8500,119 @@ export interface components {
             next_step: string;
             /** Reason */
             reason: string;
+        };
+        /**
+         * TaskAssumptions
+         * @description What the user said. ``None`` = not stated; ``[]`` = stated 'none'.
+         */
+        TaskAssumptions: {
+            /** Amount */
+            amount?: number | null;
+            /** Goal */
+            goal?: ("increase_cash" | "reduce_margin") | null;
+            /** Protected Holdings */
+            protected_holdings?: string[] | null;
+            /** Stated At Turn */
+            stated_at_turn?: {
+                [key: string]: number;
+            };
+        };
+        /** TaskResumeOut */
+        TaskResumeOut: {
+            /**
+             * Dispatched
+             * @default false
+             */
+            dispatched?: boolean;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "needs_input" | "ready_to_confirm" | "continuing" | "completed" | "stale_account_changed" | "run_missing" | "run_failed" | "expired" | "closed";
+            run?: components["schemas"]["CandidateRunOut"] | null;
+            state: components["schemas"]["TaskStateView"];
+            token: components["schemas"]["TaskStateToken"];
+        };
+        /** TaskStateEnvelope */
+        TaskStateEnvelope: {
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "started" | "continued" | "ambiguous" | "unrelated" | "turn_limit" | "closed" | "expired" | "discarded";
+            state?: components["schemas"]["TaskStateView"] | null;
+            token?: components["schemas"]["TaskStateToken"] | null;
+        };
+        /**
+         * TaskStateToken
+         * @description Opaque to the client: echoed back verbatim; only the server can mint it.
+         */
+        TaskStateToken: {
+            /** Record */
+            record: string;
+            /** Signature */
+            signature: string;
+        };
+        /** TaskStateView */
+        TaskStateView: {
+            /** Ambiguities */
+            ambiguities?: ("amount_multiple" | "amount_percent" | "amount_unanchored" | "amount_out_of_range" | "goal_conflict" | "goal_unsupported" | "goal_negated" | "protected_without_ticker" | "ticker_without_instruction")[];
+            assumptions?: components["schemas"]["TaskAssumptions"];
+            /**
+             * Clarification Turns
+             * @default 0
+             */
+            clarification_turns?: number;
+            confirmed?: components["schemas"]["ConfirmedParameters"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "candidate_request" | "clarification";
+            /** Max Clarification Turns */
+            max_clarification_turns: number;
+            /** Missing Inputs */
+            missing_inputs?: ("goal" | "amount" | "protected_holdings")[];
+            /** Pending Question */
+            pending_question?: ("goal" | "amount" | "protected_holdings") | null;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "needs_input" | "ready_to_confirm" | "confirmed" | "closed";
+            /** Superseded Run Ids */
+            superseded_run_ids?: string[];
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version?: 1;
         };
         /** TickerNewsResponse */
         TickerNewsResponse: {
@@ -9751,6 +9998,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_RunOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_api_v1_copilot_task_state_confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmTaskParameters"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_TaskStateEnvelope_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_api_v1_copilot_task_state_resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResumeTask"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_TaskResumeOut_"];
                 };
             };
             /** @description Validation Error */

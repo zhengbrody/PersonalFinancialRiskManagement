@@ -1876,3 +1876,143 @@ def answer(
         disclaimer=_DISCLAIMER[lang],
         research_context=research_context,
     )
+
+
+# ── Multi-turn decision task follow-ups (deterministic, no LLM, no numbers) ──
+
+_SLOT_LABEL = {
+    "goal": ("the goal", "目标"),
+    "amount": ("the dollar amount", "金额"),
+    "protected_holdings": ("holdings to keep", "需保留的持仓"),
+}
+_AMBIGUITY_QUESTION = {
+    "amount_multiple": (
+        "I found more than one amount. Which single dollar amount should the comparison use?",
+        "我看到不止一个金额。比较应使用哪一个美元金额？",
+    ),
+    "amount_percent": (
+        "Percentages are not converted automatically. What dollar amount should be freed?",
+        "百分比不会被自动换算。需要释放多少美元？",
+    ),
+    "amount_unanchored": (
+        "Please reply with the dollar amount on its own, with a $ sign or 'USD'.",
+        "请单独回复美元金额，并带上 $ 或“美元”。",
+    ),
+    "amount_out_of_range": (
+        "That amount is outside the supported range. Please give a positive dollar amount.",
+        "该金额超出支持范围。请给出一个正的美元金额。",
+    ),
+    "goal_conflict": (
+        "Should the proceeds stay as cash, or repay margin debt? Please choose one.",
+        "卖出所得是留作现金，还是偿还融资？请选择其一。",
+    ),
+    "goal_unsupported": (
+        "Broker buying power cannot be calculated here. Should the comparison increase cash or reduce margin debt?",
+        "这里无法计算券商购买力。比较应以增加现金还是降低融资为目标？",
+    ),
+    "goal_negated": (
+        "I could not tell which goal you meant. Increase cash, or reduce margin debt?",
+        "无法确定您指的目标。是增加现金，还是降低融资？",
+    ),
+    "protected_without_ticker": (
+        "Which holdings must be kept? Please list their tickers.",
+        "哪些持仓必须保留？请列出代码。",
+    ),
+    "ticker_without_instruction": (
+        "Should those tickers be kept out of the candidates? To test reducing one specific holding, use Test a change instead.",
+        "这些代码是需要保留（不作为候选）吗？如果想测试减少某一只持仓，请使用 Test a change。",
+    ),
+}
+
+
+def task_answer(state, outcome: str, lang: str) -> CopilotAnswer:
+    """Deterministic reply for a follow-up that belongs to an open task.
+
+    It names WHICH inputs were recorded and what is still missing, but never
+    repeats a user-stated figure as if it were a fact; the typed panel shows the
+    assumptions with an explicit "not confirmed" label.
+    """
+    zh = int(lang == "zh")
+    recorded = [
+        _SLOT_LABEL[s][zh]
+        for s, turn in state.assumptions.stated_at_turn.items()
+        if turn == state.clarification_turns and outcome == "continued"
+    ]
+    missing = [_SLOT_LABEL[s][zh] for s in state.missing_inputs]
+    sep = "、" if zh else ", "
+    if outcome == "closed":
+        direct = (
+            "已关闭该任务，未计算或保存任何内容。"
+            if zh
+            else "Task closed. Nothing was calculated or saved."
+        )
+    elif outcome == "turn_limit":
+        direct = (
+            "本任务的聊天澄清次数已用完。请在下方表单中补全剩余输入。"
+            if zh
+            else "This task has used its chat clarifications. Please complete the remaining inputs in the form below."
+        )
+    elif outcome == "ambiguous":
+        direct = " ".join(_AMBIGUITY_QUESTION[a][zh] for a in state.ambiguities)
+    else:
+        parts = []
+        if recorded:
+            parts.append(
+                f"已记录为假设（尚未确认）：{sep.join(recorded)}。"
+                if zh
+                else f"Recorded as an assumption, not a confirmed parameter: {sep.join(recorded)}."
+            )
+        if state.confirmed is not None:
+            parts.append(
+                "已确认的参数保持不变；如需使用新的假设，请在表单中重新确认。"
+                if zh
+                else "Your confirmed parameters are unchanged; re-confirm in the form to use the new assumption."
+            )
+        elif missing:
+            parts.append(
+                f"还需要：{sep.join(missing)}。" if zh else f"Still needed: {sep.join(missing)}."
+            )
+        else:
+            parts.append(
+                "三项输入都已说明。请在下方表单核对并确认后再计算；确认前不会计算任何内容。"
+                if zh
+                else "All three inputs are stated. Review and confirm them in the form below; nothing is calculated until you confirm."
+            )
+        direct = " ".join(parts)
+    relevance = (
+        "聊天中的数值仅作为假设预填表单；只有您在表单中确认后才会成为计算参数，账户数据由服务器从当前组合读取。"
+        if zh
+        else "Values typed in chat only prefill the form as assumptions. They become calculation parameters only after you confirm them in the form; account data is read by the server from your selected portfolio."
+    )
+    dc = _answer_confidence([], None)
+    sections = _build_sections(
+        intent="action_plan", tickers=[], evidence=[], dc=dc, lang=lang, narrative={}
+    )
+    bodies = {
+        "direct_answer": direct,
+        "portfolio_relevance": relevance,
+        "data_confidence": (
+            "尚未读取账户或计算候选。"
+            if zh
+            else "No account data has been read and no candidate has been calculated."
+        ),
+        "what_would_change": (
+            "确认的参数、持仓或价格变化后需要重新计算。"
+            if zh
+            else "Changing a confirmed parameter, the holdings or prices requires a new calculation."
+        ),
+        "simulation": "尚未运行模拟。" if zh else "No simulation has been run.",
+    }
+    for section in sections:
+        if section.key in bodies:
+            section.markdown = bodies[section.key]
+    return CopilotAnswer(
+        intent="action_plan",
+        answer_markdown=_flat_from_sections(sections, lang),
+        sections=sections,
+        data_only=True,
+        conviction="none",
+        data_confidence=dc,
+        language=lang,
+        disclaimer=_DISCLAIMER[lang],
+    )
