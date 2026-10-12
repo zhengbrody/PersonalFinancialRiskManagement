@@ -1,5 +1,7 @@
 # Copilot decision support — implementation status
 
+> **Current state lives in [release status 2026-10-12](copilot-release-status-2026-10.md).** Migrations 0014–0020 are in production; the run journal and saved-plan history are enabled; decision support, background jobs, Put and funding scenarios are deployed but off (compliance gate). The text below is the dated history.
+
 User authorized execution on 2026-09-11. Implemented on
 `codex/copilot-decision-support`, based on local main `11a0698`, in an isolated
 worktree. Original working-tree marketing assets and export script were untouched.
