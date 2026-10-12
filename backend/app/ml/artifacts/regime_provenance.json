@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "model_version": "regime-v1.1.0",
+  "trained_at": "2026-10-12T08:54:29.178929+00:00",
+  "source_commit": "84fc27dd6d3cc6ac98ecbab4cf1b427d5939cdde",
+  "run_id": "38226334256",
+  "run_url": "https://github.com/zhengbrody/PersonalFinancialRiskManagement/actions/runs/38226334256",
+  "recorded_at": "2026-10-12T08:54:34.003487+00:00",
+  "gates": {
+    "passed": true,
+    "checks": {
+      "elevated_risk_auc >= 0.7": true,
+      "holdout_size >= 500": true,
+      "test_model_card": true
+    },
+    "observed": {
+      "elevated_risk_auc": 0.7461,
+      "holdout_size": 706
+    },
+    "informational": {
+      "holdout_accuracy": 0.5255,
+      "baseline_accuracy": 0.5312
+    }
+  },
+  "artifacts": {
+    "regime_model.joblib": "43947e89d8f9b12612f18179d4294dacd27e90191d63055e360ba4abd8b76871",
+    "regime_meta.json": "b0d0c4b054f63b1d8cbc781a22f9b49b0a9d8bf1a9c7f1800493d52271cf9fec",
+    "regime_reference.json": "1186c34359688df236f124a14909a3b7bd3077516cf143030274886fa217953c"
+  }
+}
