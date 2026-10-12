@@ -145,6 +145,13 @@ class Settings:
         default_factory=lambda: _env_str("MINDMARKET_COMPARISON_SAVE_ENABLED", "false").lower()
         == "true"
     )
+    # Cross-device saved-plan history + versioned metric review. Read-only over
+    # existing evidence (no migration); each plan kind still needs its own
+    # save flag for its evidence to authenticate. Off by default.
+    plan_history_enabled: bool = field(
+        default_factory=lambda: _env_str("MINDMARKET_PLAN_HISTORY_ENABLED", "false").lower()
+        == "true"
+    )
     # Trust the CF-Connecting-IP header for rate-limit identity. ONLY safe
     # when the deployment guarantees Cloudflare-only ingress (our prod SG
     # admits only Cloudflare ranges); anywhere else the header is

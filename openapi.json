@@ -4040,6 +4040,31 @@
         "title": "DataQualityChange",
         "type": "object"
       },
+      "DataWindow": {
+        "additionalProperties": false,
+        "properties": {
+          "history_start": {
+            "title": "History Start",
+            "type": "string"
+          },
+          "observations": {
+            "minimum": 0.0,
+            "title": "Observations",
+            "type": "integer"
+          },
+          "price_as_of": {
+            "title": "Price As Of",
+            "type": "string"
+          }
+        },
+        "required": [
+          "price_as_of",
+          "history_start",
+          "observations"
+        ],
+        "title": "DataWindow",
+        "type": "object"
+      },
       "DecisionSupport": {
         "additionalProperties": false,
         "properties": {
@@ -5352,6 +5377,39 @@
         "title": "Envelope[OptionExplainOutput]",
         "type": "object"
       },
+      "Envelope_PlanMetricReview_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanMetricReview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[PlanMetricReview]",
+        "type": "object"
+      },
       "Envelope_PortalSessionResponse_": {
         "additionalProperties": true,
         "properties": {
@@ -6010,6 +6068,72 @@
           "meta"
         ],
         "title": "Envelope[SavedFundingPlan]",
+        "type": "object"
+      },
+      "Envelope_SavedPlanDetail_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedPlanDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[SavedPlanDetail]",
+        "type": "object"
+      },
+      "Envelope_SavedPlanPage_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedPlanPage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[SavedPlanPage]",
         "type": "object"
       },
       "Envelope_SavedPutPlanPage_": {
@@ -9990,6 +10114,48 @@
         "title": "MetaOut",
         "type": "object"
       },
+      "MethodComparison": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "plan-review-metrics-v1",
+            "default": "plan-review-metrics-v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "current_method_version": {
+            "title": "Current Method Version",
+            "type": "string"
+          },
+          "original_method_version": {
+            "title": "Original Method Version",
+            "type": "string"
+          },
+          "reproduced": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reproduced"
+          },
+          "same_method": {
+            "title": "Same Method",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "original_method_version",
+          "current_method_version",
+          "same_method",
+          "reproduced"
+        ],
+        "title": "MethodComparison",
+        "type": "object"
+      },
       "MethodReference": {
         "additionalProperties": false,
         "properties": {
@@ -10050,6 +10216,21 @@
           "applicability"
         ],
         "title": "MethodReference",
+        "type": "object"
+      },
+      "MetricReviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_portfolio_id"
+        ],
+        "title": "MetricReviewRequest",
         "type": "object"
       },
       "ModelCardOut": {
@@ -11978,6 +12159,149 @@
           "monthly_chat"
         ],
         "title": "PlanCard",
+        "type": "object"
+      },
+      "PlanMetricReview": {
+        "additionalProperties": false,
+        "properties": {
+          "account_changes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Account Changes",
+            "type": "array"
+          },
+          "account_window": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataWindow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decomposition": {
+            "const": "sequential_market_then_account",
+            "default": "sequential_market_then_account",
+            "title": "Decomposition",
+            "type": "string"
+          },
+          "holdings_changed_by_review": {
+            "const": false,
+            "default": false,
+            "title": "Holdings Changed By Review",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "comparison",
+              "cash_secured_put",
+              "funding_scenarios"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "live_quote_checked": {
+            "const": false,
+            "default": false,
+            "title": "Live Quote Checked",
+            "type": "boolean"
+          },
+          "market_window": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataWindow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "method": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MethodComparison"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewMetric"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "original_window": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataWindow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plan_id": {
+            "format": "uuid",
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "realised_return_attribution": {
+            "const": false,
+            "default": false,
+            "title": "Realised Return Attribution",
+            "type": "boolean"
+          },
+          "reviewed_at": {
+            "format": "date-time",
+            "title": "Reviewed At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "comparable",
+              "method_changed",
+              "not_computable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "status_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Reason"
+          }
+        },
+        "required": [
+          "plan_id",
+          "portfolio_id",
+          "kind",
+          "reviewed_at",
+          "status"
+        ],
+        "title": "PlanMetricReview",
         "type": "object"
       },
       "PortalSessionRequest": {
@@ -14057,6 +14381,156 @@
           "expected_portfolio_id"
         ],
         "title": "ReviewFundingPlanRequest",
+        "type": "object"
+      },
+      "ReviewMetric": {
+        "additionalProperties": false,
+        "properties": {
+          "account_change": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Change"
+          },
+          "current": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current"
+          },
+          "horizon": {
+            "title": "Horizon",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "market_change": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Change"
+          },
+          "method_change": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method Change"
+          },
+          "metric_id": {
+            "enum": [
+              "net_equity",
+              "leverage",
+              "largest_position_weight",
+              "annual_volatility",
+              "var_1d_95_usd",
+              "cvar_1d_95_usd"
+            ],
+            "title": "Metric Id",
+            "type": "string"
+          },
+          "not_computable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Not Computable Reason"
+          },
+          "original": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original"
+          },
+          "original_holdings_current_prices": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Holdings Current Prices"
+          },
+          "original_inputs_current_method": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Inputs Current Method"
+          },
+          "total_change": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Change"
+          },
+          "unit": {
+            "enum": [
+              "usd",
+              "ratio",
+              "fraction",
+              "fraction_per_year"
+            ],
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "metric_id",
+          "label",
+          "unit",
+          "horizon",
+          "original",
+          "original_inputs_current_method",
+          "original_holdings_current_prices",
+          "current",
+          "method_change",
+          "market_change",
+          "account_change",
+          "total_change"
+        ],
+        "title": "ReviewMetric",
         "type": "object"
       },
       "ReviewPutPlanRequest": {
@@ -16357,6 +16831,154 @@
           "result"
         ],
         "title": "SavedFundingPlan",
+        "type": "object"
+      },
+      "SavedPlanDetail": {
+        "additionalProperties": false,
+        "description": "Exactly one of comparison / put / funding is set, matching ``item.kind``.",
+        "properties": {
+          "comparison": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedComparison"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "funding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedFundingPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "item": {
+            "$ref": "#/components/schemas/SavedPlanItem"
+          },
+          "put": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedPutPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "item"
+        ],
+        "title": "SavedPlanDetail",
+        "type": "object"
+      },
+      "SavedPlanItem": {
+        "additionalProperties": false,
+        "properties": {
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "confirmed_at": {
+            "format": "date-time",
+            "title": "Confirmed At",
+            "type": "string"
+          },
+          "evidence_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Evidence Sha256",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "comparison",
+              "cash_secured_put",
+              "funding_scenarios"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "methodology_version": {
+            "title": "Methodology Version",
+            "type": "string"
+          },
+          "plan_id": {
+            "format": "uuid",
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "signature_verified": {
+            "const": true,
+            "default": true,
+            "title": "Signature Verified",
+            "type": "boolean"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "plan_id",
+          "portfolio_id",
+          "confirmed_at",
+          "captured_at",
+          "methodology_version",
+          "summary",
+          "evidence_sha256"
+        ],
+        "title": "SavedPlanItem",
+        "type": "object"
+      },
+      "SavedPlanPage": {
+        "additionalProperties": false,
+        "properties": {
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "order": {
+            "const": "stable_plan_id",
+            "default": "stable_plan_id",
+            "title": "Order",
+            "type": "string"
+          },
+          "plans": {
+            "items": {
+              "$ref": "#/components/schemas/SavedPlanItem"
+            },
+            "title": "Plans",
+            "type": "array"
+          },
+          "unverified_records": {
+            "default": 0,
+            "title": "Unverified Records",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "plans"
+        ],
+        "title": "SavedPlanPage",
         "type": "object"
       },
       "SavedPutPlan": {
@@ -20478,6 +21100,172 @@
           }
         },
         "summary": "Cancel Run",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/saved-plans": {
+      "get": {
+        "operationId": "history_api_v1_copilot_saved_plans_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "expected_portfolio_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Expected Portfolio Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 101,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SavedPlanPage_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "History",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/saved-plans/{plan_id}": {
+      "get": {
+        "operationId": "detail_api_v1_copilot_saved_plans__plan_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Plan Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_portfolio_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Expected Portfolio Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SavedPlanDetail_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Detail",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/saved-plans/{plan_id}/metric-review": {
+      "post": {
+        "operationId": "metric_review_api_v1_copilot_saved_plans__plan_id__metric_review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Plan Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetricReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_PlanMetricReview_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Metric Review",
         "tags": [
           "copilot"
         ]

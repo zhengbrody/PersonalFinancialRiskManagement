@@ -26,6 +26,8 @@ const E2E_ENV: Record<string, string> = {
   NEXT_PUBLIC_SITE_URL: BASE_URL,
   // Match production beta posture (billing UI hidden); avoids pricing surfaces.
   NEXT_PUBLIC_BILLING_ENABLED: "false",
+  // Collapsed Saved plans card in Copilot (read-only, mocked API).
+  NEXT_PUBLIC_PLAN_HISTORY_ENABLED: "true",
 };
 
 export default defineConfig({

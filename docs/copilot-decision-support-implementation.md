@@ -442,3 +442,13 @@ Release compatibility boundaries:
 The local B acceptance now covers lost queue, active-process crash/expiry,
 multiple-instance claim contention and durable queue overflow. Sustained load,
 release-pair deployment acceptance and the full C/E financing scenario remain open.
+
+## F follow-up: cross-device history and versioned metric review (2026-10)
+
+See docs/plan-history-review-2026-10.md. Adds owner-scoped, cursor-paged history
+over all three signed plan kinds, original-evidence reads verified on every
+request, and a versioned review-metric contract that decomposes changes into
+method / market / account parts (method change never totalled). In-session
+periodic review is opt-in and bounded; offline monitoring is design-only. Both
+flags (`MINDMARKET_PLAN_HISTORY_ENABLED`, `NEXT_PUBLIC_PLAN_HISTORY_ENABLED`)
+default off. No migration. Put plans remain assumption-review only.

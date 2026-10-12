@@ -1,0 +1,239 @@
+{
+ "page": {
+  "plans": [
+   {
+    "kind": "comparison",
+    "plan_id": "525d0119-2500-4fcd-ab94-93630e772801",
+    "portfolio_id": "33333333-3333-4333-8333-333333333333",
+    "confirmed_at": "2026-09-06T00:00:30Z",
+    "captured_at": "2026-09-06T00:00:00Z",
+    "methodology_version": "reduce-close-v1/mindmarket-score-v1.0.0",
+    "summary": "Hypothetical reduction of SPY by $500.00, to cash",
+    "evidence_sha256": "c7f0961b3713f3760c399524d0be81398e528fc35b7688b84bac40ba2f86da4a",
+    "signature_verified": true
+   }
+  ],
+  "next_cursor": null,
+  "unverified_records": 1,
+  "order": "stable_plan_id"
+ },
+ "detail": {
+  "item": {
+   "kind": "comparison",
+   "plan_id": "525d0119-2500-4fcd-ab94-93630e772801",
+   "portfolio_id": "33333333-3333-4333-8333-333333333333",
+   "confirmed_at": "2026-09-06T00:00:30Z",
+   "captured_at": "2026-09-06T00:00:00Z",
+   "methodology_version": "reduce-close-v1/mindmarket-score-v1.0.0",
+   "summary": "Hypothetical reduction of SPY by $500.00, to cash",
+   "evidence_sha256": "c7f0961b3713f3760c399524d0be81398e528fc35b7688b84bac40ba2f86da4a",
+   "signature_verified": true
+  },
+  "comparison": {
+   "plan_id": "525d0119-2500-4fcd-ab94-93630e772801",
+   "portfolio_id": "33333333-3333-4333-8333-333333333333",
+   "result_id": "525d0119-2500-4fcd-ab94-93630e772801",
+   "confirmed_at": "2026-09-06T00:00:30Z",
+   "result": {
+    "result_id": "525d0119-2500-4fcd-ab94-93630e772801",
+    "portfolio_id": "33333333-3333-4333-8333-333333333333",
+    "computed_at": "2026-09-06T00:00:00Z",
+    "snapshot_digest": "4f55cb430c1d2e5dfb17577752a3e392d5032b3312b58df3aef9acd3fbb92a09",
+    "methodology_version": "reduce-close-v1/mindmarket-score-v1.0.0",
+    "assumptions": {
+     "expected_portfolio_id": "33333333-3333-4333-8333-333333333333",
+     "ticker": "SPY",
+     "amount": 500.0,
+     "proceeds": "cash"
+    },
+    "price_as_of": "2026-09-04",
+    "history_start": "2026-04-20",
+    "observations": 100,
+    "sources": {
+     "SGOV": "unknown",
+     "SPY": "unknown"
+    },
+    "baseline": {
+     "gross_assets": 13000.0,
+     "net_equity": 8000.0,
+     "cash": 1000.0,
+     "margin": 5000.0,
+     "leverage": 1.625,
+     "largest_position_weight": 0.8333333333333334,
+     "annual_volatility": 0.04470849341359919,
+     "var_1d_95_usd": 44.62425940775323,
+     "cvar_1d_95_usd": 51.82637061299622,
+     "option_assets": 0.0,
+     "option_liabilities": 0.0
+    },
+    "candidate": {
+     "gross_assets": 13000.0,
+     "net_equity": 8000.0,
+     "cash": 1500.0,
+     "margin": 5000.0,
+     "leverage": 1.625,
+     "largest_position_weight": 0.8695652173913043,
+     "annual_volatility": 0.035297388623147075,
+     "var_1d_95_usd": 34.110570705148945,
+     "cvar_1d_95_usd": 41.4607659056783,
+     "option_assets": 0.0,
+     "option_liabilities": 0.0
+    },
+    "limitations": [
+     "Hypothetical reduction, not an order or a recommendation. No holdings or plans were saved.",
+     "Valuation uses one captured adjusted-close frame, not live execution quotes; fractional shares assumed.",
+     "US-listed, USD-priced securities assumed. No FX conversion; cash and margin use their captured account values.",
+     "Taxes, fees, slippage, settlement, fund look-through and broker maintenance requirements are not modeled.",
+     "A smaller margin balance is not a guarantee against a margin call. Lower modeled risk also changes investment exposure.",
+     "Daily historical VaR and expected shortfall are estimates, not maximum losses or actual YTD performance.",
+     "Current and proposed weights are each held constant over the same return dates; this is not your account history.",
+     "Returns spanning an extra weekday are omitted conservatively; this can also omit exchange-holiday intervals.",
+     "Cash yield and borrowing cost both use the existing 4.5% annual model proxy, not your broker's rates."
+    ],
+    "risk_method": "historical_equity",
+    "scenarios": [],
+    "option_groups": [],
+    "option_quote_basis": null,
+    "replay_receipt": null
+   },
+   "notice": "Saved as a draft risk plan with the original signed calculation. No holdings changed. This is a historical assumption, not an order or current recommendation."
+  },
+  "put": null,
+  "funding": null
+ },
+ "review": {
+  "plan_id": "525d0119-2500-4fcd-ab94-93630e772801",
+  "portfolio_id": "33333333-3333-4333-8333-333333333333",
+  "kind": "comparison",
+  "reviewed_at": "2026-10-06T00:00:00Z",
+  "status": "comparable",
+  "status_reason": null,
+  "method": {
+   "contract_version": "plan-review-metrics-v1",
+   "original_method_version": "reduce-close-v1/mindmarket-score-v1.0.0+686e78bc10cd",
+   "current_method_version": "reduce-close-v1/mindmarket-score-v1.0.0+686e78bc10cd",
+   "same_method": true,
+   "reproduced": true
+  },
+  "original_window": {
+   "price_as_of": "2026-09-04",
+   "history_start": "2026-04-20",
+   "observations": 100
+  },
+  "market_window": {
+   "price_as_of": "2026-10-02",
+   "history_start": "2026-05-18",
+   "observations": 100
+  },
+  "account_window": {
+   "price_as_of": "2026-10-02",
+   "history_start": "2026-05-18",
+   "observations": 100
+  },
+  "account_changes": [
+   "holdings",
+   "cash_balance"
+  ],
+  "metrics": [
+   {
+    "metric_id": "net_equity",
+    "label": "Net equity",
+    "unit": "usd",
+    "horizon": "point in time",
+    "original": 8000.0,
+    "original_inputs_current_method": 8000.0,
+    "original_holdings_current_prices": 8800.0,
+    "current": 10100.0,
+    "method_change": 0.0,
+    "market_change": 800.0,
+    "account_change": 1300.0,
+    "total_change": 2100.0,
+    "not_computable_reason": null
+   },
+   {
+    "metric_id": "leverage",
+    "label": "Gross leverage (incl. cash)",
+    "unit": "ratio",
+    "horizon": "point in time",
+    "original": 1.625,
+    "original_inputs_current_method": 1.625,
+    "original_holdings_current_prices": 1.5681818181818181,
+    "current": 1.495049504950495,
+    "method_change": 0.0,
+    "market_change": -0.05681818181818188,
+    "account_change": -0.07313231323132308,
+    "total_change": -0.12995049504950495,
+    "not_computable_reason": null
+   },
+   {
+    "metric_id": "largest_position_weight",
+    "label": "Largest position weight",
+    "unit": "fraction",
+    "horizon": "point in time",
+    "original": 0.8333333333333334,
+    "original_inputs_current_method": 0.8333333333333334,
+    "original_holdings_current_prices": 0.859375,
+    "current": 0.7534246575342466,
+    "method_change": 0.0,
+    "market_change": 0.02604166666666663,
+    "account_change": -0.10595034246575341,
+    "total_change": -0.07990867579908678,
+    "not_computable_reason": null
+   },
+   {
+    "metric_id": "annual_volatility",
+    "label": "Annualised volatility",
+    "unit": "fraction_per_year",
+    "horizon": "annualised, daily returns",
+    "original": 0.04470849341359919,
+    "original_inputs_current_method": 0.04470849341359919,
+    "original_holdings_current_prices": 0.037808441451812634,
+    "current": 0.06102884279766368,
+    "method_change": 0.0,
+    "market_change": -0.0069000519617865574,
+    "account_change": 0.023220401345851044,
+    "total_change": 0.016320349384064486,
+    "not_computable_reason": null
+   },
+   {
+    "metric_id": "var_1d_95_usd",
+    "label": "1-day 95% VaR",
+    "unit": "usd",
+    "horizon": "1 trading day, 95%",
+    "original": 44.62425940775323,
+    "original_inputs_current_method": 44.62425940775323,
+    "original_holdings_current_prices": 40.68367527786849,
+    "current": 76.65761651453896,
+    "method_change": 0.0,
+    "market_change": -3.9405841298847406,
+    "account_change": 35.97394123667047,
+    "total_change": 32.03335710678573,
+    "not_computable_reason": null
+   },
+   {
+    "metric_id": "cvar_1d_95_usd",
+    "label": "1-day 95% expected shortfall",
+    "unit": "usd",
+    "horizon": "1 trading day, 95%",
+    "original": 51.82637061299622,
+    "original_inputs_current_method": 51.82637061299622,
+    "original_holdings_current_prices": 48.71652390844155,
+    "current": 86.12414076690192,
+    "method_change": 0.0,
+    "market_change": -3.10984670455467,
+    "account_change": 37.407616858460365,
+    "total_change": 34.297770153905695,
+    "not_computable_reason": null
+   }
+  ],
+  "decomposition": "sequential_market_then_account",
+  "notes": [
+   "Decomposition order: prices change first with the original holdings held fixed; any interaction between new prices and new holdings is attributed to the account change. This is a definition, not a causal claim.",
+   "No execution records exist. This review does not infer that any trade happened and does not attribute realised returns.",
+   "Current figures use daily closing prices, not live quotes. Cash yield and borrowing use the existing 4.5% model proxy, not your broker's rates."
+  ],
+  "realised_return_attribution": false,
+  "holdings_changed_by_review": false,
+  "live_quote_checked": false
+ }
+}
