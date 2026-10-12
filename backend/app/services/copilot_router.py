@@ -333,6 +333,12 @@ _METRIC_GLOSSARY = {
 }
 
 
+_PROFIT_MARGIN = re.compile(
+    r"\b(?:net|gross|operating|profit|pretax|pre-tax|ebitda|ebit|fcf|free cash flow)"
+    r"(?: profit)? margins?\b"
+)
+
+
 def classify(message: str, tickers: list[str], *, route: Optional[str] = None) -> str:
     text = f" {(message or '').lower()} "
     n_tk = len(tickers)
@@ -350,7 +356,10 @@ def classify(message: str, tickers: list[str], *, route: Optional[str] = None) -
         return "tax_fee_review"
     # Margin / options questions are portfolio-grounded — check before scenario
     # and ticker_research so "am I over-leveraged" / "my options risk" route here.
-    if has("margin_risk"):
+    # "Net margin" / "operating margin" are profitability ratios, not a margin
+    # loan: strip them before the margin-risk cue so a company-research view
+    # about profitability is not routed to the account's leverage check.
+    if any(k in _PROFIT_MARGIN.sub(" ", text) for k in _KW["margin_risk"]):
         return "margin_risk"
     if has("options_risk") and n_tk == 0:
         return "options_risk"
@@ -962,7 +971,7 @@ def _gather(
             if research_context is not None:
                 from .copilot_research import build_context, context_evidence
 
-                context = build_context(tk, fp)
+                context = build_context(tk, fp, message=message, tickers=tickers)
                 research_context.append(context)
                 ev += _stamp(context_evidence(context), "factpack")
                 floors.append(

@@ -11,6 +11,7 @@ import { CopilotAnswerCard } from "@/components/copilot-answer";
 import { CopilotRiskCheck } from "@/components/copilot-risk-check";
 import { CopilotChangeForm, CopilotChangeResult } from "@/components/copilot-change";
 import { CopilotFundingPlans } from "./copilot-funding-plans";
+import { emptyChange } from "@/lib/copilot-compare";
 import { useAuth } from "@/lib/auth-context";
 import { usePortfolioContext } from "@/lib/portfolio-context";
 import { useCopilotThread } from "@/lib/use-copilot-thread";
@@ -211,7 +212,10 @@ function Conversation({
             )}
             {turn.status === "completed" && turn.answer && (
               <>
-                <CopilotAnswerCard answer={turn.answer} />
+                <CopilotAnswerCard answer={turn.answer} onTestHypothesis={portfolioId && !disabled ? (h) => thread.openChange({
+                  ...emptyChange, ticker: h.subject,
+                  hypothesis: { id: h.id, subject: h.subject, claim: h.claim, pct: "", confirmed: false },
+                }) : undefined} />
                 {portfolioId && turn.answer.decision_support?.cash_secured_put_available &&
                   <CopilotPut key={portfolioId} token={token} portfolioId={portfolioId} plansEnabled={turn.answer.decision_support.cash_secured_put_save_available} />}
                 {portfolioId && turn.answer.decision_support?.candidate_comparison_available &&

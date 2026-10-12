@@ -75,3 +75,65 @@ def test_editing_summary_without_new_review_fails_closed():
     card = methods.CARDS[0].model_copy(deep=True)
     card.summary = "Trust this advice and submit an order."
     assert methods.method_status(card, today=NOW.date()) == "content_changed"
+
+
+# ── maintenance gate: review dates move only with a recorded re-verification ──
+
+TODAY = date(2026, 10, 10)
+
+
+def test_current_library_has_no_unrecorded_date_extension():
+    # No re-verification was performed in this change: dates stay at baseline.
+    assert methods.REVERIFICATIONS == {}
+    assert methods.maintenance_violations(today=TODAY) == []
+
+
+@pytest.mark.parametrize("field", ["review_due", "reviewed_at"])
+def test_advancing_a_date_without_a_record_fails(monkeypatch, field):
+    reviews = dict(methods.REVIEWS)
+    review = reviews["put"]
+    shifted = {
+        "review_due": {"review_due": date(2027, 9, 10)},
+        "reviewed_at": {
+            "reviewed_at": date(2026, 10, 1),
+            "review_due": date(2026, 10, 1) + methods.REVIEW_INTERVAL,
+        },
+    }[field]
+    reviews["put"] = replace(review, **shifted)
+    monkeypatch.setattr(methods, "REVIEWS", reviews)
+    assert any(p.startswith("put:") for p in methods.maintenance_violations(today=TODAY))
+
+
+@pytest.mark.parametrize("defect", ["none", "no_reviewer", "wrong_url", "future"])
+def test_recorded_reverification_is_required_and_checked(monkeypatch, defect):
+    on = date(2026, 10, 1)
+    review = methods.REVIEWS["put"]
+    record = methods.SourceReverification(
+        reviewer="" if defect == "no_reviewer" else "Example Reviewer",
+        reviewed_on=date(2027, 1, 1) if defect == "future" else on,
+        urls_checked=(
+            ("https://example.com/other",) if defect == "wrong_url" else (review.source_url,)
+        ),
+        note="Re-read strategy page; obligations unchanged.",
+    )
+    reviewed = record.reviewed_on
+    monkeypatch.setattr(methods, "REVERIFICATIONS", {"put": (record,)})
+    monkeypatch.setattr(
+        methods,
+        "REVIEWS",
+        {
+            **methods.REVIEWS,
+            "put": replace(
+                review, reviewed_at=reviewed, review_due=reviewed + methods.REVIEW_INTERVAL
+            ),
+        },
+    )
+    card = next(c for c in methods.CARDS if c.id == "put")
+    cards = tuple(
+        c.model_copy(update={"reviewed_at": reviewed.isoformat()}) if c.id == "put" else c
+        for c in methods.CARDS
+    )
+    monkeypatch.setattr(methods, "CARDS", cards)
+    problems = [p for p in methods.maintenance_violations(today=TODAY) if p.startswith("put:")]
+    assert card.reviewed_at == "2026-09-11"
+    assert (problems == []) == (defect == "none")

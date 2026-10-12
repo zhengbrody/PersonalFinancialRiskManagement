@@ -2765,6 +2765,7 @@ export interface components {
             computed_at: string;
             /** History Start */
             history_start: string;
+            hypothesis_scenario?: components["schemas"]["HypothesisScenario"] | null;
             /** Limitations */
             limitations: string[];
             /** Methodology Version */
@@ -2967,6 +2968,7 @@ export interface components {
              * Format: uuid
              */
             expected_portfolio_id: string;
+            hypothesis?: components["schemas"]["HypothesisAssumption"] | null;
             /**
              * Proceeds
              * @enum {string}
@@ -3309,6 +3311,8 @@ export interface components {
              * Format: date-time
              */
             captured_at: string;
+            /** Hypotheses */
+            hypotheses?: components["schemas"]["ResearchHypothesis"][];
             /** Leads */
             leads?: components["schemas"]["ResearchLead"][];
             /** Limitations */
@@ -5138,6 +5142,144 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /**
+         * HypothesisAssumption
+         * @description A research hypothesis carried in as the USER's price assumption.
+         *
+         *     Only an id, the subject and a number the user typed travel here; the claim
+         *     text never does. ``user_confirmed`` must be literally true: the typed confirm
+         *     step, not the research card, turns it into a calculation input. It adds one
+         *     deterministic row to this comparison and authorizes nothing else.
+         */
+        HypothesisAssumption: {
+            /**
+             * Basis
+             * @default user_assumption
+             * @constant
+             */
+            basis?: "user_assumption";
+            /** Hypothesis Id */
+            hypothesis_id: string;
+            /** Price Change Pct */
+            price_change_pct: number;
+            /** Subject */
+            subject: string;
+            /** User Confirmed */
+            user_confirmed: boolean;
+        };
+        /** HypothesisMissing */
+        HypothesisMissing: {
+            /** Item */
+            item: string;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "no_authorized_source" | "reporting_period_unavailable" | "observation_missing" | "observation_stale" | "observation_undated" | "no_testable_predicate" | "cited_source_not_retrieved";
+        };
+        /**
+         * HypothesisScenario
+         * @description Isolated subject price move at the captured close, both sides. Not a forecast.
+         */
+        HypothesisScenario: {
+            /** Baseline Equity */
+            baseline_equity?: number | null;
+            /** Baseline Pnl */
+            baseline_pnl?: number | null;
+            /**
+             * Basis
+             * @default user_assumption
+             * @constant
+             */
+            basis?: "user_assumption";
+            /** Candidate Equity */
+            candidate_equity?: number | null;
+            /** Candidate Pnl */
+            candidate_pnl?: number | null;
+            /** Hypothesis Id */
+            hypothesis_id: string;
+            /** Price Change Pct */
+            price_change_pct: number;
+            /** Reason */
+            reason?: ("subject_not_held" | "subject_has_options") | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "computed" | "not_computable";
+            /** Subject */
+            subject: string;
+            /** Subject Value Baseline */
+            subject_value_baseline?: number | null;
+            /** Subject Value Candidate */
+            subject_value_candidate?: number | null;
+        };
+        /**
+         * HypothesisSource
+         * @description Where a claim or its evidence came from. Never an authorization.
+         */
+        HypothesisSource: {
+            /** Author */
+            author?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Paraphrase
+             * @default true
+             */
+            paraphrase?: boolean;
+            /** Published At */
+            published_at?: string | null;
+            /** Publisher */
+            publisher?: string | null;
+            /** Quote Locator */
+            quote_locator?: string | null;
+            /** Retrieved At */
+            retrieved_at?: string | null;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "user_statement" | "provider_snapshot" | "method_card";
+            /** Url */
+            url?: string | null;
+            /**
+             * Usage Basis
+             * @enum {string}
+             */
+            usage_basis: "user_provided" | "provider_api" | "public_page_paraphrase";
+            /**
+             * Verification
+             * @enum {string}
+             */
+            verification: "not_verified" | "provider_snapshot" | "reviewed_method";
+        };
+        /**
+         * HypothesisTest
+         * @description One observable predicate. The threshold is ALWAYS the user's number.
+         */
+        HypothesisTest: {
+            /**
+             * Comparator
+             * @enum {string}
+             */
+            comparator: "gt" | "ge" | "lt" | "le";
+            /** Observation Id */
+            observation_id: string;
+            /** Threshold */
+            threshold: number;
+            /**
+             * Threshold Basis
+             * @default user_assumption
+             * @constant
+             */
+            threshold_basis?: "user_assumption";
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "ratio" | "fraction";
+        };
         /** InputChange */
         InputChange: {
             /** Current */
@@ -5265,6 +5407,18 @@ export interface components {
             cik: string;
             /** Name */
             name: string;
+        };
+        /** InvalidationCondition */
+        InvalidationCondition: {
+            /** Description */
+            description: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "observable_test" | "qualitative_check" | "not_defined";
+            /** Observation Id */
+            observation_id?: string | null;
         };
         /** JourneyOut */
         JourneyOut: {
@@ -6800,6 +6954,71 @@ export interface components {
             missing?: components["schemas"]["FieldProvenance"][];
             /** Ticker */
             ticker: string;
+        };
+        /**
+         * ResearchHypothesis
+         * @description A checkable research view. Evidence, model inference and user assumption
+         *     are separate fields; none of them can authorize a tool, rank a candidate
+         *     or become a confirmed comparison parameter.
+         */
+        ResearchHypothesis: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /**
+             * Can Authorize Tools
+             * @default false
+             * @constant
+             */
+            can_authorize_tools?: false;
+            /** Claim */
+            claim: string;
+            /**
+             * Claim Basis
+             * @enum {string}
+             */
+            claim_basis: "user_assumption" | "model_inference";
+            /**
+             * Comparison Input
+             * @default user_entered_price_change_only
+             * @constant
+             */
+            comparison_input?: "user_entered_price_change_only";
+            /** Counter Arguments */
+            counter_arguments: string[];
+            /** Evidence Observation Ids */
+            evidence_observation_ids?: string[];
+            /** Id */
+            id: string;
+            /** Inference */
+            inference?: string[];
+            /** Invalidation Conditions */
+            invalidation_conditions: components["schemas"]["InvalidationCondition"][];
+            /** Missing */
+            missing?: components["schemas"]["HypothesisMissing"][];
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "user_view" | "method_question";
+            /**
+             * Scope
+             * @default company
+             * @constant
+             */
+            scope?: "company";
+            /** Sources */
+            sources: components["schemas"]["HypothesisSource"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "unverified" | "supported_by_evidence" | "contradicted" | "stale";
+            /** Subject */
+            subject: string;
+            test?: components["schemas"]["HypothesisTest"] | null;
         };
         /** ResearchLead */
         ResearchLead: {

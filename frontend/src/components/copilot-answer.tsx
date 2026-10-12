@@ -2,6 +2,7 @@
 
 /** Shared, input-free renderer for the existing grounded six-section contract. */
 import { CopilotResearchPanel } from "./copilot-research";
+import type { ResearchHypothesis } from "@/lib/copilot-research";
 import { DataConfidence } from "@/components/data-confidence";
 import { Markdown } from "@/components/markdown";
 import type {
@@ -42,7 +43,9 @@ function sourceClass(source: string): string {
   return SOURCE_STYLE[source] ?? SOURCE_STYLE.glossary;
 }
 
-export function CopilotAnswerCard({ answer }: { answer: CopilotAnswer }) {
+export function CopilotAnswerCard({ answer, onTestHypothesis }: {
+  answer: CopilotAnswer; onTestHypothesis?: (h: ResearchHypothesis) => void;
+}) {
   const sections = answer.sections ?? [];
   const directionalBlocked =
     !answer.decision_support &&
@@ -107,7 +110,7 @@ export function CopilotAnswerCard({ answer }: { answer: CopilotAnswer }) {
         </div>
       )}
 
-      <CopilotResearchPanel research={answer.research_context ?? []} />
+      <CopilotResearchPanel research={answer.research_context ?? []} onTestHypothesis={onTestHypothesis} />
 
       {sections.length > 0 ? (
         <div className="space-y-3">

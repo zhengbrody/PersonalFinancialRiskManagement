@@ -16,6 +16,7 @@ from ..schemas.copilot_research import (
     ResearchObservation,
     ResearchQuestion,
 )
+from . import research_hypotheses
 from .analyst_methods import select_methods
 
 _FIELDS = (
@@ -58,7 +59,7 @@ def safe_research_url(value):
         return None
 
 
-def build_context(ticker, fp, *, now=None):
+def build_context(ticker, fp, *, now=None, message=None, tickers=None):
     now = now or datetime.now(timezone.utc)
     # A mislabeled or wrong-security cache entry is never reused.
     if fp is not None and fp.ticker != ticker:
@@ -142,6 +143,12 @@ def build_context(ticker, fp, *, now=None):
         if len(leads) == 3:
             break
     present = sum(o.value is not None for o in observations)
+    views = research_hypotheses.user_views(
+        message or "", ticker, observations, tickers=list(tickers or [ticker]), now=now
+    )
+    hypotheses = views + research_hypotheses.method_hypotheses(
+        ticker, questions, methods, observations, now=now, start=len(views)
+    )
     return CopilotResearch(
         ticker=ticker,
         captured_at=now,
@@ -154,6 +161,7 @@ def build_context(ticker, fp, *, now=None):
         questions=questions,
         leads=leads,
         methods=methods,
+        hypotheses=hypotheses,
         limitations=(
             ["One or more method reviews are unavailable; their questions are withheld."]
             if len(methods) < 2
@@ -166,6 +174,7 @@ def build_context(ticker, fp, *, now=None):
             "Questions are untested MindMarket hypotheses, not conclusions or analyst recommendations.",
             "News links are unverified metadata only. Article text, author identity, conflicts and opposing coverage have not been verified.",
             "Company research is not account evidence and cannot authorize tools, rank candidates or save a plan.",
+            "Hypothesis status compares one provider snapshot with a stated threshold. It does not establish the thesis, a reporting period or suitability.",
         ],
     )
 

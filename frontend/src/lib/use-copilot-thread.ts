@@ -12,7 +12,7 @@ import {
 } from "./risk-check";
 import { readSession, writeSession } from "./use-session-state";
 import { loadSavedRun, savedRunsEnabled, type SavedRun } from "./copilot-runs";
-import { changeComparisonSchema, changeDraftSchema, emptyChange, isChangeRequest, comparisonVerificationSchema, comparisonVerificationSummarySchema, savedComparisonSchema, savedComparisonSummarySchema, type ChangeDraft } from "./copilot-compare";
+import { changeComparisonSchema, changeDraftSchema, emptyChange, hypothesisRequest, isChangeRequest, comparisonVerificationSchema, comparisonVerificationSummarySchema, savedComparisonSchema, savedComparisonSummarySchema, type ChangeDraft } from "./copilot-compare";
 
 const turnSchema = z.object({
   id: z.string(),
@@ -255,6 +255,9 @@ export function useCopilotThread(
       patch(turn.id, { error: "Enter a held ticker and a positive dollar amount with at most two decimal places." });
       return;
     }
+    const carried = hypothesisRequest(turn.change.hypothesis);
+    if (!carried.ok) { patch(turn.id, { error: carried.error }); return; }
+    const hypothesis = carried.value;
     const ac = new AbortController();
     active.current = ac;
     patch(turn.id, { status: "running", error: undefined });
@@ -262,9 +265,13 @@ export function useCopilotThread(
     try {
       const comparison = await apiFetch("/api/v1/copilot/compare-change", {
         method: "POST", authToken: token ?? undefined, signal: ac.signal,
-        body: { expected_portfolio_id: portfolioId, ticker, amount: Number(amount), proceeds }, schema: changeComparisonSchema,
+        body: { expected_portfolio_id: portfolioId, ticker, amount: Number(amount), proceeds, ...(hypothesis ? { hypothesis } : {}) }, schema: changeComparisonSchema,
       });
-      if (comparison.portfolio_id !== portfolioId || comparison.assumptions.expected_portfolio_id !== portfolioId || comparison.assumptions.ticker !== ticker || comparison.assumptions.amount !== Number(amount) || comparison.assumptions.proceeds !== proceeds)
+      const echoed = comparison.assumptions.hypothesis ?? undefined;
+      const hypothesisMismatch = hypothesis
+        ? !echoed || echoed.hypothesis_id !== hypothesis.hypothesis_id || echoed.price_change_pct !== hypothesis.price_change_pct || comparison.hypothesis_scenario?.hypothesis_id !== hypothesis.hypothesis_id
+        : Boolean(echoed || comparison.hypothesis_scenario);
+      if (hypothesisMismatch || comparison.portfolio_id !== portfolioId || comparison.assumptions.expected_portfolio_id !== portfolioId || comparison.assumptions.ticker !== ticker || comparison.assumptions.amount !== Number(amount) || comparison.assumptions.proceeds !== proceeds)
         throw new ApiError(409, "comparison_mismatch", "The comparison does not match this portfolio and assumption. Please try again.");
       if (!ac.signal.aborted) patch(turn.id, { status: "completed", comparison });
     } catch (error) {

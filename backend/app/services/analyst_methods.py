@@ -9,7 +9,7 @@ unreviewed cards fail closed for new answers; historical answers retain attribut
 
 import hashlib
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
 from ..schemas.decision_support import MethodReference
@@ -134,6 +134,59 @@ APPROVED_CONTENT = {
     "systematic": "e4addb805ebcf3cb59d2a9af92ca79ad0ae81f7485ee3470da23b53167de2925",
     "put": "7c26fa59f9182acdf2f86e98c01b8625aa80d10a74cb4af27918cda960558f63",
 }
+
+
+@dataclass(frozen=True)
+class SourceReverification:
+    """An actual re-reading of a card's source. Never generated automatically."""
+
+    reviewer: str
+    reviewed_on: date
+    urls_checked: tuple[str, ...]
+    note: str
+
+
+# Initial editorial review of all four cards (docs/copilot-method-library-maintenance.md).
+BASELINE_REVIEW = date(2026, 9, 11)
+# Internal maintenance policy, not a claim about how fast knowledge decays.
+REVIEW_INTERVAL = timedelta(days=180)
+# Append an entry ONLY after actually re-reading the source. A card's review
+# date may move past the baseline only together with such a record.
+REVERIFICATIONS: dict[str, tuple[SourceReverification, ...]] = {}
+
+
+def maintenance_violations(*, today: date) -> list[str]:
+    """Review dates may only advance with a recorded source re-verification.
+
+    Checks every card: its approval date equals the baseline or the latest
+    recorded re-verification; each record names a reviewer, a past date and the
+    approved source URL; the due date is exactly reviewed_at + REVIEW_INTERVAL
+    (so a due date cannot be extended on its own)."""
+    problems: list[str] = []
+    for card in CARDS:
+        review = REVIEWS.get(card.id)
+        if review is None:
+            problems.append(f"{card.id}: no approval record")
+            continue
+        records = REVERIFICATIONS.get(card.id, ())
+        for record in records:
+            if not record.reviewer.strip():
+                problems.append(f"{card.id}: re-verification without a reviewer")
+            if record.reviewed_on > today:
+                problems.append(f"{card.id}: re-verification dated in the future")
+            if review.source_url not in record.urls_checked:
+                problems.append(f"{card.id}: re-verification did not check the source URL")
+        expected = max([BASELINE_REVIEW, *(r.reviewed_on for r in records)])
+        if review.reviewed_at != expected or card.reviewed_at != expected.isoformat():
+            problems.append(
+                f"{card.id}: review date {review.reviewed_at} has no matching recorded "
+                f"source re-verification (expected {expected})"
+            )
+        if review.review_due != review.reviewed_at + REVIEW_INTERVAL:
+            problems.append(
+                f"{card.id}: review_due is not reviewed_at + {REVIEW_INTERVAL.days} days"
+            )
+    return problems
 
 
 def method_status(card: MethodReference, *, today: date) -> str:
