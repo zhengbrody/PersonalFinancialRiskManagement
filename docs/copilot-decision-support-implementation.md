@@ -557,3 +557,13 @@ into the existing `compare-change` comparison only as a user-typed, explicitly
 confirmed price change (`hypothesis` request field → `hypothesis_scenario`);
 claim text is never sent. Method-card review dates are now gated by recorded
 source re-verifications. No migration, new provider, retrieval or deployment.
+
+## F follow-up: cross-device history and versioned metric review (2026-10)
+
+See docs/plan-history-review-2026-10.md. Adds owner-scoped, cursor-paged history
+over all three signed plan kinds, original-evidence reads verified on every
+request, and a versioned review-metric contract that decomposes changes into
+method / market / account parts (method change never totalled). In-session
+periodic review is opt-in and bounded; offline monitoring is design-only. Both
+flags (`MINDMARKET_PLAN_HISTORY_ENABLED`, `NEXT_PUBLIC_PLAN_HISTORY_ENABLED`)
+default off. No migration. Put plans remain assumption-review only.

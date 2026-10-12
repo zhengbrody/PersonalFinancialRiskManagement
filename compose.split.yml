@@ -73,6 +73,8 @@ services:
       - MINDMARKET_FUNDING_SCENARIOS_SAVE_ENABLED=${MINDMARKET_FUNDING_SCENARIOS_SAVE_ENABLED:-false}
       - MINDMARKET_ASYNC_ANALYSIS_ENABLED=${MINDMARKET_ASYNC_ANALYSIS_ENABLED:-false}
       - MINDMARKET_COPILOT_RUNS_ENABLED=${MINDMARKET_COPILOT_RUNS_ENABLED:-false}
+      # Read-only saved-plan history + metric review; off by default, no migration.
+      - MINDMARKET_PLAN_HISTORY_ENABLED=${MINDMARKET_PLAN_HISTORY_ENABLED:-false}
       # Signed comparison receipts (replay) and explicitly confirmed saved
       # drafts. Both default off and fail closed without the signing key below;
       # save additionally requires migration 0015. These MUST be listed here —
@@ -156,6 +158,7 @@ services:
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
         NEXT_PUBLIC_COPILOT_RUNS_ENABLED: ${NEXT_PUBLIC_COPILOT_RUNS_ENABLED:-false}
+        NEXT_PUBLIC_PLAN_HISTORY_ENABLED: ${NEXT_PUBLIC_PLAN_HISTORY_ENABLED:-false}
     expose:
       - "3000"
     environment:

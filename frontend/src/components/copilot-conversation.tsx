@@ -12,6 +12,8 @@ import { CopilotRiskCheck } from "@/components/copilot-risk-check";
 import { CopilotChangeForm, CopilotChangeResult } from "@/components/copilot-change";
 import { CopilotFundingPlans } from "./copilot-funding-plans";
 import { emptyChange } from "@/lib/copilot-compare";
+import { CopilotPlanHistory } from "./copilot-plan-history";
+import { planHistoryEnabled } from "@/lib/plan-history";
 import { useAuth } from "@/lib/auth-context";
 import { usePortfolioContext } from "@/lib/portfolio-context";
 import { useCopilotThread } from "@/lib/use-copilot-thread";
@@ -161,6 +163,7 @@ function Conversation({
           </div>
         )}
         {fundingPlanId && portfolioId && token && !switching && <CopilotFundingPlans planId={fundingPlanId} portfolioId={portfolioId} token={token} />}
+        {planHistoryEnabled() && portfolioId && token && !switching && <CopilotPlanHistory key={portfolioId} token={token} portfolioId={portfolioId} />}
         {thread.turns.map((turn) => (
           <div key={turn.id} className="min-w-0 space-y-3">
             <div className="ml-auto w-fit max-w-[90%] whitespace-pre-wrap break-words rounded-2xl bg-primary/10 px-4 py-3 text-sm">

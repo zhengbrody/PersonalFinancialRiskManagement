@@ -693,6 +693,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/copilot/saved-plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** History */
+        get: operations["history_api_v1_copilot_saved_plans_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/saved-plans/{plan_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Detail */
+        get: operations["detail_api_v1_copilot_saved_plans__plan_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/saved-plans/{plan_id}/metric-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Metric Review */
+        post: operations["metric_review_api_v1_copilot_saved_plans__plan_id__metric_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/copilot/task-state/confirm": {
         parameters: {
             query?: never;
@@ -3814,6 +3865,15 @@ export interface components {
             /** Previous */
             previous?: string | null;
         };
+        /** DataWindow */
+        DataWindow: {
+            /** History Start */
+            history_start: string;
+            /** Observations */
+            observations: number;
+            /** Price As Of */
+            price_as_of: string;
+        };
         /** DecisionSupport */
         DecisionSupport: {
             /**
@@ -4188,6 +4248,14 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** Envelope[PlanMetricReview] */
+        Envelope_PlanMetricReview_: {
+            data?: components["schemas"]["PlanMetricReview"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
         /** Envelope[PortalSessionResponse] */
         Envelope_PortalSessionResponse_: {
             data?: components["schemas"]["PortalSessionResponse"] | null;
@@ -4343,6 +4411,22 @@ export interface components {
         /** Envelope[SavedFundingPlan] */
         Envelope_SavedFundingPlan_: {
             data?: components["schemas"]["SavedFundingPlan"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[SavedPlanDetail] */
+        Envelope_SavedPlanDetail_: {
+            data?: components["schemas"]["SavedPlanDetail"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[SavedPlanPage] */
+        Envelope_SavedPlanPage_: {
+            data?: components["schemas"]["SavedPlanPage"] | null;
             error?: components["schemas"]["ErrorOut"] | null;
             meta: components["schemas"]["MetaOut"];
         } & {
@@ -5908,6 +5992,23 @@ export interface components {
             /** Request Id */
             request_id: string;
         };
+        /** MethodComparison */
+        MethodComparison: {
+            /**
+             * Contract Version
+             * @default plan-review-metrics-v1
+             * @constant
+             */
+            contract_version?: "plan-review-metrics-v1";
+            /** Current Method Version */
+            current_method_version: string;
+            /** Original Method Version */
+            original_method_version: string;
+            /** Reproduced */
+            reproduced: boolean | null;
+            /** Same Method */
+            same_method: boolean;
+        };
         /** MethodReference */
         MethodReference: {
             /** Applicability */
@@ -5930,6 +6031,14 @@ export interface components {
             url: string;
             /** Version */
             version: string;
+        };
+        /** MetricReviewRequest */
+        MetricReviewRequest: {
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
         };
         /** ModelCardOut */
         ModelCardOut: {
@@ -6615,6 +6724,70 @@ export interface components {
             plan: string;
             /** Price Usd Per Month */
             price_usd_per_month: number;
+        };
+        /** PlanMetricReview */
+        PlanMetricReview: {
+            /** Account Changes */
+            account_changes?: string[];
+            account_window?: components["schemas"]["DataWindow"] | null;
+            /**
+             * Decomposition
+             * @default sequential_market_then_account
+             * @constant
+             */
+            decomposition?: "sequential_market_then_account";
+            /**
+             * Holdings Changed By Review
+             * @default false
+             * @constant
+             */
+            holdings_changed_by_review?: false;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "comparison" | "cash_secured_put" | "funding_scenarios";
+            /**
+             * Live Quote Checked
+             * @default false
+             * @constant
+             */
+            live_quote_checked?: false;
+            market_window?: components["schemas"]["DataWindow"] | null;
+            method?: components["schemas"]["MethodComparison"] | null;
+            /** Metrics */
+            metrics?: components["schemas"]["ReviewMetric"][];
+            /** Notes */
+            notes?: string[];
+            original_window?: components["schemas"]["DataWindow"] | null;
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /**
+             * Realised Return Attribution
+             * @default false
+             * @constant
+             */
+            realised_return_attribution?: false;
+            /**
+             * Reviewed At
+             * Format: date-time
+             */
+            reviewed_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "comparable" | "method_changed" | "not_computable";
+            /** Status Reason */
+            status_reason?: string | null;
         };
         /**
          * PortalSessionRequest
@@ -7521,6 +7694,41 @@ export interface components {
              */
             expected_portfolio_id: string;
         };
+        /** ReviewMetric */
+        ReviewMetric: {
+            /** Account Change */
+            account_change: number | null;
+            /** Current */
+            current: number | null;
+            /** Horizon */
+            horizon: string;
+            /** Label */
+            label: string;
+            /** Market Change */
+            market_change: number | null;
+            /** Method Change */
+            method_change: number | null;
+            /**
+             * Metric Id
+             * @enum {string}
+             */
+            metric_id: "net_equity" | "leverage" | "largest_position_weight" | "annual_volatility" | "var_1d_95_usd" | "cvar_1d_95_usd";
+            /** Not Computable Reason */
+            not_computable_reason?: string | null;
+            /** Original */
+            original: number | null;
+            /** Original Holdings Current Prices */
+            original_holdings_current_prices: number | null;
+            /** Original Inputs Current Method */
+            original_inputs_current_method: number | null;
+            /** Total Change */
+            total_change: number | null;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "usd" | "ratio" | "fraction" | "fraction_per_year";
+        };
         /** ReviewPutPlanRequest */
         ReviewPutPlanRequest: {
             /**
@@ -8293,6 +8501,74 @@ export interface components {
              */
             portfolio_id: string;
             result: components["schemas"]["FundingScenarioResult"];
+        };
+        /**
+         * SavedPlanDetail
+         * @description Exactly one of comparison / put / funding is set, matching ``item.kind``.
+         */
+        SavedPlanDetail: {
+            comparison?: components["schemas"]["SavedComparison"] | null;
+            funding?: components["schemas"]["SavedFundingPlan"] | null;
+            item: components["schemas"]["SavedPlanItem"];
+            put?: components["schemas"]["SavedPutPlan"] | null;
+        };
+        /** SavedPlanItem */
+        SavedPlanItem: {
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /**
+             * Confirmed At
+             * Format: date-time
+             */
+            confirmed_at: string;
+            /** Evidence Sha256 */
+            evidence_sha256: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "comparison" | "cash_secured_put" | "funding_scenarios";
+            /** Methodology Version */
+            methodology_version: string;
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /**
+             * Signature Verified
+             * @default true
+             * @constant
+             */
+            signature_verified?: true;
+            /** Summary */
+            summary: string;
+        };
+        /** SavedPlanPage */
+        SavedPlanPage: {
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /**
+             * Order
+             * @default stable_plan_id
+             * @constant
+             */
+            order?: "stable_plan_id";
+            /** Plans */
+            plans: components["schemas"]["SavedPlanItem"][];
+            /**
+             * Unverified Records
+             * @default 0
+             */
+            unverified_records?: number;
         };
         /** SavedPutPlan */
         SavedPutPlan: {
@@ -10492,6 +10768,106 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_RunOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    history_api_v1_copilot_saved_plans_get: {
+        parameters: {
+            query: {
+                expected_portfolio_id: string;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SavedPlanPage_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    detail_api_v1_copilot_saved_plans__plan_id__get: {
+        parameters: {
+            query: {
+                expected_portfolio_id: string;
+            };
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SavedPlanDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    metric_review_api_v1_copilot_saved_plans__plan_id__metric_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MetricReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_PlanMetricReview_"];
                 };
             };
             /** @description Validation Error */
