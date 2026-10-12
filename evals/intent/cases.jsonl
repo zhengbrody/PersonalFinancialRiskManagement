@@ -1,0 +1,148 @@
+{"id": "int-001", "lang": "en", "question": "How risky is my portfolio right now?", "gold": "portfolio_diagnosis", "ambiguous": false, "notes": "Direct overall-risk question about own book."}
+{"id": "int-002", "lang": "en", "question": "Am I diversified enough?", "gold": "portfolio_diagnosis", "ambiguous": false, "notes": "Diversification of own holdings."}
+{"id": "int-003", "lang": "en", "question": "What happens to my portfolio if the market drops 20%?", "gold": "scenario_simulation", "ambiguous": false, "notes": "Explicit % shock on own book."}
+{"id": "int-004", "lang": "en", "question": "Simulate a 2008-style crash on my holdings", "gold": "scenario_simulation", "ambiguous": false, "notes": "Explicit crash simulation."}
+{"id": "int-005", "lang": "en", "question": "Is the Fed going to cut rates this year?", "gold": "macro_rates", "ambiguous": false, "notes": "Central-bank rates question, no holding."}
+{"id": "int-006", "lang": "en", "question": "Can I harvest tax losses before year end?", "gold": "tax_fee_review", "ambiguous": false, "notes": "Tax-loss harvesting."}
+{"id": "int-007", "lang": "en", "question": "What is the Sharpe ratio?", "gold": "explain_metric", "ambiguous": false, "notes": "Pure definition."}
+{"id": "int-008", "lang": "en", "question": "Explain CVaR in simple terms", "gold": "explain_metric", "ambiguous": false, "notes": "Pure definition."}
+{"id": "int-009", "lang": "en", "question": "What should I do to improve my health score?", "gold": "action_plan", "ambiguous": false, "notes": "Asks for next steps."}
+{"id": "int-010", "lang": "en", "question": "Thoughts on NVDA?", "gold": "ticker_research", "ambiguous": false, "notes": "Opinion on one named ticker."}
+{"id": "int-011", "lang": "en", "question": "Compare AAPL and MSFT", "gold": "compare_tickers", "ambiguous": false, "notes": "Two tickers + compare cue."}
+{"id": "int-012", "lang": "en", "question": "Am I over-leveraged on margin?", "gold": "margin_risk", "ambiguous": false, "notes": "Leverage in own account."}
+{"id": "int-013", "lang": "en", "question": "What's my options gamma exposure?", "gold": "options_risk", "ambiguous": false, "notes": "Options greeks of own book."}
+{"id": "int-014", "lang": "en", "question": "Is TSLA overvalued?", "gold": "ticker_research", "ambiguous": false, "notes": "Valuation of one named ticker."}
+{"id": "int-015", "lang": "en", "question": "AAPL vs GOOGL for a long-term hold", "gold": "compare_tickers", "ambiguous": false, "notes": "Two tickers + vs."}
+{"id": "int-016", "lang": "en", "question": "How much buying power do I have left before a margin call?", "gold": "margin_risk", "ambiguous": false, "notes": "Buying power / margin call."}
+{"id": "int-017", "lang": "en", "question": "When do my covered calls expire?", "gold": "options_risk", "ambiguous": false, "notes": "Own options expiry."}
+{"id": "int-018", "lang": "en", "question": "Which of my funds has the highest expense ratio?", "gold": "tax_fee_review", "ambiguous": false, "notes": "Fund fees."}
+{"id": "int-019", "lang": "en", "question": "What does beta mean?", "gold": "explain_metric", "ambiguous": false, "notes": "Pure definition."}
+{"id": "int-020", "lang": "en", "question": "How concentrated is my portfolio?", "gold": "portfolio_diagnosis", "ambiguous": false, "notes": "Concentration; guards the 'conCENTRATEd' -> rate substring bug."}
+{"id": "int-021", "lang": "en", "question": "Give me a plan to rebalance", "gold": "action_plan", "ambiguous": false, "notes": "Asks for a rebalance plan."}
+{"id": "int-022", "lang": "en", "question": "How would a recession affect me?", "gold": "scenario_simulation", "ambiguous": false, "notes": "Hypothetical macro shock applied to own book."}
+{"id": "int-023", "lang": "en", "question": "Is inflation still a risk for the market?", "gold": "macro_rates", "ambiguous": false, "notes": "Macro inflation, market-level."}
+{"id": "int-024", "lang": "en", "question": "Should I buy more AMD?", "gold": "ticker_research", "ambiguous": false, "notes": "Decision about one named stock; routed to research (no buy/sell advice is given downstream)."}
+{"id": "int-025", "lang": "en", "question": "What's the bull case for COST?", "gold": "ticker_research", "ambiguous": false, "notes": "Bull case for one ticker."}
+{"id": "int-026", "lang": "en", "question": "Rank MSFT, AMZN and META on valuation", "gold": "compare_tickers", "ambiguous": false, "notes": "Three tickers ranked."}
+{"id": "int-027", "lang": "en", "question": "Is my short put at risk of assignment?", "gold": "options_risk", "ambiguous": false, "notes": "Own option assignment risk."}
+{"id": "int-028", "lang": "en", "question": "What's my portfolio beta?", "gold": "portfolio_diagnosis", "ambiguous": false, "notes": "A metric VALUE of own book (not a definition) -> diagnosis."}
+{"id": "int-029", "lang": "en", "question": "How bad could a 30% correction be for my account?", "gold": "scenario_simulation", "ambiguous": false, "notes": "Explicit % shock."}
+{"id": "int-030", "lang": "en", "question": "How am I doing?", "gold": "portfolio_diagnosis", "ambiguous": false, "notes": "Overall status."}
+{"id": "int-031", "lang": "en", "question": "Fix my portfolio", "gold": "action_plan", "ambiguous": false, "notes": "Action request."}
+{"id": "int-032", "lang": "en", "question": "Analyze my holdings", "gold": "portfolio_diagnosis", "ambiguous": false, "notes": "'analyze' without a ticker -> whole-book diagnosis."}
+{"id": "int-033", "lang": "en", "question": "Look at my portfolio and tell me the biggest risk", "gold": "portfolio_diagnosis", "ambiguous": false, "notes": "Biggest-risk diagnosis."}
+{"id": "int-034", "lang": "en", "question": "What is theta decay?", "gold": "explain_metric", "ambiguous": false, "notes": "Pure options concept definition, no personal reference."}
+{"id": "int-035", "lang": "en", "question": "Am I paying too much in fees?", "gold": "tax_fee_review", "ambiguous": false, "notes": "Fees."}
+{"id": "int-036", "lang": "en", "question": "How much tax will I owe if I sell?", "gold": "tax_fee_review", "ambiguous": false, "notes": "Tax on sale (no 'if market' shock; tax domain dominates)."}
+{"id": "int-037", "lang": "en", "question": "Next steps after my diagnosis?", "gold": "action_plan", "ambiguous": false, "notes": "Next steps."}
+{"id": "int-038", "lang": "en", "question": "How do I reduce my concentration?", "gold": "action_plan", "ambiguous": false, "notes": "How-to improvement, not a status read."}
+{"id": "int-039", "lang": "en", "question": "Recommend a hedge for my portfolio", "gold": "action_plan", "ambiguous": false, "notes": "Action request (downstream stays non-transactional)."}
+{"id": "int-040", "lang": "en", "question": "Should I use margin to buy more?", "gold": "margin_risk", "ambiguous": false, "notes": "Margin usage decision."}
+{"id": "int-041", "lang": "en", "question": "Is my iron condor safe through earnings?", "gold": "options_risk", "ambiguous": false, "notes": "Own options position."}
+{"id": "int-042", "lang": "en", "question": "NVDA earnings preview", "gold": "ticker_research", "ambiguous": false, "notes": "One ticker research."}
+{"id": "int-043", "lang": "en", "question": "Is GOOGL a buy at these prices?", "gold": "ticker_research", "ambiguous": false, "notes": "One ticker."}
+{"id": "int-044", "lang": "en", "question": "Which is riskier, ARKK or SPY?", "gold": "compare_tickers", "ambiguous": false, "notes": "Two tickers compared on risk."}
+{"id": "int-045", "lang": "en", "question": "What is the difference between VaR and CVaR?", "gold": "explain_metric", "ambiguous": false, "notes": "Two definitions contrasted."}
+{"id": "int-046", "lang": "en", "question": "How volatile is my portfolio?", "gold": "portfolio_diagnosis", "ambiguous": false, "notes": "Own volatility."}
+{"id": "int-047", "lang": "en", "question": "Is SPY or QQQ better for me?", "gold": "compare_tickers", "ambiguous": false, "notes": "Two tickers 'or'."}
+{"id": "int-048", "lang": "en", "question": "What does the yield curve say right now?", "gold": "macro_rates", "ambiguous": false, "notes": "Current macro indicator."}
+{"id": "int-049", "lang": "en", "question": "Is my accurate cost basis affecting my moderate risk score?", "gold": "portfolio_diagnosis", "ambiguous": false, "notes": "Substring traps: accuRATE / modeRATE must not route to macro."}
+{"id": "int-050", "lang": "en", "question": "What does the yield curve say about recession odds?", "gold": "macro_rates", "ambiguous": true, "notes": "'recession' keyword pulls toward scenario, but the ask is a macro reading."}
+{"id": "int-051", "lang": "en", "question": "What is the VIX telling us?", "gold": "macro_rates", "ambiguous": true, "notes": "'what is' looks like a definition; it asks for the current macro reading."}
+{"id": "int-052", "lang": "en", "question": "Explain what assignment risk means for a short put", "gold": "explain_metric", "ambiguous": true, "notes": "Options vocabulary, but a general concept explanation with no personal reference."}
+{"id": "int-053", "lang": "en", "question": "What's going on with interest rates and my bonds?", "gold": "macro_rates", "ambiguous": true, "notes": "Mentions own bonds but asks the current rate situation (status, not a hypothetical)."}
+{"id": "int-054", "lang": "en", "question": "My portfolio feels too risky, what should I do?", "gold": "action_plan", "ambiguous": true, "notes": "Diagnosis + action; the explicit ask is what to do."}
+{"id": "int-055", "lang": "en", "question": "Is my margin loan making a crash worse for me?", "gold": "margin_risk", "ambiguous": true, "notes": "Crash + margin; the mechanism asked about is leverage."}
+{"id": "int-056", "lang": "en", "question": "If rates rise, what happens to my portfolio?", "gold": "scenario_simulation", "ambiguous": true, "notes": "Rate cue vs hypothetical; it is a conditional shock on own book -> scenario."}
+{"id": "int-057", "lang": "en", "question": "What if NVDA falls 40%?", "gold": "scenario_simulation", "ambiguous": true, "notes": "Ticker present, but a hypothetical % move -> scenario."}
+{"id": "int-058", "lang": "en", "question": "Tell me about the fear and greed index", "gold": "macro_rates", "ambiguous": true, "notes": "Could be a definition; a market-sentiment indicator, treated as macro."}
+{"id": "int-059", "lang": "en", "question": "Is now a good time to invest?", "gold": "macro_rates", "ambiguous": true, "notes": "No keyword; a market-timing/market-overall question."}
+{"id": "int-060", "lang": "en", "question": "Should I sell everything?", "gold": "action_plan", "ambiguous": true, "notes": "No keyword; an action question (answered non-transactionally)."}
+{"id": "int-061", "lang": "en", "question": "What is a good expense ratio for an index fund?", "gold": "tax_fee_review", "ambiguous": true, "notes": "'what is' vs fee domain; it asks a fee benchmark, not a definition."}
+{"id": "int-062", "lang": "en", "question": "Explain my margin requirement", "gold": "margin_risk", "ambiguous": true, "notes": "'explain' cue, but personal margin account -> margin."}
+{"id": "int-063", "lang": "en", "question": "Why did my score fall?", "gold": "portfolio_diagnosis", "ambiguous": true, "notes": "'fall' is a scenario keyword; it is a score-change diagnosis."}
+{"id": "int-064", "lang": "en", "question": "MSFT or AAPL?", "gold": "compare_tickers", "ambiguous": true, "notes": "Minimal two-ticker either/or."}
+{"id": "int-065", "lang": "en", "question": "What is AAPL's fair value?", "gold": "ticker_research", "ambiguous": true, "notes": "'what is' cue but it is valuation of a named ticker."}
+{"id": "int-066", "lang": "en", "question": "Is the market in a bear market?", "gold": "macro_rates", "ambiguous": true, "notes": "'bear market' is a scenario keyword; asks current regime."}
+{"id": "int-067", "lang": "en", "question": "How did the market do today?", "gold": "macro_rates", "ambiguous": true, "notes": "No macro keyword; market-level status."}
+{"id": "int-068", "lang": "en", "question": "Should I roll my NVDA calls?", "gold": "options_risk", "ambiguous": true, "notes": "Ticker present, but about an options position."}
+{"id": "int-069", "lang": "en", "question": "Explain the greeks on my iron condor", "gold": "options_risk", "ambiguous": true, "notes": "'explain' cue but own position."}
+{"id": "int-070", "lang": "en", "question": "Is TSLA too big a part of my portfolio?", "gold": "portfolio_diagnosis", "ambiguous": true, "notes": "Ticker present; concentration of own book."}
+{"id": "int-071", "lang": "en", "question": "Does my leverage make my VaR worse?", "gold": "margin_risk", "ambiguous": true, "notes": "VaR + leverage; leverage is the driver asked about."}
+{"id": "int-072", "lang": "en", "question": "What does my VaR mean?", "gold": "explain_metric", "ambiguous": true, "notes": "Personal pronoun, but asks the meaning of the metric."}
+{"id": "int-073", "lang": "en", "question": "hi", "gold": "portfolio_diagnosis", "ambiguous": true, "notes": "No intent; default route is portfolio diagnosis."}
+{"id": "int-074", "lang": "en", "question": "Help", "gold": "portfolio_diagnosis", "ambiguous": true, "notes": "No intent; default route."}
+{"id": "int-075", "lang": "en", "question": "Compare my portfolio to the S&P 500", "gold": "portfolio_diagnosis", "ambiguous": true, "notes": "'compare' but no second ticker; a benchmark-relative diagnosis."}
+{"id": "int-076", "lang": "en", "question": "Is there a recession coming?", "gold": "macro_rates", "ambiguous": true, "notes": "'recession' keyword; it is a macro forecast question."}
+{"id": "int-077", "lang": "en", "question": "What would a rate hike do to my bonds?", "gold": "scenario_simulation", "ambiguous": true, "notes": "Rate cue, but a conditional shock on own holdings."}
+{"id": "int-078", "lang": "en", "question": "Is my portfolio protected if the economy slows?", "gold": "scenario_simulation", "ambiguous": true, "notes": "Economy cue (macro) vs conditional effect on own book -> scenario."}
+{"id": "int-079", "lang": "zh", "question": "我的组合风险高吗?", "gold": "portfolio_diagnosis", "ambiguous": false, "notes": "整体风险。"}
+{"id": "int-080", "lang": "zh", "question": "我的持仓够分散吗?", "gold": "portfolio_diagnosis", "ambiguous": false, "notes": "分散度。"}
+{"id": "int-081", "lang": "zh", "question": "如果市场下跌20%,我会亏多少?", "gold": "scenario_simulation", "ambiguous": false, "notes": "明确的百分比冲击。"}
+{"id": "int-082", "lang": "zh", "question": "模拟一下熊市对我的影响", "gold": "scenario_simulation", "ambiguous": false, "notes": "明确的情景模拟请求。"}
+{"id": "int-083", "lang": "zh", "question": "美联储今年会降息吗?", "gold": "macro_rates", "ambiguous": false, "notes": "央行利率。"}
+{"id": "int-084", "lang": "zh", "question": "现在通胀怎么样?", "gold": "macro_rates", "ambiguous": false, "notes": "宏观通胀。"}
+{"id": "int-085", "lang": "zh", "question": "我可以做税损收割吗?", "gold": "tax_fee_review", "ambiguous": false, "notes": "税损收割。"}
+{"id": "int-086", "lang": "zh", "question": "什么是夏普比率?", "gold": "explain_metric", "ambiguous": false, "notes": "纯定义。"}
+{"id": "int-087", "lang": "zh", "question": "解释一下贝塔", "gold": "explain_metric", "ambiguous": false, "notes": "纯定义。"}
+{"id": "int-088", "lang": "zh", "question": "我该怎么改善我的健康分?", "gold": "action_plan", "ambiguous": false, "notes": "下一步行动。"}
+{"id": "int-089", "lang": "zh", "question": "NVDA 的估值高吗?", "gold": "ticker_research", "ambiguous": false, "notes": "单只股票估值。"}
+{"id": "int-090", "lang": "zh", "question": "对比一下 AAPL 和 MSFT", "gold": "compare_tickers", "ambiguous": false, "notes": "两只股票对比。"}
+{"id": "int-091", "lang": "zh", "question": "我的杠杆太高了吗?", "gold": "margin_risk", "ambiguous": false, "notes": "杠杆。"}
+{"id": "int-092", "lang": "zh", "question": "我的期权希腊字母暴露是多少?", "gold": "options_risk", "ambiguous": false, "notes": "期权希腊字母。"}
+{"id": "int-093", "lang": "zh", "question": "我的融资余额会不会被强平?", "gold": "margin_risk", "ambiguous": false, "notes": "融资/强平;人工判断无歧义,但词表无'强平'。"}
+{"id": "int-094", "lang": "zh", "question": "我的备兑看涨期权什么时候到期?", "gold": "options_risk", "ambiguous": false, "notes": "期权到期。"}
+{"id": "int-095", "lang": "zh", "question": "我的基金费率高吗?", "gold": "tax_fee_review", "ambiguous": false, "notes": "费率。"}
+{"id": "int-096", "lang": "zh", "question": "VIX 现在说明什么?", "gold": "macro_rates", "ambiguous": false, "notes": "VIX 当前读数。"}
+{"id": "int-097", "lang": "zh", "question": "什么是最大回撤?", "gold": "explain_metric", "ambiguous": false, "notes": "纯定义。"}
+{"id": "int-098", "lang": "zh", "question": "我的组合集中度怎么样?", "gold": "portfolio_diagnosis", "ambiguous": false, "notes": "集中度。"}
+{"id": "int-099", "lang": "zh", "question": "帮我做个再平衡计划", "gold": "action_plan", "ambiguous": false, "notes": "再平衡计划。"}
+{"id": "int-100", "lang": "zh", "question": "经济衰退会怎么影响我?", "gold": "scenario_simulation", "ambiguous": false, "notes": "条件冲击作用于自己的组合。"}
+{"id": "int-101", "lang": "zh", "question": "我的卖出看跌期权会被行权吗?", "gold": "options_risk", "ambiguous": false, "notes": "自己的期权行权风险。"}
+{"id": "int-102", "lang": "zh", "question": "我的组合贝塔是多少?", "gold": "portfolio_diagnosis", "ambiguous": false, "notes": "自己组合的指标数值(非定义)。"}
+{"id": "int-103", "lang": "zh", "question": "如果大跌30%我的账户会怎样?", "gold": "scenario_simulation", "ambiguous": false, "notes": "明确的百分比冲击。"}
+{"id": "int-104", "lang": "zh", "question": "恐慌贪婪指数现在多少?", "gold": "macro_rates", "ambiguous": false, "notes": "当前市场情绪指标。"}
+{"id": "int-105", "lang": "zh", "question": "我表现怎么样?", "gold": "portfolio_diagnosis", "ambiguous": false, "notes": "整体状态。"}
+{"id": "int-106", "lang": "zh", "question": "AAPL 的合理估值是多少?", "gold": "ticker_research", "ambiguous": false, "notes": "单只股票估值。"}
+{"id": "int-107", "lang": "zh", "question": "什么是 theta 衰减?", "gold": "explain_metric", "ambiguous": false, "notes": "纯期权概念定义。"}
+{"id": "int-108", "lang": "zh", "question": "我付的手续费太多了吗?", "gold": "tax_fee_review", "ambiguous": false, "notes": "费用;词表只有'费用/费率',无'手续费'。"}
+{"id": "int-109", "lang": "zh", "question": "卖出的话要交多少税?", "gold": "tax_fee_review", "ambiguous": false, "notes": "税;词表有'缴税'无'交税'。"}
+{"id": "int-110", "lang": "zh", "question": "我该用融资再买一些吗?", "gold": "margin_risk", "ambiguous": false, "notes": "融资使用决定。"}
+{"id": "int-111", "lang": "zh", "question": "我的铁鹰期权在财报前安全吗?", "gold": "options_risk", "ambiguous": false, "notes": "自己的期权头寸。"}
+{"id": "int-112", "lang": "zh", "question": "ARKK 和 SPY 哪个风险更大?", "gold": "compare_tickers", "ambiguous": false, "notes": "两只 ETF 风险对比。"}
+{"id": "int-113", "lang": "zh", "question": "VaR 和 CVaR 有什么区别?", "gold": "explain_metric", "ambiguous": false, "notes": "两个定义对比;注意 'CVAR' 会被正则误抽成股票代码。"}
+{"id": "int-114", "lang": "zh", "question": "我的组合波动有多大?", "gold": "portfolio_diagnosis", "ambiguous": false, "notes": "自己的波动率。"}
+{"id": "int-115", "lang": "zh", "question": "我的资产配置合理吗?", "gold": "portfolio_diagnosis", "ambiguous": false, "notes": "整体配置诊断。"}
+{"id": "int-116", "lang": "zh", "question": "下一步我该做什么?", "gold": "action_plan", "ambiguous": false, "notes": "下一步行动。"}
+{"id": "int-117", "lang": "zh", "question": "SPY 和 QQQ 哪个更适合我?", "gold": "compare_tickers", "ambiguous": false, "notes": "两只 ETF 对比。"}
+{"id": "int-118", "lang": "zh", "question": "我的税务情况有什么可以优化的?", "gold": "tax_fee_review", "ambiguous": false, "notes": "税务('优化'是行动词,但领域是税务)。"}
+{"id": "int-119", "lang": "zh", "question": "你怎么看英伟达?", "gold": "ticker_research", "ambiguous": true, "notes": "中文公司名,无代码;是单只股票观点。"}
+{"id": "int-120", "lang": "zh", "question": "特斯拉现在值得买吗?", "gold": "ticker_research", "ambiguous": true, "notes": "中文公司名,无代码。"}
+{"id": "int-121", "lang": "zh", "question": "苹果和微软哪个更好?", "gold": "compare_tickers", "ambiguous": true, "notes": "两家公司中文名,无代码 -> 对比。"}
+{"id": "int-122", "lang": "zh", "question": "收益率曲线倒挂意味着什么?", "gold": "macro_rates", "ambiguous": true, "notes": "像定义问题,但问的是宏观信号含义。"}
+{"id": "int-123", "lang": "zh", "question": "解释一下卖出看跌期权的行权风险", "gold": "explain_metric", "ambiguous": true, "notes": "期权词汇,但无个人指代,是概念解释。"}
+{"id": "int-124", "lang": "zh", "question": "利率上升对我的债券有什么影响?", "gold": "scenario_simulation", "ambiguous": true, "notes": "利率线索 vs 条件冲击作用于自己的持仓 -> 情景。"}
+{"id": "int-125", "lang": "zh", "question": "我的组合太冒险了,怎么办?", "gold": "action_plan", "ambiguous": true, "notes": "诊断 + 行动,明确问的是怎么办。"}
+{"id": "int-126", "lang": "zh", "question": "我的保证金会让暴跌更糟吗?", "gold": "margin_risk", "ambiguous": true, "notes": "暴跌 + 保证金;问的是杠杆机制。"}
+{"id": "int-127", "lang": "zh", "question": "如果加息,我的组合会怎样?", "gold": "scenario_simulation", "ambiguous": true, "notes": "条件冲击作用于自己的组合。"}
+{"id": "int-128", "lang": "zh", "question": "现在是入场的好时机吗?", "gold": "macro_rates", "ambiguous": true, "notes": "无关键词;市场时机/整体市场。"}
+{"id": "int-129", "lang": "zh", "question": "我应该全部卖掉吗?", "gold": "action_plan", "ambiguous": true, "notes": "无关键词;行动问题(下游不给交易建议)。"}
+{"id": "int-130", "lang": "zh", "question": "指数基金的费率多少算合理?", "gold": "tax_fee_review", "ambiguous": true, "notes": "像定义,但问的是费用基准。"}
+{"id": "int-131", "lang": "zh", "question": "解释一下我的保证金要求", "gold": "margin_risk", "ambiguous": true, "notes": "'解释'线索,但是自己的保证金账户。"}
+{"id": "int-132", "lang": "zh", "question": "为什么我的分数下降了?", "gold": "portfolio_diagnosis", "ambiguous": true, "notes": "分数变化诊断。"}
+{"id": "int-133", "lang": "zh", "question": "现在是熊市吗?", "gold": "macro_rates", "ambiguous": true, "notes": "'熊市'是情景关键词;问的是当前市场状态。"}
+{"id": "int-134", "lang": "zh", "question": "我的 NVDA 看涨期权要不要展期?", "gold": "options_risk", "ambiguous": true, "notes": "含代码,但是期权头寸问题。"}
+{"id": "int-135", "lang": "zh", "question": "TSLA 在我的组合里占比太高吗?", "gold": "portfolio_diagnosis", "ambiguous": true, "notes": "含代码;是自己组合的集中度。"}
+{"id": "int-136", "lang": "zh", "question": "杠杆会让我的 VaR 变大吗?", "gold": "margin_risk", "ambiguous": true, "notes": "VaR + 杠杆;杠杆是被问的驱动因素。"}
+{"id": "int-137", "lang": "zh", "question": "我的 VaR 是什么意思?", "gold": "explain_metric", "ambiguous": true, "notes": "有'我的',但问的是指标含义。"}
+{"id": "int-138", "lang": "zh", "question": "你好", "gold": "portfolio_diagnosis", "ambiguous": true, "notes": "无意图;默认路由。"}
+{"id": "int-139", "lang": "zh", "question": "把我的组合和标普500比较一下", "gold": "portfolio_diagnosis", "ambiguous": true, "notes": "'比较'但没有第二个代码;基准相对诊断。"}
+{"id": "int-140", "lang": "zh", "question": "会有经济衰退吗?", "gold": "macro_rates", "ambiguous": true, "notes": "'衰退'是情景关键词;是宏观预测问题。"}
+{"id": "int-141", "lang": "zh", "question": "英伟达财报前瞻", "gold": "ticker_research", "ambiguous": true, "notes": "中文公司名,无代码。"}
+{"id": "int-142", "lang": "zh", "question": "如何降低我的集中度?", "gold": "action_plan", "ambiguous": true, "notes": "'集中度'是诊断词;问的是如何改善 -> 行动。"}
+{"id": "int-143", "lang": "zh", "question": "市场最近波动这么大,我的组合扛得住吗?", "gold": "scenario_simulation", "ambiguous": true, "notes": "市场线索 vs 自己组合的承压能力;归为情景。"}
+{"id": "int-144", "lang": "zh", "question": "我的 portfolio 风险大吗?", "gold": "portfolio_diagnosis", "ambiguous": true, "notes": "中英混写。"}
+{"id": "int-145", "lang": "zh", "question": "Fed 加息对我有影响吗?", "gold": "scenario_simulation", "ambiguous": true, "notes": "中英混写;条件冲击作用于自己。"}
+{"id": "int-146", "lang": "zh", "question": "我该把现金拿去还融资吗?", "gold": "margin_risk", "ambiguous": true, "notes": "现金 vs 融资还款;核心是杠杆/融资。"}
+{"id": "int-147", "lang": "zh", "question": "我的期权快到期了,下一步怎么办?", "gold": "options_risk", "ambiguous": true, "notes": "'下一步/怎么办'是行动词,但问题对象是期权头寸。"}
+{"id": "int-148", "lang": "zh", "question": "标普500现在贵不贵?", "gold": "macro_rates", "ambiguous": true, "notes": "指数估值 -> 整体市场,而非单只股票。"}

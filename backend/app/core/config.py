@@ -126,6 +126,14 @@ class Settings:
         default_factory=lambda: _env_str("MINDMARKET_DECISION_SUPPORT_ENABLED", "false").lower()
         == "true"
     )
+    # Research experiment (docs/jev-intent-experiment.md): an optional
+    # TypeSafe "Jev" intent classifier, used ONLY for shadow comparison
+    # against the deterministic router. Off by default; the key is read
+    # here and nowhere else.
+    jev_intent_enabled: bool = field(
+        default_factory=lambda: _env_str("MINDMARKET_JEV_INTENT_ENABLED", "false").lower() == "true"
+    )
+    typesafe_api_key: str = field(default_factory=lambda: _env_str("TYPESAFE_API_KEY"), repr=False)
     # Durable foreground checks require migration 0014 and an independent key.
     # Off by default: preparing code never provisions production storage.
     copilot_runs_enabled: bool = field(
