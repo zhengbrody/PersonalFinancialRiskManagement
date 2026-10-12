@@ -1,16 +1,27 @@
 -- Requires 0014, 0016, 0017. Re-runnable: CREATE OR REPLACE + DROP TRIGGER IF EXISTS.
--- Version-two background job records gain three DATABASE-clock guarantees that
--- application code alone cannot provide:
+-- Version-two ("version":2) background job records gain these DATABASE-clock
+-- guarantees, independent of application code. Exactly what is guaranteed:
 --   1. A running job is interrupted only after its lease has expired by the
 --      database clock (a reader with a fast application clock cannot kill it).
---   2. A stored record can never move backwards: revision strictly increases and
---      execution attempts never decrease, whether written by the RPC or by a
---      direct UPDATE (RLS grants the owner UPDATE for version-one runs). A newly
---      inserted record must be a fresh initial reservation, so an old validly
---      signed record cannot be replayed after a DELETE to reset its attempts.
---   3. One owner holds at most one active (queued, or running with a live lease)
---      background job, enforced under a per-owner transaction lock.
--- Version-one foreground runs (no "version":2) are untouched.
+--   2. A stored record never moves backwards: on every UPDATE, by the RPC or a
+--      direct statement (RLS grants the owner UPDATE), revision strictly
+--      increases and execution attempts never decrease. The row's id, user_id
+--      and portfolio_id are immutable and its state column must equal the
+--      state inside the record, so a column-only edit cannot change status.
+--   3. Anti-replay. An INSERT must be a fresh initial reservation (queued,
+--      revision 0, attempts 0, record created_at within [-5 min, +1 min] of the
+--      database clock). A DELETE, direct or through cleanup_copilot_jobs, is
+--      refused until that record's created_at is older than the insert window,
+--      so once a row is deletable its record can never be inserted again:
+--      delete + re-insert of an old signed reservation cannot reset attempts
+--      and bypass the two-attempt cap. Deletes cascaded from a removed
+--      portfolio or account are allowed (no re-insert is possible then).
+--   4. One owner holds at most one active (queued, or running with a live
+--      lease) background job, enforced under a per-owner transaction lock; the
+--      limit check refuses to run for any user other than auth.uid().
+-- Not guaranteed: the database does not verify the HMAC; trust in record TEXT
+-- comes from the server's signature check. Version-one foreground runs (no
+-- "version":2) are untouched by every rule above.
 BEGIN;
 
 CREATE OR REPLACE FUNCTION public.copilot_job_document(p_record text)
@@ -24,11 +35,29 @@ $$;
 REVOKE ALL ON FUNCTION public.copilot_job_document(text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.copilot_job_document(text) TO authenticated;
 
+-- Unparseable timestamps read as -infinity: such a record could never pass the
+-- insert window, so treating it as old is exact and never fails a DELETE.
+CREATE OR REPLACE FUNCTION public.copilot_job_timestamp(p_value text)
+RETURNS timestamptz LANGUAGE plpgsql STABLE SET search_path = public AS $$
+BEGIN
+  RETURN p_value::timestamptz;
+EXCEPTION WHEN others THEN
+  RETURN '-infinity'::timestamptz;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.copilot_job_timestamp(text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.copilot_job_timestamp(text) TO authenticated;
+
 CREATE OR REPLACE FUNCTION public.enforce_copilot_job_limit(p_user uuid, p_id uuid)
 RETURNS void LANGUAGE plpgsql SECURITY INVOKER SET search_path = public AS $$
 DECLARE
   active integer;
 BEGIN
+  -- Only for the caller's own jobs: refusing other users stops a caller from
+  -- taking another owner's lock or probing their active count.
+  IF p_user IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'copilot_job_forbidden' USING errcode = 'P0001';
+  END IF;
   -- Serialize this owner's activations so two concurrent starts cannot both
   -- observe zero active jobs. Other owners are never blocked.
   PERFORM pg_advisory_xact_lock(hashtextextended('mindmarket:copilot-job:' || p_user::text, 0));
@@ -50,9 +79,12 @@ GRANT EXECUTE ON FUNCTION public.enforce_copilot_job_limit(uuid, uuid) TO authen
 CREATE OR REPLACE FUNCTION public.guard_copilot_job_record()
 RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path = public AS $$
 DECLARE
-  new_doc jsonb := public.copilot_job_document(NEW.record);
+  new_doc jsonb;
   old_doc jsonb;
 BEGIN
+  IF TG_OP <> 'DELETE' THEN
+    new_doc := public.copilot_job_document(NEW.record);
+  END IF;
   IF TG_OP = 'INSERT' THEN
     IF new_doc IS NULL OR jsonb_typeof(new_doc) <> 'object' OR new_doc->>'version' IS DISTINCT FROM '2' THEN
       RETURN NEW;
@@ -69,13 +101,33 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  -- UPDATE
-  IF NEW.record IS NOT DISTINCT FROM OLD.record THEN
-    RETURN NEW;
+  IF TG_OP = 'DELETE' THEN
+    old_doc := public.copilot_job_document(OLD.record);
+    IF old_doc IS NULL OR jsonb_typeof(old_doc) <> 'object' OR old_doc->>'version' IS DISTINCT FROM '2'
+      OR pg_trigger_depth() > 1  -- cascaded from a deleted portfolio/account
+      OR (old_doc->>'created_at') IS NULL
+      OR public.copilot_job_timestamp(old_doc->>'created_at')
+         < clock_timestamp() - interval '5 minutes' THEN
+      RETURN OLD;
+    END IF;
+    RAISE EXCEPTION 'copilot_job_replay' USING errcode = 'P0001';
   END IF;
+
+  -- UPDATE
   old_doc := public.copilot_job_document(OLD.record);
   IF (old_doc IS NULL OR old_doc->>'version' IS DISTINCT FROM '2')
     AND (new_doc IS NULL OR new_doc->>'version' IS DISTINCT FROM '2') THEN
+    RETURN NEW;
+  END IF;
+  IF NEW.id IS DISTINCT FROM OLD.id OR NEW.user_id IS DISTINCT FROM OLD.user_id
+    OR NEW.portfolio_id IS DISTINCT FROM OLD.portfolio_id
+    OR NEW.state IS DISTINCT FROM new_doc->>'state' THEN
+    RAISE EXCEPTION 'copilot_job_rollback' USING errcode = 'P0001';
+  END IF;
+  IF NEW.record IS NOT DISTINCT FROM OLD.record THEN
+    IF NEW.signature IS DISTINCT FROM OLD.signature THEN
+      RAISE EXCEPTION 'copilot_job_rollback' USING errcode = 'P0001';
+    END IF;
     RETURN NEW;
   END IF;
   IF old_doc->>'version' IS DISTINCT FROM '2' OR new_doc->>'version' IS DISTINCT FROM '2'
@@ -94,7 +146,7 @@ $$;
 
 DROP TRIGGER IF EXISTS copilot_job_integrity ON public.copilot_runs;
 CREATE TRIGGER copilot_job_integrity
-  BEFORE INSERT OR UPDATE ON public.copilot_runs
+  BEFORE INSERT OR UPDATE OR DELETE ON public.copilot_runs
   FOR EACH ROW EXECUTE FUNCTION public.guard_copilot_job_record();
 
 CREATE OR REPLACE FUNCTION public.transition_copilot_job(

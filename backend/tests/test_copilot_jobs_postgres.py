@@ -30,6 +30,8 @@ def migrated(database):
     integrity = (root / "0020_copilot_job_integrity.sql").read_text()
     run(integrity)
     run(integrity)  # re-runnable
+    # 0014 is re-runnable too, and a re-run never undoes 0016's wider CHECK.
+    run((root / "0014_copilot_runs.sql").read_text())
     return run
 
 
@@ -191,7 +193,7 @@ def test_reader_cannot_interrupt_a_live_lease_only_an_expired_one(migrated, book
 
 def test_fresh_queued_reservation_is_the_only_insertable_record(migrated, book):
     assert client_insert(migrated, fresh_doc()).returncode == 0
-    migrated("delete from copilot_runs;", USER)
+    seed(migrated, "delete from copilot_runs;")
     old = fresh_doc(created_at=(datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat())
     for doc in (
         old,
@@ -308,3 +310,74 @@ def test_overlapping_transactions_cannot_both_start(migrated, database, book):
     assert holder.returncode == 0, holder.stderr.read()
     assert late.returncode != 0 and "copilot_job_limit" in late.stderr
     assert migrated("select count(*) from copilot_runs;", USER).stdout.strip() == "1"
+
+
+# ---- anti-replay: delete + re-insert, column-only edits, foreign limit calls ----
+
+
+def test_fresh_job_row_cannot_be_deleted_to_replay_its_reservation(migrated, book):
+    """The attack: run a job (attempts=1), delete the row, re-insert the original
+    signed reservation (revision 0, attempts 0) to get a third attempt."""
+    original = fresh_doc()
+    assert client_insert(migrated, original).returncode == 0
+    assert transition(migrated, original, "running") == "1"
+    deleted = migrated(f"delete from copilot_runs where id='{original['id']}';", USER, check=False)
+    assert deleted.returncode != 0 and "copilot_job_replay" in deleted.stderr
+    replay = client_insert(migrated, original, check=False)
+    assert replay.returncode != 0
+    stored = migrated(f"select record from copilot_runs where id='{original['id']}';", USER)
+    assert json.loads(stored.stdout.strip())["attempts"] == 1
+    # Moving the row aside (new id) to free the original id is refused as well.
+    moved = migrated(
+        f"update copilot_runs set id=gen_random_uuid() where id='{original['id']}';",
+        USER,
+        check=False,
+    )
+    assert moved.returncode != 0 and "copilot_job_rollback" in moved.stderr
+
+
+def test_deletable_rows_are_exactly_those_that_can_never_be_reinserted(migrated, book):
+    seed(migrated, "delete from copilot_runs;")
+    old = fresh_doc(created_at=(datetime.now(timezone.utc) - timedelta(minutes=6)).isoformat())
+    seed(
+        migrated,
+        f"insert into copilot_runs(id,user_id,portfolio_id,state,record,signature) values "
+        f"('{old['id']}','{USER}','{BOOK}','queued',{literal(json.dumps(old))},repeat('a',64));",
+    )
+    migrated(f"delete from copilot_runs where id='{old['id']}';", USER)
+    again = client_insert(migrated, old, check=False)
+    assert again.returncode != 0 and "copilot_job_replay" in again.stderr
+    assert migrated("select count(*) from copilot_runs;", USER).stdout.strip() == "0"
+    # Version-one rows remain freely deletable.
+    migrated(
+        f"insert into copilot_runs(id,user_id,portfolio_id,state,record,signature) values "
+        f"(gen_random_uuid(),'{USER}','{BOOK}','running',{literal(json.dumps({'version': 1}))},repeat('a',64));"
+        "delete from copilot_runs;",
+        USER,
+    )
+
+
+def test_column_only_state_change_is_refused(migrated, book):
+    seed(migrated, "delete from copilot_runs;")
+    doc = fresh_doc()
+    client_insert(migrated, doc)
+    for sql in ("set state='completed'", "set signature=repeat('c',64)"):
+        result = migrated(f"update copilot_runs {sql} where id='{doc['id']}';", USER, check=False)
+        assert result.returncode != 0 and "copilot_job_rollback" in result.stderr, sql
+    assert (
+        migrated(f"select state from copilot_runs where id='{doc['id']}';", USER).stdout.strip()
+        == "queued"
+    )
+
+
+def test_job_limit_cannot_be_called_for_another_user(migrated, book):
+    result = migrated(f"select enforce_copilot_job_limit('{OTHER}', gen_random_uuid());", USER, check=False)
+    assert result.returncode != 0 and "copilot_job_forbidden" in result.stderr
+    assert migrated(f"select enforce_copilot_job_limit('{USER}', gen_random_uuid());", USER).returncode == 0
+
+
+def test_portfolio_deletion_cascades_through_a_fresh_job(migrated, book):
+    seed(migrated, "delete from copilot_runs;")
+    client_insert(migrated, fresh_doc())
+    migrated(f"delete from portfolios where id='{BOOK}';", USER)
+    assert migrated("select count(*) from copilot_runs;", USER).stdout.strip() == "0"
