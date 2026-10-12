@@ -282,7 +282,8 @@ def account(stack):
                 },
                 timeout=15,
             )
-            assert response.status_code == 200, "Local fixture cleanup failed"
+            # 404: the test itself already deleted the account (deletion path under test).
+            assert response.status_code in (200, 404), "Local fixture cleanup failed"
 
 
 def capture(owner):
@@ -433,7 +434,21 @@ def test_job_renewal_listing_cancel_and_cleanup_with_real_jwt(stack, account):
     response = requests.post(endpoint + "/" + id + "/cancel", headers=owner.headers, timeout=15)
     assert response.status_code == 200
     assert log.publish(id, renewed.revision, error_code="analysis_failed").state == "cancelled"
-    stack.sql(f"update copilot_runs set created_at=now()-interval '2 days' where id='{id}';")
+    # Simulate two days passing. In production the column and the signed
+    # record's created_at age together; 0020's delete guard reads the RECORD
+    # (an owner can choose the column value on insert), so age both. The
+    # integrity trigger is bypassed only for this superuser time-travel edit.
+    stack.sql(
+        "alter table copilot_runs disable trigger copilot_job_integrity; "
+        "update copilot_runs set created_at=now()-interval '2 days', "
+        # Text replacement keeps the canonical record bytes (the cleanup RPC
+        # matches the exact '"version":2}' suffix; a jsonb round-trip would not).
+        'record=regexp_replace(record, \'"created_at":"[^"]*"\', '
+        "'\"created_at\":\"' || to_char((now()-interval '2 days') at time zone 'utc', "
+        '\'YYYY-MM-DD"T"HH24:MI:SS"+00:00"\') || \'"\') '
+        f"where id='{id}'; "
+        "alter table copilot_runs enable trigger copilot_job_integrity;"
+    )
     response = requests.post(endpoint + "/recover", headers=owner.headers, json=query, timeout=15)
     assert response.status_code == 200
     assert response.json()["data"]["removed"] == 1
@@ -1001,3 +1016,59 @@ def test_real_combined_funding_capture_confirm_read_and_review(stack, account):
     assert stale.status_code == 409
     retry = requests.post(path + "/confirm", headers=owner.headers, json=consent, timeout=30)
     assert retry.json()["data"] == expected_saved
+
+
+def test_account_deletion_cascades_through_a_fresh_background_job(stack, account):
+    """0020 refuses an owner DELETE of a fresh v2 job row (anti-replay). Account
+    deletion must still succeed: the GoTrue admin delete (the same call
+    account_delete uses) cascades through auth.users → copilot_runs."""
+    owner = account()
+    now = datetime.now(timezone.utc).isoformat()
+    record = json.dumps(
+        {
+            "version": 2,
+            "id": str(uuid4()),
+            "state": "queued",
+            "revision": 0,
+            "attempts": 0,
+            "created_at": now,
+            "expires_at": now,
+        }
+    )
+    run_id = json.loads(record)["id"]
+    inserted = requests.post(
+        stack.url + "/rest/v1/copilot_runs",
+        headers=owner.headers,
+        json={
+            "id": run_id,
+            "user_id": owner.user,
+            "portfolio_id": owner.row["id"],
+            "state": "queued",
+            "record": record,
+            "signature": "0" * 64,
+        },
+        timeout=15,
+    )
+    assert inserted.status_code == 201, inserted.status_code
+    # The owner cannot delete the fresh row directly (it could be re-inserted).
+    refused = requests.delete(
+        stack.url + f"/rest/v1/copilot_runs?id=eq.{run_id}", headers=owner.headers, timeout=15
+    )
+    assert refused.status_code >= 400
+    admin = {
+        "apikey": stack.keys["ANON_KEY"],
+        "Authorization": "Bearer " + stack.keys["SERVICE_ROLE_KEY"],
+    }
+    deleted = requests.delete(
+        stack.url + f"/auth/v1/admin/users/{owner.user}", headers=admin, timeout=15
+    )
+    assert deleted.status_code == 200, deleted.status_code
+    remaining = requests.get(
+        stack.url + f"/rest/v1/copilot_runs?id=eq.{run_id}",
+        headers={
+            "apikey": stack.keys["ANON_KEY"],
+            "Authorization": "Bearer " + stack.keys["SERVICE_ROLE_KEY"],
+        },
+        timeout=15,
+    )
+    assert remaining.status_code == 200 and remaining.json() == []
