@@ -1,5 +1,7 @@
 # Copilot deployment-readiness verification
 
+> **Current state lives in [release status 2026-10-12](copilot-release-status-2026-10.md).** Migrations 0014–0020 are in production; the run journal and saved-plan history are enabled; decision support, background jobs, Put and funding scenarios are deployed but off (compliance gate). The text below is the dated history.
+
 This package prepares local evidence before deployment validation. It does not
 apply hosted migrations, deploy builds, switch production flags, call a broker,
 train a model or authorize orders. A green local suite is not release approval.
