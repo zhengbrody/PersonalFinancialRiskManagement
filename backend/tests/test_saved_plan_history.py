@@ -207,9 +207,32 @@ def test_forged_signature_and_wrong_domain_are_counted_not_shown(monkeypatch):
     assert page.unverified_records == 2
 
 
-def test_disabled_kind_cannot_authenticate(monkeypatch):
+@pytest.mark.parametrize(
+    "disabled",
+    [
+        ["MINDMARKET_COMPARISON_SAVE_ENABLED"],
+        ["MINDMARKET_COMPARISON_SAVE_ENABLED", "MINDMARKET_COMPARISON_REPLAY_ENABLED"],
+        ["MINDMARKET_CASH_SECURED_PUT_SAVE_ENABLED", "MINDMARKET_COMPARISON_SAVE_ENABLED"],
+    ],
+)
+def test_turning_save_flags_off_later_keeps_saved_plans_verified(monkeypatch, disabled):
+    """Save flags gate writes, never reads: a plan saved while a flag was on is
+    still authenticated (with its original evidence) after the flag is off."""
+    row, result = signed_row()
+    for name in disabled:
+        monkeypatch.setenv(name, "false")
+    reset_settings_cache()
+    monkeypatch.setattr(history, "_client", Store([row]))
+    page = history.page("jwt", USER, BOOK)
+    assert page.unverified_records == 0
+    assert [p.plan_id for p in page.plans] == [result.result_id]
+    detail = history.detail("jwt", USER, BOOK, str(result.result_id))
+    assert detail.comparison.result == result
+
+
+def test_rotated_signing_secret_cannot_authenticate(monkeypatch):
     row, _ = signed_row()
-    monkeypatch.setenv("MINDMARKET_COMPARISON_SAVE_ENABLED", "false")
+    monkeypatch.setenv("MINDMARKET_RISK_RUN_SIGNING_SECRET", "a-different-secret-" + "1" * 30)
     reset_settings_cache()
     monkeypatch.setattr(history, "_client", Store([row]))
     assert history.page("jwt", USER, BOOK).unverified_records == 1

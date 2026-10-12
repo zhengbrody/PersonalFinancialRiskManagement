@@ -29,19 +29,14 @@ def require_enabled() -> None:
 
 
 def _domain_keys() -> list[tuple[str, bytes]]:
-    """Confirmation keys of the kinds that are enabled right now."""
-    settings = get_settings()
-    keys: list[tuple[str, bytes]] = []
-    if settings.copilot_comparison_save_enabled:
-        try:
-            keys.append(("comparison", comparison_save._key()))
-        except APIError:
-            pass  # replay signing off: comparison evidence cannot be authenticated
-    if settings.cash_secured_put_save_enabled:
-        keys.append(("cash_secured_put", put_plans.key("confirmation")))
-    if settings.funding_scenarios_save_enabled:
-        keys.append(("funding_scenarios", signing.key(funding_plans.DOMAIN, "confirmation")))
-    return keys
+    """Confirmation keys of EVERY saved-plan kind, derived from the signing
+    secret alone. Save flags gate writes, never reads: a plan saved while a
+    flag was on stays verifiable after that flag is turned off."""
+    return [
+        ("comparison", comparison_save.read_key()),
+        ("cash_secured_put", put_plans.key("confirmation")),
+        ("funding_scenarios", signing.key(funding_plans.DOMAIN, "confirmation")),
+    ]
 
 
 def classify(row: dict) -> str | None:
@@ -69,7 +64,9 @@ def verified(row: dict, user_id: str, portfolio_id: str) -> SavedPlanDetail:
     evidence = hashlib.sha256(str(row.get("record")).encode()).hexdigest()
     try:
         if kind == "comparison":
-            comparison = comparison_save._verified_row(row, user_id, portfolio_id, plan_id)
+            comparison = comparison_save._verified_row(
+                row, user_id, portfolio_id, plan_id, history=True
+            )
             a = comparison.result.assumptions
             proceeds = "to cash" if a.proceeds == "cash" else "to repay margin"
             item = SavedPlanItem(

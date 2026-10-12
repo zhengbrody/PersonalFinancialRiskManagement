@@ -17,10 +17,14 @@ code and tests are checked against.
 | Cash-secured Put | `confirm_copilot_put_plan` (0018) | `put-plan:confirmation` | yes | **not computable** (no captured price history; see 3.6) |
 | Funding scenario | `confirm_copilot_funding_plan` (0019) | `funding-plan:confirmation` | yes | yes, anchored on its signed source comparison |
 
-A history row is only returned after its HMAC verifies under one enabled
-domain AND every binding (user, portfolio, plan id, confirmation window)
-matches. The kind is decided by *which key verifies*, never by a label in the
-stored JSON. Rows that verify under no enabled domain are counted, never shown.
+A history row is only returned after its HMAC verifies under one domain key
+AND every binding (user, portfolio, plan id, confirmation window) matches. The
+kind is decided by *which key verifies*, never by a label in the stored JSON.
+Rows that verify under no domain key are counted, never shown. Every domain key
+is derived from the signing secret alone (2026-10-12): the per-kind save flags
+and the comparison-replay flag gate *writes* and new calculations only, so a
+plan saved while a flag was on stays verified after that flag is turned off.
+Rotating the signing secret does make older rows unverified.
 
 ## 2. History reads (cross-device)
 
