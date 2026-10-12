@@ -9,10 +9,22 @@ from .copilot_candidates import CandidateBatch, CandidateRequest
 from .copilot_runs import RunSnapshot
 
 
+class SignedTaskToken(BaseModel):
+    """Same wire shape as copilot_task_state.TaskStateToken (kept here to avoid
+    an import cycle); verified server-side before use."""
+
+    model_config = ConfigDict(extra="forbid")
+    record: str = Field(min_length=2, max_length=8192)
+    signature: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class StartCandidateRun(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: UUID
     task: CandidateRequest
+    # Optional (additive): when present, the run must be exactly the task's
+    # current confirmed version — same run id and same confirmed parameters.
+    task_state: SignedTaskToken | None = None
 
 
 class CandidateRunOut(BaseModel):
