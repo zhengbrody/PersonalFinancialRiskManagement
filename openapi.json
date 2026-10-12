@@ -1853,6 +1853,16 @@
             "title": "History Start",
             "type": "string"
           },
+          "hypothesis_scenario": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HypothesisScenario"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "limitations": {
             "items": {
               "type": "string"
@@ -2362,6 +2372,16 @@
             "format": "uuid",
             "title": "Expected Portfolio Id",
             "type": "string"
+          },
+          "hypothesis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HypothesisAssumption"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "proceeds": {
             "enum": [
@@ -3357,6 +3377,14 @@
             "format": "date-time",
             "title": "Captured At",
             "type": "string"
+          },
+          "hypotheses": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchHypothesis"
+            },
+            "maxItems": 4,
+            "title": "Hypotheses",
+            "type": "array"
           },
           "leads": {
             "items": {
@@ -9708,6 +9736,365 @@
         "title": "HoldingsChange",
         "type": "object"
       },
+      "HypothesisAssumption": {
+        "additionalProperties": false,
+        "description": "A research hypothesis carried in as the USER's price assumption.\n\nOnly an id, the subject and a number the user typed travel here; the claim\ntext never does. ``user_confirmed`` must be literally true: the typed confirm\nstep, not the research card, turns it into a calculation input. It adds one\ndeterministic row to this comparison and authorizes nothing else.",
+        "properties": {
+          "basis": {
+            "const": "user_assumption",
+            "default": "user_assumption",
+            "title": "Basis",
+            "type": "string"
+          },
+          "hypothesis_id": {
+            "pattern": "^[A-Z][A-Z0-9.\\-]{0,11}:h[0-9]$",
+            "title": "Hypothesis Id",
+            "type": "string"
+          },
+          "price_change_pct": {
+            "maximum": 100.0,
+            "minimum": -95.0,
+            "title": "Price Change Pct",
+            "type": "number"
+          },
+          "subject": {
+            "pattern": "^[A-Z][A-Z0-9.\\-]{0,11}$",
+            "title": "Subject",
+            "type": "string"
+          },
+          "user_confirmed": {
+            "title": "User Confirmed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "hypothesis_id",
+          "subject",
+          "price_change_pct",
+          "user_confirmed"
+        ],
+        "title": "HypothesisAssumption",
+        "type": "object"
+      },
+      "HypothesisMissing": {
+        "additionalProperties": false,
+        "properties": {
+          "item": {
+            "maxLength": 120,
+            "title": "Item",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "no_authorized_source",
+              "reporting_period_unavailable",
+              "observation_missing",
+              "observation_stale",
+              "observation_undated",
+              "no_testable_predicate",
+              "cited_source_not_retrieved"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "reason"
+        ],
+        "title": "HypothesisMissing",
+        "type": "object"
+      },
+      "HypothesisScenario": {
+        "additionalProperties": false,
+        "description": "Isolated subject price move at the captured close, both sides. Not a forecast.",
+        "properties": {
+          "baseline_equity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Equity"
+          },
+          "baseline_pnl": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Pnl"
+          },
+          "basis": {
+            "const": "user_assumption",
+            "default": "user_assumption",
+            "title": "Basis",
+            "type": "string"
+          },
+          "candidate_equity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Equity"
+          },
+          "candidate_pnl": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Pnl"
+          },
+          "hypothesis_id": {
+            "title": "Hypothesis Id",
+            "type": "string"
+          },
+          "price_change_pct": {
+            "title": "Price Change Pct",
+            "type": "number"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "subject_not_held",
+                  "subject_has_options"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "enum": [
+              "computed",
+              "not_computable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "subject_value_baseline": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Value Baseline"
+          },
+          "subject_value_candidate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Value Candidate"
+          }
+        },
+        "required": [
+          "hypothesis_id",
+          "subject",
+          "price_change_pct",
+          "status"
+        ],
+        "title": "HypothesisScenario",
+        "type": "object"
+      },
+      "HypothesisSource": {
+        "additionalProperties": false,
+        "description": "Where a claim or its evidence came from. Never an authorization.",
+        "properties": {
+          "author": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "id": {
+            "maxLength": 120,
+            "title": "Id",
+            "type": "string"
+          },
+          "paraphrase": {
+            "default": true,
+            "title": "Paraphrase",
+            "type": "boolean"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "quote_locator": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote Locator"
+          },
+          "retrieved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieved At"
+          },
+          "source_type": {
+            "enum": [
+              "user_statement",
+              "provider_snapshot",
+              "method_card"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "usage_basis": {
+            "enum": [
+              "user_provided",
+              "provider_api",
+              "public_page_paraphrase"
+            ],
+            "title": "Usage Basis",
+            "type": "string"
+          },
+          "verification": {
+            "enum": [
+              "not_verified",
+              "provider_snapshot",
+              "reviewed_method"
+            ],
+            "title": "Verification",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source_type",
+          "usage_basis",
+          "verification"
+        ],
+        "title": "HypothesisSource",
+        "type": "object"
+      },
+      "HypothesisTest": {
+        "additionalProperties": false,
+        "description": "One observable predicate. The threshold is ALWAYS the user's number.",
+        "properties": {
+          "comparator": {
+            "enum": [
+              "gt",
+              "ge",
+              "lt",
+              "le"
+            ],
+            "title": "Comparator",
+            "type": "string"
+          },
+          "observation_id": {
+            "title": "Observation Id",
+            "type": "string"
+          },
+          "threshold": {
+            "title": "Threshold",
+            "type": "number"
+          },
+          "threshold_basis": {
+            "const": "user_assumption",
+            "default": "user_assumption",
+            "title": "Threshold Basis",
+            "type": "string"
+          },
+          "unit": {
+            "enum": [
+              "ratio",
+              "fraction"
+            ],
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "observation_id",
+          "comparator",
+          "threshold",
+          "unit"
+        ],
+        "title": "HypothesisTest",
+        "type": "object"
+      },
       "InputChange": {
         "properties": {
           "current": {
@@ -10053,6 +10440,42 @@
           "cik"
         ],
         "title": "InstitutionRow",
+        "type": "object"
+      },
+      "InvalidationCondition": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "maxLength": 400,
+            "title": "Description",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "observable_test",
+              "qualitative_check",
+              "not_defined"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "observation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observation Id"
+          }
+        },
+        "required": [
+          "kind",
+          "description"
+        ],
+        "title": "InvalidationCondition",
         "type": "object"
       },
       "JourneyOut": {
@@ -14687,6 +15110,150 @@
           "data_confidence"
         ],
         "title": "ResearchCoverageOut",
+        "type": "object"
+      },
+      "ResearchHypothesis": {
+        "additionalProperties": false,
+        "description": "A checkable research view. Evidence, model inference and user assumption\nare separate fields; none of them can authorize a tool, rank a candidate\nor become a confirmed comparison parameter.",
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "can_authorize_tools": {
+            "const": false,
+            "default": false,
+            "title": "Can Authorize Tools",
+            "type": "boolean"
+          },
+          "claim": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Claim",
+            "type": "string"
+          },
+          "claim_basis": {
+            "enum": [
+              "user_assumption",
+              "model_inference"
+            ],
+            "title": "Claim Basis",
+            "type": "string"
+          },
+          "comparison_input": {
+            "const": "user_entered_price_change_only",
+            "default": "user_entered_price_change_only",
+            "title": "Comparison Input",
+            "type": "string"
+          },
+          "counter_arguments": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Counter Arguments",
+            "type": "array"
+          },
+          "evidence_observation_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 4,
+            "title": "Evidence Observation Ids",
+            "type": "array"
+          },
+          "id": {
+            "pattern": "^[A-Z][A-Z0-9.\\-]{0,11}:h[0-9]$",
+            "title": "Id",
+            "type": "string"
+          },
+          "inference": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 4,
+            "title": "Inference",
+            "type": "array"
+          },
+          "invalidation_conditions": {
+            "items": {
+              "$ref": "#/components/schemas/InvalidationCondition"
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Invalidation Conditions",
+            "type": "array"
+          },
+          "missing": {
+            "items": {
+              "$ref": "#/components/schemas/HypothesisMissing"
+            },
+            "maxItems": 8,
+            "title": "Missing",
+            "type": "array"
+          },
+          "origin": {
+            "enum": [
+              "user_view",
+              "method_question"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "scope": {
+            "const": "company",
+            "default": "company",
+            "title": "Scope",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/HypothesisSource"
+            },
+            "maxItems": 6,
+            "title": "Sources",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "unverified",
+              "supported_by_evidence",
+              "contradicted",
+              "stale"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "test": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HypothesisTest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "origin",
+          "claim",
+          "claim_basis",
+          "subject",
+          "as_of",
+          "sources",
+          "counter_arguments",
+          "invalidation_conditions",
+          "status"
+        ],
+        "title": "ResearchHypothesis",
         "type": "object"
       },
       "ResearchLead": {

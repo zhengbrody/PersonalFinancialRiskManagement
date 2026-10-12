@@ -25,7 +25,14 @@ To review a card:
 3. Change the card version, actual review date and approval record. Set a finite
    next-review date. Refresh that card's SHA-256 of `card.model_dump_json().encode()`
    after editorial review. Never regenerate all approvals automatically on startup.
-4. Run lifecycle, research, and answer-boundary tests below and review the diff.
+4. Append a `SourceReverification` (reviewer, actual date, URLs checked, note) to
+   `REVERIFICATIONS[card_id]` in the same change. `maintenance_violations()` and
+   its tests reject a review date that differs from the 2026-09-11 baseline or the
+   latest recorded re-verification, a record without a reviewer or without the
+   approved source URL, a future-dated record, and any `review_due` other than
+   `reviewed_at + 180 days`. A date therefore cannot be extended on its own.
+   As of 2026-10-10 no re-verification has been recorded; all dates are baseline.
+5. Run lifecycle, research, and answer-boundary tests below and review the diff.
 
 To withdraw a method, set its `MethodReview.status` to `withdrawn` and record a
 specific reason. Keep its ID/version for auditing; do not replace history with a

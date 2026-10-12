@@ -545,3 +545,15 @@ prop update aborted the in-flight start); fixed and pinned by a unit regression.
   queued pre-upgrade jobs fail with `execution_version_changed` after deploy (the
   existing, documented behaviour).
 - Flags unchanged (decision support + async remain default off); no migration.
+
+## 2026-10-10 — D: checkable research hypotheses (local, default-off)
+
+Design, math and limits: [copilot-research-hypotheses.md](copilot-research-hypotheses.md).
+`research_context[].hypotheses` (additive) turns user-stated views and method
+questions into typed `ResearchHypothesis` records with sources, counterpoints,
+invalidation conditions and a deterministic status; research evidence, model
+inference and user assumptions are separate fields. A hypothesis can be carried
+into the existing `compare-change` comparison only as a user-typed, explicitly
+confirmed price change (`hypothesis` request field → `hypothesis_scenario`);
+claim text is never sent. Method-card review dates are now gated by recorded
+source re-verifications. No migration, new provider, retrieval or deployment.

@@ -23,7 +23,12 @@ from libs.mindmarket_core.portfolio_scoring import AssetPosition
 from libs.mindmarket_core.score_version import SCORE_VERSION
 
 from ..core.responses import APIError
-from ..schemas.copilot_compare import ChangeComparison, CompareChange, ComparisonSide
+from ..schemas.copilot_compare import (
+    ChangeComparison,
+    CompareChange,
+    ComparisonSide,
+    HypothesisScenario,
+)
 from . import comparison_options
 
 
@@ -155,6 +160,47 @@ def prepare_prices(
             "At least 60 common daily returns with 95% date coverage are required.",
         )
     return frame, returns
+
+
+def _hypothesis_scenario(
+    change: CompareChange,
+    values: dict[str, Decimal],
+    candidate: dict[str, Decimal],
+    equity: Decimal,
+    option_results: list[dict],
+) -> HypothesisScenario:
+    """Isolated subject price move at the captured close on BOTH sides.
+
+    V_base = q·close, V_cand = V_base − A only when the subject is the reduced
+    ticker; pnl = V·p; equity_after = E + pnl. Every other holding, cash, margin
+    and option leg is unchanged. Options on the subject are NOT repriced, so a
+    stock-only number would misstate exposure: it is not computable instead.
+    The percentage is the user's typed assumption — never research data."""
+    h = change.hypothesis
+    if h is None:
+        raise RuntimeError("Hypothesis scenario requested without an assumption")
+    base = {
+        "hypothesis_id": h.hypothesis_id,
+        "subject": h.subject,
+        "price_change_pct": h.price_change_pct,
+    }
+    if any(r.get("underlying") == h.subject for r in option_results):
+        return HypothesisScenario(**base, status="not_computable", reason="subject_has_options")
+    if h.subject not in values:
+        return HypothesisScenario(**base, status="not_computable", reason="subject_not_held")
+    p = Decimal(str(h.price_change_pct)) / Decimal(100)
+    v_base, v_cand = values[h.subject], candidate[h.subject]
+    pnl_base, pnl_cand = v_base * p, v_cand * p
+    return HypothesisScenario(
+        **base,
+        status="computed",
+        subject_value_baseline=float(v_base),
+        subject_value_candidate=float(v_cand),
+        baseline_pnl=float(pnl_base),
+        candidate_pnl=float(pnl_cand),
+        baseline_equity=float(equity + pnl_base),
+        candidate_equity=float(equity + pnl_cand),
+    )
 
 
 def compare_change(
@@ -294,7 +340,9 @@ def compare_change(
     # Fingerprint for inspectability, not a signed save/execute authorization.
     payload = {
         "context": account_payload(context),
-        "change": change.model_dump(mode="json"),
+        # exclude_none keeps fingerprints of comparisons without a research
+        # hypothesis byte-identical to those computed before the field existed.
+        "change": change.model_dump(mode="json", exclude_none=True),
         "prices": frame.to_json(date_format="iso", double_precision=15),
         "sources": sources,
         "version": SCORE_VERSION,
@@ -331,6 +379,11 @@ def compare_change(
             0,
             "This reduction removes some stock backing from short calls on the same underlying. Option-only expiry bounds do not measure that lost stock cover; inspect the paired account stresses.",
         )
+    hypothesis_scenario = (
+        _hypothesis_scenario(change, values, candidate, equity, option_results)
+        if change.hypothesis is not None
+        else None
+    )
     return ChangeComparison(
         result_id=uuid4(),
         portfolio_id=context.portfolio_id,
@@ -352,6 +405,7 @@ def compare_change(
             if option_results
             else None
         ),
+        hypothesis_scenario=hypothesis_scenario,
         limitations=[
             "Hypothetical reduction, not an order or a recommendation. No holdings or plans were saved.",
             "Valuation uses one captured adjusted-close frame, not live execution quotes; fractional shares assumed.",

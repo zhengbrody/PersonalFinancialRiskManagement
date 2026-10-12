@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import type { ChangeComparison, ChangeDraft, ComparisonVerification, SavedComparison } from "@/lib/copilot-compare";
+import type { ChangeComparison, ChangeDraft, ComparisonVerification, HypothesisDraft, SavedComparison } from "@/lib/copilot-compare";
 
 export function CopilotChangeForm({ draft, disabled, onChange, onSubmit }: {
   draft: ChangeDraft; disabled: boolean; onChange: (draft: ChangeDraft) => void; onSubmit: () => void;
@@ -27,12 +27,38 @@ export function CopilotChangeForm({ draft, disabled, onChange, onSubmit }: {
         onChange={(e) => onChange({ ...draft, proceeds: e.target.value as ChangeDraft["proceeds"] })}>
         <option value="cash">Keep as account cash</option><option value="repay_margin">Repay margin</option>
       </select>
+      {draft.hypothesis && <HypothesisFields draft={draft} hypothesis={draft.hypothesis} disabled={disabled} onChange={onChange} />}
       <Button type="submit" disabled={disabled}>Compare assumptions</Button>
     </form>
   );
 }
 
+function HypothesisFields({ draft, hypothesis, disabled, onChange }: {
+  draft: ChangeDraft; hypothesis: HypothesisDraft; disabled: boolean; onChange: (draft: ChangeDraft) => void;
+}) {
+  const id = useId();
+  const set = (patch: Partial<HypothesisDraft>) => onChange({ ...draft, hypothesis: { ...hypothesis, ...patch } });
+  return (
+    <fieldset className="space-y-2 rounded-lg border border-border p-3">
+      <legend className="px-1 text-sm font-medium">Research assumption · {hypothesis.subject}</legend>
+      <p className="break-words text-sm">&ldquo;{hypothesis.claim}&rdquo;</p>
+      <p className="text-xs text-muted-foreground">The research text is not sent and sets no number. Enter the price move you associate with this view, e.g. if it is invalidated. Only {hypothesis.subject} moves; other holdings, cash and margin stay unchanged.</p>
+      <label className="block text-sm" htmlFor={`${id}-pct`}>Your assumed {hypothesis.subject} price change (%)</label>
+      <input id={`${id}-pct`} type="number" min="-95" max="100" step="0.01" inputMode="decimal" value={hypothesis.pct} disabled={disabled}
+        className="w-full rounded-lg border border-border bg-background p-2"
+        onChange={(e) => set({ pct: e.target.value, confirmed: false })} />
+      <label htmlFor={`${id}-confirm`} className="flex items-start gap-2 text-sm">
+        <input id={`${id}-confirm`} type="checkbox" checked={hypothesis.confirmed} disabled={disabled}
+          onChange={(e) => set({ confirmed: e.target.checked })} />
+        This price change is my own assumption, not a forecast or research finding.
+      </label>
+      <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => onChange({ ...draft, hypothesis: undefined })}>Remove research assumption</Button>
+    </fieldset>
+  );
+}
+
 const money = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+const maybeMoney = (v: number | null | undefined) => (v == null ? "Unavailable" : money(v));
 const percent = (v: number) => `${(v * 100).toFixed(1)}%`;
 const rows = [
   ["net_equity", "Net equity (captured valuation basis)", money],
@@ -99,6 +125,16 @@ export function CopilotChangeResult({ result, disabled, onRevise, onVerify, veri
           </div>
         ))}
       </dl>
+      {result.hypothesis_scenario && <section aria-label="Research assumption scenario" className="space-y-2 rounded-lg border border-border p-3 text-sm">
+        <h4 className="font-medium">Research assumption · {result.hypothesis_scenario.subject} {result.hypothesis_scenario.price_change_pct > 0 ? "+" : ""}{result.hypothesis_scenario.price_change_pct}% (your assumption)</h4>
+        {result.hypothesis_scenario.status === "computed" ? <>
+          <div className="grid grid-cols-2 gap-3 tabular-nums">
+            <p>Keep unchanged<br />{result.hypothesis_scenario.subject} value {maybeMoney(result.hypothesis_scenario.subject_value_baseline)}<br />P&amp;L {maybeMoney(result.hypothesis_scenario.baseline_pnl)}<br />Equity {maybeMoney(result.hypothesis_scenario.baseline_equity)}</p>
+            <p>Your assumption<br />{result.hypothesis_scenario.subject} value {maybeMoney(result.hypothesis_scenario.subject_value_candidate)}<br />P&amp;L {maybeMoney(result.hypothesis_scenario.candidate_pnl)}<br />Equity {maybeMoney(result.hypothesis_scenario.candidate_equity)}</p>
+          </div>
+          <p className="text-xs text-muted-foreground">Isolated move at the captured close. Every other holding, cash, margin and option leg is unchanged. Not a forecast or probability.</p>
+        </> : <p>Not computable: {result.hypothesis_scenario.reason === "subject_has_options" ? "options on this security are not repriced here, so a stock-only figure would misstate exposure." : "this security is not a captured stock/ETF holding in the selected portfolio."}</p>}
+      </section>}
       {mixed && <section aria-label="Full-account stress scenarios" className="space-y-3">
         <h4 className="font-medium">Full-account instantaneous stresses</h4>
         <p className="text-xs text-muted-foreground">Chosen assumptions, not forecasts or worst-case bounds. Full option repricing is anchored to the same model&apos;s zero-shock value; no time passes.</p>

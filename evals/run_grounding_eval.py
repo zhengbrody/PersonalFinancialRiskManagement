@@ -55,6 +55,17 @@ def _score_obj(d: dict):
     )
 
 
+def _fixture_time(value):
+    """``"fresh"`` → one hour before now. The research projection judges freshness
+    against the wall clock, so a FIXED fixture date would silently age into
+    "stale" and turn an evidence case into a missing-data case."""
+    from datetime import datetime, timedelta, timezone
+
+    if value == "fresh":
+        return (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    return value
+
+
 def _factpack_obj(ticker: str, d: dict):
     from backend.app.schemas import research as R
 
@@ -62,11 +73,30 @@ def _factpack_obj(ticker: str, d: dict):
         ticker=ticker,
         price=d.get("price"),
         valuation=R.ValuationBlock(pe=d.get("pe"), band=d.get("band")),
-        quality=R.QualityBlock(net_margin=d.get("net_margin"), roe=d.get("roe")),
+        quality=R.QualityBlock(
+            net_margin=d.get("net_margin"),
+            roe=d.get("roe"),
+            debt_to_equity=d.get("debt_to_equity"),
+        ),
         growth=R.GrowthBlock(revenue_cagr=d.get("revenue_cagr")),
         analyst=R.AnalystBlock(implied_upside_pct=d.get("implied_upside_pct")),
         drivers=d.get("drivers") or [],
         risk_flags=d.get("risk_flags") or [],
+        data_quality=R.DataQuality(
+            coverage=d.get("coverage", 0.0),
+            sources=[
+                R.SourceRef(
+                    field=row["field"],
+                    source=row["source"],
+                    as_of=_fixture_time(row.get("as_of")),
+                    coverage=1.0,
+                )
+                for row in d.get("sources") or []
+            ],
+        ),
+        news=[
+            {**row, "published": _fixture_time(row.get("published"))} for row in d.get("news") or []
+        ],
     )
 
 
@@ -196,6 +226,11 @@ def patched_seams(fixture: dict, passthrough: frozenset | set | tuple = ()):
         "build_fact_pack",
         lambda tk, *, yf_enricher=None: _factpack_obj(tk, packs[tk]),
     )
+    put(
+        rf,
+        "build_fact_pack_cached",
+        lambda tk, *, yf_enricher=None: _factpack_obj(tk, packs[tk]),
+    )
 
     macro = fx.get("macro")
     if macro:
@@ -247,8 +282,50 @@ def _rule_fires(actual: float, rule: dict) -> bool:
     raise KeyError(f"must_mention_when rule needs 'gt' or 'lt': {rule!r}")
 
 
+@contextmanager
+def case_settings(overrides: dict | None):
+    """Feature flags a case needs (e.g. the default-off research path). Applied
+    through the real env + settings cache, restored afterwards."""
+    import os
+
+    from backend.app.core.config import reset_settings_cache
+
+    env = {
+        "decision_support_enabled": "MINDMARKET_DECISION_SUPPORT_ENABLED",
+    }
+    saved = {}
+    for key, value in (overrides or {}).items():
+        name = env[key]  # unknown keys fail loudly at review
+        saved[name] = os.environ.get(name)
+        os.environ[name] = "true" if value else "false"
+    reset_settings_cache()
+    try:
+        yield
+    finally:
+        for name, value in saved.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+        reset_settings_cache()
+
+
+def _scripted(text: str, prompts: list):
+    """A deterministic ADVERSARIAL model: returns the case's canned narrative and
+    records the prompt it was given. Exercises the grounding gate offline."""
+
+    def call(*, prompt, system, max_tokens, temperature):
+        prompts.append(prompt)
+        return text
+
+    return call
+
+
 def run_case(case: dict, llm_callable) -> dict:
-    with patched_seams(case.get("fixture")):
+    prompts: list[str] = []
+    if case.get("scripted_llm") is not None:
+        llm_callable = _scripted(case["scripted_llm"], prompts)
+    with case_settings(case.get("settings")), patched_seams(case.get("fixture")):
         # route/ticker ride through the REAL sanitizers (_safe_route/_safe_ticker)
         # so injection cases exercise the same untrusted-context path production does.
         ans = cr.answer(
@@ -278,6 +355,35 @@ def run_case(case: dict, llm_callable) -> dict:
     check_failures = [
         f"contains:{s}" for s in checks.get("must_not_contain", []) if s.lower() in low
     ] + [f"missing:{s}" for s in checks.get("must_contain", []) if s.lower() not in low]
+    # Research text and method cards are untrusted inputs to the prompt: provider
+    # prose must never reach it, and a narrative section that cites a number
+    # from them must fail CLOSED (deterministic text, ai_generated=False).
+    prompt_low = "\n".join(prompts).lower()
+    check_failures += [
+        f"prompt_contains:{s}"
+        for s in checks.get("prompt_must_not_contain", [])
+        if s.lower() in prompt_low
+    ]
+    if case.get("scripted_llm") is not None and not prompts:
+        check_failures.append("scripted_model_not_called")
+    by_key = {sec.key: sec for sec in ans.sections}
+    check_failures += [
+        f"not_failed_closed:{k}"
+        for k in checks.get("must_fail_closed", [])
+        if by_key.get(k) is None or by_key[k].ai_generated
+    ] + [
+        f"not_ai_phrased:{k}"
+        for k in checks.get("must_pass_gate", [])
+        if by_key.get(k) is None or not by_key[k].ai_generated
+    ]
+    hypotheses = [
+        (h.origin, h.status, h.can_authorize_tools)
+        for ctx in (ans.research_context or [])
+        for h in ctx.hypotheses
+    ]
+    for want in checks.get("hypotheses", []):
+        if (want["origin"], want["status"], False) not in hypotheses:
+            check_failures.append(f"hypothesis:{want['origin']}:{want['status']}")
 
     # Six-section structural integrity — EVERY case, EVERY mode.
     sections_ok = [sec.key for sec in ans.sections] == list(SECTION_KEYS)
@@ -511,6 +617,7 @@ def main() -> int:
         "gate",
         "provenance",
         "coverage",
+        "research",
     ):
         c = s["categories"].get(name)
         if c:
