@@ -64,6 +64,9 @@ def fingerprint():
         Path(__file__).parents[1] / "schemas/funding_scenarios.py",
         Path(__file__).with_name("funding_risk.py"),
         Path(__file__).parents[1] / "schemas/funding_risk.py",
+        Path(__file__).with_name("option_coverage.py"),
+        Path(__file__).with_name("broker_rules.py"),
+        Path(__file__).with_name("copilot_candidates.py"),
     ]
     # Put and comparison implementation changes also invalidate first-save replay.
     from . import put_plans

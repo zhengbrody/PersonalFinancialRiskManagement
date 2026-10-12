@@ -9,6 +9,8 @@ from copy import deepcopy
 from dataclasses import asdict, replace
 from decimal import Decimal
 
+from libs.mindmarket_core.options_positions import signed_option_quantity
+
 from ..core.responses import APIError
 from ..schemas.funding_scenarios import (
     FundingAlternative,
@@ -16,7 +18,16 @@ from ..schemas.funding_scenarios import (
     FundingScenarioAssumptions,
     FundingScenarioResult,
 )
-from . import comparison_options, comparison_replay, copilot_put, copilot_scope
+from . import comparison_options, comparison_replay, copilot_put, copilot_scope, option_coverage
+
+
+def _short(holding) -> bool:
+    return (
+        signed_option_quantity(
+            float(holding.get("shares") or 0), str(holding.get("option_side") or "").strip().lower()
+        )
+        < 0
+    )
 
 
 def calculate(snapshot, body, *, now):
@@ -40,9 +51,12 @@ def calculate(snapshot, body, *, now):
     if net <= 0:
         raise APIError(422, "invalid_sale_fees", "Sale fees must be less than gross proceeds.")
     context = snapshot.account.context()
-    if change.ticker in {
-        spec.underlying for spec in comparison_options.option_specs(context.holdings, now=now)
-    }:
+    specs = comparison_options.option_specs(context.holdings, now=now)
+    # Without the whole-account ledger nothing values a broken covered call or
+    # protective put, so selling an option underlying stays refused. With it,
+    # the ledger recomputes and flags every changed coverage relationship.
+    combined = body.risk is not None
+    if not combined and change.ticker in {spec.underlying for spec in specs}:
         raise APIError(
             422,
             "protected_option_underlying",
@@ -78,7 +92,42 @@ def calculate(snapshot, body, *, now):
             margin_loan=0.0,
         )
         arithmetic_digest = copilot_scope.context_digest(asdict(adjusted))
-        put = copilot_put.calculate(adjusted, body.put, arithmetic_digest, now=now)
+        put_context = adjusted
+        if combined:
+            # The nested gross-cash Put arithmetic covers short Puts only; every
+            # other leg is valued, settled and coverage-checked by the ledger.
+            put_context = replace(
+                adjusted,
+                holdings={
+                    key: holding
+                    for key, holding in adjusted.holdings.items()
+                    if str(holding.get("asset_type") or "").lower() != "option"
+                    or (str(holding.get("option_type", "")).lower() == "put" and _short(holding))
+                },
+            )
+        put = copilot_put.calculate(put_context, body.put, arithmetic_digest, now=now)
+        uncovered = combined and option_coverage.has_unbounded(
+            option_coverage.relations(
+                {
+                    t: Decimal(str(h["shares"]))
+                    for t, h in adjusted.holdings.items()
+                    if str(h.get("asset_type") or "").lower() != "option"
+                },
+                [
+                    {
+                        "symbol": option_coverage.contract_symbol(
+                            spec.underlying, spec.expiry, spec.option_type, spec.strike
+                        ),
+                        "underlying": spec.underlying,
+                        "option_type": spec.option_type,
+                        "quantity": int(spec.quantity),
+                        "strike": spec.strike,
+                        "expiry": spec.expiry,
+                    }
+                    for spec in specs
+                ],
+            )
+        )
         rows.append(
             FundingAlternative(
                 kind="sale_repay_margin_and_put" if repay else "sale_keep_cash_and_put",
@@ -93,7 +142,11 @@ def calculate(snapshot, body, *, now):
                 ),
                 hypothetical_debt_if_shortfall_financed=float(remaining_debt)
                 + max(row.funding_gap_after_reserves for row in put.scenarios),
-                status="financing_rules_required" if remaining_debt else put.funding_status,
+                status=(
+                    "financing_rules_required"
+                    if remaining_debt or uncovered
+                    else put.funding_status
+                ),
                 put=put,
                 pre_put_largest_position_weight=snapshot.result.candidate.largest_position_weight,
                 pre_put_var_1d_95_usd=snapshot.result.candidate.var_1d_95_usd,
@@ -132,7 +185,10 @@ def calculate(snapshot, body, *, now):
         ],
     )
 
-    if body.risk is not None:
+    if combined:
+        result.limitations.append(
+            "With the whole-account ledger, existing calls, long Puts and spreads are not part of the nested gross-cash Put arithmetic; they are settled, valued and coverage-checked in the account outcomes. A sale that leaves a short call uncovered marks the row as requiring financing rules."
+        )
         from . import funding_risk
 
         result.account_risk = funding_risk.calculate(

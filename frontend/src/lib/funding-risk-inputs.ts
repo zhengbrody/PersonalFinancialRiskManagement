@@ -1,14 +1,24 @@
+export const FUNDING_OBJECTIVES = ["preserve_terminal_equity", "minimize_funding_gap", "minimize_conditional_debt"] as const;
+export type FundingObjective = typeof FUNDING_OBJECTIVES[number];
 export type FundingRiskInputs = {
   scenarios: Array<{ label: string; prices: Record<string, number> }>;
   annual_borrowing_rate: number | null;
+  residual_risk_free_rate: number | null;
+  objective: FundingObjective | null;
+  objective_confirmed: boolean;
 };
 export type RiskInputDraft = { label: string; rows: Array<{ ticker: string; price: string }> };
 
 /** Blank is unknown, never zero. Validate before converting UI strings. */
-export function parseFundingRiskInputs(scenarios: RiskInputDraft[], rate: string): FundingRiskInputs {
+export function parseFundingRiskInputs(scenarios: RiskInputDraft[], rate: string, residualRate = "", objective = "", objectiveConfirmed = false): FundingRiskInputs {
   if (scenarios.length < 1 || scenarios.length > 3) throw new Error("Enter one to three price scenarios.");
   const annualRate = rate.trim() === "" ? null : Number(rate);
   if (annualRate !== null && (!Number.isFinite(annualRate) || annualRate < 0 || annualRate > 100)) throw new Error("Annual borrowing rate must be between 0% and 100%, or left blank if unknown.");
+  const residual = residualRate.trim() === "" ? null : Number(residualRate);
+  if (residual !== null && (!Number.isFinite(residual) || residual < 0 || residual > 20)) throw new Error("Residual-valuation risk-free rate must be between 0% and 20%, or left blank if unknown.");
+  const goal = objective === "" ? null : FUNDING_OBJECTIVES.find(item => item === objective);
+  if (goal === undefined) throw new Error("Choose a listed objective or none.");
+  if (objectiveConfirmed && goal === null) throw new Error("Choose an objective before confirming it.");
   const labels = new Set<string>();
   const parsed = scenarios.map(scenario => {
     const label = scenario.label.trim();
@@ -27,5 +37,6 @@ export function parseFundingRiskInputs(scenarios: RiskInputDraft[], rate: string
     }
     return { label, prices };
   });
-  return { scenarios: parsed, annual_borrowing_rate: annualRate === null ? null : annualRate / 100 };
+  return { scenarios: parsed, annual_borrowing_rate: annualRate === null ? null : annualRate / 100,
+    residual_risk_free_rate: residual === null ? null : residual / 100, objective: goal, objective_confirmed: goal !== null && objectiveConfirmed };
 }

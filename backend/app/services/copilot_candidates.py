@@ -25,6 +25,20 @@ LIMITATIONS = [
 ]
 
 
+def dominates_all(own, others) -> bool:
+    """True when ``own`` is no worse in EVERY entry and strictly better in at
+    least one versus EACH vector in ``others``. Vectors are LOSS-DIRECTION
+    magnitudes (lower is better, e.g. a positive CVaR loss). Any unknown entry
+    (``None``) on either side forbids dominance — unknown is never "no worse".
+    """
+    return bool(others) and all(
+        len(own) == len(other)
+        and all(x is not None and y is not None and x <= y for x, y in zip(own, other))
+        and any(x < y for x, y in zip(own, other))
+        for other in others
+    )
+
+
 def evaluate(context, task: CandidateRequest, prices, sources, *, now=None, option_results=None):
     now = now or datetime.now(timezone.utc)
     if not task.confirmed:
@@ -120,11 +134,7 @@ def evaluate(context, task: CandidateRequest, prices, sources, *, now=None, opti
         for candidate in comparisons:
             own = vector(candidate.candidate)
             others = [base, *(vector(c.candidate) for c in comparisons if c != candidate)]
-            if all(
-                all(x is not None and y is not None and x <= y for x, y in zip(own, other))
-                and any(x < y for x, y in zip(own, other))
-                for other in others
-            ):
+            if dominates_all(own, others):
                 preferred = candidate.result_id
     judgment = (
         "Under the confirmed funding goal, the preferred candidate does not worsen any compared risk dimension and improves at least one versus keeping the portfolio and each other evaluated candidate. This is conditional, not a forecast."

@@ -157,3 +157,15 @@ Put rows retain their separate, narrower payoff meaning.
 Keep Python/FastAPI and TypeScript/Next.js. No C++ or Java service is introduced:
 a new runtime is not needed for this bounded deterministic ledger. Any future
 native optimization should follow profiling with representative workloads.
+
+## 2026-10-11 v2 whole-account scenarios
+
+`funding-account-scenarios-v2` replaces the common-expiry restriction; the
+specification is `copilot-account-scenarios-math.md`. One captured snapshot id
+binds every alternative; mixed expiries are supported (earlier legs need explicit
+settlement prices, later legs are valued by Black-Scholes at the valuation date
+with captured or confirmed IV and an explicit rate, otherwise not computable);
+calls, long Puts and spreads are settled and coverage-checked; a sale that
+uncovers a short call is flagged and blocks ranking. Broker rules come only from
+the `unknown` provider. Ranking requires a confirmed objective and complete,
+bounded metrics. Saved v1 records keep their v1 meaning.

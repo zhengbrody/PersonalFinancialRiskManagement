@@ -14,7 +14,7 @@ it("defaults off and keeps enabled incomplete inputs invalid instead of omitting
   fireEvent.change(screen.getByLabelText("Scenario 1 ticker 1"), { target: { value: "spy" } });
   expect(screen.getByLabelText("Scenario 1 ticker 1")).toHaveValue("SPY");
   fireEvent.change(screen.getByLabelText("Scenario 1 price 1"), { target: { value: "0" } });
-  expect(changed).toHaveBeenLastCalledWith({ scenarios: [{ label: "Scenario 1", prices: { SPY: 0 } }], annual_borrowing_rate: null }, true);
+  expect(changed).toHaveBeenLastCalledWith({ scenarios: [{ label: "Scenario 1", prices: { SPY: 0 } }], annual_borrowing_rate: null, residual_risk_free_rate: null, objective: null, objective_confirmed: false }, true);
   fireEvent.change(screen.getByLabelText("Annual borrowing rate (%)"), { target: { value: "0" } });
   expect(changed.mock.lastCall?.[0].annual_borrowing_rate).toBe(0);
   fireEvent.change(screen.getByLabelText("Annual borrowing rate (%)"), { target: { value: "7.5" } });
