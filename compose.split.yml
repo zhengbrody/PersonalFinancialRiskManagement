@@ -121,6 +121,8 @@ services:
       - ANTHROPIC_TOPUP_SINCE=${ANTHROPIC_TOPUP_SINCE:-}
       - ANTHROPIC_WARN_PCT=${ANTHROPIC_WARN_PCT:-}
       - ANTHROPIC_CRITICAL_PCT=${ANTHROPIC_CRITICAL_PCT:-}
+      # Age (days) after which /api/v1/ml/health reports the model stale.
+      - MINDMARKET_ML_STALE_DAYS=${MINDMARKET_ML_STALE_DAYS:-}
       # Optional shared cache (services/cache.py). Blank => in-process store.
       - REDIS_URL=${REDIS_URL:-}
       # Anthropic is optional fallback/configurable provider; deterministic

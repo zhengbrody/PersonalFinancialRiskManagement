@@ -1,13 +1,23 @@
-# Daily ML drift heartbeat — curls the public read-only health endpoint and
-# turns the run RED when the model reports drift (or the endpoint is down).
-# All computation + Sentry alerting happens server-side (see ADR 0005); this
-# job is just the scheduler + a visible red light.
+# Daily ML health heartbeat. Turns the run RED and keeps exactly ONE open issue
+# per alert kind:
 #
-# No secrets, no prerequisites: /api/v1/ml/health is public and unauthenticated.
+#   endpoint        /api/v1/ml/health unreachable
+#   drift           overall_status == drift (server-side, see ADR 0005)
+#   freshness       served model older than MINDMARKET_ML_STALE_DAYS (default 21)
+#   artifact        serving model bytes != the approved hash in its provenance
+#   train_pipeline  latest completed train-regime run did not succeed
+#
+# Firing → open the kind's issue or comment on it (never a second issue).
+# Recovered → comment + close it. Unknown (cannot judge today) → leave it.
+# Classification lives in scripts/ml_health_alerts.py (unit-tested).
+#
+# The pipeline result is NOT knowable from the serving box, so it is read
+# from the Actions API here. No secrets: the endpoint is public and the
+# default token reads this repo's runs.
 #
 # NOTE the coupling to train-regime.yml: the drift verdict compares the live
-# feature window against regime_reference.json. That baseline is only coherent
-# while it is regenerated alongside the model, which train-regime.yml now does.
+# feature window against regime_reference.json, which must be regenerated
+# alongside the model — train-regime.yml commits both in its retrain PR.
 
 name: ml-health
 
@@ -18,6 +28,7 @@ on:
 
 permissions:
   contents: read
+  actions: read # latest train-regime run conclusion
   issues: write # a red daily cron must page, not sit in an Actions digest
 
 concurrency:
@@ -29,40 +40,68 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Probe /api/v1/ml/health
-        run: |
-          set -euo pipefail
-          # --retry: a transient Cloudflare/network blip must not be
-          # indistinguishable from real model drift.
-          resp=$(curl -fsS --max-time 120 --retry 3 --retry-delay 15 \
-                   --retry-all-errors "https://mindmarket.app/api/v1/ml/health")
-          echo "ml health: ${resp}"
-          # Tolerate an envelope shape change: report it as an unrecognised
-          # status rather than dying on a KeyError traceback under `pipefail`.
-          status=$(echo "${resp}" | python3 -c "import json,sys; d=(json.load(sys.stdin).get('data') or {}); print(d.get('status'), d.get('overall_status'))")
-          echo "status: ${status}"
-          case "${status}" in
-            "ok drift") echo "::error::ML drift detected"; exit 1 ;;
-            "ok watch") echo "::warning::ML drift watch band" ;;
-            "ok None") echo "::warning::live data insufficient for any drift verdict" ;;
-            "ok healthy"|"not_ready None"|"not_ready "*) : ;;
-            "unavailable"*) echo "::warning::health computed as unavailable (data/model down)" ;;
-            *) echo "::warning::unrecognized health status: ${status}" ;;
-          esac
+      - uses: actions/checkout@v4
 
-      # Matches e2e-real.yml: a scheduled red run must actively ping the owner,
-      # because GitHub's default failure email is easy to miss.
-      - name: Alert on failure (open/refresh a tracking issue)
-        if: failure()
+      - name: Probe /api/v1/ml/health
+        # --retry: a transient Cloudflare/network blip must not be
+        # indistinguishable from real model drift. A failed probe is NOT a
+        # step failure here — it is classified as the `endpoint` kind below.
+        run: |
+          set -uo pipefail
+          if curl -fsS --max-time 120 --retry 3 --retry-delay 15 --retry-all-errors \
+               -A "Mozilla/5.0 (mindmarket ml-health monitor)" \
+               "https://mindmarket.app/api/v1/ml/health" -o "$RUNNER_TEMP/health.json"; then
+            echo "ml health: $(cat "$RUNNER_TEMP/health.json")"
+          else
+            echo "::warning::health probe failed"
+            : > "$RUNNER_TEMP/health.json"
+          fi
+
+      - name: Latest completed train-regime run
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          title="ML drift monitor FAILED (/api/v1/ml/health)"
-          body="Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          num=$(gh issue list --state open --search "\"$title\" in:title" \
-                --json number --jq '.[0].number' || true)
-          if [ -n "$num" ]; then
-            gh issue comment "$num" --body "$body"
-          else
-            gh issue create --title "$title" --body "$body"
+          set -uo pipefail
+          gh run list --repo "$GITHUB_REPOSITORY" --workflow train-regime.yml \
+            --status completed --limit 1 --json conclusion,url,createdAt \
+            > "$RUNNER_TEMP/train.json" || : > "$RUNNER_TEMP/train.json"
+          echo "train-regime: $(cat "$RUNNER_TEMP/train.json")"
+
+      - name: Classify, then open / comment / close one issue per kind
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/ml_health_alerts.py \
+            --health "$RUNNER_TEMP/health.json" \
+            --train-run "$RUNNER_TEMP/train.json" > "$RUNNER_TEMP/kinds.json"
+          cat "$RUNNER_TEMP/kinds.json"
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          open_issues=$(gh issue list --state open --limit 200 --json number,title)
+          firing=0
+          while IFS=$'\t' read -r kind state title detail; do
+            num=$(echo "$open_issues" | jq -r --arg t "$title" \
+                  '[.[] | select(.title == $t)] | .[0].number // empty')
+            body="${kind}: ${detail}
+          Run: ${run_url}"
+            case "$state" in
+              firing)
+                firing=1
+                echo "::error::${kind} firing — ${detail}"
+                if [ -n "$num" ]; then
+                  gh issue comment "$num" --body "Still firing. $body"
+                else
+                  gh issue create --title "$title" --body "$body"
+                fi ;;
+              ok)
+                if [ -n "$num" ]; then
+                  gh issue comment "$num" --body "Recovered — closing automatically. $body"
+                  gh issue close "$num"
+                fi ;;
+              *) echo "${kind}: unknown (${detail}) — issue left as is" ;;
+            esac
+          done < <(jq -r 'to_entries[] | [.key, .value.state, .value.title, .value.detail] | @tsv' \
+                     "$RUNNER_TEMP/kinds.json")
+          if [ "$firing" = 1 ]; then
+            exit 1
           fi

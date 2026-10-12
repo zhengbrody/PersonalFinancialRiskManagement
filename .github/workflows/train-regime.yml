@@ -1,27 +1,43 @@
-# Offline retraining of the market-regime classifier.
+# Offline retraining of the market-regime classifier — delivered as a PULL
+# REQUEST, never a direct push to main.
 #
 # Training NEVER runs on the EC2 box (RAM) or in the request path — it runs here
-# on a GH runner, fetches free market history (yfinance), trains the sklearn
-# model, and commits the refreshed artifact (backend/app/ml/artifacts/).
+# on a GH runner, fetches free market history (yfinance) and trains the sklearn
+# model.
 #
-# ⚠️ That artifact commit cannot trigger a workflow on its own: it is pushed
-# with the default GITHUB_TOKEN (GitHub's recursion guard means `on: push`
-# never fires for such a push) AND carries [skip ci]. Between 2026-07-27 and
-# 2026-08-10 that stranded three retrains — production kept serving the model
-# baked into the 2026-07-22 image for 24 days, and nothing said so.
+# Why a PR: main is branch-protected (required checks, PR required, enforced
+# for admins). The previous design pushed the artifact straight to main with
+# the default GITHUB_TOKEN, and every weekly run from 2026-09-14 to 2026-10-05
+# trained, passed the quality floor, and then died on
+# "GH006: Protected branch update failed" — production kept serving the
+# 2026-09-07 model and nothing but a red cron said so.
 #
-# So this workflow now explicitly dispatches `build-images` after a successful
-# commit. `workflow_dispatch` is the documented exception to BOTH the recursion
-# guard and [skip ci], so the image gets built while the weekly run still skips
-# the 10 unrelated CI jobs for a two-artifact diff.
+# Pipeline:  train → release gate → model-card contract → provenance record
+#            → branch ml/retrain-<date>-<run_id> → PR → dispatch CI on it
+#            → close any older open retrain PR as superseded.
 #
-# DEPLOY STAYS MANUAL. The backend image is `COPY . /app` — auto-deploying
-# "because the model changed" would also ship every unrelated commit merged
-# since the last release. The run opens/refreshes a tracking issue instead, so
-# a pending model is loud rather than silent.
+# regime_provenance.json binds the artifact to the commit it was trained from,
+# this run, every gate result, and the sha256 of each artifact. /api/v1/ml/health
+# compares the SERVING model's bytes against that hash.
 #
-# Manual (`workflow_dispatch`) or weekly. NOT on push — so it can't loop on its
-# own artifact commit. A flaky yfinance fetch just fails the run; re-dispatch.
+# A PR opened with GITHUB_TOKEN does not fire `pull_request` workflows
+# (GitHub's recursion guard). `workflow_dispatch` is the documented exception,
+# so this job dispatches ci.yml + contract.yml on the PR branch; their check
+# runs land on the PR head SHA, which is what the required status checks are
+# matched against.
+#
+# NO AUTO-MERGE, NO AUTO-DEPLOY. A human merges; the merge push builds the
+# images (build-images.yml, `on: push`); deploying is the manual
+# "Deploy to EC2" workflow. The backend image is `COPY . /app`, so deploying
+# "because the model changed" would also ship every unrelated commit.
+#
+# REQUIRES the repository setting "Allow GitHub Actions to create and approve
+# pull requests" (Settings → Actions → General → Workflow permissions). Without
+# it `gh pr create` is refused; the job then fails loudly and opens/refreshes
+# an issue linking the already-pushed branch so a human can open the PR.
+#
+# Manual (`workflow_dispatch`) or weekly. NOT on push. A flaky yfinance fetch
+# just fails the run; re-dispatch.
 
 name: Train regime model
 
@@ -31,9 +47,10 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: write # to commit the refreshed artifact
-  actions: write # dispatch build-images (a GITHUB_TOKEN push can't trigger it)
-  issues: write # flag the new artifact as pending a deliberate deploy
+  contents: write # push the ml/retrain-* branch (main itself is protected)
+  pull-requests: write # open the retrain PR, close superseded ones
+  actions: write # dispatch CI on the PR branch (a GITHUB_TOKEN PR can't trigger it)
+  issues: write # loud fallback when the PR cannot be opened
 
 concurrency:
   group: train-regime
@@ -52,100 +69,174 @@ jobs:
           pip install -r requirements.txt
           pip install -r backend/requirements-backend.txt
           pip install -r backend/app/ml/requirements-train.txt
+          pip install pytest
       - name: Train + write artifact
         # --config is REQUIRED wiring: without it the run stamps the code-default
-        # model_version ("regime-v1") instead of the YAML's semantic version, and
-        # the [skip ci] artifact commit breaks test_model_card on the NEXT PR
-        # (exactly what the 2026-07-12 weekly run did).
+        # model_version ("regime-v1") instead of the YAML's semantic version and
+        # test_model_card fails on the next PR (what the 2026-07-12 run did).
         run: python -m backend.app.ml.train --config backend/app/ml/configs/risk_today.yaml
-      - name: Quality floor on the FRESHLY trained model
-        # test_model_card's floor reads validation_report.json, which this
-        # workflow never regenerates — so it structurally cannot see THIS run's
-        # model. Gate on the meta just produced, before anything is committed:
-        # a bad artifact must never reach main, because the next feature deploy
-        # would ship it.
-        #
-        # Deliberately NOT gated on holdout_accuracy >= baseline_accuracy: the
-        # public model card states the model does not beat a persistence
-        # baseline and that its value is probability RANKING. Printed only.
-        run: |
-          python - <<'PY'
-          import json, pathlib, sys
-          meta = json.loads(pathlib.Path("backend/app/ml/artifacts/regime_meta.json").read_text())
-          m = meta["metrics"]
-          checks = {
-              "elevated_risk_auc >= 0.70": m["elevated_risk_auc"] >= 0.70,
-              "holdout_size >= 500": m["holdout_size"] >= 500,
-          }
-          for name, passed in checks.items():
-              print(("PASS  " if passed else "FAIL  ") + name)
-          print(f"  elevated_risk_auc={m['elevated_risk_auc']}  holdout_size={m['holdout_size']}")
-          print(f"  holdout_accuracy={m['holdout_accuracy']}  baseline_accuracy={m['baseline_accuracy']}  (informational)")
-          if not all(checks.values()):
-              sys.exit("::error::freshly trained model is below the release floor — NOT committing")
-          PY
 
-      - name: Verify artifact contract and quality floor
-        # The model card reads the committed machine artifacts directly. Run its
-        # contract before committing so a weekly metric/feature-order change is
-        # accepted only when the public card stays truthful and quality gates hold.
+      - name: Release gate on the FRESHLY trained model
+        # Same floor as before (elevated_risk_auc >= 0.70, holdout_size >= 500),
+        # now in backend/app/ml/provenance.py so it is unit-tested. Deliberately
+        # NOT gated on holdout_accuracy >= baseline_accuracy — the public model
+        # card states the model's value is probability ranking. Printed only.
+        run: python -m backend.app.ml.provenance gate --out "$RUNNER_TEMP/gates.json"
+
+      - name: Model-card contract on the fresh artifact
+        # The card reads the committed machine artifacts directly; a metric or
+        # feature-order change is proposed only when the card stays truthful.
+        run: pytest backend/tests/test_model_card.py -q -o "addopts="
+
+      - name: Detect an artifact change
+        id: diff
         run: |
-          pip install pytest
-          pytest backend/tests/test_model_card.py -q -o "addopts="
-      - name: Commit artifact if changed
-        id: commit
+          if git diff --quiet -- backend/app/ml/artifacts/regime_model.joblib \
+                                 backend/app/ml/artifacts/regime_meta.json \
+                                 backend/app/ml/artifacts/regime_reference.json; then
+            echo "No artifact change — nothing to propose."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Record provenance (source commit, run, gates, artifact hashes)
+        if: steps.diff.outputs.changed == 'true'
+        # Only reached when every gate above passed; recorded anyway so the
+        # record is self-describing. `record` exits non-zero if a recorded gate
+        # failed.
         run: |
+          python -m backend.app.ml.provenance record \
+            --gates "$RUNNER_TEMP/gates.json" \
+            --source-commit "${GITHUB_SHA}" \
+            --run-id "${GITHUB_RUN_ID}" \
+            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --extra test_model_card=pass
+
+      - name: Commit to a retrain branch
+        if: steps.diff.outputs.changed == 'true'
+        id: branch
+        run: |
+          set -euo pipefail
+          day=$(date -u +%Y-%m-%d)
+          branch="ml/retrain-${day}-${GITHUB_RUN_ID}"
           git config user.name "regime-train-bot"
           git config user.email "bot@users.noreply.github.com"
-          # regime_reference.json is the DRIFT BASELINE and train.py regenerates
-          # it every run (it embeds THIS model's predicted-class distribution).
-          # Omitting it here pinned the baseline at 2026-07-08 while the model
-          # was retrained weekly, so /ml/health compared the current model
-          # against an older model's calibration — invisible, because
-          # model_version doesn't change between retrains.
+          git switch -c "$branch"
+          # regime_reference.json is the DRIFT BASELINE; it must move with the
+          # model or /ml/health scores the new model against an old calibration.
           git add backend/app/ml/artifacts/regime_model.joblib \
                   backend/app/ml/artifacts/regime_meta.json \
-                  backend/app/ml/artifacts/regime_reference.json
-          if git diff --cached --quiet; then
-            echo "No artifact change — skipping commit."
-            echo "committed=false" >> "$GITHUB_OUTPUT"
-          else
-            git commit -m "chore(ml): retrain regime model [skip ci]"
-            git push origin HEAD:main
-            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-            echo "committed=true" >> "$GITHUB_OUTPUT"
-          fi
+                  backend/app/ml/artifacts/regime_reference.json \
+                  backend/app/ml/artifacts/regime_provenance.json
+          git commit -m "chore(ml): retrain regime model (${day}, run ${GITHUB_RUN_ID})"
+          # A NEW non-protected branch — never main.
+          git push origin "HEAD:refs/heads/${branch}"
+          {
+            echo "name=${branch}"
+            echo "day=${day}"
+            echo "sha=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Build images for the retrained artifact
-        if: steps.commit.outputs.committed == 'true'
+      - name: Open the retrain PR
+        if: steps.diff.outputs.changed == 'true'
+        id: pr
         env:
           GH_TOKEN: ${{ github.token }}
-        # --ref main resolves to the commit just pushed, so the sha-<full40>
-        # tag and the baked artifact match. Lands in the same
-        # build-images-refs/heads/main concurrency group as push builds, so it
-        # can't race a concurrent feature merge.
+          BRANCH: ${{ steps.branch.outputs.name }}
+          DAY: ${{ steps.branch.outputs.day }}
+          HEAD_SHA: ${{ steps.branch.outputs.sha }}
         run: |
-          gh workflow run build-images.yml --ref main
-          echo "Dispatched build-images for ${{ steps.commit.outputs.sha }}"
+          set -euo pipefail
+          body_file="${RUNNER_TEMP}/pr-body.md"
+          python3 - "$body_file" <<'PY'
+          import json, os, pathlib, sys
+          p = json.loads(pathlib.Path("backend/app/ml/artifacts/regime_provenance.json").read_text())
+          g = p["gates"]
+          lines = [
+              "Automated weekly retrain of the market-regime classifier.",
+              "",
+              f"- model_version: `{p['model_version']}`  trained_at: `{p['trained_at']}`",
+              f"- trained from: `{p['source_commit']}`",
+              f"- run: {p['run_url']}",
+              f"- gates passed: **{g['passed']}**",
+          ]
+          lines += [f"  - {'PASS' if ok else 'FAIL'} `{name}`" for name, ok in g["checks"].items()]
+          lines += [
+              f"- observed: `{json.dumps(g['observed'])}`",
+              f"- informational (not gated): `{json.dumps(g['informational'])}`",
+              "",
+              "Artifact sha256:",
+              "",
+          ]
+          lines += [f"- `{name}` `{digest}`" for name, digest in p["artifacts"].items()]
+          lines += [
+              "",
+              "Opened by GitHub Actions, so `pull_request` workflows do not fire for it.",
+              f"CI and the contract check were dispatched on this branch at `{os.environ['HEAD_SHA']}`.",
+              "",
+              "**Not auto-merged, not auto-deployed.** After merge, `build-images` runs on the",
+              "push to main; deploy via Actions -> Deploy to EC2 (manual, pinned SHA).",
+              "Afterwards check `approved_artifact.match` and `freshness` at",
+              "https://mindmarket.app/api/v1/ml/health",
+          ]
+          pathlib.Path(sys.argv[1]).write_text("\n".join(lines) + "\n")
+          PY
+          if url=$(gh pr create --base main --head "$BRANCH" \
+                     --title "chore(ml): retrain regime model (${DAY})" \
+                     --body-file "$body_file"); then
+            echo "Opened $url"
+            echo "url=${url}" >> "$GITHUB_OUTPUT"
+            echo "number=${url##*/}" >> "$GITHUB_OUTPUT"
+          else
+            title="Regime retrain could not open a PR"
+            compare="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/main...${BRANCH}?expand=1"
+            run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            msg_file="${RUNNER_TEMP}/issue.md"
+            {
+              echo "Run ${run_url} trained and gated a new artifact and pushed branch \`${BRANCH}\`, but \`gh pr create\` was refused."
+              echo
+              echo "Most likely cause: Settings -> Actions -> General -> Workflow permissions -> \"Allow GitHub Actions to create and approve pull requests\" is off."
+              echo
+              echo "Open the PR by hand (CI runs normally for a human-opened PR): ${compare}"
+            } > "$msg_file"
+            num=$(gh issue list --state open --search "\"$title\" in:title" \
+                  --json number --jq '.[0].number' || true)
+            if [ -n "$num" ]; then
+              gh issue comment "$num" --body-file "$msg_file"
+            else
+              gh issue create --title "$title" --body-file "$msg_file"
+            fi
+            echo "::error::could not open the retrain PR — see the tracking issue"
+            exit 1
+          fi
 
-      - name: Flag the new artifact as pending a deliberate deploy
-        if: steps.commit.outputs.committed == 'true'
+      - name: Dispatch required checks on the PR branch
+        if: steps.pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.branch.outputs.name }}
         run: |
-          sha="${{ steps.commit.outputs.sha }}"
-          title="Regime model retrained — pending production deploy"
-          body="New artifact on main: \`$sha\`
+          set -euo pipefail
+          gh workflow run ci.yml --ref "$BRANCH"
+          gh workflow run contract.yml --ref "$BRANCH"
+          echo "Dispatched ci.yml + contract.yml on $BRANCH"
 
-          Images are building (\`build-images\`). Once both are green, deploy with:
-          Actions → **Deploy to EC2 (manual, pinned SHA)** → sha = \`$sha\`
-
-          Model currently served in production — check \`trained_at\` at
-          https://mindmarket.app/api/v1/ml/health"
-          num=$(gh issue list --state open --search "\"$title\" in:title" \
-                --json number --jq '.[0].number' || true)
-          if [ -n "$num" ]; then
-            gh issue comment "$num" --body "$body"
-          else
-            gh issue create --title "$title" --body "$body"
-          fi
+      - name: Supersede older open retrain PRs
+        if: steps.pr.outputs.number != ''
+        # Runs only after the NEW PR exists, so there is never a moment with no
+        # open proposal. Older bot branches are left in place (cheap, and a
+        # human may want to diff them).
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEW: ${{ steps.pr.outputs.number }}
+        run: |
+          set -euo pipefail
+          olds=$(gh pr list --state open --base main --limit 100 \
+                   --json number,headRefName \
+                   --jq '.[] | select(.headRefName | startswith("ml/retrain-")) | .number')
+          for n in $olds; do
+            if [ "$n" != "$NEW" ]; then
+              gh pr close "$n" --comment "Superseded by #${NEW} (newer retrain)."
+            fi
+          done

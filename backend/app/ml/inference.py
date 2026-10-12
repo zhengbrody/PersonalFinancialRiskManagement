@@ -6,6 +6,8 @@ job (services/ml_regime.py falls back to the deterministic heuristic).
 
 from __future__ import annotations
 
+import hashlib
+import io
 import json
 import logging
 from pathlib import Path
@@ -43,12 +45,15 @@ _FEATURE_LABELS = {
 _model: Any = None
 _meta: Optional[dict] = None
 _load_failed = False
+# sha256 of the exact bytes the model was deserialised from — identity of what
+# is SERVING, compared by /ml/health against the approved (recorded) hash.
+_model_sha256: Optional[str] = None
 
 
 def _load() -> bool:
     """Lazy-load the artifact + metadata once. Returns False if unavailable
     (the model wasn't trained/committed) — caller then falls back."""
-    global _model, _meta, _load_failed
+    global _model, _meta, _load_failed, _model_sha256
     if _model is not None:
         return True
     if _load_failed:
@@ -58,7 +63,11 @@ def _load() -> bool:
         import sklearn
 
         _meta = json.loads(_META_PATH.read_text())
-        _model = joblib.load(_MODEL_PATH)
+        # Read once, hash those bytes, deserialise the SAME bytes: the hash
+        # identifies exactly what is loaded, not whatever is on disk later.
+        raw = _MODEL_PATH.read_bytes()
+        _model = joblib.load(io.BytesIO(raw))
+        _model_sha256 = hashlib.sha256(raw).hexdigest()
         trained_with = str((_meta or {}).get("sklearn_version") or "")
         if trained_with and trained_with != sklearn.__version__:
             # Pickled sklearn models aren't guaranteed to load across minor
@@ -77,8 +86,8 @@ def _load() -> bool:
 
 def reset() -> None:
     """Test hook — drop the cached model/meta."""
-    global _model, _meta, _load_failed
-    _model, _meta, _load_failed = None, None, False
+    global _model, _meta, _load_failed, _model_sha256
+    _model, _meta, _load_failed, _model_sha256 = None, None, False, None
 
 
 def is_available() -> bool:
@@ -89,6 +98,11 @@ def load_model():
     """The fitted estimator, or None when the artifact can't load (health/
     drift consumers; the request path keeps using predict())."""
     return _model if _load() else None
+
+
+def loaded_model_sha256() -> Optional[str]:
+    """sha256 of the bytes the serving model was loaded from, or None."""
+    return _model_sha256 if _load() else None
 
 
 def model_meta() -> Optional[dict]:

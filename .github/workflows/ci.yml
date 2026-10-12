@@ -5,6 +5,12 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main ]
+  # A pull request opened with the default GITHUB_TOKEN (the weekly model
+  # retrain, train-regime.yml) does not fire `pull_request` — GitHub's
+  # recursion guard. That workflow dispatches CI on the PR branch instead; the
+  # resulting check runs land on the PR head SHA, which is what branch
+  # protection's required checks are matched against.
+  workflow_dispatch: {}
 
 jobs:
   # ── existing Streamlit-era suite (unit + integration in tests/) ──
