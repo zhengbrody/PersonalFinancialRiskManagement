@@ -6,25 +6,47 @@ const optionalNumber = finite.nullable();
 export const fundingRiskAssumptionsSchema = z.object({
   scenarios: z.array(z.object({ label: z.string().min(1).max(80), prices: z.record(z.string(), finite.min(0).max(1_000_000)) })).min(1).max(3),
   annual_borrowing_rate: finite.min(0).max(1).nullable(),
+  residual_risk_free_rate: finite.min(0).max(0.2).nullable().default(null),
+  objective: z.enum(["preserve_terminal_equity", "minimize_funding_gap", "minimize_conditional_debt"]).nullable().default(null),
+  objective_confirmed: z.boolean().default(false),
 });
 export function sameFundingRisk(a: unknown, b: unknown): boolean {
   const canonical = (value: unknown): string => JSON.stringify(value, (_key, item) => item && typeof item === "object" && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
   return canonical(a ?? null) === canonical(b ?? null);
 }
+const nullableRecord = z.record(z.string(), finite).nullable();
+const notComputableSchema = z.object({ code: z.string(), contract: z.string().nullish(), message: z.string() });
+const coverageSchema = z.object({ contract: z.string(), underlying: z.string(), option_type: z.enum(["call", "put"]), side: z.enum(["long", "short"]),
+  expiry: z.string(), strike: finite, contracts: z.number().int(), coverage: z.string(), covered_by: z.string().nullish(),
+  max_loss_excl_premium: optionalNumber, collateral: z.string() });
+const outcomeSchema = z.object({
+  kind: z.enum(["no_action", "sale_keep_cash_and_put", "sale_repay_margin_and_put"]),
+  positions: nullableRecord, position_values: nullableRecord, stock_assets: optionalNumber,
+  initial_net_equity: finite, cash_before_interest: optionalNumber, cash_after_interest: optionalNumber, principal_debt: finite,
+  interest_cost: optionalNumber, net_equity_before_interest: optionalNumber, net_equity_after_interest: optionalNumber,
+  total_pnl_before_interest: optionalNumber, total_pnl: optionalNumber, incremental_pnl_vs_no_action: optionalNumber,
+  assignment_shares: nullableRecord, assignment_cash_paid: optionalNumber, funding_gap_before_interest: optionalNumber,
+  funding_gap: optionalNumber, conditional_debt_if_gap_financed: optionalNumber, largest_position_weight: optionalNumber, gross_leverage_if_gap_financed: optionalNumber,
+  snapshot_id: z.string().nullish(), short_stock_value: optionalNumber.optional(), residual_option_value: optionalNumber.optional(),
+  sold_stock_opportunity_cost: optionalNumber.optional(), min_cash_through_horizon: optionalNumber.optional(),
+  residual_valuations: z.array(z.object({ contract: z.string(), iv: optionalNumber, iv_source: z.string(), rate: optionalNumber, position_value: optionalNumber })).default([]),
+  settlement_events: z.array(z.object({ contract: z.string(), expiry: z.string(), underlying_price: finite, action: z.string(), shares_delta: finite, cash_delta: finite })).default([]),
+  not_computable: z.array(notComputableSchema).default([]),
+});
 export const fundingAccountRiskSchema = z.object({
-  methodology_version: z.literal("funding-common-expiry-v1"), portfolio_id: z.string().uuid(), source_result_id: z.string().uuid(), captured_at: z.string(),
+  methodology_version: z.enum(["funding-common-expiry-v1", "funding-account-scenarios-v2"]), portfolio_id: z.string().uuid(), source_result_id: z.string().uuid(), captured_at: z.string(),
   assumptions: fundingRiskAssumptionsSchema, days_of_interest: z.number().int().nonnegative(), preferred_alternative: z.null(), limitations: z.array(z.string()),
-  scenarios: z.array(z.object({ label: z.string(), prices: z.record(z.string(), finite), outcomes: z.array(z.object({
-    kind: z.enum(["no_action", "sale_keep_cash_and_put", "sale_repay_margin_and_put"]),
-    positions: z.record(z.string(), finite), position_values: z.record(z.string(), finite), stock_assets: finite,
-    initial_net_equity: finite, cash_before_interest: finite, cash_after_interest: optionalNumber, principal_debt: finite,
-    interest_cost: optionalNumber, net_equity_before_interest: finite, net_equity_after_interest: optionalNumber,
-    total_pnl_before_interest: finite, total_pnl: optionalNumber, incremental_pnl_vs_no_action: optionalNumber,
-    assignment_shares: z.record(z.string(), finite), assignment_cash_paid: finite, funding_gap_before_interest: finite,
-    funding_gap: optionalNumber, conditional_debt_if_gap_financed: optionalNumber, largest_position_weight: optionalNumber, gross_leverage_if_gap_financed: optionalNumber,
-  })).length(3) })).min(1).max(3),
+  valuation_date: z.string().nullish(),
+  market_snapshot: z.object({ snapshot_id: z.string(), price_as_of: z.string(), quote_time_note: z.string() }).nullish(),
+  broker_rules: z.object({ provider_id: z.literal("unknown"), rule_version: z.string(), source: z.string() }).nullish(),
+  ranking: z.object({ status: z.string(), objective: z.string().nullish(), preferred_kind: z.enum(["no_action", "sale_keep_cash_and_put", "sale_repay_margin_and_put"]).nullish(), reasons: z.array(z.string()) }).nullish(),
+  alternatives: z.array(z.object({ kind: z.enum(["no_action", "sale_keep_cash_and_put", "sale_repay_margin_and_put"]), snapshot_id: z.string(),
+    coverage_at_capture: z.array(coverageSchema), coverage_changes: z.array(z.object({ contract: z.string(), before: z.string(), after: z.string(), reason: z.string() })),
+    unbounded_loss: z.boolean(), buying_power: z.object({ status: z.literal("unknown"), reason: z.string() }) })).default([]),
+  scenarios: z.array(z.object({ label: z.string(), prices: z.record(z.string(), finite), outcomes: z.array(outcomeSchema).length(3) })).min(1).max(3),
 }).superRefine((risk, ctx) => {
-  if (!sameFundingRisk(risk.scenarios.map(({ label, prices }) => ({ label, prices })), risk.assumptions.scenarios) || risk.scenarios.some(row => new Set(row.outcomes.map(outcome => outcome.kind)).size !== 3)) ctx.addIssue({ code: "custom", message: "Account scenario evidence mismatch" });
+  if (!sameFundingRisk(risk.scenarios.map(({ label, prices }) => ({ label, prices })), risk.assumptions.scenarios) || risk.scenarios.some(row => new Set(row.outcomes.map(outcome => outcome.kind)).size !== 3)
+    || (risk.market_snapshot && [...risk.alternatives.map(row => row.snapshot_id), ...risk.scenarios.flatMap(row => row.outcomes.map(outcome => outcome.snapshot_id))].some(id => id !== risk.market_snapshot?.snapshot_id))) ctx.addIssue({ code: "custom", message: "Account scenario evidence mismatch" });
 });
 export type FundingAccountRisk = z.infer<typeof fundingAccountRiskSchema>;
 

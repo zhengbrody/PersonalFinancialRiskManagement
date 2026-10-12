@@ -1,0 +1,536 @@
+{
+  "methodology_version": "funding-account-scenarios-v2",
+  "portfolio_id": "11111111-1111-4111-8111-111111111111",
+  "source_result_id": "f74d9466-3c9c-4595-a4cb-9bc0eabd1753",
+  "captured_at": "2026-09-16T00:00:00Z",
+  "assumptions": {
+    "scenarios": [
+      {
+        "label": "Explicit downside",
+        "prices": {
+          "A": 100.0,
+          "B": 50.0,
+          "Y": 35.0,
+          "X": 30.0
+        },
+        "settlement_prices": {}
+      }
+    ],
+    "annual_borrowing_rate": null,
+    "residual_risk_free_rate": null,
+    "residual_iv_overrides": {},
+    "residual_assumptions_confirmed": false,
+    "objective": "preserve_terminal_equity",
+    "objective_confirmed": true,
+    "broker_rules_provider": "unknown"
+  },
+  "days_of_interest": 30,
+  "scenarios": [
+    {
+      "label": "Explicit downside",
+      "prices": {
+        "A": 100.0,
+        "B": 50.0,
+        "Y": 35.0,
+        "X": 30.0
+      },
+      "outcomes": [
+        {
+          "kind": "no_action",
+          "positions": {
+            "A": 10.0,
+            "B": 20.0,
+            "Y": 0.0
+          },
+          "position_values": {
+            "A": 1000.0,
+            "B": 1000.0,
+            "Y": 0.0
+          },
+          "stock_assets": 2000.0,
+          "initial_net_equity": 24100.0,
+          "cash_before_interest": 23000.0,
+          "cash_after_interest": 23000.0,
+          "principal_debt": 0.0,
+          "interest_cost": 0.0,
+          "net_equity_before_interest": null,
+          "net_equity_after_interest": null,
+          "total_pnl_before_interest": null,
+          "total_pnl": null,
+          "incremental_pnl_vs_no_action": null,
+          "assignment_shares": {
+            "Y": -100.0
+          },
+          "assignment_cash_paid": 0.0,
+          "funding_gap_before_interest": 0.0,
+          "funding_gap": 0.0,
+          "conditional_debt_if_gap_financed": 0.0,
+          "largest_position_weight": null,
+          "gross_leverage_if_gap_financed": null,
+          "snapshot_id": "b795202adb043fad1781a4bab22b616b934f52ec69c600dc74af5f9f9a1c51dc",
+          "short_stock_value": 0.0,
+          "residual_option_value": null,
+          "residual_valuations": [
+            {
+              "contract": "X261120P00025000",
+              "expiry": "2026-11-20",
+              "contracts_signed": -1,
+              "tau_years": 0.09582477754962354,
+              "underlying_price": 30.0,
+              "iv": 1.3605,
+              "iv_source": "captured_quote_implied_vol",
+              "rate": null,
+              "rate_source": "missing",
+              "value_per_share": null,
+              "position_value": null
+            }
+          ],
+          "settlement_events": [
+            {
+              "contract": "Y261016C00030000",
+              "expiry": "2026-10-16",
+              "underlying_price": 35.0,
+              "action": "assigned",
+              "shares_delta": -100.0,
+              "cash_delta": 3000.0
+            }
+          ],
+          "min_cash_through_horizon": 20000.0,
+          "sold_stock_opportunity_cost": 0.0,
+          "fees_total": 0.0,
+          "open_leg_coverage": [
+            {
+              "contract": "X261120P00025000",
+              "underlying": "X",
+              "option_type": "put",
+              "side": "short",
+              "expiry": "2026-11-20",
+              "strike": 25.0,
+              "contracts": 1,
+              "coverage": "cash_secured",
+              "covered_by": null,
+              "max_loss_excl_premium": 2500.0,
+              "collateral": "cash"
+            }
+          ],
+          "not_computable": [
+            {
+              "code": "residual_rate_missing",
+              "contract": "X261120P00025000",
+              "message": "A residual-valuation risk-free rate must be supplied explicitly; none is assumed."
+            }
+          ]
+        },
+        {
+          "kind": "sale_keep_cash_and_put",
+          "positions": {
+            "A": 10.0,
+            "B": 20.0,
+            "Y": -100.0
+          },
+          "position_values": {
+            "A": 1000.0,
+            "B": 1000.0,
+            "Y": -3500.0
+          },
+          "stock_assets": 2000.0,
+          "initial_net_equity": 24100.0,
+          "cash_before_interest": 25743.0,
+          "cash_after_interest": 25743.0,
+          "principal_debt": 0.0,
+          "interest_cost": 0.0,
+          "net_equity_before_interest": null,
+          "net_equity_after_interest": null,
+          "total_pnl_before_interest": null,
+          "total_pnl": null,
+          "incremental_pnl_vs_no_action": null,
+          "assignment_shares": {
+            "Y": -100.0
+          },
+          "assignment_cash_paid": 0.0,
+          "funding_gap_before_interest": 0.0,
+          "funding_gap": 0.0,
+          "conditional_debt_if_gap_financed": 0.0,
+          "largest_position_weight": null,
+          "gross_leverage_if_gap_financed": null,
+          "snapshot_id": "b795202adb043fad1781a4bab22b616b934f52ec69c600dc74af5f9f9a1c51dc",
+          "short_stock_value": 3500.0,
+          "residual_option_value": null,
+          "residual_valuations": [
+            {
+              "contract": "X261120P00025000",
+              "expiry": "2026-11-20",
+              "contracts_signed": -1,
+              "tau_years": 0.09582477754962354,
+              "underlying_price": 30.0,
+              "iv": 1.3605,
+              "iv_source": "captured_quote_implied_vol",
+              "rate": null,
+              "rate_source": "missing",
+              "value_per_share": null,
+              "position_value": null
+            }
+          ],
+          "settlement_events": [
+            {
+              "contract": "Y261016C00030000",
+              "expiry": "2026-10-16",
+              "underlying_price": 35.0,
+              "action": "assigned",
+              "shares_delta": -100.0,
+              "cash_delta": 3000.0
+            },
+            {
+              "contract": "B261016P00040000-new",
+              "expiry": "2026-10-16",
+              "underlying_price": 50.0,
+              "action": "expired",
+              "shares_delta": 0.0,
+              "cash_delta": 0.0
+            }
+          ],
+          "min_cash_through_horizon": 22743.0,
+          "sold_stock_opportunity_cost": 1000.0,
+          "fees_total": 7.0,
+          "open_leg_coverage": [
+            {
+              "contract": "X261120P00025000",
+              "underlying": "X",
+              "option_type": "put",
+              "side": "short",
+              "expiry": "2026-11-20",
+              "strike": 25.0,
+              "contracts": 1,
+              "coverage": "cash_secured",
+              "covered_by": null,
+              "max_loss_excl_premium": 2500.0,
+              "collateral": "cash"
+            }
+          ],
+          "not_computable": [
+            {
+              "code": "residual_rate_missing",
+              "contract": "X261120P00025000",
+              "message": "A residual-valuation risk-free rate must be supplied explicitly; none is assumed."
+            }
+          ]
+        },
+        {
+          "kind": "sale_repay_margin_and_put",
+          "positions": {
+            "A": 10.0,
+            "B": 20.0,
+            "Y": -100.0
+          },
+          "position_values": {
+            "A": 1000.0,
+            "B": 1000.0,
+            "Y": -3500.0
+          },
+          "stock_assets": 2000.0,
+          "initial_net_equity": 24100.0,
+          "cash_before_interest": 25743.0,
+          "cash_after_interest": 25743.0,
+          "principal_debt": 0.0,
+          "interest_cost": 0.0,
+          "net_equity_before_interest": null,
+          "net_equity_after_interest": null,
+          "total_pnl_before_interest": null,
+          "total_pnl": null,
+          "incremental_pnl_vs_no_action": null,
+          "assignment_shares": {
+            "Y": -100.0
+          },
+          "assignment_cash_paid": 0.0,
+          "funding_gap_before_interest": 0.0,
+          "funding_gap": 0.0,
+          "conditional_debt_if_gap_financed": 0.0,
+          "largest_position_weight": null,
+          "gross_leverage_if_gap_financed": null,
+          "snapshot_id": "b795202adb043fad1781a4bab22b616b934f52ec69c600dc74af5f9f9a1c51dc",
+          "short_stock_value": 3500.0,
+          "residual_option_value": null,
+          "residual_valuations": [
+            {
+              "contract": "X261120P00025000",
+              "expiry": "2026-11-20",
+              "contracts_signed": -1,
+              "tau_years": 0.09582477754962354,
+              "underlying_price": 30.0,
+              "iv": 1.3605,
+              "iv_source": "captured_quote_implied_vol",
+              "rate": null,
+              "rate_source": "missing",
+              "value_per_share": null,
+              "position_value": null
+            }
+          ],
+          "settlement_events": [
+            {
+              "contract": "Y261016C00030000",
+              "expiry": "2026-10-16",
+              "underlying_price": 35.0,
+              "action": "assigned",
+              "shares_delta": -100.0,
+              "cash_delta": 3000.0
+            },
+            {
+              "contract": "B261016P00040000-new",
+              "expiry": "2026-10-16",
+              "underlying_price": 50.0,
+              "action": "expired",
+              "shares_delta": 0.0,
+              "cash_delta": 0.0
+            }
+          ],
+          "min_cash_through_horizon": 22743.0,
+          "sold_stock_opportunity_cost": 1000.0,
+          "fees_total": 7.0,
+          "open_leg_coverage": [
+            {
+              "contract": "X261120P00025000",
+              "underlying": "X",
+              "option_type": "put",
+              "side": "short",
+              "expiry": "2026-11-20",
+              "strike": 25.0,
+              "contracts": 1,
+              "coverage": "cash_secured",
+              "covered_by": null,
+              "max_loss_excl_premium": 2500.0,
+              "collateral": "cash"
+            }
+          ],
+          "not_computable": [
+            {
+              "code": "residual_rate_missing",
+              "contract": "X261120P00025000",
+              "message": "A residual-valuation risk-free rate must be supplied explicitly; none is assumed."
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "preferred_alternative": null,
+  "limitations": [
+    "Every alternative, including no action, is evaluated from the same captured account and the same captured prices and option quotes (one snapshot id). Scenario prices are explicit assumptions with no probabilities; they are not forecasts.",
+    "Valuation date is the new Put's expiry. Legs expiring at or before it settle physically at the explicit price on their own expiry date: in-the-money short legs are assigned and in-the-money long legs are assumed exercised; at- or out-of-the-money legs expire. Early exercise and early assignment are not modelled.",
+    "Legs still open at the valuation date are valued by Black-Scholes using the captured quote's implied volatility (or your confirmed override) and your explicit risk-free rate, with constant volatility to the horizon. Without those inputs the leg and every total that includes it are reported as not computable, never as zero or as an expiry payoff.",
+    "Selling stock that covers a short call, or that a long put protects, recomputes the relationship; an uncovered short call has unbounded loss and a broker-defined collateral requirement.",
+    "Total P&L uses the original captured equity including existing option marks. New premium is not instant profit; terminal obligations and both fee types are included once. Sold-stock opportunity cost is a decomposition already inside total P&L, never subtracted twice.",
+    "Interest is simple actual/365 on each branch's initial debt from capture to the valuation date. An unknown APR leaves debt-bearing equity, P&L and funding gaps unknown; zero-debt branches incur none. Cash earns no yield here.",
+    "Open short Puts at the valuation date reserve gross strike cash without spread netting. Conditional deficit borrowing adds equal cash and debt and does not imply broker approval or available credit.",
+    "Broker buying power, maintenance requirements and uncovered-call collateral are unknown: no verified broker rule set is connected (provider 'unknown'). Actual fills, early exercise, margin calls and liquidation paths are not modelled.",
+    "A preferred alternative is shown only under your confirmed objective when every compared figure is computable and bounded for every alternative; otherwise no ranking is given. It is conditional arithmetic, not a recommendation.",
+    "Taxes, dividends, changes in reserved cash, intraperiod price paths and execution/settlement uncertainty are excluded."
+  ],
+  "valuation_date": "2026-10-16",
+  "market_snapshot": {
+    "snapshot_id": "b795202adb043fad1781a4bab22b616b934f52ec69c600dc74af5f9f9a1c51dc",
+    "captured_at": "2026-09-16T00:00:00Z",
+    "price_as_of": "2026-09-16",
+    "prices": {
+      "A": 100.0,
+      "B": 50.0,
+      "X": 40.0,
+      "Y": 25.0
+    },
+    "options": [
+      {
+        "contract": "X261120P00025000",
+        "mark": 2.0,
+        "iv": 1.3605,
+        "spot": 40.0,
+        "basis": "captured_two_sided_quote_midpoint"
+      },
+      {
+        "contract": "Y261016C00030000",
+        "mark": 2.0,
+        "iv": 1.2774,
+        "spot": 25.0,
+        "basis": "captured_two_sided_quote_midpoint"
+      }
+    ],
+    "quote_time_note": "Option quotes and stock closes were captured together with the signed comparison; exchange quote timestamps are not available from the provider."
+  },
+  "alternatives": [
+    {
+      "kind": "no_action",
+      "snapshot_id": "b795202adb043fad1781a4bab22b616b934f52ec69c600dc74af5f9f9a1c51dc",
+      "coverage_at_capture": [
+        {
+          "contract": "X261120P00025000",
+          "underlying": "X",
+          "option_type": "put",
+          "side": "short",
+          "expiry": "2026-11-20",
+          "strike": 25.0,
+          "contracts": 1,
+          "coverage": "cash_secured",
+          "covered_by": null,
+          "max_loss_excl_premium": 2500.0,
+          "collateral": "cash"
+        },
+        {
+          "contract": "Y261016C00030000",
+          "underlying": "Y",
+          "option_type": "call",
+          "side": "short",
+          "expiry": "2026-10-16",
+          "strike": 30.0,
+          "contracts": 1,
+          "coverage": "stock",
+          "covered_by": "Y",
+          "max_loss_excl_premium": 0.0,
+          "collateral": "shares"
+        }
+      ],
+      "coverage_changes": [],
+      "unbounded_loss": false,
+      "buying_power": {
+        "requirement": "buying_power_impact",
+        "status": "unknown",
+        "value": null,
+        "reason": "Broker buying power, maintenance and collateral rules are not verified; this requirement is unknown and must not be assumed to be zero or satisfied."
+      }
+    },
+    {
+      "kind": "sale_keep_cash_and_put",
+      "snapshot_id": "b795202adb043fad1781a4bab22b616b934f52ec69c600dc74af5f9f9a1c51dc",
+      "coverage_at_capture": [
+        {
+          "contract": "B261016P00040000-new",
+          "underlying": "B",
+          "option_type": "put",
+          "side": "short",
+          "expiry": "2026-10-16",
+          "strike": 40.0,
+          "contracts": 1,
+          "coverage": "cash_secured",
+          "covered_by": null,
+          "max_loss_excl_premium": 4000.0,
+          "collateral": "cash"
+        },
+        {
+          "contract": "X261120P00025000",
+          "underlying": "X",
+          "option_type": "put",
+          "side": "short",
+          "expiry": "2026-11-20",
+          "strike": 25.0,
+          "contracts": 1,
+          "coverage": "cash_secured",
+          "covered_by": null,
+          "max_loss_excl_premium": 2500.0,
+          "collateral": "cash"
+        },
+        {
+          "contract": "Y261016C00030000",
+          "underlying": "Y",
+          "option_type": "call",
+          "side": "short",
+          "expiry": "2026-10-16",
+          "strike": 30.0,
+          "contracts": 1,
+          "coverage": "uncovered",
+          "covered_by": null,
+          "max_loss_excl_premium": null,
+          "collateral": "broker_rule_unknown"
+        }
+      ],
+      "coverage_changes": [
+        {
+          "contract": "Y261016C00030000",
+          "before": "stock\u00d71",
+          "after": "uncovered\u00d71",
+          "reason": "Hypothetical sale of 100.0 Y shares changes the stock available to this leg."
+        }
+      ],
+      "unbounded_loss": true,
+      "buying_power": {
+        "requirement": "buying_power_impact",
+        "status": "unknown",
+        "value": null,
+        "reason": "Broker buying power, maintenance and collateral rules are not verified; this requirement is unknown and must not be assumed to be zero or satisfied."
+      }
+    },
+    {
+      "kind": "sale_repay_margin_and_put",
+      "snapshot_id": "b795202adb043fad1781a4bab22b616b934f52ec69c600dc74af5f9f9a1c51dc",
+      "coverage_at_capture": [
+        {
+          "contract": "B261016P00040000-new",
+          "underlying": "B",
+          "option_type": "put",
+          "side": "short",
+          "expiry": "2026-10-16",
+          "strike": 40.0,
+          "contracts": 1,
+          "coverage": "cash_secured",
+          "covered_by": null,
+          "max_loss_excl_premium": 4000.0,
+          "collateral": "cash"
+        },
+        {
+          "contract": "X261120P00025000",
+          "underlying": "X",
+          "option_type": "put",
+          "side": "short",
+          "expiry": "2026-11-20",
+          "strike": 25.0,
+          "contracts": 1,
+          "coverage": "cash_secured",
+          "covered_by": null,
+          "max_loss_excl_premium": 2500.0,
+          "collateral": "cash"
+        },
+        {
+          "contract": "Y261016C00030000",
+          "underlying": "Y",
+          "option_type": "call",
+          "side": "short",
+          "expiry": "2026-10-16",
+          "strike": 30.0,
+          "contracts": 1,
+          "coverage": "uncovered",
+          "covered_by": null,
+          "max_loss_excl_premium": null,
+          "collateral": "broker_rule_unknown"
+        }
+      ],
+      "coverage_changes": [
+        {
+          "contract": "Y261016C00030000",
+          "before": "stock\u00d71",
+          "after": "uncovered\u00d71",
+          "reason": "Hypothetical sale of 100.0 Y shares changes the stock available to this leg."
+        }
+      ],
+      "unbounded_loss": true,
+      "buying_power": {
+        "requirement": "buying_power_impact",
+        "status": "unknown",
+        "value": null,
+        "reason": "Broker buying power, maintenance and collateral rules are not verified; this requirement is unknown and must not be assumed to be zero or satisfied."
+      }
+    }
+  ],
+  "broker_rules": {
+    "provider_id": "unknown",
+    "rule_version": "none",
+    "source": "No verified broker rule set is connected for this account."
+  },
+  "ranking": {
+    "status": "not_computable",
+    "objective": "preserve_terminal_equity",
+    "preferred_kind": null,
+    "reasons": [
+      "net_equity_after_interest is not computable for no_action in 'Explicit downside'.",
+      "net_equity_after_interest is not computable for sale_keep_cash_and_put in 'Explicit downside'.",
+      "net_equity_after_interest is not computable for sale_repay_margin_and_put in 'Explicit downside'.",
+      "sale_keep_cash_and_put carries an uncovered short call whose loss is unbounded beyond these scenarios.",
+      "sale_repay_margin_and_put carries an uncovered short call whose loss is unbounded beyond these scenarios."
+    ]
+  }
+}

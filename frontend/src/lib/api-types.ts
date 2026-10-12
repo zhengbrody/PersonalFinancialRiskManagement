@@ -2111,6 +2111,23 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccountAlternative */
+        AccountAlternative: {
+            buying_power: components["schemas"]["BrokerRequirementOut"];
+            /** Coverage At Capture */
+            coverage_at_capture: components["schemas"]["CoverageRelation"][];
+            /** Coverage Changes */
+            coverage_changes: components["schemas"]["CoverageChange"][];
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "no_action" | "sale_keep_cash_and_put" | "sale_repay_margin_and_put";
+            /** Snapshot Id */
+            snapshot_id: string;
+            /** Unbounded Loss */
+            unbounded_loss: boolean;
+        };
         /** AccountDeleteIn */
         AccountDeleteIn: {
             /** Confirmation */
@@ -2426,6 +2443,35 @@ export interface components {
             selection_effect?: number | null;
             /** Total Active Return */
             total_active_return?: number | null;
+        };
+        /** BrokerRequirementOut */
+        BrokerRequirementOut: {
+            /** Reason */
+            reason: string;
+            /**
+             * Requirement
+             * @enum {string}
+             */
+            requirement: "buying_power_impact" | "maintenance_requirement" | "uncovered_call_collateral";
+            /**
+             * Status
+             * @constant
+             */
+            status: "unknown";
+            /** Value */
+            value?: null;
+        };
+        /** BrokerRulesOut */
+        BrokerRulesOut: {
+            /**
+             * Provider Id
+             * @constant
+             */
+            provider_id: "unknown";
+            /** Rule Version */
+            rule_version: string;
+            /** Source */
+            source: string;
         };
         /**
          * CacheProvenance
@@ -3375,6 +3421,57 @@ export interface components {
              * @default false
              */
             truncated?: boolean;
+        };
+        /** CoverageChange */
+        CoverageChange: {
+            /** After */
+            after: string;
+            /** Before */
+            before: string;
+            /** Contract */
+            contract: string;
+            /** Reason */
+            reason: string;
+        };
+        /** CoverageRelation */
+        CoverageRelation: {
+            /**
+             * Collateral
+             * @enum {string}
+             */
+            collateral: "shares" | "long_option" | "cash" | "broker_rule_unknown" | "none";
+            /** Contract */
+            contract: string;
+            /** Contracts */
+            contracts: number;
+            /**
+             * Coverage
+             * @enum {string}
+             */
+            coverage: "stock" | "long_call_spread" | "uncovered" | "long_put_spread" | "cash_secured" | "protective" | "unpaired_no_stock" | "long_call";
+            /** Covered By */
+            covered_by?: string | null;
+            /**
+             * Expiry
+             * Format: date
+             */
+            expiry: string;
+            /** Max Loss Excl Premium */
+            max_loss_excl_premium: number | null;
+            /**
+             * Option Type
+             * @enum {string}
+             */
+            option_type: "call" | "put";
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "long" | "short";
+            /** Strike */
+            strike: number;
+            /** Underlying */
+            underlying: string;
         };
         /**
          * CoverageTestOut
@@ -4328,21 +4425,23 @@ export interface components {
         /** ExpiryAccountOutcome */
         ExpiryAccountOutcome: {
             /** Assignment Cash Paid */
-            assignment_cash_paid: number;
+            assignment_cash_paid: number | null;
             /** Assignment Shares */
             assignment_shares: {
                 [key: string]: number;
-            };
+            } | null;
             /** Cash After Interest */
             cash_after_interest: number | null;
             /** Cash Before Interest */
-            cash_before_interest: number;
+            cash_before_interest: number | null;
             /** Conditional Debt If Gap Financed */
             conditional_debt_if_gap_financed: number | null;
+            /** Fees Total */
+            fees_total?: number | null;
             /** Funding Gap */
             funding_gap: number | null;
             /** Funding Gap Before Interest */
-            funding_gap_before_interest: number;
+            funding_gap_before_interest: number | null;
             /** Gross Leverage If Gap Financed */
             gross_leverage_if_gap_financed: number | null;
             /** Incremental Pnl Vs No Action */
@@ -4358,26 +4457,44 @@ export interface components {
             kind: "no_action" | "sale_keep_cash_and_put" | "sale_repay_margin_and_put";
             /** Largest Position Weight */
             largest_position_weight: number | null;
+            /** Min Cash Through Horizon */
+            min_cash_through_horizon?: number | null;
             /** Net Equity After Interest */
             net_equity_after_interest: number | null;
             /** Net Equity Before Interest */
-            net_equity_before_interest: number;
+            net_equity_before_interest: number | null;
+            /** Not Computable */
+            not_computable?: components["schemas"]["NotComputable"][];
+            /** Open Leg Coverage */
+            open_leg_coverage?: components["schemas"]["CoverageRelation"][];
             /** Position Values */
             position_values: {
                 [key: string]: number;
-            };
+            } | null;
             /** Positions */
             positions: {
                 [key: string]: number;
-            };
+            } | null;
             /** Principal Debt */
             principal_debt: number;
+            /** Residual Option Value */
+            residual_option_value?: number | null;
+            /** Residual Valuations */
+            residual_valuations?: components["schemas"]["ResidualValuation"][];
+            /** Settlement Events */
+            settlement_events?: components["schemas"]["SettlementEvent"][];
+            /** Short Stock Value */
+            short_stock_value?: number | null;
+            /** Snapshot Id */
+            snapshot_id?: string | null;
+            /** Sold Stock Opportunity Cost */
+            sold_stock_opportunity_cost?: number | null;
             /** Stock Assets */
-            stock_assets: number;
+            stock_assets: number | null;
             /** Total Pnl */
             total_pnl: number | null;
             /** Total Pnl Before Interest */
-            total_pnl_before_interest: number;
+            total_pnl_before_interest: number | null;
         };
         /** ExpiryAccountScenario */
         ExpiryAccountScenario: {
@@ -4412,6 +4529,12 @@ export interface components {
             /** Prices */
             prices: {
                 [key: string]: number;
+            };
+            /** Settlement Prices */
+            settlement_prices?: {
+                [key: string]: {
+                    [key: string]: number;
+                };
             };
         };
         /** ExplainContributor */
@@ -4831,12 +4954,39 @@ export interface components {
         FundingRiskAssumptions: {
             /** Annual Borrowing Rate */
             annual_borrowing_rate?: number | null;
+            /**
+             * Broker Rules Provider
+             * @default unknown
+             * @constant
+             */
+            broker_rules_provider?: "unknown";
+            /** Objective */
+            objective?: ("preserve_terminal_equity" | "minimize_funding_gap" | "minimize_conditional_debt") | null;
+            /**
+             * Objective Confirmed
+             * @default false
+             */
+            objective_confirmed?: boolean;
+            /**
+             * Residual Assumptions Confirmed
+             * @default false
+             */
+            residual_assumptions_confirmed?: boolean;
+            /** Residual Iv Overrides */
+            residual_iv_overrides?: {
+                [key: string]: number;
+            };
+            /** Residual Risk Free Rate */
+            residual_risk_free_rate?: number | null;
             /** Scenarios */
             scenarios: components["schemas"]["ExpiryPriceScenario"][];
         };
         /** FundingRiskResult */
         FundingRiskResult: {
+            /** Alternatives */
+            alternatives?: components["schemas"]["AccountAlternative"][];
             assumptions: components["schemas"]["FundingRiskAssumptions"];
+            broker_rules?: components["schemas"]["BrokerRulesOut"] | null;
             /**
              * Captured At
              * Format: date-time
@@ -4846,12 +4996,13 @@ export interface components {
             days_of_interest: number;
             /** Limitations */
             limitations: string[];
+            market_snapshot?: components["schemas"]["MarketSnapshotOut"] | null;
             /**
              * Methodology Version
-             * @default funding-common-expiry-v1
-             * @constant
+             * @default funding-account-scenarios-v2
+             * @enum {string}
              */
-            methodology_version?: "funding-common-expiry-v1";
+            methodology_version?: "funding-common-expiry-v1" | "funding-account-scenarios-v2";
             /**
              * Portfolio Id
              * Format: uuid
@@ -4859,6 +5010,7 @@ export interface components {
             portfolio_id: string;
             /** Preferred Alternative */
             preferred_alternative?: null;
+            ranking?: components["schemas"]["RankingOut"] | null;
             /** Scenarios */
             scenarios: components["schemas"]["ExpiryAccountScenario"][];
             /**
@@ -4866,6 +5018,8 @@ export interface components {
              * Format: uuid
              */
             source_result_id: string;
+            /** Valuation Date */
+            valuation_date?: string | null;
         };
         /** FundingScenarioAssumptions */
         FundingScenarioAssumptions: {
@@ -5454,6 +5608,29 @@ export interface components {
              */
             status?: "none" | "comfortable" | "tight" | "call_risk" | "n/a";
         };
+        /** MarketSnapshotOut */
+        MarketSnapshotOut: {
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /** Options */
+            options: components["schemas"]["OptionInput"][];
+            /**
+             * Price As Of
+             * Format: date
+             */
+            price_as_of: string;
+            /** Prices */
+            prices: {
+                [key: string]: number;
+            };
+            /** Quote Time Note */
+            quote_time_note: string;
+            /** Snapshot Id */
+            snapshot_id: string;
+        };
         /**
          * MetaOut
          * @description The ``meta`` block every envelope carries (see ``responses._meta``).
@@ -5666,6 +5843,18 @@ export interface components {
             /** Sources */
             sources?: components["schemas"]["SourceProvenance"][];
         };
+        /** NotComputable */
+        NotComputable: {
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "settlement_price_missing" | "residual_iv_missing" | "residual_rate_missing" | "interest_rate_unknown" | "broker_collateral_unknown" | "nonpositive_equity";
+            /** Contract */
+            contract?: string | null;
+            /** Message */
+            message: string;
+        };
         /** OptionAnalyticsOut */
         OptionAnalyticsOut: {
             /** Assignment Risk */
@@ -5866,6 +6055,23 @@ export interface components {
             detail: string;
             /** Severity */
             severity: string;
+        };
+        /** OptionInput */
+        OptionInput: {
+            /**
+             * Basis
+             * @default captured_two_sided_quote_midpoint
+             * @constant
+             */
+            basis?: "captured_two_sided_quote_midpoint";
+            /** Contract */
+            contract: string;
+            /** Iv */
+            iv: number | null;
+            /** Mark */
+            mark: number;
+            /** Spot */
+            spot: number | null;
         };
         /** OptionScenarioGrid */
         OptionScenarioGrid: {
@@ -6560,6 +6766,20 @@ export interface components {
             /** Roic */
             roic?: number | null;
         };
+        /** RankingOut */
+        RankingOut: {
+            /** Objective */
+            objective?: ("preserve_terminal_equity" | "minimize_funding_gap" | "minimize_conditional_debt") | null;
+            /** Preferred Kind */
+            preferred_kind?: ("no_action" | "sale_keep_cash_and_put" | "sale_repay_margin_and_put") | null;
+            /** Reasons */
+            reasons: string[];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "not_requested" | "objective_not_confirmed" | "not_computable" | "no_dominant_alternative" | "preferred";
+        };
         /**
          * ReasonCodeOut
          * @description A structured, machine-readable penalty behind the score (the LLM may
@@ -6917,6 +7137,40 @@ export interface components {
             summary: string;
             /** What Would Change My Mind */
             what_would_change_my_mind?: string[];
+        };
+        /** ResidualValuation */
+        ResidualValuation: {
+            /** Contract */
+            contract: string;
+            /** Contracts Signed */
+            contracts_signed: number;
+            /**
+             * Expiry
+             * Format: date
+             */
+            expiry: string;
+            /** Iv */
+            iv: number | null;
+            /**
+             * Iv Source
+             * @enum {string}
+             */
+            iv_source: "captured_quote_implied_vol" | "user_assumption" | "missing";
+            /** Position Value */
+            position_value: number | null;
+            /** Rate */
+            rate: number | null;
+            /**
+             * Rate Source
+             * @enum {string}
+             */
+            rate_source: "user_assumption" | "missing";
+            /** Tau Years */
+            tau_years: number;
+            /** Underlying Price */
+            underlying_price: number;
+            /** Value Per Share */
+            value_per_share: number | null;
         };
         /** ReviewFundingPlanRequest */
         ReviewFundingPlanRequest: {
@@ -8109,6 +8363,27 @@ export interface components {
             points?: components["schemas"]["SeriesPointOut"][];
             /** Series Id */
             series_id: string;
+        };
+        /** SettlementEvent */
+        SettlementEvent: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "assigned" | "exercised" | "expired";
+            /** Cash Delta */
+            cash_delta: number;
+            /** Contract */
+            contract: string;
+            /**
+             * Expiry
+             * Format: date
+             */
+            expiry: string;
+            /** Shares Delta */
+            shares_delta: number;
+            /** Underlying Price */
+            underlying_price: number;
         };
         /** ShareCardCapabilityOut */
         ShareCardCapabilityOut: {

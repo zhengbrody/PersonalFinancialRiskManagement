@@ -188,7 +188,6 @@ def test_terminal_account_against_independent_oracle(captured, prices, apr):
 
 
 def test_missing_prices_stop_instead_of_inferred_prices(captured):
-    from backend.app.core.responses import APIError
     from backend.app.schemas.funding_risk import FundingRiskAssumptions
     from backend.app.services import funding_risk, funding_scenarios
 
@@ -210,7 +209,8 @@ def test_missing_prices_stop_instead_of_inferred_prices(captured):
     "mutation", ["order", "call", "long", "fractional", "multiplier", "expiry"]
 )
 def test_expiry_guards(captured, monkeypatch, mutation):
-    from backend.app.core.responses import APIError
+    """v2 values calls, long legs and mixed expiries, but a leg that does not
+    match a captured, signed quote row is still refused (never priced ad hoc)."""
     from backend.app.schemas.funding_risk import FundingRiskAssumptions
     from backend.app.services import funding_risk, funding_scenarios
 
@@ -240,11 +240,7 @@ def test_expiry_guards(captured, monkeypatch, mutation):
             now=NOW,
             funding_result=funding,
         )
-    assert error.value.code == (
-        "risk_source_mismatch"
-        if mutation == "order"
-        else "mixed_expiry_unsupported" if mutation == "expiry" else "unsupported_expiry_legs"
-    )
+    assert error.value.code == "risk_source_mismatch"
 
 
 def test_reserves_affect_funding_not_equity(captured):
@@ -490,37 +486,40 @@ def test_negative_equity_with_positive_assets_has_no_ratios(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "options,code",
+    "options",
     [
-        (
-            [
-                _option("X", 30, EXPIRY, "put", -1, "sell"),
-                _option("X", 25, "2026-11-20", "put", -1, "sell"),
-            ],
-            "mixed_expiry_unsupported",
-        ),
-        ([_option("X", 30, EXPIRY, "put", 1, "buy")], "put_scenario_unavailable"),
-        ([_option("Y", 30, EXPIRY, "call", -1, "sell")], "put_scenario_unavailable"),
-        (
-            [
-                _option("X", 30, EXPIRY, "put", -1, "sell"),
-                _option("X", 25, EXPIRY, "put", 1, "buy"),
-            ],
-            "put_scenario_unavailable",
-        ),
+        [
+            _option("X", 30, EXPIRY, "put", -1, "sell"),
+            _option("X", 25, "2026-11-20", "put", -1, "sell"),
+        ],
+        [_option("X", 30, EXPIRY, "put", 1, "buy")],
+        [_option("Y", 30, EXPIRY, "call", -1, "sell")],
+        [_option("X", 30, EXPIRY, "put", -1, "sell"), _option("X", 25, EXPIRY, "put", 1, "buy")],
     ],
     ids=["mixed-expiry-short-puts", "protective-long-put", "covered-call", "vertical-put-spread"],
 )
-def test_unsupported_option_books_are_rejected_as_a_whole(monkeypatch, options, code):
-    """Real holdings through capture -> replay -> composition. No leg is dropped,
-    no hedge offset is credited: the whole request stops with a named reason."""
+def test_formerly_unsupported_books_are_valued_without_dropping_legs(monkeypatch, options):
+    """Real holdings through capture -> replay -> composition. Every leg appears in
+    the coverage relations; a missing residual rate is NOT COMPUTABLE, not zero."""
     from backend.app.schemas.funding_risk import FundingRiskAssumptions
     from backend.app.services import funding_scenarios
 
     snapshot, assumptions = _capture(monkeypatch, options=options, cash=20000, debt=300)
     assumptions.risk = FundingRiskAssumptions(
-        scenarios=[{"label": "flat", "prices": {"A": 100, "B": 50, "X": 40, "Y": 25}}]
+        scenarios=[
+            {
+                "label": "flat",
+                "prices": {"A": 100, "B": 50, "Y": 25}
+                | ({"X": 40} if any(leg["underlying"] == "X" for _, leg in options) else {}),
+            }
+        ],
+        annual_borrowing_rate=0.05,
     )
-    with pytest.raises(APIError) as error:
-        funding_scenarios.calculate(snapshot, assumptions, now=NOW)
-    assert error.value.code == code
+    risk = funding_scenarios.calculate(snapshot, assumptions, now=NOW).account_risk
+    symbols = {symbol for symbol, _ in options}
+    relations = risk.alternatives[0].coverage_at_capture
+    assert {r.contract for r in relations} | {r.covered_by for r in relations} >= symbols
+    residual = any(leg["expiry"] > EXPIRY for _, leg in options)
+    for row in risk.scenarios[0].outcomes:
+        assert (row.total_pnl is None) == residual
+        assert ("residual_rate_missing" in {n.code for n in row.not_computable}) == residual

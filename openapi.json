@@ -1,6 +1,55 @@
 {
   "components": {
     "schemas": {
+      "AccountAlternative": {
+        "additionalProperties": false,
+        "properties": {
+          "buying_power": {
+            "$ref": "#/components/schemas/BrokerRequirementOut"
+          },
+          "coverage_at_capture": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageRelation"
+            },
+            "title": "Coverage At Capture",
+            "type": "array"
+          },
+          "coverage_changes": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageChange"
+            },
+            "title": "Coverage Changes",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "no_action",
+              "sale_keep_cash_and_put",
+              "sale_repay_margin_and_put"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "unbounded_loss": {
+            "title": "Unbounded Loss",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "snapshot_id",
+          "coverage_at_capture",
+          "coverage_changes",
+          "unbounded_loss",
+          "buying_power"
+        ],
+        "title": "AccountAlternative",
+        "type": "object"
+      },
       "AccountDeleteIn": {
         "properties": {
           "confirmation": {
@@ -1011,6 +1060,65 @@
           }
         },
         "title": "BrinsonOut",
+        "type": "object"
+      },
+      "BrokerRequirementOut": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "requirement": {
+            "enum": [
+              "buying_power_impact",
+              "maintenance_requirement",
+              "uncovered_call_collateral"
+            ],
+            "title": "Requirement",
+            "type": "string"
+          },
+          "status": {
+            "const": "unknown",
+            "title": "Status",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "null"
+          }
+        },
+        "required": [
+          "requirement",
+          "status",
+          "reason"
+        ],
+        "title": "BrokerRequirementOut",
+        "type": "object"
+      },
+      "BrokerRulesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "provider_id": {
+            "const": "unknown",
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "rule_version": {
+            "title": "Rule Version",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_id",
+          "rule_version",
+          "source"
+        ],
+        "title": "BrokerRulesOut",
         "type": "object"
       },
       "CacheProvenance": {
@@ -3297,6 +3405,138 @@
           "matrix"
         ],
         "title": "CorrelationOut",
+        "type": "object"
+      },
+      "CoverageChange": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "title": "Before",
+            "type": "string"
+          },
+          "contract": {
+            "title": "Contract",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract",
+          "before",
+          "after",
+          "reason"
+        ],
+        "title": "CoverageChange",
+        "type": "object"
+      },
+      "CoverageRelation": {
+        "additionalProperties": false,
+        "properties": {
+          "collateral": {
+            "enum": [
+              "shares",
+              "long_option",
+              "cash",
+              "broker_rule_unknown",
+              "none"
+            ],
+            "title": "Collateral",
+            "type": "string"
+          },
+          "contract": {
+            "title": "Contract",
+            "type": "string"
+          },
+          "contracts": {
+            "title": "Contracts",
+            "type": "integer"
+          },
+          "coverage": {
+            "enum": [
+              "stock",
+              "long_call_spread",
+              "uncovered",
+              "long_put_spread",
+              "cash_secured",
+              "protective",
+              "unpaired_no_stock",
+              "long_call"
+            ],
+            "title": "Coverage",
+            "type": "string"
+          },
+          "covered_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Covered By"
+          },
+          "expiry": {
+            "format": "date",
+            "title": "Expiry",
+            "type": "string"
+          },
+          "max_loss_excl_premium": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Loss Excl Premium"
+          },
+          "option_type": {
+            "enum": [
+              "call",
+              "put"
+            ],
+            "title": "Option Type",
+            "type": "string"
+          },
+          "side": {
+            "enum": [
+              "long",
+              "short"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "strike": {
+            "title": "Strike",
+            "type": "number"
+          },
+          "underlying": {
+            "title": "Underlying",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract",
+          "underlying",
+          "option_type",
+          "side",
+          "expiry",
+          "strike",
+          "contracts",
+          "coverage",
+          "max_loss_excl_premium",
+          "collateral"
+        ],
+        "title": "CoverageRelation",
         "type": "object"
       },
       "CoverageTestOut": {
@@ -6665,15 +6905,29 @@
         "additionalProperties": false,
         "properties": {
           "assignment_cash_paid": {
-            "title": "Assignment Cash Paid",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignment Cash Paid"
           },
           "assignment_shares": {
-            "additionalProperties": {
-              "type": "number"
-            },
-            "title": "Assignment Shares",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignment Shares"
           },
           "cash_after_interest": {
             "anyOf": [
@@ -6687,8 +6941,15 @@
             "title": "Cash After Interest"
           },
           "cash_before_interest": {
-            "title": "Cash Before Interest",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cash Before Interest"
           },
           "conditional_debt_if_gap_financed": {
             "anyOf": [
@@ -6700,6 +6961,17 @@
               }
             ],
             "title": "Conditional Debt If Gap Financed"
+          },
+          "fees_total": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fees Total"
           },
           "funding_gap": {
             "anyOf": [
@@ -6713,8 +6985,15 @@
             "title": "Funding Gap"
           },
           "funding_gap_before_interest": {
-            "title": "Funding Gap Before Interest",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Funding Gap Before Interest"
           },
           "gross_leverage_if_gap_financed": {
             "anyOf": [
@@ -6773,6 +7052,17 @@
             ],
             "title": "Largest Position Weight"
           },
+          "min_cash_through_horizon": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Cash Through Horizon"
+          },
           "net_equity_after_interest": {
             "anyOf": [
               {
@@ -6785,30 +7075,130 @@
             "title": "Net Equity After Interest"
           },
           "net_equity_before_interest": {
-            "title": "Net Equity Before Interest",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Equity Before Interest"
+          },
+          "not_computable": {
+            "items": {
+              "$ref": "#/components/schemas/NotComputable"
+            },
+            "title": "Not Computable",
+            "type": "array"
+          },
+          "open_leg_coverage": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageRelation"
+            },
+            "title": "Open Leg Coverage",
+            "type": "array"
           },
           "position_values": {
-            "additionalProperties": {
-              "type": "number"
-            },
-            "title": "Position Values",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position Values"
           },
           "positions": {
-            "additionalProperties": {
-              "type": "number"
-            },
-            "title": "Positions",
-            "type": "object"
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Positions"
           },
           "principal_debt": {
             "title": "Principal Debt",
             "type": "number"
           },
+          "residual_option_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Residual Option Value"
+          },
+          "residual_valuations": {
+            "items": {
+              "$ref": "#/components/schemas/ResidualValuation"
+            },
+            "title": "Residual Valuations",
+            "type": "array"
+          },
+          "settlement_events": {
+            "items": {
+              "$ref": "#/components/schemas/SettlementEvent"
+            },
+            "title": "Settlement Events",
+            "type": "array"
+          },
+          "short_stock_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Stock Value"
+          },
+          "snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Id"
+          },
+          "sold_stock_opportunity_cost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sold Stock Opportunity Cost"
+          },
           "stock_assets": {
-            "title": "Stock Assets",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stock Assets"
           },
           "total_pnl": {
             "anyOf": [
@@ -6822,8 +7212,15 @@
             "title": "Total Pnl"
           },
           "total_pnl_before_interest": {
-            "title": "Total Pnl Before Interest",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Pnl Before Interest"
           }
         },
         "required": [
@@ -6934,6 +7331,20 @@
             "maxProperties": 120,
             "minProperties": 1,
             "title": "Prices",
+            "type": "object"
+          },
+          "settlement_prices": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            "maxProperties": 12,
+            "propertyNames": {
+              "format": "date"
+            },
+            "title": "Settlement Prices",
             "type": "object"
           }
         },
@@ -8137,6 +8548,63 @@
             ],
             "title": "Annual Borrowing Rate"
           },
+          "broker_rules_provider": {
+            "const": "unknown",
+            "default": "unknown",
+            "title": "Broker Rules Provider",
+            "type": "string"
+          },
+          "objective": {
+            "anyOf": [
+              {
+                "enum": [
+                  "preserve_terminal_equity",
+                  "minimize_funding_gap",
+                  "minimize_conditional_debt"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objective"
+          },
+          "objective_confirmed": {
+            "default": false,
+            "title": "Objective Confirmed",
+            "type": "boolean"
+          },
+          "residual_assumptions_confirmed": {
+            "default": false,
+            "title": "Residual Assumptions Confirmed",
+            "type": "boolean"
+          },
+          "residual_iv_overrides": {
+            "maxProperties": 20,
+            "patternProperties": {
+              "^[A-Z]{1,6}\\d{6}[CP]\\d{8}$": {
+                "exclusiveMinimum": 0.0,
+                "maximum": 5.0,
+                "type": "number"
+              }
+            },
+            "title": "Residual Iv Overrides",
+            "type": "object"
+          },
+          "residual_risk_free_rate": {
+            "anyOf": [
+              {
+                "maximum": 0.2,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Residual Risk Free Rate"
+          },
           "scenarios": {
             "items": {
               "$ref": "#/components/schemas/ExpiryPriceScenario"
@@ -8156,8 +8624,26 @@
       "FundingRiskResult": {
         "additionalProperties": false,
         "properties": {
+          "alternatives": {
+            "items": {
+              "$ref": "#/components/schemas/AccountAlternative"
+            },
+            "maxItems": 3,
+            "title": "Alternatives",
+            "type": "array"
+          },
           "assumptions": {
             "$ref": "#/components/schemas/FundingRiskAssumptions"
+          },
+          "broker_rules": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BrokerRulesOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "captured_at": {
             "format": "date-time",
@@ -8176,9 +8662,22 @@
             "title": "Limitations",
             "type": "array"
           },
+          "market_snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MarketSnapshotOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "methodology_version": {
-            "const": "funding-common-expiry-v1",
-            "default": "funding-common-expiry-v1",
+            "default": "funding-account-scenarios-v2",
+            "enum": [
+              "funding-common-expiry-v1",
+              "funding-account-scenarios-v2"
+            ],
             "title": "Methodology Version",
             "type": "string"
           },
@@ -8191,6 +8690,16 @@
             "title": "Preferred Alternative",
             "type": "null"
           },
+          "ranking": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RankingOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "scenarios": {
             "items": {
               "$ref": "#/components/schemas/ExpiryAccountScenario"
@@ -8202,6 +8711,18 @@
             "format": "uuid",
             "title": "Source Result Id",
             "type": "string"
+          },
+          "valuation_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valuation Date"
           }
         },
         "required": [
@@ -9965,6 +10486,54 @@
         "title": "MarginBuffer",
         "type": "object"
       },
+      "MarketSnapshotOut": {
+        "additionalProperties": false,
+        "properties": {
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/OptionInput"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "price_as_of": {
+            "format": "date",
+            "title": "Price As Of",
+            "type": "string"
+          },
+          "prices": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Prices",
+            "type": "object"
+          },
+          "quote_time_note": {
+            "title": "Quote Time Note",
+            "type": "string"
+          },
+          "snapshot_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Snapshot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshot_id",
+          "captured_at",
+          "price_as_of",
+          "prices",
+          "options",
+          "quote_time_note"
+        ],
+        "title": "MarketSnapshotOut",
+        "type": "object"
+      },
       "MetaOut": {
         "description": "The ``meta`` block every envelope carries (see ``responses._meta``).",
         "properties": {
@@ -10679,6 +11248,44 @@
         "title": "NewsResponse",
         "type": "object"
       },
+      "NotComputable": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "enum": [
+              "settlement_price_missing",
+              "residual_iv_missing",
+              "residual_rate_missing",
+              "interest_rate_unknown",
+              "broker_collateral_unknown",
+              "nonpositive_equity"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "contract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "NotComputable",
+        "type": "object"
+      },
       "OptionAnalyticsOut": {
         "additionalProperties": true,
         "properties": {
@@ -11308,6 +11915,55 @@
           "detail"
         ],
         "title": "OptionFlagOut",
+        "type": "object"
+      },
+      "OptionInput": {
+        "additionalProperties": false,
+        "properties": {
+          "basis": {
+            "const": "captured_two_sided_quote_midpoint",
+            "default": "captured_two_sided_quote_midpoint",
+            "title": "Basis",
+            "type": "string"
+          },
+          "contract": {
+            "title": "Contract",
+            "type": "string"
+          },
+          "iv": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iv"
+          },
+          "mark": {
+            "title": "Mark",
+            "type": "number"
+          },
+          "spot": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spot"
+          }
+        },
+        "required": [
+          "contract",
+          "mark",
+          "iv",
+          "spot"
+        ],
+        "title": "OptionInput",
         "type": "object"
       },
       "OptionScenarioGrid": {
@@ -13095,6 +13751,67 @@
         "title": "QualityBlock",
         "type": "object"
       },
+      "RankingOut": {
+        "additionalProperties": false,
+        "properties": {
+          "objective": {
+            "anyOf": [
+              {
+                "enum": [
+                  "preserve_terminal_equity",
+                  "minimize_funding_gap",
+                  "minimize_conditional_debt"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objective"
+          },
+          "preferred_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "no_action",
+                  "sale_keep_cash_and_put",
+                  "sale_repay_margin_and_put"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Kind"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "not_requested",
+              "objective_not_confirmed",
+              "not_computable",
+              "no_dominant_alternative",
+              "preferred"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "reasons"
+        ],
+        "title": "RankingOut",
+        "type": "object"
+      },
       "ReasonCodeOut": {
         "additionalProperties": true,
         "description": "A structured, machine-readable penalty behind the score (the LLM may\nphrase these, never invent). Extra keys (dimension / tickers /\nstabilized_from) ride along per code.",
@@ -14042,6 +14759,108 @@
           "summary"
         ],
         "title": "ResearchVerdict",
+        "type": "object"
+      },
+      "ResidualValuation": {
+        "additionalProperties": false,
+        "properties": {
+          "contract": {
+            "title": "Contract",
+            "type": "string"
+          },
+          "contracts_signed": {
+            "title": "Contracts Signed",
+            "type": "integer"
+          },
+          "expiry": {
+            "format": "date",
+            "title": "Expiry",
+            "type": "string"
+          },
+          "iv": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iv"
+          },
+          "iv_source": {
+            "enum": [
+              "captured_quote_implied_vol",
+              "user_assumption",
+              "missing"
+            ],
+            "title": "Iv Source",
+            "type": "string"
+          },
+          "position_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position Value"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate"
+          },
+          "rate_source": {
+            "enum": [
+              "user_assumption",
+              "missing"
+            ],
+            "title": "Rate Source",
+            "type": "string"
+          },
+          "tau_years": {
+            "title": "Tau Years",
+            "type": "number"
+          },
+          "underlying_price": {
+            "title": "Underlying Price",
+            "type": "number"
+          },
+          "value_per_share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Per Share"
+          }
+        },
+        "required": [
+          "contract",
+          "expiry",
+          "contracts_signed",
+          "tau_years",
+          "underlying_price",
+          "iv",
+          "iv_source",
+          "rate",
+          "rate_source",
+          "value_per_share",
+          "position_value"
+        ],
+        "title": "ResidualValuation",
         "type": "object"
       },
       "ReviewFundingPlanRequest": {
@@ -17497,6 +18316,51 @@
           "label"
         ],
         "title": "SeriesResultOut",
+        "type": "object"
+      },
+      "SettlementEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "assigned",
+              "exercised",
+              "expired"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "cash_delta": {
+            "title": "Cash Delta",
+            "type": "number"
+          },
+          "contract": {
+            "title": "Contract",
+            "type": "string"
+          },
+          "expiry": {
+            "format": "date",
+            "title": "Expiry",
+            "type": "string"
+          },
+          "shares_delta": {
+            "title": "Shares Delta",
+            "type": "number"
+          },
+          "underlying_price": {
+            "title": "Underlying Price",
+            "type": "number"
+          }
+        },
+        "required": [
+          "contract",
+          "expiry",
+          "underlying_price",
+          "action",
+          "shares_delta",
+          "cash_delta"
+        ],
+        "title": "SettlementEvent",
         "type": "object"
       },
       "ShareCardCapabilityOut": {
