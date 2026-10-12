@@ -98,6 +98,42 @@ class Settings:
     public_risk_check_enabled: bool = field(
         default_factory=lambda: _env_str("PUBLIC_RISK_CHECK_ENABLED", "false").lower() == "true"
     )
+    async_analysis_enabled: bool = field(
+        default_factory=lambda: _env_str("MINDMARKET_ASYNC_ANALYSIS_ENABLED", "false").lower()
+        == "true"
+    )
+    funding_scenarios_save_enabled: bool = field(
+        default_factory=lambda: _env_str(
+            "MINDMARKET_FUNDING_SCENARIOS_SAVE_ENABLED", "false"
+        ).lower()
+        == "true"
+    )
+    funding_scenarios_enabled: bool = field(
+        default_factory=lambda: _env_str("MINDMARKET_FUNDING_SCENARIOS_ENABLED", "false").lower()
+        == "true"
+    )
+    cash_secured_put_save_enabled: bool = field(
+        default_factory=lambda: _env_str(
+            "MINDMARKET_CASH_SECURED_PUT_SAVE_ENABLED", "false"
+        ).lower()
+        == "true"
+    )
+    cash_secured_put_enabled: bool = field(
+        default_factory=lambda: _env_str("MINDMARKET_CASH_SECURED_PUT_ENABLED", "false").lower()
+        == "true"
+    )
+    decision_support_enabled: bool = field(
+        default_factory=lambda: _env_str("MINDMARKET_DECISION_SUPPORT_ENABLED", "false").lower()
+        == "true"
+    )
+    # Research experiment (docs/jev-intent-experiment.md): an optional
+    # TypeSafe "Jev" intent classifier, used ONLY for shadow comparison
+    # against the deterministic router. Off by default; the key is read
+    # here and nowhere else.
+    jev_intent_enabled: bool = field(
+        default_factory=lambda: _env_str("MINDMARKET_JEV_INTENT_ENABLED", "false").lower() == "true"
+    )
+    typesafe_api_key: str = field(default_factory=lambda: _env_str("TYPESAFE_API_KEY"), repr=False)
     # Durable foreground checks require migration 0014 and an independent key.
     # Off by default: preparing code never provisions production storage.
     copilot_runs_enabled: bool = field(
@@ -115,6 +151,13 @@ class Settings:
     # Requires migration 0015 AND replay signing; never enabled implicitly.
     copilot_comparison_save_enabled: bool = field(
         default_factory=lambda: _env_str("MINDMARKET_COMPARISON_SAVE_ENABLED", "false").lower()
+        == "true"
+    )
+    # Cross-device saved-plan history + versioned metric review. Read-only over
+    # existing evidence (no migration); each plan kind still needs its own
+    # save flag for its evidence to authenticate. Off by default.
+    plan_history_enabled: bool = field(
+        default_factory=lambda: _env_str("MINDMARKET_PLAN_HISTORY_ENABLED", "false").lower()
         == "true"
     )
     # Trust the CF-Connecting-IP header for rate-limit identity. ONLY safe

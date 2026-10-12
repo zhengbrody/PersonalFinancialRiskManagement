@@ -91,7 +91,9 @@ export default function CopilotPage() {
 function CopilotWithPrefill() {
   const params = useSearchParams();
   const q = params.get("q") ?? undefined;
-  return <CopilotConversation variant="page" initialQuestion={q} />;
+  const rawPlan = params.get("funding_plan");
+  const fundingPlanId = rawPlan && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawPlan) ? rawPlan : undefined;
+  return <CopilotConversation variant="page" initialQuestion={q} fundingPlanId={fundingPlanId} />;
 }
 
 function PreviewBuildNotice() {

@@ -333,6 +333,12 @@ _METRIC_GLOSSARY = {
 }
 
 
+_PROFIT_MARGIN = re.compile(
+    r"\b(?:net|gross|operating|profit|pretax|pre-tax|ebitda|ebit|fcf|free cash flow)"
+    r"(?: profit)? margins?\b"
+)
+
+
 def classify(message: str, tickers: list[str], *, route: Optional[str] = None) -> str:
     text = f" {(message or '').lower()} "
     n_tk = len(tickers)
@@ -350,7 +356,10 @@ def classify(message: str, tickers: list[str], *, route: Optional[str] = None) -
         return "tax_fee_review"
     # Margin / options questions are portfolio-grounded — check before scenario
     # and ticker_research so "am I over-leveraged" / "my options risk" route here.
-    if has("margin_risk"):
+    # "Net margin" / "operating margin" are profitability ratios, not a margin
+    # loan: strip them before the margin-risk cue so a company-research view
+    # about profitability is not routed to the account's leverage check.
+    if any(k in _PROFIT_MARGIN.sub(" ", text) for k in _KW["margin_risk"]):
         return "margin_risk"
     if has("options_risk") and n_tk == 0:
         return "options_risk"
@@ -934,7 +943,13 @@ def _ticker_exposure_evidence(
 
 
 def _gather(
-    intent: str, message: str, tickers: list[str], *, user, budget: "ToolBudget | None" = None
+    intent: str,
+    message: str,
+    tickers: list[str],
+    *,
+    user,
+    budget: "ToolBudget | None" = None,
+    research_context=None,
 ):
     """Returns (evidence, quality_floor). ``quality_floor`` is the grounding
     data's OWN quality (0..1) when the answer rests on the portfolio score /
@@ -949,8 +964,22 @@ def _gather(
         ev: list[EvidenceItem] = []
         floors: list[float] = []
         for tk in (tickers[:3] if intent == "compare_tickers" else tickers[:1]):
-            fp = safe(f"factpack:{tk}", lambda tk=tk: rf.build_fact_pack(tk))
-            if fp is not None:
+            builder = (
+                rf.build_fact_pack_cached if research_context is not None else rf.build_fact_pack
+            )
+            fp = safe(f"factpack:{tk}", lambda tk=tk: builder(tk))
+            if research_context is not None:
+                from .copilot_research import build_context, context_evidence
+
+                context = build_context(tk, fp, message=message, tickers=tickers)
+                research_context.append(context)
+                ev += _stamp(context_evidence(context), "factpack")
+                floors.append(
+                    float(fp.data_quality.coverage)
+                    if fp is not None and context.status == "available"
+                    else 0.0
+                )
+            elif fp is not None:
                 ev += _stamp(
                     _factpack_evidence(fp, prefix=tk if intent == "compare_tickers" else ""),
                     "factpack",
@@ -1737,6 +1766,59 @@ def answer(
     # route + ticker are UNTRUSTED client context. Sanitize BOTH before either
     # touches the classifier or the LLM prompt (F1): route must be a strict safe
     # internal path, ticker a valid symbol; anything else is dropped.
+    from ..core.config import get_settings
+    from .decision_support import classify_task, describe_task
+
+    decision = classify_task(message) if get_settings().decision_support_enabled else None
+    if decision is not None:
+        task, topic = decision
+        lang = _lang_code(message)
+        support, bodies = describe_task(task, topic, lang)
+        support.candidate_comparison_available = get_settings().async_analysis_enabled
+        support.cash_secured_put_available = get_settings().cash_secured_put_enabled and topic in {
+            "put",
+            "margin",
+        }
+        support.cash_secured_put_save_available = get_settings().cash_secured_put_save_enabled
+        support.funding_scenarios_available = (
+            get_settings().funding_scenarios_enabled
+            and get_settings().copilot_comparison_replay_enabled
+            and get_settings().cash_secured_put_enabled
+        )
+        dc = _answer_confidence([], None)
+        sections = _build_sections(
+            intent="explain_metric" if task.kind == "explanation" else "action_plan",
+            tickers=[],
+            evidence=[],
+            dc=dc,
+            lang=lang,
+            narrative={},
+        )
+        for section in sections:
+            if section.key in bodies:
+                section.markdown = bodies[section.key]
+            elif section.key == "data_confidence":
+                section.markdown = (
+                    "方法解释不验证账户数据；候选尚未计算。"
+                    if lang == "zh"
+                    else "Method explanations do not verify account data. No candidate calculation has been performed."
+                )
+            elif section.key == "simulation":
+                section.markdown = (
+                    "尚未运行模拟。" if lang == "zh" else "No simulation has been run."
+                )
+        return CopilotAnswer(
+            intent="explain_metric" if task.kind == "explanation" else "action_plan",
+            answer_markdown=_flat_from_sections(sections, lang),
+            sections=sections,
+            data_only=True,
+            conviction="none",
+            data_confidence=dc,
+            language=lang,
+            disclaimer=_DISCLAIMER[lang],
+            decision_support=support,
+        )
+
     route = _safe_route(route)
     ticker = _safe_ticker(ticker)
     tickers = extract_tickers(message)
@@ -1746,7 +1828,13 @@ def answer(
     if ticker and ticker not in tickers:
         tickers = [ticker, *tickers][:5]
     intent = classify(message, tickers, route=route)
-    evidence, quality_floor = _gather(intent, message, tickers, user=user)
+    research_context = []
+    if get_settings().decision_support_enabled and intent in ("ticker_research", "compare_tickers"):
+        evidence, quality_floor = _gather(
+            intent, message, tickers, user=user, research_context=research_context
+        )
+    else:
+        evidence, quality_floor = _gather(intent, message, tickers, user=user)
     for i, e in enumerate(evidence):
         e.id = f"E{i + 1}"
     dc = _answer_confidence(evidence, quality_floor)
@@ -1793,6 +1881,147 @@ def answer(
         conviction=dc.conviction_cap,
         data_confidence=dc,
         sections=sections,
+        language=lang,
+        disclaimer=_DISCLAIMER[lang],
+        research_context=research_context,
+    )
+
+
+# ── Multi-turn decision task follow-ups (deterministic, no LLM, no numbers) ──
+
+_SLOT_LABEL = {
+    "goal": ("the goal", "目标"),
+    "amount": ("the dollar amount", "金额"),
+    "protected_holdings": ("holdings to keep", "需保留的持仓"),
+}
+_AMBIGUITY_QUESTION = {
+    "amount_multiple": (
+        "I found more than one amount. Which single dollar amount should the comparison use?",
+        "我看到不止一个金额。比较应使用哪一个美元金额？",
+    ),
+    "amount_percent": (
+        "Percentages are not converted automatically. What dollar amount should be freed?",
+        "百分比不会被自动换算。需要释放多少美元？",
+    ),
+    "amount_unanchored": (
+        "Please reply with the dollar amount on its own, with a $ sign or 'USD'.",
+        "请单独回复美元金额，并带上 $ 或“美元”。",
+    ),
+    "amount_out_of_range": (
+        "That amount is outside the supported range. Please give a positive dollar amount.",
+        "该金额超出支持范围。请给出一个正的美元金额。",
+    ),
+    "goal_conflict": (
+        "Should the proceeds stay as cash, or repay margin debt? Please choose one.",
+        "卖出所得是留作现金，还是偿还融资？请选择其一。",
+    ),
+    "goal_unsupported": (
+        "Broker buying power cannot be calculated here. Should the comparison increase cash or reduce margin debt?",
+        "这里无法计算券商购买力。比较应以增加现金还是降低融资为目标？",
+    ),
+    "goal_negated": (
+        "I could not tell which goal you meant. Increase cash, or reduce margin debt?",
+        "无法确定您指的目标。是增加现金，还是降低融资？",
+    ),
+    "protected_without_ticker": (
+        "Which holdings must be kept? Please list their tickers.",
+        "哪些持仓必须保留？请列出代码。",
+    ),
+    "ticker_without_instruction": (
+        "Should those tickers be kept out of the candidates? To test reducing one specific holding, use Test a change instead.",
+        "这些代码是需要保留（不作为候选）吗？如果想测试减少某一只持仓，请使用 Test a change。",
+    ),
+}
+
+
+def task_answer(state, outcome: str, lang: str) -> CopilotAnswer:
+    """Deterministic reply for a follow-up that belongs to an open task.
+
+    It names WHICH inputs were recorded and what is still missing, but never
+    repeats a user-stated figure as if it were a fact; the typed panel shows the
+    assumptions with an explicit "not confirmed" label.
+    """
+    zh = int(lang == "zh")
+    recorded = [
+        _SLOT_LABEL[s][zh]
+        for s, turn in state.assumptions.stated_at_turn.items()
+        if turn == state.clarification_turns and outcome == "continued"
+    ]
+    missing = [_SLOT_LABEL[s][zh] for s in state.missing_inputs]
+    sep = "、" if zh else ", "
+    if outcome == "closed":
+        direct = (
+            "已关闭该任务，未计算或保存任何内容。"
+            if zh
+            else "Task closed. Nothing was calculated or saved."
+        )
+    elif outcome == "turn_limit":
+        direct = (
+            "本任务的聊天澄清次数已用完。请在下方表单中补全剩余输入。"
+            if zh
+            else "This task has used its chat clarifications. Please complete the remaining inputs in the form below."
+        )
+    elif outcome == "ambiguous":
+        direct = " ".join(_AMBIGUITY_QUESTION[a][zh] for a in state.ambiguities)
+    else:
+        parts = []
+        if recorded:
+            parts.append(
+                f"已记录为假设（尚未确认）：{sep.join(recorded)}。"
+                if zh
+                else f"Recorded as an assumption, not a confirmed parameter: {sep.join(recorded)}."
+            )
+        if state.confirmed is not None:
+            parts.append(
+                "已确认的参数保持不变；如需使用新的假设，请在表单中重新确认。"
+                if zh
+                else "Your confirmed parameters are unchanged; re-confirm in the form to use the new assumption."
+            )
+        elif missing:
+            parts.append(
+                f"还需要：{sep.join(missing)}。" if zh else f"Still needed: {sep.join(missing)}."
+            )
+        else:
+            parts.append(
+                "三项输入都已说明。请在下方表单核对并确认后再计算；确认前不会计算任何内容。"
+                if zh
+                else "All three inputs are stated. Review and confirm them in the form below; nothing is calculated until you confirm."
+            )
+        direct = " ".join(parts)
+    relevance = (
+        "聊天中的数值仅作为假设预填表单；只有您在表单中确认后才会成为计算参数，账户数据由服务器从当前组合读取。"
+        if zh
+        else "Values typed in chat only prefill the form as assumptions. They become calculation parameters only after you confirm them in the form; account data is read by the server from your selected portfolio."
+    )
+    dc = _answer_confidence([], None)
+    sections = _build_sections(
+        intent="action_plan", tickers=[], evidence=[], dc=dc, lang=lang, narrative={}
+    )
+    bodies = {
+        "direct_answer": direct,
+        "portfolio_relevance": relevance,
+        "data_confidence": (
+            "尚未读取账户或计算候选。"
+            if zh
+            else "No account data has been read and no candidate has been calculated."
+        ),
+        "what_would_change": (
+            "确认的参数、持仓或价格变化后需要重新计算。"
+            if zh
+            else "Changing a confirmed parameter, the holdings or prices requires a new calculation."
+        ),
+        "simulation": "尚未运行模拟。" if zh else "No simulation has been run.",
+    }
+    for section in sections:
+        if section.key in bodies:
+            section.markdown = bodies[section.key]
+    return CopilotAnswer(
+        intent="action_plan",
+        answer_markdown=_flat_from_sections(sections, lang),
+        sections=sections,
+        data_only=True,
+        conviction="none",
+        data_confidence=dc,
         language=lang,
         disclaimer=_DISCLAIMER[lang],
     )

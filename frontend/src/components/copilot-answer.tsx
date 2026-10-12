@@ -1,6 +1,8 @@
 "use client";
 
 /** Shared, input-free renderer for the existing grounded six-section contract. */
+import { CopilotResearchPanel } from "./copilot-research";
+import type { ResearchHypothesis } from "@/lib/copilot-research";
 import { DataConfidence } from "@/components/data-confidence";
 import { Markdown } from "@/components/markdown";
 import type {
@@ -41,9 +43,12 @@ function sourceClass(source: string): string {
   return SOURCE_STYLE[source] ?? SOURCE_STYLE.glossary;
 }
 
-export function CopilotAnswerCard({ answer }: { answer: CopilotAnswer }) {
+export function CopilotAnswerCard({ answer, onTestHypothesis }: {
+  answer: CopilotAnswer; onTestHypothesis?: (h: ResearchHypothesis) => void;
+}) {
   const sections = answer.sections ?? [];
   const directionalBlocked =
+    !answer.decision_support &&
     answer.data_confidence != null &&
     answer.data_confidence.directional_allowed === false;
   return (
@@ -76,6 +81,36 @@ export function CopilotAnswerCard({ answer }: { answer: CopilotAnswer }) {
           show what is known and what&apos;s missing.
         </div>
       )}
+
+      {answer.decision_support && (
+        <div className="space-y-2 text-sm">
+          <p className="text-muted-foreground">
+            {answer.decision_support.coverage === "explained"
+              ? "General explanation · no account calculation"
+              : "Inputs needed · no candidates ranked"}
+          </p>
+          <details className="rounded-lg border border-border p-3">
+            <summary className="cursor-pointer font-medium">Analysis methods & counterpoints</summary>
+            <div className="mt-3 space-y-4">
+              {answer.decision_support.methods.map((method) => (
+                <article key={method.id} className="space-y-1">
+                  <h4 className="font-medium">{method.title}</h4>
+                  <p>{method.summary}</p>
+                  <ul className="list-disc pl-5">{method.checks.map((check) => <li key={check}>{check}</li>)}</ul>
+                  <p className="text-muted-foreground">Counterpoint: {method.counterpoint}</p>
+                  <p className="text-xs text-muted-foreground">{method.applicability}</p>
+                  <a href={method.url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary underline">
+                    {method.author} · reviewed {method.reviewed_at}
+                  </a>
+                </article>
+              ))}
+              <p className="text-xs text-muted-foreground">Methods are separate from account evidence. Sources do not endorse a candidate.</p>
+            </div>
+          </details>
+        </div>
+      )}
+
+      <CopilotResearchPanel research={answer.research_context ?? []} onTestHypothesis={onTestHypothesis} />
 
       {sections.length > 0 ? (
         <div className="space-y-3">
@@ -179,7 +214,7 @@ function AnswerSection({
         <SectionTitle title={section.title} />
         {section.ai_generated && (
           <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-            AI-phrased · numbers verified
+            AI-phrased · numeric values checked against sources
           </span>
         )}
       </div>

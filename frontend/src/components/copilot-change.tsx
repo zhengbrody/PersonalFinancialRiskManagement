@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import type { ChangeComparison, ChangeDraft, ComparisonVerification, SavedComparison } from "@/lib/copilot-compare";
+import type { ChangeComparison, ChangeDraft, ComparisonVerification, HypothesisDraft, SavedComparison } from "@/lib/copilot-compare";
 
 export function CopilotChangeForm({ draft, disabled, onChange, onSubmit }: {
   draft: ChangeDraft; disabled: boolean; onChange: (draft: ChangeDraft) => void; onSubmit: () => void;
@@ -27,18 +27,44 @@ export function CopilotChangeForm({ draft, disabled, onChange, onSubmit }: {
         onChange={(e) => onChange({ ...draft, proceeds: e.target.value as ChangeDraft["proceeds"] })}>
         <option value="cash">Keep as account cash</option><option value="repay_margin">Repay margin</option>
       </select>
+      {draft.hypothesis && <HypothesisFields draft={draft} hypothesis={draft.hypothesis} disabled={disabled} onChange={onChange} />}
       <Button type="submit" disabled={disabled}>Compare assumptions</Button>
     </form>
   );
 }
 
+function HypothesisFields({ draft, hypothesis, disabled, onChange }: {
+  draft: ChangeDraft; hypothesis: HypothesisDraft; disabled: boolean; onChange: (draft: ChangeDraft) => void;
+}) {
+  const id = useId();
+  const set = (patch: Partial<HypothesisDraft>) => onChange({ ...draft, hypothesis: { ...hypothesis, ...patch } });
+  return (
+    <fieldset className="space-y-2 rounded-lg border border-border p-3">
+      <legend className="px-1 text-sm font-medium">Research assumption · {hypothesis.subject}</legend>
+      <p className="break-words text-sm">&ldquo;{hypothesis.claim}&rdquo;</p>
+      <p className="text-xs text-muted-foreground">The research text is not sent and sets no number. Enter the price move you associate with this view, e.g. if it is invalidated. Only {hypothesis.subject} moves; other holdings, cash and margin stay unchanged.</p>
+      <label className="block text-sm" htmlFor={`${id}-pct`}>Your assumed {hypothesis.subject} price change (%)</label>
+      <input id={`${id}-pct`} type="number" min="-95" max="100" step="0.01" inputMode="decimal" value={hypothesis.pct} disabled={disabled}
+        className="w-full rounded-lg border border-border bg-background p-2"
+        onChange={(e) => set({ pct: e.target.value, confirmed: false })} />
+      <label htmlFor={`${id}-confirm`} className="flex items-start gap-2 text-sm">
+        <input id={`${id}-confirm`} type="checkbox" checked={hypothesis.confirmed} disabled={disabled}
+          onChange={(e) => set({ confirmed: e.target.checked })} />
+        This price change is my own assumption, not a forecast or research finding.
+      </label>
+      <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => onChange({ ...draft, hypothesis: undefined })}>Remove research assumption</Button>
+    </fieldset>
+  );
+}
+
 const money = (v: number) => v.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+const maybeMoney = (v: number | null | undefined) => (v == null ? "Unavailable" : money(v));
 const percent = (v: number) => `${(v * 100).toFixed(1)}%`;
 const rows = [
   ["net_equity", "Net equity (captured valuation basis)", money],
   ["cash", "Account cash", money], ["margin", "Margin loan", money],
   ["leverage", "Gross assets / net equity", (v: number) => `${v.toFixed(2)}×`],
-  ["largest_position_weight", "Largest stock/ETF / gross assets", percent],
+  ["largest_position_weight", "Largest invested position / invested assets", percent],
   ["annual_volatility", "Annualized equity volatility", percent],
   ["var_1d_95_usd", "Historical 1-day 95% VaR", money],
   ["cvar_1d_95_usd", "Historical 1-day expected shortfall (95%)", money],
@@ -66,6 +92,17 @@ export function CopilotChangeResult({ result, disabled, onRevise, onVerify, veri
     if (confirmOpen) consentRef.current?.focus();
     else if (restoreFocus.current) { restoreFocus.current = false; saveRef.current?.focus(); }
   }, [confirmOpen]);
+  // "Confirm and save draft" (or "Check saved record") disables or removes the
+  // control that had focus; when the outcome arrives, move focus to it so a
+  // keyboard/screen-reader user lands on what happened instead of <body>.
+  const awaitingOutcome = useRef(false);
+  const errorRef = useRef<HTMLParagraphElement | null>(null);
+  const savedRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!awaitingOutcome.current || savePending) return;
+    const target = saveError ? errorRef.current : saved ? savedRef.current : null;
+    if (target) { awaitingOutcome.current = false; target.focus(); }
+  }, [savePending, saveError, saved]);
   return (
     <section aria-label="Change comparison" className="space-y-4 rounded-2xl border border-border bg-card p-4">
       <div><h3 className="font-semibold">Keep unchanged vs your assumption</h3>
@@ -88,6 +125,16 @@ export function CopilotChangeResult({ result, disabled, onRevise, onVerify, veri
           </div>
         ))}
       </dl>
+      {result.hypothesis_scenario && <section aria-label="Research assumption scenario" className="space-y-2 rounded-lg border border-border p-3 text-sm">
+        <h4 className="font-medium">Research assumption · {result.hypothesis_scenario.subject} {result.hypothesis_scenario.price_change_pct > 0 ? "+" : ""}{result.hypothesis_scenario.price_change_pct}% (your assumption)</h4>
+        {result.hypothesis_scenario.status === "computed" ? <>
+          <div className="grid grid-cols-2 gap-3 tabular-nums">
+            <p>Keep unchanged<br />{result.hypothesis_scenario.subject} value {maybeMoney(result.hypothesis_scenario.subject_value_baseline)}<br />P&amp;L {maybeMoney(result.hypothesis_scenario.baseline_pnl)}<br />Equity {maybeMoney(result.hypothesis_scenario.baseline_equity)}</p>
+            <p>Your assumption<br />{result.hypothesis_scenario.subject} value {maybeMoney(result.hypothesis_scenario.subject_value_candidate)}<br />P&amp;L {maybeMoney(result.hypothesis_scenario.candidate_pnl)}<br />Equity {maybeMoney(result.hypothesis_scenario.candidate_equity)}</p>
+          </div>
+          <p className="text-xs text-muted-foreground">Isolated move at the captured close. Every other holding, cash, margin and option leg is unchanged. Not a forecast or probability.</p>
+        </> : <p>Not computable: {result.hypothesis_scenario.reason === "subject_has_options" ? "options on this security are not repriced here, so a stock-only figure would misstate exposure." : "this security is not a captured stock/ETF holding in the selected portfolio."}</p>}
+      </section>}
       {mixed && <section aria-label="Full-account stress scenarios" className="space-y-3">
         <h4 className="font-medium">Full-account instantaneous stresses</h4>
         <p className="text-xs text-muted-foreground">Chosen assumptions, not forecasts or worst-case bounds. Full option repricing is anchored to the same model&apos;s zero-shock value; no time passes.</p>
@@ -122,21 +169,21 @@ export function CopilotChangeResult({ result, disabled, onRevise, onVerify, veri
         <p className="text-xs text-muted-foreground">{verification.notice}</p>
       </div>}
       {result.replay_receipt?.save_available && onSave && !saved && <div className="space-y-2 rounded-lg border border-border p-3">
-        {!confirmOpen ? <Button ref={saveRef} disabled={disabled} onClick={() => { setConsent(false); setConfirmOpen(true); }}>Save as draft plan</Button> : <form className="space-y-3" aria-label="Confirm draft plan" onSubmit={(e) => { e.preventDefault(); if (consent && !disabled) { setConfirmOpen(false); setConsent(false); onSave(); } }}>
+        {!confirmOpen ? <Button ref={saveRef} disabled={disabled} onClick={() => { setConsent(false); setConfirmOpen(true); }}>Save as draft plan</Button> : <form className="space-y-3" aria-label="Confirm draft plan" onSubmit={(e) => { e.preventDefault(); if (consent && !disabled) { awaitingOutcome.current = true; setConfirmOpen(false); setConsent(false); onSave(); } }}>
           <p className="text-sm">Save this assumption and the server-verified captured calculation, not a trade. The server will check the portfolio version and reject a new save after 15 minutes; this does not refresh quotes.</p>
           <label htmlFor={consentId} className="flex items-start gap-2 text-sm"><input ref={consentRef} id={consentId} type="checkbox" checked={consent} disabled={disabled} onChange={(e) => setConsent(e.target.checked)} />I confirm saving this hypothetical comparison as a draft. My holdings will not change.</label>
           <div className="flex flex-wrap gap-2"><Button type="submit" disabled={disabled || !consent}>Confirm and save draft</Button><Button type="button" variant="outline" disabled={disabled} onClick={() => { setConsent(false); restoreFocus.current = true; setConfirmOpen(false); }}>Cancel save</Button></div>
         </form>}
       </div>}
       {savePending && <p role="status" className="text-sm">Checking saved calculation…</p>}
-      {saveError && <p role="alert" className="text-sm">{saveError}</p>}
-      {saved && <div role="status" className="space-y-1 rounded-lg border border-border p-3 text-sm">
+      {saveError && <p ref={errorRef} tabIndex={-1} role="alert" className="text-sm">{saveError}</p>}
+      {saved && <div ref={savedRef} tabIndex={-1} role="status" className="space-y-1 rounded-lg border border-border p-3 text-sm">
         <p>{savedNeedsCheck ? "This tab remembers a saved plan. Check its server record to confirm it still exists." : `Draft saved · ${new Date(saved.confirmed_at).toLocaleString()}`}</p>
         {!savedNeedsCheck && <p>{saved.notice}</p>}
         <p className="break-all text-xs text-muted-foreground">Plan {saved.plan_id}</p>
         <Link href="/analyze?view=plan" className="inline-block text-sm underline">Open saved risk plans</Link>
       </div>}
-      {(saved || saveError) && onRetrieveSaved && <Button variant="outline" disabled={disabled} onClick={onRetrieveSaved}>Check saved record</Button>}
+      {(saved || saveError) && onRetrieveSaved && <Button variant="outline" disabled={disabled} onClick={() => { awaitingOutcome.current = true; onRetrieveSaved(); }}>Check saved record</Button>}
       <p className="text-xs text-muted-foreground">Recomputing captures fresh inputs for both sides. {saved && !savedNeedsCheck ? "The draft keeps the original calculation; edits to plan notes do not update its evidence." : "A comparison alone does not save a risk plan."}</p>
     </section>
   );

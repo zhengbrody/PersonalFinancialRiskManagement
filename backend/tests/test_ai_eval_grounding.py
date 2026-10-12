@@ -289,9 +289,9 @@ KNOWN_TOOLS = {
 
 def test_cases_schema_and_distribution():
     cases = _cases()
-    assert len(cases) == 50
+    assert len(cases) == 54
     ids = [c["id"] for c in cases]
-    assert len(set(ids)) == 50
+    assert len(set(ids)) == 54
     by_cat: dict[str, int] = {}
     for c in cases:
         by_cat[c["category"]] = by_cat.get(c["category"], 0) + 1
@@ -303,7 +303,7 @@ def test_cases_schema_and_distribution():
         "normal": 14,
         "induced": 8,
         "boundary": 8,
-        "injection": 6,
+        "injection": 10,
         "attribution": 2,
         "followup": 2,
         "gate": 2,
@@ -370,7 +370,7 @@ def test_template_mode_full_run_is_fully_traceable_offline():
     runner = _load_runner()
     rows = [runner.run_case(c, None) for c in _cases()]
     summary = runner.summarize(rows)
-    assert summary["cases"] == 50
+    assert summary["cases"] == 54
     assert summary["intent_mismatches"] == []
     assert summary["check_failures"] == [], [
         (r["id"], r["check_failures"]) for r in rows if r.get("check_failures")

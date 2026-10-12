@@ -12,7 +12,8 @@ import {
 } from "./risk-check";
 import { readSession, writeSession } from "./use-session-state";
 import { loadSavedRun, savedRunsEnabled, type SavedRun } from "./copilot-runs";
-import { changeComparisonSchema, changeDraftSchema, emptyChange, isChangeRequest, comparisonVerificationSchema, comparisonVerificationSummarySchema, savedComparisonSchema, savedComparisonSummarySchema, type ChangeDraft } from "./copilot-compare";
+import { openTask, type TaskStateEnvelope } from "./copilot-task-state";
+import { changeComparisonSchema, changeDraftSchema, emptyChange, hypothesisRequest, isChangeRequest, comparisonVerificationSchema, comparisonVerificationSummarySchema, savedComparisonSchema, savedComparisonSummarySchema, type ChangeDraft } from "./copilot-compare";
 
 const turnSchema = z.object({
   id: z.string(),
@@ -155,6 +156,7 @@ export function useCopilotThread(
     if (!text || text.length > 2000 || active.current || !ready) return;
     if (isChangeRequest(text)) { openChange(); return; }
     const kind = isRiskCheckRequest(text) ? "check" : "answer";
+    const task = currentTask()?.task ?? null;
     const id = crypto.randomUUID();
     const durable = kind === "check" && savedRunsEnabled() && !!portfolioId;
     const ac = new AbortController();
@@ -207,6 +209,9 @@ export function useCopilotThread(
             message: text,
             route: "/copilot",
             expected_portfolio_id: portfolioId,
+            // Echo the open task (if any). The server alone decides whether
+            // this message answers its pending question.
+            ...(task ? { task_state: task.token } : {}),
           },
           schema: copilotAnswerSchema,
         });
@@ -243,6 +248,24 @@ export function useCopilotThread(
     }
   }
 
+  /** The latest live task in this user/book partition, and the turn holding it. */
+  function currentTask(): { turnId: string; task: TaskStateEnvelope } | null {
+    for (let i = turnsRef.current.length - 1; i >= 0; i--) {
+      const env = turnsRef.current[i].answer?.task_state;
+      if (env?.state) {
+        const task = openTask(env, portfolioId);
+        return task ? { turnId: turnsRef.current[i].id, task } : null;
+      }
+    }
+    return null;
+  }
+
+  function updateTask(turnId: string, task: TaskStateEnvelope) {
+    const turn = turnsRef.current.find((t) => t.id === turnId);
+    if (!turn?.answer || task.state?.portfolio_id !== portfolioId) return;
+    patch(turnId, { answer: { ...turn.answer, task_state: task } });
+  }
+
   function openChange(change: ChangeDraft = emptyChange) {
     if (active.current || !ready) return;
     commit([...turnsRef.current, { id: crypto.randomUUID(), question: "Test a change", kind: "change", status: "needs_input", change: { ...change } }]);
@@ -255,6 +278,9 @@ export function useCopilotThread(
       patch(turn.id, { error: "Enter a held ticker and a positive dollar amount with at most two decimal places." });
       return;
     }
+    const carried = hypothesisRequest(turn.change.hypothesis);
+    if (!carried.ok) { patch(turn.id, { error: carried.error }); return; }
+    const hypothesis = carried.value;
     const ac = new AbortController();
     active.current = ac;
     patch(turn.id, { status: "running", error: undefined });
@@ -262,9 +288,13 @@ export function useCopilotThread(
     try {
       const comparison = await apiFetch("/api/v1/copilot/compare-change", {
         method: "POST", authToken: token ?? undefined, signal: ac.signal,
-        body: { expected_portfolio_id: portfolioId, ticker, amount: Number(amount), proceeds }, schema: changeComparisonSchema,
+        body: { expected_portfolio_id: portfolioId, ticker, amount: Number(amount), proceeds, ...(hypothesis ? { hypothesis } : {}) }, schema: changeComparisonSchema,
       });
-      if (comparison.portfolio_id !== portfolioId || comparison.assumptions.expected_portfolio_id !== portfolioId || comparison.assumptions.ticker !== ticker || comparison.assumptions.amount !== Number(amount) || comparison.assumptions.proceeds !== proceeds)
+      const echoed = comparison.assumptions.hypothesis ?? undefined;
+      const hypothesisMismatch = hypothesis
+        ? !echoed || echoed.hypothesis_id !== hypothesis.hypothesis_id || echoed.price_change_pct !== hypothesis.price_change_pct || comparison.hypothesis_scenario?.hypothesis_id !== hypothesis.hypothesis_id
+        : Boolean(echoed || comparison.hypothesis_scenario);
+      if (hypothesisMismatch || comparison.portfolio_id !== portfolioId || comparison.assumptions.expected_portfolio_id !== portfolioId || comparison.assumptions.ticker !== ticker || comparison.assumptions.amount !== Number(amount) || comparison.assumptions.proceeds !== proceeds)
         throw new ApiError(409, "comparison_mismatch", "The comparison does not match this portfolio and assumption. Please try again.");
       if (!ac.signal.aborted) patch(turn.id, { status: "completed", comparison });
     } catch (error) {
@@ -362,6 +392,8 @@ export function useCopilotThread(
     verifyComparison,
     saveComparison,
     editChange: (id: string, change: ChangeDraft) => { if (!active.current) patch(id, { change, error: undefined }); },
+    task: ready ? currentTask() : null,
+    updateTask,
     retrieve: (turn: CopilotTurn) => recover(turn, "retrieve"),
     cancelRun: (turn: CopilotTurn) => recover(turn, "cancel"),
     stop: () => active.current?.abort(),

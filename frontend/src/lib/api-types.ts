@@ -238,6 +238,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/copilot/cash-secured-put": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Scenario */
+        post: operations["scenario_api_v1_copilot_cash_secured_put_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/copilot/chat": {
         parameters: {
             query?: never;
@@ -361,6 +378,160 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/copilot/decision-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recent */
+        get: operations["recent_api_v1_copilot_decision_runs_get"];
+        put?: never;
+        /** Start */
+        post: operations["start_api_v1_copilot_decision_runs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/decision-runs/recover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Recover */
+        post: operations["recover_api_v1_copilot_decision_runs_recover_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/decision-runs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read */
+        get: operations["read_api_v1_copilot_decision_runs__id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/decision-runs/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel */
+        post: operations["cancel_api_v1_copilot_decision_runs__id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/decision-runs/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume */
+        post: operations["resume_api_v1_copilot_decision_runs__id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/funding-plans/{result_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read */
+        get: operations["read_api_v1_copilot_funding_plans__result_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/funding-plans/{result_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm */
+        post: operations["confirm_api_v1_copilot_funding_plans__result_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/funding-plans/{result_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review */
+        post: operations["review_api_v1_copilot_funding_plans__result_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/funding-scenarios": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Calculate */
+        post: operations["calculate_api_v1_copilot_funding_scenarios_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/copilot/insights": {
         parameters: {
             query?: never;
@@ -398,6 +569,74 @@ export interface paths {
         post?: never;
         /** Completely clear the caller's Copilot preferences */
         delete: operations["copilot_preferences_delete_api_v1_copilot_preferences_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/put-plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Plans */
+        get: operations["list_plans_api_v1_copilot_put_plans_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/put-plans/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Plan History */
+        get: operations["plan_history_api_v1_copilot_put_plans_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/put-plans/{plan_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Review Plan */
+        post: operations["review_plan_api_v1_copilot_put_plans__plan_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/put-plans/{result_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm Plan */
+        post: operations["confirm_plan_api_v1_copilot_put_plans__result_id__confirm_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -448,6 +687,98 @@ export interface paths {
         put?: never;
         /** Cancel Run */
         post: operations["cancel_run_api_v1_copilot_runs__run_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/saved-plans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** History */
+        get: operations["history_api_v1_copilot_saved_plans_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/saved-plans/{plan_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Detail */
+        get: operations["detail_api_v1_copilot_saved_plans__plan_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/saved-plans/{plan_id}/metric-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Metric Review */
+        post: operations["metric_review_api_v1_copilot_saved_plans__plan_id__metric_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/task-state/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm
+         * @description The ONLY way a parameter becomes confirmed: an explicit typed submission.
+         */
+        post: operations["confirm_api_v1_copilot_task_state_confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/copilot/task-state/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume
+         * @description Re-authenticate, re-bind and either continue from the durable confirmed
+         *     run or report that the account changed (old result stale).
+         */
+        post: operations["resume_api_v1_copilot_task_state_resume_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1872,6 +2203,23 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AccountAlternative */
+        AccountAlternative: {
+            buying_power: components["schemas"]["BrokerRequirementOut"];
+            /** Coverage At Capture */
+            coverage_at_capture: components["schemas"]["CoverageRelation"][];
+            /** Coverage Changes */
+            coverage_changes: components["schemas"]["CoverageChange"][];
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "no_action" | "sale_keep_cash_and_put" | "sale_repay_margin_and_put";
+            /** Snapshot Id */
+            snapshot_id: string;
+            /** Unbounded Loss */
+            unbounded_loss: boolean;
+        };
         /** AccountDeleteIn */
         AccountDeleteIn: {
             /** Confirmation */
@@ -2228,6 +2576,35 @@ export interface components {
             /** Total Active Return */
             total_active_return?: number | null;
         };
+        /** BrokerRequirementOut */
+        BrokerRequirementOut: {
+            /** Reason */
+            reason: string;
+            /**
+             * Requirement
+             * @enum {string}
+             */
+            requirement: "buying_power_impact" | "maintenance_requirement" | "uncovered_call_collateral";
+            /**
+             * Status
+             * @constant
+             */
+            status: "unknown";
+            /** Value */
+            value?: null;
+        };
+        /** BrokerRulesOut */
+        BrokerRulesOut: {
+            /**
+             * Provider Id
+             * @constant
+             */
+            provider_id: "unknown";
+            /** Rule Version */
+            rule_version: string;
+            /** Source */
+            source: string;
+        };
         /**
          * CacheProvenance
          * @description Whether a payload was served from cache and its freshness window. Lets the
@@ -2260,6 +2637,138 @@ export interface components {
             /** Observed Frequency */
             observed_frequency?: number | null;
         };
+        /** CandidateBatch */
+        CandidateBatch: {
+            baseline?: components["schemas"]["ComparisonSide"] | null;
+            /** Candidates */
+            candidates?: components["schemas"]["ChangeComparison"][];
+            /**
+             * Computed At
+             * Format: date-time
+             */
+            computed_at: string;
+            /**
+             * Coverage
+             * @enum {string}
+             */
+            coverage: "evaluated" | "insufficient_data" | "unsupported";
+            /** Excluded */
+            excluded?: {
+                [key: string]: string;
+            };
+            /** Judgment */
+            judgment: string;
+            /** Limitations */
+            limitations: string[];
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Preferred Result Id */
+            preferred_result_id?: string | null;
+            /**
+             * Snapshot Id
+             * Format: uuid
+             */
+            snapshot_id: string;
+            task: components["schemas"]["CandidateRequest"];
+        };
+        /** CandidateRequest */
+        CandidateRequest: {
+            /** Amount */
+            amount: number;
+            /** Confirmed */
+            confirmed: boolean;
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
+            /**
+             * Goal
+             * @enum {string}
+             */
+            goal: "increase_cash" | "reduce_margin";
+            /** Protected Holdings */
+            protected_holdings?: string[];
+        };
+        /** CandidateRunList */
+        CandidateRunList: {
+            /**
+             * Dispatched
+             * @default 0
+             */
+            dispatched?: number;
+            /**
+             * Removed
+             * @default 0
+             */
+            removed?: number;
+            /** Runs */
+            runs?: components["schemas"]["CandidateRunOut"][];
+            /**
+             * Untrusted Records
+             * @default 0
+             */
+            untrusted_records?: number;
+        };
+        /** CandidateRunOut */
+        CandidateRunOut: {
+            /**
+             * Attempts
+             * @default 0
+             */
+            attempts?: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Error Code */
+            error_code?: ("analysis_failed" | "reauthentication_required" | "execution_expired" | "portfolio_changed" | "execution_version_changed") | null;
+            /** Execution Deadline */
+            execution_deadline?: string | null;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Lease Until */
+            lease_until?: string | null;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            result?: components["schemas"]["CandidateBatch"] | null;
+            /**
+             * Revision
+             * @default 0
+             */
+            revision?: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "queued" | "running" | "completed" | "failed" | "cancelled" | "interrupted";
+            /**
+             * Step
+             * @default queued
+             * @enum {string}
+             */
+            step?: "queued" | "capturing" | "evaluating" | "done";
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /**
          * CashEquivalentHoldingOut
          * @description One holding counted toward the current-value margin offset.
@@ -2274,6 +2783,118 @@ export interface components {
             market_value: number;
             /** Ticker */
             ticker: string;
+        };
+        /** CashSecuredPutRequest */
+        CashSecuredPutRequest: {
+            /** Assumed Spot */
+            assumed_spot: number;
+            /** Cash Buffer */
+            cash_buffer: number;
+            /** Confirmed */
+            confirmed: boolean;
+            /** Contracts */
+            contracts: number;
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
+            /**
+             * Expiry
+             * Format: date
+             */
+            expiry: string;
+            /** Fees Total */
+            fees_total: number;
+            /** Gross Settled Usd Cash Confirmed */
+            gross_settled_usd_cash_confirmed: boolean;
+            /** Other Reserved Cash */
+            other_reserved_cash: number;
+            /** Premium Per Share */
+            premium_per_share: number;
+            /** Standard Contract Confirmed */
+            standard_contract_confirmed: boolean;
+            /** Strike */
+            strike: number;
+            /** Underlying */
+            underlying: string;
+        };
+        /** CashSecuredPutResult */
+        CashSecuredPutResult: {
+            /** Assignment Notional */
+            assignment_notional: number;
+            assumptions: components["schemas"]["CashSecuredPutRequest"];
+            /** Best Expiry Pnl */
+            best_expiry_pnl: number;
+            /** Breakeven */
+            breakeven: number;
+            /**
+             * Computed At
+             * Format: date-time
+             */
+            computed_at: string;
+            /** Existing Put Reserve */
+            existing_put_reserve: number;
+            /**
+             * Funding Status
+             * @enum {string}
+             */
+            funding_status: "covered_under_assumptions" | "insufficient_cash";
+            /** Gross Premium */
+            gross_premium: number;
+            /** Initial Incremental Equity */
+            initial_incremental_equity: number;
+            /**
+             * Input Basis
+             * @default user_hypothesis_not_live_quote
+             * @constant
+             */
+            input_basis?: "user_hypothesis_not_live_quote";
+            /** Limitations */
+            limitations: string[];
+            /** Maximum Loss */
+            maximum_loss: number;
+            /**
+             * Methodology Version
+             * @default cash-secured-put-v1
+             * @constant
+             */
+            methodology_version?: "cash-secured-put-v1";
+            /** Net Premium */
+            net_premium: number;
+            /** No Action Free Cash */
+            no_action_free_cash: number;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Pre Trade Funding Gap */
+            pre_trade_funding_gap: number;
+            receipt?: components["schemas"]["ComparisonReceipt"] | null;
+            /** Recorded Cash */
+            recorded_cash: number;
+            /**
+             * Result Id
+             * Format: uuid
+             */
+            result_id: string;
+            /**
+             * Save Available
+             * @default false
+             * @constant
+             */
+            save_available?: false;
+            /** Scenarios */
+            scenarios: components["schemas"]["PutExpiryScenario"][];
+            /** Snapshot Digest */
+            snapshot_digest: string;
+            /**
+             * Source Url
+             * @default https://www.optionseducation.org/strategies/all-strategies/cash-secured-put
+             * @constant
+             */
+            source_url?: "https://www.optionseducation.org/strategies/all-strategies/cash-secured-put";
         };
         /**
          * ChangeAttribution
@@ -2322,6 +2943,7 @@ export interface components {
             computed_at: string;
             /** History Start */
             history_start: string;
+            hypothesis_scenario?: components["schemas"]["HypothesisScenario"] | null;
             /** Limitations */
             limitations: string[];
             /** Methodology Version */
@@ -2524,6 +3146,7 @@ export interface components {
              * Format: uuid
              */
             expected_portfolio_id: string;
+            hypothesis?: components["schemas"]["HypothesisAssumption"] | null;
             /**
              * Proceeds
              * @enum {string}
@@ -2697,6 +3320,82 @@ export interface components {
             expected_portfolio_id: string;
             receipt: components["schemas"]["ComparisonReceipt"];
         };
+        /** ConfirmFundingPlan */
+        ConfirmFundingPlan: {
+            /** Confirmed */
+            confirmed: boolean;
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
+            receipt: components["schemas"]["ComparisonReceipt"];
+        };
+        /** ConfirmPutPlan */
+        ConfirmPutPlan: {
+            /** Confirmed */
+            confirmed: boolean;
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
+            receipt: components["schemas"]["ComparisonReceipt"];
+        };
+        /** ConfirmTaskParameters */
+        ConfirmTaskParameters: {
+            /** Amount */
+            amount: number;
+            /** Confirmed */
+            confirmed: boolean;
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
+            /**
+             * Goal
+             * @enum {string}
+             */
+            goal: "increase_cash" | "reduce_margin";
+            /** Protected Holdings */
+            protected_holdings?: string[];
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            task_state: components["schemas"]["TaskStateToken"];
+        };
+        /** ConfirmedParameters */
+        ConfirmedParameters: {
+            /** Amount */
+            amount: number;
+            /**
+             * Confirmed At
+             * Format: date-time
+             */
+            confirmed_at: string;
+            /**
+             * Goal
+             * @enum {string}
+             */
+            goal: "increase_cash" | "reduce_margin";
+            /** Protected Holdings */
+            protected_holdings?: string[];
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * Stale
+             * @default false
+             */
+            stale?: boolean;
+            /** Version */
+            version: number;
+        };
         /** CopilotAnswer */
         CopilotAnswer: {
             /** Answer Markdown */
@@ -2712,6 +3411,7 @@ export interface components {
              * @default false
              */
             data_only?: boolean;
+            decision_support?: components["schemas"]["DecisionSupport"] | null;
             /** Disclaimer */
             disclaimer?: string | null;
             /** Evidence */
@@ -2726,8 +3426,11 @@ export interface components {
             language?: "en" | "zh";
             /** Model */
             model?: string | null;
+            /** Research Context */
+            research_context?: components["schemas"]["CopilotResearch"][];
             /** Sections */
             sections?: components["schemas"]["CopilotAnswerSection"][];
+            task_state?: components["schemas"]["TaskStateEnvelope"] | null;
             /** Tickers */
             tickers?: string[];
         };
@@ -2763,6 +3466,7 @@ export interface components {
             message: string;
             /** Route */
             route?: string | null;
+            task_state?: components["schemas"]["TaskStateToken"] | null;
             /** Ticker */
             ticker?: string | null;
         };
@@ -2828,6 +3532,45 @@ export interface components {
             /** Updated At */
             updated_at?: string | null;
         };
+        /** CopilotResearch */
+        CopilotResearch: {
+            /**
+             * Can Rank Candidates
+             * @default false
+             * @constant
+             */
+            can_rank_candidates?: false;
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /** Hypotheses */
+            hypotheses?: components["schemas"]["ResearchHypothesis"][];
+            /** Leads */
+            leads?: components["schemas"]["ResearchLead"][];
+            /** Limitations */
+            limitations: string[];
+            /** Methods */
+            methods: components["schemas"]["MethodReference"][];
+            /** Observations */
+            observations: components["schemas"]["ResearchObservation"][];
+            /** Questions */
+            questions: components["schemas"]["ResearchQuestion"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "partial" | "unavailable";
+            /** Ticker */
+            ticker: string;
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version?: 1;
+        };
         /** CorrTopPair */
         CorrTopPair: {
             /** A */
@@ -2870,6 +3613,57 @@ export interface components {
              * @default false
              */
             truncated?: boolean;
+        };
+        /** CoverageChange */
+        CoverageChange: {
+            /** After */
+            after: string;
+            /** Before */
+            before: string;
+            /** Contract */
+            contract: string;
+            /** Reason */
+            reason: string;
+        };
+        /** CoverageRelation */
+        CoverageRelation: {
+            /**
+             * Collateral
+             * @enum {string}
+             */
+            collateral: "shares" | "long_option" | "cash" | "broker_rule_unknown" | "none";
+            /** Contract */
+            contract: string;
+            /** Contracts */
+            contracts: number;
+            /**
+             * Coverage
+             * @enum {string}
+             */
+            coverage: "stock" | "long_call_spread" | "uncovered" | "long_put_spread" | "cash_secured" | "protective" | "unpaired_no_stock" | "long_call";
+            /** Covered By */
+            covered_by?: string | null;
+            /**
+             * Expiry
+             * Format: date
+             */
+            expiry: string;
+            /** Max Loss Excl Premium */
+            max_loss_excl_premium: number | null;
+            /**
+             * Option Type
+             * @enum {string}
+             */
+            option_type: "call" | "put";
+            /**
+             * Side
+             * @enum {string}
+             */
+            side: "long" | "short";
+            /** Strike */
+            strike: number;
+            /** Underlying */
+            underlying: string;
         };
         /**
          * CoverageTestOut
@@ -3111,6 +3905,76 @@ export interface components {
             /** Previous */
             previous?: string | null;
         };
+        /** DataWindow */
+        DataWindow: {
+            /** History Start */
+            history_start: string;
+            /** Observations */
+            observations: number;
+            /** Price As Of */
+            price_as_of: string;
+        };
+        /** DecisionSupport */
+        DecisionSupport: {
+            /**
+             * Candidate Comparison Available
+             * @default false
+             */
+            candidate_comparison_available?: boolean;
+            /**
+             * Cash Secured Put Available
+             * @default false
+             */
+            cash_secured_put_available?: boolean;
+            /**
+             * Cash Secured Put Save Available
+             * @default false
+             */
+            cash_secured_put_save_available?: boolean;
+            /**
+             * Coverage
+             * @enum {string}
+             */
+            coverage: "unsupported" | "insufficient_data" | "explained" | "evaluated";
+            /**
+             * Funding Scenarios Available
+             * @default false
+             */
+            funding_scenarios_available?: boolean;
+            /** Limitations */
+            limitations?: string[];
+            /** Methods */
+            methods?: components["schemas"]["MethodReference"][];
+            /**
+             * Save Available
+             * @default false
+             * @constant
+             */
+            save_available?: false;
+            task: components["schemas"]["DecisionTask"];
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version?: 1;
+        };
+        /** DecisionTask */
+        DecisionTask: {
+            /** Confirmed Constraints */
+            confirmed_constraints?: {
+                [key: string]: string;
+            };
+            /** Goal */
+            goal?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "explanation" | "clarification" | "specified_comparison" | "candidate_request";
+            /** Missing Inputs */
+            missing_inputs?: string[];
+        };
         /** DigestPrefIn */
         DigestPrefIn: {
             /** Enabled */
@@ -3232,6 +4096,30 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** Envelope[CandidateRunList] */
+        Envelope_CandidateRunList_: {
+            data?: components["schemas"]["CandidateRunList"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[CandidateRunOut] */
+        Envelope_CandidateRunOut_: {
+            data?: components["schemas"]["CandidateRunOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[CashSecuredPutResult] */
+        Envelope_CashSecuredPutResult_: {
+            data?: components["schemas"]["CashSecuredPutResult"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
         /** Envelope[ChangeComparison] */
         Envelope_ChangeComparison_: {
             data?: components["schemas"]["ChangeComparison"] | null;
@@ -3291,6 +4179,22 @@ export interface components {
         /** Envelope[EfficientFrontierOut] */
         Envelope_EfficientFrontierOut_: {
             data?: components["schemas"]["EfficientFrontierOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[FundingPlanReview] */
+        Envelope_FundingPlanReview_: {
+            data?: components["schemas"]["FundingPlanReview"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[FundingScenarioResult] */
+        Envelope_FundingScenarioResult_: {
+            data?: components["schemas"]["FundingScenarioResult"] | null;
             error?: components["schemas"]["ErrorOut"] | null;
             meta: components["schemas"]["MetaOut"];
         } & {
@@ -3384,6 +4288,14 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** Envelope[PlanMetricReview] */
+        Envelope_PlanMetricReview_: {
+            data?: components["schemas"]["PlanMetricReview"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
         /** Envelope[PortalSessionResponse] */
         Envelope_PortalSessionResponse_: {
             data?: components["schemas"]["PortalSessionResponse"] | null;
@@ -3419,6 +4331,14 @@ export interface components {
         /** Envelope[PublicRiskCheckOut] */
         Envelope_PublicRiskCheckOut_: {
             data?: components["schemas"]["PublicRiskCheckOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[PutPlanReview] */
+        Envelope_PutPlanReview_: {
+            data?: components["schemas"]["PutPlanReview"] | null;
             error?: components["schemas"]["ErrorOut"] | null;
             meta: components["schemas"]["MetaOut"];
         } & {
@@ -3528,6 +4448,46 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** Envelope[SavedFundingPlan] */
+        Envelope_SavedFundingPlan_: {
+            data?: components["schemas"]["SavedFundingPlan"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[SavedPlanDetail] */
+        Envelope_SavedPlanDetail_: {
+            data?: components["schemas"]["SavedPlanDetail"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[SavedPlanPage] */
+        Envelope_SavedPlanPage_: {
+            data?: components["schemas"]["SavedPlanPage"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[SavedPutPlanPage] */
+        Envelope_SavedPutPlanPage_: {
+            data?: components["schemas"]["SavedPutPlanPage"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[SavedPutPlan] */
+        Envelope_SavedPutPlan_: {
+            data?: components["schemas"]["SavedPutPlan"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
         /** Envelope[ScenariosOut] */
         Envelope_ScenariosOut_: {
             data?: components["schemas"]["ScenariosOut"] | null;
@@ -3600,6 +4560,22 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** Envelope[TaskResumeOut] */
+        Envelope_TaskResumeOut_: {
+            data?: components["schemas"]["TaskResumeOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[TaskStateEnvelope] */
+        Envelope_TaskStateEnvelope_: {
+            data?: components["schemas"]["TaskStateEnvelope"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
         /** Envelope[TickerNewsResponse] */
         Envelope_TickerNewsResponse_: {
             data?: components["schemas"]["TickerNewsResponse"] | null;
@@ -3643,6 +4619,15 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** Envelope[list[SavedPutPlan]] */
+        Envelope_list_SavedPutPlan__: {
+            /** Data */
+            data?: components["schemas"]["SavedPutPlan"][] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * ErrorOut
          * @description The ``error`` block of a failed envelope (``APIError.to_payload``).
@@ -3678,6 +4663,91 @@ export interface components {
             /** Value */
             value: string;
         };
+        /** ExpiryAccountOutcome */
+        ExpiryAccountOutcome: {
+            /** Assignment Cash Paid */
+            assignment_cash_paid: number | null;
+            /** Assignment Shares */
+            assignment_shares: {
+                [key: string]: number;
+            } | null;
+            /** Cash After Interest */
+            cash_after_interest: number | null;
+            /** Cash Before Interest */
+            cash_before_interest: number | null;
+            /** Conditional Debt If Gap Financed */
+            conditional_debt_if_gap_financed: number | null;
+            /** Fees Total */
+            fees_total?: number | null;
+            /** Funding Gap */
+            funding_gap: number | null;
+            /** Funding Gap Before Interest */
+            funding_gap_before_interest: number | null;
+            /** Gross Leverage If Gap Financed */
+            gross_leverage_if_gap_financed: number | null;
+            /** Incremental Pnl Vs No Action */
+            incremental_pnl_vs_no_action: number | null;
+            /** Initial Net Equity */
+            initial_net_equity: number;
+            /** Interest Cost */
+            interest_cost: number | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "no_action" | "sale_keep_cash_and_put" | "sale_repay_margin_and_put";
+            /** Largest Position Weight */
+            largest_position_weight: number | null;
+            /** Min Cash Through Horizon */
+            min_cash_through_horizon?: number | null;
+            /** Net Equity After Interest */
+            net_equity_after_interest: number | null;
+            /** Net Equity Before Interest */
+            net_equity_before_interest: number | null;
+            /** Not Computable */
+            not_computable?: components["schemas"]["NotComputable"][];
+            /** Open Leg Coverage */
+            open_leg_coverage?: components["schemas"]["CoverageRelation"][];
+            /** Position Values */
+            position_values: {
+                [key: string]: number;
+            } | null;
+            /** Positions */
+            positions: {
+                [key: string]: number;
+            } | null;
+            /** Principal Debt */
+            principal_debt: number;
+            /** Residual Option Value */
+            residual_option_value?: number | null;
+            /** Residual Valuations */
+            residual_valuations?: components["schemas"]["ResidualValuation"][];
+            /** Settlement Events */
+            settlement_events?: components["schemas"]["SettlementEvent"][];
+            /** Short Stock Value */
+            short_stock_value?: number | null;
+            /** Snapshot Id */
+            snapshot_id?: string | null;
+            /** Sold Stock Opportunity Cost */
+            sold_stock_opportunity_cost?: number | null;
+            /** Stock Assets */
+            stock_assets: number | null;
+            /** Total Pnl */
+            total_pnl: number | null;
+            /** Total Pnl Before Interest */
+            total_pnl_before_interest: number | null;
+        };
+        /** ExpiryAccountScenario */
+        ExpiryAccountScenario: {
+            /** Label */
+            label: string;
+            /** Outcomes */
+            outcomes: components["schemas"]["ExpiryAccountOutcome"][];
+            /** Prices */
+            prices: {
+                [key: string]: number;
+            };
+        };
         /** ExpiryBucketOut */
         ExpiryBucketOut: {
             /** Contracts */
@@ -3692,6 +4762,21 @@ export interface components {
             net_notional: number;
         } & {
             [key: string]: unknown;
+        };
+        /** ExpiryPriceScenario */
+        ExpiryPriceScenario: {
+            /** Label */
+            label: string;
+            /** Prices */
+            prices: {
+                [key: string]: number;
+            };
+            /** Settlement Prices */
+            settlement_prices?: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
         };
         /** ExplainContributor */
         ExplainContributor: {
@@ -4017,6 +5102,260 @@ export interface components {
             /** Vol */
             vol: number;
         };
+        /** FundingAlternative */
+        FundingAlternative: {
+            /**
+             * Assignment Cash Shortfall
+             * @default 0
+             */
+            assignment_cash_shortfall?: number;
+            /** Cash Before Put */
+            cash_before_put: number;
+            /** Debt Repaid */
+            debt_repaid: number;
+            /** Expiry Funding */
+            expiry_funding?: components["schemas"]["FundingExpiryFunding"][];
+            /** Hypothetical Debt If Shortfall Financed */
+            hypothetical_debt_if_shortfall_financed?: number | null;
+            /** Initial Incremental Equity */
+            initial_incremental_equity: number;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "no_action" | "sale_keep_cash_and_put" | "sale_repay_margin_and_put";
+            /** Margin Remaining */
+            margin_remaining: number;
+            /** Pre Put Largest Position Weight */
+            pre_put_largest_position_weight: number;
+            /** Pre Put Var 1D 95 Usd */
+            pre_put_var_1d_95_usd: number | null;
+            put?: components["schemas"]["CashSecuredPutResult"] | null;
+            /** Sale Proceeds Net */
+            sale_proceeds_net: number;
+            /** Shares Sold */
+            shares_sold: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "no_action" | "covered_under_assumptions" | "insufficient_cash" | "financing_rules_required";
+        };
+        /** FundingExpiryFunding */
+        FundingExpiryFunding: {
+            /** Assignment Cash Shortfall */
+            assignment_cash_shortfall: number;
+            /** Hypothetical Debt If Shortfall Financed */
+            hypothetical_debt_if_shortfall_financed: number;
+            /** Interest Cost */
+            interest_cost?: null;
+            /** Underlying Price */
+            underlying_price: number;
+        };
+        /** FundingPlanReview */
+        FundingPlanReview: {
+            /** Changed Fields */
+            changed_fields: string[];
+            /**
+             * Holdings Changed By Review
+             * @default false
+             * @constant
+             */
+            holdings_changed_by_review?: false;
+            /**
+             * Live Quote Checked
+             * @default false
+             * @constant
+             */
+            live_quote_checked?: false;
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Reasons */
+            reasons: string[];
+            /**
+             * Reviewed At
+             * Format: date-time
+             */
+            reviewed_at: string;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "requires_recalculation" | "assumptions_need_confirmation";
+        };
+        /** FundingRiskAssumptions */
+        FundingRiskAssumptions: {
+            /** Annual Borrowing Rate */
+            annual_borrowing_rate?: number | null;
+            /**
+             * Broker Rules Provider
+             * @default unknown
+             * @constant
+             */
+            broker_rules_provider?: "unknown";
+            /** Objective */
+            objective?: ("preserve_terminal_equity" | "minimize_funding_gap" | "minimize_conditional_debt") | null;
+            /**
+             * Objective Confirmed
+             * @default false
+             */
+            objective_confirmed?: boolean;
+            /**
+             * Residual Assumptions Confirmed
+             * @default false
+             */
+            residual_assumptions_confirmed?: boolean;
+            /** Residual Iv Overrides */
+            residual_iv_overrides?: {
+                [key: string]: number;
+            };
+            /** Residual Risk Free Rate */
+            residual_risk_free_rate?: number | null;
+            /** Scenarios */
+            scenarios: components["schemas"]["ExpiryPriceScenario"][];
+        };
+        /** FundingRiskResult */
+        FundingRiskResult: {
+            /** Alternatives */
+            alternatives?: components["schemas"]["AccountAlternative"][];
+            assumptions: components["schemas"]["FundingRiskAssumptions"];
+            broker_rules?: components["schemas"]["BrokerRulesOut"] | null;
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /** Days Of Interest */
+            days_of_interest: number;
+            /** Limitations */
+            limitations: string[];
+            market_snapshot?: components["schemas"]["MarketSnapshotOut"] | null;
+            /**
+             * Methodology Version
+             * @default funding-account-scenarios-v2
+             * @enum {string}
+             */
+            methodology_version?: "funding-common-expiry-v1" | "funding-account-scenarios-v2";
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Preferred Alternative */
+            preferred_alternative?: null;
+            ranking?: components["schemas"]["RankingOut"] | null;
+            /** Scenarios */
+            scenarios: components["schemas"]["ExpiryAccountScenario"][];
+            /**
+             * Source Result Id
+             * Format: uuid
+             */
+            source_result_id: string;
+            /** Valuation Date */
+            valuation_date?: string | null;
+        };
+        /** FundingScenarioAssumptions */
+        FundingScenarioAssumptions: {
+            /** Confirmed */
+            confirmed: boolean;
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
+            /** Protected Holdings */
+            protected_holdings?: string[];
+            put: components["schemas"]["CashSecuredPutRequest"];
+            risk?: components["schemas"]["FundingRiskAssumptions"] | null;
+            /** Sale Fees */
+            sale_fees: number;
+            /**
+             * Source Result Id
+             * Format: uuid
+             */
+            source_result_id: string;
+        };
+        /** FundingScenarioRequest */
+        FundingScenarioRequest: {
+            /** Confirmed */
+            confirmed: boolean;
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
+            /** Protected Holdings */
+            protected_holdings?: string[];
+            put: components["schemas"]["CashSecuredPutRequest"];
+            receipt: components["schemas"]["ComparisonReceipt"];
+            risk?: components["schemas"]["FundingRiskAssumptions"] | null;
+            /** Sale Fees */
+            sale_fees: number;
+            /**
+             * Source Result Id
+             * Format: uuid
+             */
+            source_result_id: string;
+        };
+        /** FundingScenarioResult */
+        FundingScenarioResult: {
+            account_risk?: components["schemas"]["FundingRiskResult"] | null;
+            /** Alternatives */
+            alternatives: components["schemas"]["FundingAlternative"][];
+            assumptions: components["schemas"]["FundingScenarioAssumptions"];
+            /** Broker Buying Power */
+            broker_buying_power?: null;
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /**
+             * Computed At
+             * Format: date-time
+             */
+            computed_at: string;
+            /** Limitations */
+            limitations: string[];
+            /**
+             * Methodology Version
+             * @default funding-scenarios-v1
+             * @constant
+             */
+            methodology_version?: "funding-scenarios-v1";
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Preferred Alternative */
+            preferred_alternative?: null;
+            receipt?: components["schemas"]["ComparisonReceipt"] | null;
+            /**
+             * Result Id
+             * Format: uuid
+             */
+            result_id?: string;
+            /** Sale Price */
+            sale_price: number;
+            /** Sale Ticker */
+            sale_ticker: string;
+            /** Snapshot Digest */
+            snapshot_digest: string;
+            /**
+             * Source Result Id
+             * Format: uuid
+             */
+            source_result_id: string;
+        };
         /** GreeksOut */
         GreeksOut: {
             /** Delta */
@@ -4194,6 +5533,144 @@ export interface components {
                 [key: string]: unknown;
             }[];
         };
+        /**
+         * HypothesisAssumption
+         * @description A research hypothesis carried in as the USER's price assumption.
+         *
+         *     Only an id, the subject and a number the user typed travel here; the claim
+         *     text never does. ``user_confirmed`` must be literally true: the typed confirm
+         *     step, not the research card, turns it into a calculation input. It adds one
+         *     deterministic row to this comparison and authorizes nothing else.
+         */
+        HypothesisAssumption: {
+            /**
+             * Basis
+             * @default user_assumption
+             * @constant
+             */
+            basis?: "user_assumption";
+            /** Hypothesis Id */
+            hypothesis_id: string;
+            /** Price Change Pct */
+            price_change_pct: number;
+            /** Subject */
+            subject: string;
+            /** User Confirmed */
+            user_confirmed: boolean;
+        };
+        /** HypothesisMissing */
+        HypothesisMissing: {
+            /** Item */
+            item: string;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "no_authorized_source" | "reporting_period_unavailable" | "observation_missing" | "observation_stale" | "observation_undated" | "no_testable_predicate" | "cited_source_not_retrieved";
+        };
+        /**
+         * HypothesisScenario
+         * @description Isolated subject price move at the captured close, both sides. Not a forecast.
+         */
+        HypothesisScenario: {
+            /** Baseline Equity */
+            baseline_equity?: number | null;
+            /** Baseline Pnl */
+            baseline_pnl?: number | null;
+            /**
+             * Basis
+             * @default user_assumption
+             * @constant
+             */
+            basis?: "user_assumption";
+            /** Candidate Equity */
+            candidate_equity?: number | null;
+            /** Candidate Pnl */
+            candidate_pnl?: number | null;
+            /** Hypothesis Id */
+            hypothesis_id: string;
+            /** Price Change Pct */
+            price_change_pct: number;
+            /** Reason */
+            reason?: ("subject_not_held" | "subject_has_options") | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "computed" | "not_computable";
+            /** Subject */
+            subject: string;
+            /** Subject Value Baseline */
+            subject_value_baseline?: number | null;
+            /** Subject Value Candidate */
+            subject_value_candidate?: number | null;
+        };
+        /**
+         * HypothesisSource
+         * @description Where a claim or its evidence came from. Never an authorization.
+         */
+        HypothesisSource: {
+            /** Author */
+            author?: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Paraphrase
+             * @default true
+             */
+            paraphrase?: boolean;
+            /** Published At */
+            published_at?: string | null;
+            /** Publisher */
+            publisher?: string | null;
+            /** Quote Locator */
+            quote_locator?: string | null;
+            /** Retrieved At */
+            retrieved_at?: string | null;
+            /**
+             * Source Type
+             * @enum {string}
+             */
+            source_type: "user_statement" | "provider_snapshot" | "method_card";
+            /** Url */
+            url?: string | null;
+            /**
+             * Usage Basis
+             * @enum {string}
+             */
+            usage_basis: "user_provided" | "provider_api" | "public_page_paraphrase";
+            /**
+             * Verification
+             * @enum {string}
+             */
+            verification: "not_verified" | "provider_snapshot" | "reviewed_method";
+        };
+        /**
+         * HypothesisTest
+         * @description One observable predicate. The threshold is ALWAYS the user's number.
+         */
+        HypothesisTest: {
+            /**
+             * Comparator
+             * @enum {string}
+             */
+            comparator: "gt" | "ge" | "lt" | "le";
+            /** Observation Id */
+            observation_id: string;
+            /** Threshold */
+            threshold: number;
+            /**
+             * Threshold Basis
+             * @default user_assumption
+             * @constant
+             */
+            threshold_basis?: "user_assumption";
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "ratio" | "fraction";
+        };
         /** InputChange */
         InputChange: {
             /** Current */
@@ -4321,6 +5798,18 @@ export interface components {
             cik: string;
             /** Name */
             name: string;
+        };
+        /** InvalidationCondition */
+        InvalidationCondition: {
+            /** Description */
+            description: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "observable_test" | "qualitative_check" | "not_defined";
+            /** Observation Id */
+            observation_id?: string | null;
         };
         /** JourneyOut */
         JourneyOut: {
@@ -4512,6 +6001,29 @@ export interface components {
              */
             status?: "none" | "comfortable" | "tight" | "call_risk" | "n/a";
         };
+        /** MarketSnapshotOut */
+        MarketSnapshotOut: {
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /** Options */
+            options: components["schemas"]["OptionInput"][];
+            /**
+             * Price As Of
+             * Format: date
+             */
+            price_as_of: string;
+            /** Prices */
+            prices: {
+                [key: string]: number;
+            };
+            /** Quote Time Note */
+            quote_time_note: string;
+            /** Snapshot Id */
+            snapshot_id: string;
+        };
         /**
          * MetaOut
          * @description The ``meta`` block every envelope carries (see ``responses._meta``).
@@ -4521,6 +6033,54 @@ export interface components {
             elapsed_ms?: number | null;
             /** Request Id */
             request_id: string;
+        };
+        /** MethodComparison */
+        MethodComparison: {
+            /**
+             * Contract Version
+             * @default plan-review-metrics-v1
+             * @constant
+             */
+            contract_version?: "plan-review-metrics-v1";
+            /** Current Method Version */
+            current_method_version: string;
+            /** Original Method Version */
+            original_method_version: string;
+            /** Reproduced */
+            reproduced: boolean | null;
+            /** Same Method */
+            same_method: boolean;
+        };
+        /** MethodReference */
+        MethodReference: {
+            /** Applicability */
+            applicability: string;
+            /** Author */
+            author: string;
+            /** Checks */
+            checks: string[];
+            /** Counterpoint */
+            counterpoint: string;
+            /** Id */
+            id: string;
+            /** Reviewed At */
+            reviewed_at: string;
+            /** Summary */
+            summary: string;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
+            /** Version */
+            version: string;
+        };
+        /** MetricReviewRequest */
+        MetricReviewRequest: {
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
         };
         /** ModelCardOut */
         ModelCardOut: {
@@ -4722,6 +6282,18 @@ export interface components {
             /** Sources */
             sources?: components["schemas"]["SourceProvenance"][];
         };
+        /** NotComputable */
+        NotComputable: {
+            /**
+             * Code
+             * @enum {string}
+             */
+            code: "settlement_price_missing" | "residual_iv_missing" | "residual_rate_missing" | "interest_rate_unknown" | "broker_collateral_unknown" | "nonpositive_equity" | "short_stock_unbounded";
+            /** Contract */
+            contract?: string | null;
+            /** Message */
+            message: string;
+        };
         /** OptionAnalyticsOut */
         OptionAnalyticsOut: {
             /** Assignment Risk */
@@ -4922,6 +6494,23 @@ export interface components {
             detail: string;
             /** Severity */
             severity: string;
+        };
+        /** OptionInput */
+        OptionInput: {
+            /**
+             * Basis
+             * @default captured_two_sided_quote_midpoint
+             * @constant
+             */
+            basis?: "captured_two_sided_quote_midpoint";
+            /** Contract */
+            contract: string;
+            /** Iv */
+            iv: number | null;
+            /** Mark */
+            mark: number;
+            /** Spot */
+            spot: number | null;
         };
         /** OptionScenarioGrid */
         OptionScenarioGrid: {
@@ -5198,6 +6787,70 @@ export interface components {
             plan: string;
             /** Price Usd Per Month */
             price_usd_per_month: number;
+        };
+        /** PlanMetricReview */
+        PlanMetricReview: {
+            /** Account Changes */
+            account_changes?: string[];
+            account_window?: components["schemas"]["DataWindow"] | null;
+            /**
+             * Decomposition
+             * @default sequential_market_then_account
+             * @constant
+             */
+            decomposition?: "sequential_market_then_account";
+            /**
+             * Holdings Changed By Review
+             * @default false
+             * @constant
+             */
+            holdings_changed_by_review?: false;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "comparison" | "cash_secured_put" | "funding_scenarios";
+            /**
+             * Live Quote Checked
+             * @default false
+             * @constant
+             */
+            live_quote_checked?: false;
+            market_window?: components["schemas"]["DataWindow"] | null;
+            method?: components["schemas"]["MethodComparison"] | null;
+            /** Metrics */
+            metrics?: components["schemas"]["ReviewMetric"][];
+            /** Notes */
+            notes?: string[];
+            original_window?: components["schemas"]["DataWindow"] | null;
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /**
+             * Realised Return Attribution
+             * @default false
+             * @constant
+             */
+            realised_return_attribution?: false;
+            /**
+             * Reviewed At
+             * Format: date-time
+             */
+            reviewed_at: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "comparable" | "method_changed" | "not_computable";
+            /** Status Reason */
+            status_reason?: string | null;
         };
         /**
          * PortalSessionRequest
@@ -5533,6 +7186,68 @@ export interface components {
             /** Stress */
             stress?: components["schemas"]["StressRowOut"][];
         };
+        /** PutExpiryScenario */
+        PutExpiryScenario: {
+            /** Assumes Assignment */
+            assumes_assignment: boolean;
+            /** Candidate Incremental Pnl */
+            candidate_incremental_pnl: number;
+            /** Cash After Settlement */
+            cash_after_settlement: number;
+            /** Free Cash After Reserves */
+            free_cash_after_reserves: number;
+            /** Funding Gap After Reserves */
+            funding_gap_after_reserves: number;
+            /**
+             * No Action Incremental Pnl
+             * @default 0
+             * @constant
+             */
+            no_action_incremental_pnl?: 0;
+            /** Shares Acquired */
+            shares_acquired: number;
+            /** Underlying Price */
+            underlying_price: number;
+        };
+        /** PutPlanReview */
+        PutPlanReview: {
+            /** Changed Fields */
+            changed_fields: string[];
+            /**
+             * Holdings Changed By Review
+             * @default false
+             * @constant
+             */
+            holdings_changed_by_review?: false;
+            /**
+             * Live Quote Checked
+             * @default false
+             * @constant
+             */
+            live_quote_checked?: false;
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /** Reasons */
+            reasons: string[];
+            /**
+             * Reviewed At
+             * Format: date-time
+             */
+            reviewed_at: string;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "requires_recalculation" | "assumptions_need_confirmation";
+        };
         /** QualityBlock */
         QualityBlock: {
             /** Current Ratio */
@@ -5554,6 +7269,20 @@ export interface components {
             /** Roic */
             roic?: number | null;
         };
+        /** RankingOut */
+        RankingOut: {
+            /** Objective */
+            objective?: ("preserve_terminal_equity" | "minimize_funding_gap" | "minimize_conditional_debt") | null;
+            /** Preferred Kind */
+            preferred_kind?: ("no_action" | "sale_keep_cash_and_put" | "sale_repay_margin_and_put") | null;
+            /** Reasons */
+            reasons: string[];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "not_requested" | "objective_not_confirmed" | "not_computable" | "no_dominant_alternative" | "preferred";
+        };
         /**
          * ReasonCodeOut
          * @description A structured, machine-readable penalty behind the score (the LLM may
@@ -5572,6 +7301,14 @@ export interface components {
             severity: string;
         } & {
             [key: string]: unknown;
+        };
+        /** RecoverCandidateRuns */
+        RecoverCandidateRuns: {
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
         };
         /**
          * ReferenceSummary
@@ -5788,6 +7525,158 @@ export interface components {
             ticker: string;
         };
         /**
+         * ResearchHypothesis
+         * @description A checkable research view. Evidence, model inference and user assumption
+         *     are separate fields; none of them can authorize a tool, rank a candidate
+         *     or become a confirmed comparison parameter.
+         */
+        ResearchHypothesis: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /**
+             * Can Authorize Tools
+             * @default false
+             * @constant
+             */
+            can_authorize_tools?: false;
+            /** Claim */
+            claim: string;
+            /**
+             * Claim Basis
+             * @enum {string}
+             */
+            claim_basis: "user_assumption" | "model_inference";
+            /**
+             * Comparison Input
+             * @default user_entered_price_change_only
+             * @constant
+             */
+            comparison_input?: "user_entered_price_change_only";
+            /** Counter Arguments */
+            counter_arguments: string[];
+            /** Evidence Observation Ids */
+            evidence_observation_ids?: string[];
+            /** Id */
+            id: string;
+            /** Inference */
+            inference?: string[];
+            /** Invalidation Conditions */
+            invalidation_conditions: components["schemas"]["InvalidationCondition"][];
+            /** Missing */
+            missing?: components["schemas"]["HypothesisMissing"][];
+            /**
+             * Origin
+             * @enum {string}
+             */
+            origin: "user_view" | "method_question";
+            /**
+             * Scope
+             * @default company
+             * @constant
+             */
+            scope?: "company";
+            /** Sources */
+            sources: components["schemas"]["HypothesisSource"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "unverified" | "supported_by_evidence" | "contradicted" | "stale";
+            /** Subject */
+            subject: string;
+            test?: components["schemas"]["HypothesisTest"] | null;
+        };
+        /** ResearchLead */
+        ResearchLead: {
+            /** Author */
+            author?: null;
+            /**
+             * Conflicts
+             * @default not_disclosed_in_feed
+             * @constant
+             */
+            conflicts?: "not_disclosed_in_feed";
+            /** Published At */
+            published_at?: string | null;
+            /** Publisher */
+            publisher?: string | null;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
+            /**
+             * Verification
+             * @default metadata_only
+             * @constant
+             */
+            verification?: "metadata_only";
+        };
+        /** ResearchObservation */
+        ResearchObservation: {
+            /**
+             * Basis
+             * @enum {string}
+             */
+            basis: "provider_projection" | "computed_from_series";
+            /** Id */
+            id: string;
+            /** Metric */
+            metric: string;
+            /**
+             * Provenance
+             * @enum {string}
+             */
+            provenance: "block_only" | "unavailable";
+            /** Reporting Period */
+            reporting_period?: null;
+            /**
+             * Scope
+             * @default company_research
+             * @constant
+             */
+            scope?: "company_research";
+            /** Source */
+            source: string;
+            /** Source As Of */
+            source_as_of?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "missing" | "stale" | "undated";
+            /** Ticker */
+            ticker: string;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "ratio" | "fraction";
+            /** Value */
+            value: number | null;
+        };
+        /** ResearchQuestion */
+        ResearchQuestion: {
+            /** Counterpoint */
+            counterpoint: string;
+            /** Hypothesis */
+            hypothesis: string;
+            /** Invalidation Check */
+            invalidation_check: string;
+            /** Method Id */
+            method_id: string;
+            /** Observation Ids */
+            observation_ids: string[];
+            /**
+             * Status
+             * @default not_tested
+             * @constant
+             */
+            status?: "not_tested";
+        };
+        /**
          * ResearchVerdict
          * @description The LLM's ranked judgment over the FactPack. The model phrases + ranks;
          *     every number it cites already lives in the FactPack.
@@ -5816,6 +7705,100 @@ export interface components {
             summary: string;
             /** What Would Change My Mind */
             what_would_change_my_mind?: string[];
+        };
+        /** ResidualValuation */
+        ResidualValuation: {
+            /** Contract */
+            contract: string;
+            /** Contracts Signed */
+            contracts_signed: number;
+            /**
+             * Expiry
+             * Format: date
+             */
+            expiry: string;
+            /** Iv */
+            iv: number | null;
+            /**
+             * Iv Source
+             * @enum {string}
+             */
+            iv_source: "captured_quote_implied_vol" | "user_assumption" | "missing";
+            /** Position Value */
+            position_value: number | null;
+            /** Rate */
+            rate: number | null;
+            /**
+             * Rate Source
+             * @enum {string}
+             */
+            rate_source: "user_assumption" | "missing";
+            /** Tau Years */
+            tau_years: number;
+            /** Underlying Price */
+            underlying_price: number;
+            /** Value Per Share */
+            value_per_share: number | null;
+        };
+        /** ResumeTask */
+        ResumeTask: {
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
+            task_state: components["schemas"]["TaskStateToken"];
+        };
+        /** ReviewFundingPlanRequest */
+        ReviewFundingPlanRequest: {
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
+        };
+        /** ReviewMetric */
+        ReviewMetric: {
+            /** Account Change */
+            account_change: number | null;
+            /** Current */
+            current: number | null;
+            /** Horizon */
+            horizon: string;
+            /** Label */
+            label: string;
+            /** Market Change */
+            market_change: number | null;
+            /** Method Change */
+            method_change: number | null;
+            /**
+             * Metric Id
+             * @enum {string}
+             */
+            metric_id: "net_equity" | "leverage" | "largest_position_weight" | "annual_volatility" | "var_1d_95_usd" | "cvar_1d_95_usd";
+            /** Not Computable Reason */
+            not_computable_reason?: string | null;
+            /** Original */
+            original: number | null;
+            /** Original Holdings Current Prices */
+            original_holdings_current_prices: number | null;
+            /** Original Inputs Current Method */
+            original_inputs_current_method: number | null;
+            /** Total Change */
+            total_change: number | null;
+            /**
+             * Unit
+             * @enum {string}
+             */
+            unit: "usd" | "ratio" | "fraction" | "fraction_per_year";
+        };
+        /** ReviewPutPlanRequest */
+        ReviewPutPlanRequest: {
+            /**
+             * Expected Portfolio Id
+             * Format: uuid
+             */
+            expected_portfolio_id: string;
         };
         /** RiskAlert */
         RiskAlert: {
@@ -6563,6 +8546,124 @@ export interface components {
              */
             result_id: string;
         };
+        /** SavedFundingPlan */
+        SavedFundingPlan: {
+            /**
+             * Confirmed At
+             * Format: date-time
+             */
+            confirmed_at: string;
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            result: components["schemas"]["FundingScenarioResult"];
+        };
+        /**
+         * SavedPlanDetail
+         * @description Exactly one of comparison / put / funding is set, matching ``item.kind``.
+         */
+        SavedPlanDetail: {
+            comparison?: components["schemas"]["SavedComparison"] | null;
+            funding?: components["schemas"]["SavedFundingPlan"] | null;
+            item: components["schemas"]["SavedPlanItem"];
+            put?: components["schemas"]["SavedPutPlan"] | null;
+        };
+        /** SavedPlanItem */
+        SavedPlanItem: {
+            /**
+             * Captured At
+             * Format: date-time
+             */
+            captured_at: string;
+            /**
+             * Confirmed At
+             * Format: date-time
+             */
+            confirmed_at: string;
+            /** Evidence Sha256 */
+            evidence_sha256: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "comparison" | "cash_secured_put" | "funding_scenarios";
+            /** Methodology Version */
+            methodology_version: string;
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /**
+             * Signature Verified
+             * @default true
+             * @constant
+             */
+            signature_verified?: true;
+            /** Summary */
+            summary: string;
+        };
+        /** SavedPlanPage */
+        SavedPlanPage: {
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /**
+             * Order
+             * @default stable_plan_id
+             * @constant
+             */
+            order?: "stable_plan_id";
+            /** Plans */
+            plans: components["schemas"]["SavedPlanItem"][];
+            /**
+             * Unverified Records
+             * @default 0
+             */
+            unverified_records?: number;
+        };
+        /** SavedPutPlan */
+        SavedPutPlan: {
+            /**
+             * Confirmed At
+             * Format: date-time
+             */
+            confirmed_at: string;
+            /**
+             * Plan Id
+             * Format: uuid
+             */
+            plan_id: string;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            result: components["schemas"]["CashSecuredPutResult"];
+        };
+        /** SavedPutPlanPage */
+        SavedPutPlanPage: {
+            /** Next Cursor */
+            next_cursor?: string | null;
+            /** Plans */
+            plans: components["schemas"]["SavedPutPlan"][];
+            /**
+             * Skipped Records
+             * @default 0
+             */
+            skipped_records?: number;
+        };
         /** ScenarioCellOut */
         ScenarioCellOut: {
             /** Horizon */
@@ -6943,6 +9044,27 @@ export interface components {
             /** Series Id */
             series_id: string;
         };
+        /** SettlementEvent */
+        SettlementEvent: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "assigned" | "exercised" | "expired";
+            /** Cash Delta */
+            cash_delta: number;
+            /** Contract */
+            contract: string;
+            /**
+             * Expiry
+             * Format: date
+             */
+            expiry: string;
+            /** Shares Delta */
+            shares_delta: number;
+            /** Underlying Price */
+            underlying_price: number;
+        };
         /** ShareCardCapabilityOut */
         ShareCardCapabilityOut: {
             /** Enabled */
@@ -7003,6 +9125,17 @@ export interface components {
         /** ShareCardResolveOut */
         ShareCardResolveOut: {
             card: components["schemas"]["ShareCardPayload"];
+        };
+        /**
+         * SignedTaskToken
+         * @description Same wire shape as copilot_task_state.TaskStateToken (kept here to avoid
+         *     an import cycle); verified server-side before use.
+         */
+        SignedTaskToken: {
+            /** Record */
+            record: string;
+            /** Signature */
+            signature: string;
         };
         /**
          * SimulateHolding
@@ -7124,6 +9257,16 @@ export interface components {
             /** Source */
             source: string;
         };
+        /** StartCandidateRun */
+        StartCandidateRun: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            task: components["schemas"]["CandidateRequest"];
+            task_state?: components["schemas"]["SignedTaskToken"] | null;
+        };
         /** StartRun */
         StartRun: {
             /**
@@ -7190,6 +9333,119 @@ export interface components {
             next_step: string;
             /** Reason */
             reason: string;
+        };
+        /**
+         * TaskAssumptions
+         * @description What the user said. ``None`` = not stated; ``[]`` = stated 'none'.
+         */
+        TaskAssumptions: {
+            /** Amount */
+            amount?: number | null;
+            /** Goal */
+            goal?: ("increase_cash" | "reduce_margin") | null;
+            /** Protected Holdings */
+            protected_holdings?: string[] | null;
+            /** Stated At Turn */
+            stated_at_turn?: {
+                [key: string]: number;
+            };
+        };
+        /** TaskResumeOut */
+        TaskResumeOut: {
+            /**
+             * Dispatched
+             * @default false
+             */
+            dispatched?: boolean;
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "needs_input" | "ready_to_confirm" | "continuing" | "completed" | "stale_account_changed" | "run_missing" | "run_failed" | "expired" | "closed" | "superseded";
+            run?: components["schemas"]["CandidateRunOut"] | null;
+            state: components["schemas"]["TaskStateView"];
+            token: components["schemas"]["TaskStateToken"];
+        };
+        /** TaskStateEnvelope */
+        TaskStateEnvelope: {
+            /**
+             * Outcome
+             * @enum {string}
+             */
+            outcome: "started" | "continued" | "ambiguous" | "unrelated" | "turn_limit" | "closed" | "expired" | "discarded";
+            state?: components["schemas"]["TaskStateView"] | null;
+            token?: components["schemas"]["TaskStateToken"] | null;
+        };
+        /**
+         * TaskStateToken
+         * @description Opaque to the client: echoed back verbatim; only the server can mint it.
+         */
+        TaskStateToken: {
+            /** Record */
+            record: string;
+            /** Signature */
+            signature: string;
+        };
+        /** TaskStateView */
+        TaskStateView: {
+            /** Ambiguities */
+            ambiguities?: ("amount_multiple" | "amount_percent" | "amount_unanchored" | "amount_out_of_range" | "goal_conflict" | "goal_unsupported" | "goal_negated" | "protected_without_ticker" | "ticker_without_instruction")[];
+            assumptions?: components["schemas"]["TaskAssumptions"];
+            /**
+             * Clarification Turns
+             * @default 0
+             */
+            clarification_turns?: number;
+            confirmed?: components["schemas"]["ConfirmedParameters"] | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "candidate_request" | "clarification";
+            /** Max Clarification Turns */
+            max_clarification_turns: number;
+            /** Missing Inputs */
+            missing_inputs?: ("goal" | "amount" | "protected_holdings")[];
+            /** Pending Question */
+            pending_question?: ("goal" | "amount" | "protected_holdings") | null;
+            /**
+             * Portfolio Id
+             * Format: uuid
+             */
+            portfolio_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "needs_input" | "ready_to_confirm" | "confirmed" | "closed";
+            /** Superseded Run Ids */
+            superseded_run_ids?: string[];
+            /**
+             * Task Id
+             * Format: uuid
+             */
+            task_id: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Version
+             * @default 1
+             * @constant
+             */
+            version?: 1;
         };
         /** TickerNewsResponse */
         TickerNewsResponse: {
@@ -7706,6 +9962,39 @@ export interface operations {
             };
         };
     };
+    scenario_api_v1_copilot_cash_secured_put_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CashSecuredPutRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_CashSecuredPutResult_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     copilot_chat_endpoint_api_v1_copilot_chat_post: {
         parameters: {
             query?: never;
@@ -7908,6 +10197,332 @@ export interface operations {
             };
         };
     };
+    recent_api_v1_copilot_decision_runs_get: {
+        parameters: {
+            query: {
+                expected_portfolio_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_CandidateRunList_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_api_v1_copilot_decision_runs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartCandidateRun"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_CandidateRunOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recover_api_v1_copilot_decision_runs_recover_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecoverCandidateRuns"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_CandidateRunList_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_api_v1_copilot_decision_runs__id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_CandidateRunOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_api_v1_copilot_decision_runs__id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_CandidateRunOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_api_v1_copilot_decision_runs__id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_CandidateRunOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    read_api_v1_copilot_funding_plans__result_id__get: {
+        parameters: {
+            query: {
+                expected_portfolio_id: string;
+            };
+            header?: never;
+            path: {
+                result_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SavedFundingPlan_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_api_v1_copilot_funding_plans__result_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                result_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmFundingPlan"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SavedFundingPlan_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_api_v1_copilot_funding_plans__result_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                result_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewFundingPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_FundingPlanReview_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    calculate_api_v1_copilot_funding_scenarios_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FundingScenarioRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_FundingScenarioResult_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     copilot_insights_endpoint_api_v1_copilot_insights_get: {
         parameters: {
             query?: never;
@@ -8001,6 +10616,139 @@ export interface operations {
             };
         };
     };
+    list_plans_api_v1_copilot_put_plans_get: {
+        parameters: {
+            query: {
+                expected_portfolio_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_SavedPutPlan__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    plan_history_api_v1_copilot_put_plans_history_get: {
+        parameters: {
+            query: {
+                expected_portfolio_id: string;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SavedPutPlanPage_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_plan_api_v1_copilot_put_plans__plan_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewPutPlanRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_PutPlanReview_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_plan_api_v1_copilot_put_plans__result_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                result_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmPutPlan"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SavedPutPlan_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     start_run_api_v1_copilot_runs_post: {
         parameters: {
             query?: never;
@@ -8083,6 +10831,172 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_RunOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    history_api_v1_copilot_saved_plans_get: {
+        parameters: {
+            query: {
+                expected_portfolio_id: string;
+                cursor?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SavedPlanPage_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    detail_api_v1_copilot_saved_plans__plan_id__get: {
+        parameters: {
+            query: {
+                expected_portfolio_id: string;
+            };
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_SavedPlanDetail_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    metric_review_api_v1_copilot_saved_plans__plan_id__metric_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                plan_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MetricReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_PlanMetricReview_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_api_v1_copilot_task_state_confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmTaskParameters"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_TaskStateEnvelope_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_api_v1_copilot_task_state_resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResumeTask"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_TaskResumeOut_"];
                 };
             };
             /** @description Validation Error */

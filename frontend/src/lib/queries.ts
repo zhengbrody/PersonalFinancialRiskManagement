@@ -1,3 +1,5 @@
+import { copilotResearchSchema } from "./copilot-research";
+import { taskStateEnvelopeSchema } from "./copilot-task-state";
 /**
  * Typed React Query hooks for backend endpoints.
  *
@@ -1331,6 +1333,28 @@ const copilotSectionSchema = z.looseObject({
 });
 export type CopilotSection = z.infer<typeof copilotSectionSchema>;
 
+export const decisionSupportSchema = z.object({
+  version: z.literal(1),
+  task: z.object({
+    kind: z.enum(["explanation", "clarification", "specified_comparison", "candidate_request"]),
+    goal: z.string().nullable(),
+    missing_inputs: z.array(z.string()),
+    confirmed_constraints: z.record(z.string(), z.string()),
+  }),
+  coverage: z.enum(["unsupported", "insufficient_data", "explained", "evaluated"]),
+  methods: z.array(z.object({
+    id: z.string(), title: z.string(), author: z.string(), url: z.string().url(),
+    reviewed_at: z.string(), version: z.string(), summary: z.string(),
+    checks: z.array(z.string()), counterpoint: z.string(), applicability: z.string(),
+  })),
+  limitations: z.array(z.string()),
+  save_available: z.literal(false),
+  candidate_comparison_available: z.boolean().default(false),
+  cash_secured_put_available: z.boolean().default(false),
+  cash_secured_put_save_available: z.boolean().default(false),
+  funding_scenarios_available: z.boolean().default(false),
+});
+
 export const copilotAnswerSchema = z.looseObject({
   intent: z.string(),
   tickers: z.array(z.string()),
@@ -1344,6 +1368,9 @@ export const copilotAnswerSchema = z.looseObject({
   sections: z.array(copilotSectionSchema).optional(),
   language: z.string().optional(),
   disclaimer: z.string().nullish(),
+  decision_support: decisionSupportSchema.nullish(),
+  research_context: z.array(copilotResearchSchema).max(3).optional(),
+  task_state: taskStateEnvelopeSchema.nullish(),
 });
 export type CopilotAnswer = z.infer<typeof copilotAnswerSchema>;
 

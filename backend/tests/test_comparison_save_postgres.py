@@ -17,6 +17,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
+import pandas as pd
 import pytest
 
 from backend.tests.test_comparison_replay import OTHER, USER
@@ -273,6 +274,11 @@ def test_signed_service_roundtrip_uses_real_transaction_not_editable_plan(
     now = datetime.now(timezone.utc)
     context = ActivePortfolioContext(BOOK, {"SPY": {"shares": 10}}, 0, 0, 0)
     prices = price_fixture.__wrapped__()[["SPY"]]
+    # The database checks capture time against its real clock, so the capture
+    # must use the real now -- and the fixture's fixed calendar would then be
+    # "stale" (>7 days old) on any later date. Re-anchor the same values to end
+    # at the most recent business day so this test does not expire on a date.
+    prices.index = pd.bdate_range(end=now.date(), periods=len(prices))
     result = compare_change(
         context,
         CompareChange(expected_portfolio_id=BOOK, ticker="SPY", amount=100.0, proceeds="cash"),

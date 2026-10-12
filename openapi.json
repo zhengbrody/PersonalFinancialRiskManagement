@@ -1,6 +1,55 @@
 {
   "components": {
     "schemas": {
+      "AccountAlternative": {
+        "additionalProperties": false,
+        "properties": {
+          "buying_power": {
+            "$ref": "#/components/schemas/BrokerRequirementOut"
+          },
+          "coverage_at_capture": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageRelation"
+            },
+            "title": "Coverage At Capture",
+            "type": "array"
+          },
+          "coverage_changes": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageChange"
+            },
+            "title": "Coverage Changes",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "no_action",
+              "sale_keep_cash_and_put",
+              "sale_repay_margin_and_put"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "snapshot_id": {
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "unbounded_loss": {
+            "title": "Unbounded Loss",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "snapshot_id",
+          "coverage_at_capture",
+          "coverage_changes",
+          "unbounded_loss",
+          "buying_power"
+        ],
+        "title": "AccountAlternative",
+        "type": "object"
+      },
       "AccountDeleteIn": {
         "properties": {
           "confirmation": {
@@ -1154,6 +1203,65 @@
         "title": "BrinsonOut",
         "type": "object"
       },
+      "BrokerRequirementOut": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "requirement": {
+            "enum": [
+              "buying_power_impact",
+              "maintenance_requirement",
+              "uncovered_call_collateral"
+            ],
+            "title": "Requirement",
+            "type": "string"
+          },
+          "status": {
+            "const": "unknown",
+            "title": "Status",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "null"
+          }
+        },
+        "required": [
+          "requirement",
+          "status",
+          "reason"
+        ],
+        "title": "BrokerRequirementOut",
+        "type": "object"
+      },
+      "BrokerRulesOut": {
+        "additionalProperties": false,
+        "properties": {
+          "provider_id": {
+            "const": "unknown",
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "rule_version": {
+            "title": "Rule Version",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_id",
+          "rule_version",
+          "source"
+        ],
+        "title": "BrokerRulesOut",
+        "type": "object"
+      },
       "CacheProvenance": {
         "description": "Whether a payload was served from cache and its freshness window. Lets the\nUI show a \"cached \u00b7 as of \u2026 \u00b7 stale\" badge and trust the recency.",
         "properties": {
@@ -1233,6 +1341,304 @@
         "title": "CalibrationBinOut",
         "type": "object"
       },
+      "CandidateBatch": {
+        "additionalProperties": false,
+        "properties": {
+          "baseline": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComparisonSide"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ChangeComparison"
+            },
+            "maxItems": 2,
+            "title": "Candidates",
+            "type": "array"
+          },
+          "computed_at": {
+            "format": "date-time",
+            "title": "Computed At",
+            "type": "string"
+          },
+          "coverage": {
+            "enum": [
+              "evaluated",
+              "insufficient_data",
+              "unsupported"
+            ],
+            "title": "Coverage",
+            "type": "string"
+          },
+          "excluded": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Excluded",
+            "type": "object"
+          },
+          "judgment": {
+            "title": "Judgment",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "preferred_result_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Result Id"
+          },
+          "snapshot_id": {
+            "format": "uuid",
+            "title": "Snapshot Id",
+            "type": "string"
+          },
+          "task": {
+            "$ref": "#/components/schemas/CandidateRequest"
+          }
+        },
+        "required": [
+          "snapshot_id",
+          "portfolio_id",
+          "computed_at",
+          "task",
+          "coverage",
+          "judgment",
+          "limitations"
+        ],
+        "title": "CandidateBatch",
+        "type": "object"
+      },
+      "CandidateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 100000000.0,
+            "title": "Amount",
+            "type": "number"
+          },
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          },
+          "goal": {
+            "enum": [
+              "increase_cash",
+              "reduce_margin"
+            ],
+            "title": "Goal",
+            "type": "string"
+          },
+          "protected_holdings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Protected Holdings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "expected_portfolio_id",
+          "goal",
+          "amount",
+          "confirmed"
+        ],
+        "title": "CandidateRequest",
+        "type": "object"
+      },
+      "CandidateRunList": {
+        "additionalProperties": false,
+        "properties": {
+          "dispatched": {
+            "default": 0,
+            "maximum": 4.0,
+            "minimum": 0.0,
+            "title": "Dispatched",
+            "type": "integer"
+          },
+          "removed": {
+            "default": 0,
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Removed",
+            "type": "integer"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateRunOut"
+            },
+            "maxItems": 20,
+            "title": "Runs",
+            "type": "array"
+          },
+          "untrusted_records": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Untrusted Records",
+            "type": "integer"
+          }
+        },
+        "title": "CandidateRunList",
+        "type": "object"
+      },
+      "CandidateRunOut": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "default": 0,
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "analysis_failed",
+                  "reauthentication_required",
+                  "execution_expired",
+                  "portfolio_changed",
+                  "execution_version_changed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "execution_deadline": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Deadline"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "lease_until": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lease Until"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateBatch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed",
+              "cancelled",
+              "interrupted"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "step": {
+            "default": "queued",
+            "enum": [
+              "queued",
+              "capturing",
+              "evaluating",
+              "done"
+            ],
+            "title": "Step",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "portfolio_id",
+          "state",
+          "created_at",
+          "updated_at",
+          "expires_at"
+        ],
+        "title": "CandidateRunOut",
+        "type": "object"
+      },
       "CashEquivalentHoldingOut": {
         "description": "One holding counted toward the current-value margin offset.",
         "properties": {
@@ -1259,6 +1665,251 @@
           "classification_source"
         ],
         "title": "CashEquivalentHoldingOut",
+        "type": "object"
+      },
+      "CashSecuredPutRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "assumed_spot": {
+            "exclusiveMaximum": 1000000.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Assumed Spot",
+            "type": "number"
+          },
+          "cash_buffer": {
+            "maximum": 100000000.0,
+            "minimum": 0.0,
+            "multipleOf": 0.01,
+            "title": "Cash Buffer",
+            "type": "number"
+          },
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "contracts": {
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Contracts",
+            "type": "integer"
+          },
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          },
+          "expiry": {
+            "format": "date",
+            "title": "Expiry",
+            "type": "string"
+          },
+          "fees_total": {
+            "maximum": 100000.0,
+            "minimum": 0.0,
+            "multipleOf": 0.01,
+            "title": "Fees Total",
+            "type": "number"
+          },
+          "gross_settled_usd_cash_confirmed": {
+            "title": "Gross Settled Usd Cash Confirmed",
+            "type": "boolean"
+          },
+          "other_reserved_cash": {
+            "maximum": 100000000.0,
+            "minimum": 0.0,
+            "multipleOf": 0.01,
+            "title": "Other Reserved Cash",
+            "type": "number"
+          },
+          "premium_per_share": {
+            "exclusiveMinimum": 0.0,
+            "multipleOf": 0.01,
+            "title": "Premium Per Share",
+            "type": "number"
+          },
+          "standard_contract_confirmed": {
+            "title": "Standard Contract Confirmed",
+            "type": "boolean"
+          },
+          "strike": {
+            "exclusiveMaximum": 100000.0,
+            "exclusiveMinimum": 0.0,
+            "multipleOf": 0.01,
+            "title": "Strike",
+            "type": "number"
+          },
+          "underlying": {
+            "pattern": "^[A-Z]{1,6}$",
+            "title": "Underlying",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_portfolio_id",
+          "underlying",
+          "expiry",
+          "strike",
+          "premium_per_share",
+          "assumed_spot",
+          "contracts",
+          "fees_total",
+          "other_reserved_cash",
+          "cash_buffer",
+          "confirmed",
+          "gross_settled_usd_cash_confirmed",
+          "standard_contract_confirmed"
+        ],
+        "title": "CashSecuredPutRequest",
+        "type": "object"
+      },
+      "CashSecuredPutResult": {
+        "additionalProperties": false,
+        "properties": {
+          "assignment_notional": {
+            "title": "Assignment Notional",
+            "type": "number"
+          },
+          "assumptions": {
+            "$ref": "#/components/schemas/CashSecuredPutRequest"
+          },
+          "best_expiry_pnl": {
+            "title": "Best Expiry Pnl",
+            "type": "number"
+          },
+          "breakeven": {
+            "title": "Breakeven",
+            "type": "number"
+          },
+          "computed_at": {
+            "format": "date-time",
+            "title": "Computed At",
+            "type": "string"
+          },
+          "existing_put_reserve": {
+            "title": "Existing Put Reserve",
+            "type": "number"
+          },
+          "funding_status": {
+            "enum": [
+              "covered_under_assumptions",
+              "insufficient_cash"
+            ],
+            "title": "Funding Status",
+            "type": "string"
+          },
+          "gross_premium": {
+            "title": "Gross Premium",
+            "type": "number"
+          },
+          "initial_incremental_equity": {
+            "title": "Initial Incremental Equity",
+            "type": "number"
+          },
+          "input_basis": {
+            "const": "user_hypothesis_not_live_quote",
+            "default": "user_hypothesis_not_live_quote",
+            "title": "Input Basis",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "maximum_loss": {
+            "title": "Maximum Loss",
+            "type": "number"
+          },
+          "methodology_version": {
+            "const": "cash-secured-put-v1",
+            "default": "cash-secured-put-v1",
+            "title": "Methodology Version",
+            "type": "string"
+          },
+          "net_premium": {
+            "title": "Net Premium",
+            "type": "number"
+          },
+          "no_action_free_cash": {
+            "title": "No Action Free Cash",
+            "type": "number"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "pre_trade_funding_gap": {
+            "title": "Pre Trade Funding Gap",
+            "type": "number"
+          },
+          "receipt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComparisonReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recorded_cash": {
+            "title": "Recorded Cash",
+            "type": "number"
+          },
+          "result_id": {
+            "format": "uuid",
+            "title": "Result Id",
+            "type": "string"
+          },
+          "save_available": {
+            "const": false,
+            "default": false,
+            "title": "Save Available",
+            "type": "boolean"
+          },
+          "scenarios": {
+            "items": {
+              "$ref": "#/components/schemas/PutExpiryScenario"
+            },
+            "title": "Scenarios",
+            "type": "array"
+          },
+          "snapshot_digest": {
+            "title": "Snapshot Digest",
+            "type": "string"
+          },
+          "source_url": {
+            "const": "https://www.optionseducation.org/strategies/all-strategies/cash-secured-put",
+            "default": "https://www.optionseducation.org/strategies/all-strategies/cash-secured-put",
+            "title": "Source Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result_id",
+          "portfolio_id",
+          "computed_at",
+          "snapshot_digest",
+          "assumptions",
+          "recorded_cash",
+          "existing_put_reserve",
+          "no_action_free_cash",
+          "assignment_notional",
+          "gross_premium",
+          "net_premium",
+          "initial_incremental_equity",
+          "pre_trade_funding_gap",
+          "funding_status",
+          "best_expiry_pnl",
+          "maximum_loss",
+          "breakeven",
+          "scenarios",
+          "limitations"
+        ],
+        "title": "CashSecuredPutResult",
         "type": "object"
       },
       "ChangeAttribution": {
@@ -1342,6 +1993,16 @@
           "history_start": {
             "title": "History Start",
             "type": "string"
+          },
+          "hypothesis_scenario": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HypothesisScenario"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "limitations": {
             "items": {
@@ -1853,6 +2514,16 @@
             "title": "Expected Portfolio Id",
             "type": "string"
           },
+          "hypothesis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HypothesisAssumption"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "proceeds": {
             "enum": [
               "cash",
@@ -2274,6 +2945,165 @@
         "title": "ConfirmComparison",
         "type": "object"
       },
+      "ConfirmFundingPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/ComparisonReceipt"
+          }
+        },
+        "required": [
+          "expected_portfolio_id",
+          "confirmed",
+          "receipt"
+        ],
+        "title": "ConfirmFundingPlan",
+        "type": "object"
+      },
+      "ConfirmPutPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/ComparisonReceipt"
+          }
+        },
+        "required": [
+          "expected_portfolio_id",
+          "confirmed",
+          "receipt"
+        ],
+        "title": "ConfirmPutPlan",
+        "type": "object"
+      },
+      "ConfirmTaskParameters": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 100000000.0,
+            "title": "Amount",
+            "type": "number"
+          },
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          },
+          "goal": {
+            "enum": [
+              "increase_cash",
+              "reduce_margin"
+            ],
+            "title": "Goal",
+            "type": "string"
+          },
+          "protected_holdings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Protected Holdings",
+            "type": "array"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "task_state": {
+            "$ref": "#/components/schemas/TaskStateToken"
+          }
+        },
+        "required": [
+          "task_state",
+          "expected_portfolio_id",
+          "goal",
+          "amount",
+          "run_id",
+          "confirmed"
+        ],
+        "title": "ConfirmTaskParameters",
+        "type": "object"
+      },
+      "ConfirmedParameters": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 100000000.0,
+            "title": "Amount",
+            "type": "number"
+          },
+          "confirmed_at": {
+            "format": "date-time",
+            "title": "Confirmed At",
+            "type": "string"
+          },
+          "goal": {
+            "enum": [
+              "increase_cash",
+              "reduce_margin"
+            ],
+            "title": "Goal",
+            "type": "string"
+          },
+          "protected_holdings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Protected Holdings",
+            "type": "array"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "stale": {
+            "default": false,
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "version": {
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "goal",
+          "amount",
+          "confirmed_at",
+          "run_id"
+        ],
+        "title": "ConfirmedParameters",
+        "type": "object"
+      },
       "CopilotAnswer": {
         "properties": {
           "answer_markdown": {
@@ -2299,6 +3129,16 @@
             "default": false,
             "title": "Data Only",
             "type": "boolean"
+          },
+          "decision_support": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecisionSupport"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "disclaimer": {
             "anyOf": [
@@ -2342,12 +3182,30 @@
             ],
             "title": "Model"
           },
+          "research_context": {
+            "items": {
+              "$ref": "#/components/schemas/CopilotResearch"
+            },
+            "maxItems": 3,
+            "title": "Research Context",
+            "type": "array"
+          },
           "sections": {
             "items": {
               "$ref": "#/components/schemas/CopilotAnswerSection"
             },
             "title": "Sections",
             "type": "array"
+          },
+          "task_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskStateEnvelope"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "tickers": {
             "items": {
@@ -2433,6 +3291,16 @@
               }
             ],
             "title": "Route"
+          },
+          "task_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskStateToken"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "ticker": {
             "anyOf": [
@@ -2637,6 +3505,98 @@
         "title": "CopilotPreferencesOut",
         "type": "object"
       },
+      "CopilotResearch": {
+        "additionalProperties": false,
+        "properties": {
+          "can_rank_candidates": {
+            "const": false,
+            "default": false,
+            "title": "Can Rank Candidates",
+            "type": "boolean"
+          },
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "hypotheses": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchHypothesis"
+            },
+            "maxItems": 4,
+            "title": "Hypotheses",
+            "type": "array"
+          },
+          "leads": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchLead"
+            },
+            "maxItems": 3,
+            "title": "Leads",
+            "type": "array"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "methods": {
+            "items": {
+              "$ref": "#/components/schemas/MethodReference"
+            },
+            "title": "Methods",
+            "type": "array"
+          },
+          "observations": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchObservation"
+            },
+            "maxItems": 4,
+            "title": "Observations",
+            "type": "array"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchQuestion"
+            },
+            "maxItems": 2,
+            "title": "Questions",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "available",
+              "partial",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ticker",
+          "captured_at",
+          "status",
+          "observations",
+          "questions",
+          "methods",
+          "limitations"
+        ],
+        "title": "CopilotResearch",
+        "type": "object"
+      },
       "CorrTopPair": {
         "properties": {
           "a": {
@@ -2745,6 +3705,138 @@
           "matrix"
         ],
         "title": "CorrelationOut",
+        "type": "object"
+      },
+      "CoverageChange": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "title": "Before",
+            "type": "string"
+          },
+          "contract": {
+            "title": "Contract",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract",
+          "before",
+          "after",
+          "reason"
+        ],
+        "title": "CoverageChange",
+        "type": "object"
+      },
+      "CoverageRelation": {
+        "additionalProperties": false,
+        "properties": {
+          "collateral": {
+            "enum": [
+              "shares",
+              "long_option",
+              "cash",
+              "broker_rule_unknown",
+              "none"
+            ],
+            "title": "Collateral",
+            "type": "string"
+          },
+          "contract": {
+            "title": "Contract",
+            "type": "string"
+          },
+          "contracts": {
+            "title": "Contracts",
+            "type": "integer"
+          },
+          "coverage": {
+            "enum": [
+              "stock",
+              "long_call_spread",
+              "uncovered",
+              "long_put_spread",
+              "cash_secured",
+              "protective",
+              "unpaired_no_stock",
+              "long_call"
+            ],
+            "title": "Coverage",
+            "type": "string"
+          },
+          "covered_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Covered By"
+          },
+          "expiry": {
+            "format": "date",
+            "title": "Expiry",
+            "type": "string"
+          },
+          "max_loss_excl_premium": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Loss Excl Premium"
+          },
+          "option_type": {
+            "enum": [
+              "call",
+              "put"
+            ],
+            "title": "Option Type",
+            "type": "string"
+          },
+          "side": {
+            "enum": [
+              "long",
+              "short"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "strike": {
+            "title": "Strike",
+            "type": "number"
+          },
+          "underlying": {
+            "title": "Underlying",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract",
+          "underlying",
+          "option_type",
+          "side",
+          "expiry",
+          "strike",
+          "contracts",
+          "coverage",
+          "max_loss_excl_premium",
+          "collateral"
+        ],
+        "title": "CoverageRelation",
         "type": "object"
       },
       "CoverageTestOut": {
@@ -3488,6 +4580,146 @@
         "title": "DataQualityChange",
         "type": "object"
       },
+      "DataWindow": {
+        "additionalProperties": false,
+        "properties": {
+          "history_start": {
+            "title": "History Start",
+            "type": "string"
+          },
+          "observations": {
+            "minimum": 0.0,
+            "title": "Observations",
+            "type": "integer"
+          },
+          "price_as_of": {
+            "title": "Price As Of",
+            "type": "string"
+          }
+        },
+        "required": [
+          "price_as_of",
+          "history_start",
+          "observations"
+        ],
+        "title": "DataWindow",
+        "type": "object"
+      },
+      "DecisionSupport": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_comparison_available": {
+            "default": false,
+            "title": "Candidate Comparison Available",
+            "type": "boolean"
+          },
+          "cash_secured_put_available": {
+            "default": false,
+            "title": "Cash Secured Put Available",
+            "type": "boolean"
+          },
+          "cash_secured_put_save_available": {
+            "default": false,
+            "title": "Cash Secured Put Save Available",
+            "type": "boolean"
+          },
+          "coverage": {
+            "enum": [
+              "unsupported",
+              "insufficient_data",
+              "explained",
+              "evaluated"
+            ],
+            "title": "Coverage",
+            "type": "string"
+          },
+          "funding_scenarios_available": {
+            "default": false,
+            "title": "Funding Scenarios Available",
+            "type": "boolean"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "methods": {
+            "items": {
+              "$ref": "#/components/schemas/MethodReference"
+            },
+            "title": "Methods",
+            "type": "array"
+          },
+          "save_available": {
+            "const": false,
+            "default": false,
+            "title": "Save Available",
+            "type": "boolean"
+          },
+          "task": {
+            "$ref": "#/components/schemas/DecisionTask"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "task",
+          "coverage"
+        ],
+        "title": "DecisionSupport",
+        "type": "object"
+      },
+      "DecisionTask": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed_constraints": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Confirmed Constraints",
+            "type": "object"
+          },
+          "goal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal"
+          },
+          "kind": {
+            "enum": [
+              "explanation",
+              "clarification",
+              "specified_comparison",
+              "candidate_request"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "missing_inputs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Inputs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "DecisionTask",
+        "type": "object"
+      },
       "DigestPrefIn": {
         "properties": {
           "enabled": {
@@ -3893,6 +5125,105 @@
         "title": "Envelope[BillingMeResponse]",
         "type": "object"
       },
+      "Envelope_CandidateRunList_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateRunList"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[CandidateRunList]",
+        "type": "object"
+      },
+      "Envelope_CandidateRunOut_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateRunOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[CandidateRunOut]",
+        "type": "object"
+      },
+      "Envelope_CashSecuredPutResult_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CashSecuredPutResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[CashSecuredPutResult]",
+        "type": "object"
+      },
       "Envelope_ChangeComparison_": {
         "additionalProperties": true,
         "properties": {
@@ -4155,6 +5486,72 @@
           "meta"
         ],
         "title": "Envelope[EfficientFrontierOut]",
+        "type": "object"
+      },
+      "Envelope_FundingPlanReview_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundingPlanReview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[FundingPlanReview]",
+        "type": "object"
+      },
+      "Envelope_FundingScenarioResult_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundingScenarioResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[FundingScenarioResult]",
         "type": "object"
       },
       "Envelope_HistoricalScenariosOut_": {
@@ -4520,6 +5917,39 @@
         "title": "Envelope[OptionExplainOutput]",
         "type": "object"
       },
+      "Envelope_PlanMetricReview_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanMetricReview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[PlanMetricReview]",
+        "type": "object"
+      },
       "Envelope_PortalSessionResponse_": {
         "additionalProperties": true,
         "properties": {
@@ -4683,6 +6113,39 @@
           "meta"
         ],
         "title": "Envelope[PublicRiskCheckOut]",
+        "type": "object"
+      },
+      "Envelope_PutPlanReview_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PutPlanReview"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[PutPlanReview]",
         "type": "object"
       },
       "Envelope_RegimeDetailResponse_": {
@@ -5114,6 +6577,171 @@
         "title": "Envelope[SavedComparison]",
         "type": "object"
       },
+      "Envelope_SavedFundingPlan_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedFundingPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[SavedFundingPlan]",
+        "type": "object"
+      },
+      "Envelope_SavedPlanDetail_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedPlanDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[SavedPlanDetail]",
+        "type": "object"
+      },
+      "Envelope_SavedPlanPage_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedPlanPage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[SavedPlanPage]",
+        "type": "object"
+      },
+      "Envelope_SavedPutPlanPage_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedPutPlanPage"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[SavedPutPlanPage]",
+        "type": "object"
+      },
+      "Envelope_SavedPutPlan_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedPutPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[SavedPutPlan]",
+        "type": "object"
+      },
       "Envelope_ScenariosOut_": {
         "additionalProperties": true,
         "properties": {
@@ -5411,6 +7039,72 @@
         "title": "Envelope[SmartMoneyOut]",
         "type": "object"
       },
+      "Envelope_TaskResumeOut_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskResumeOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[TaskResumeOut]",
+        "type": "object"
+      },
+      "Envelope_TaskStateEnvelope_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskStateEnvelope"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[TaskStateEnvelope]",
+        "type": "object"
+      },
       "Envelope_TickerNewsResponse_": {
         "additionalProperties": true,
         "properties": {
@@ -5578,6 +7272,43 @@
         "title": "Envelope[dict]",
         "type": "object"
       },
+      "Envelope_list_SavedPutPlan__": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SavedPutPlan"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[list[SavedPutPlan]]",
+        "type": "object"
+      },
       "ErrorOut": {
         "description": "The ``error`` block of a failed envelope (``APIError.to_payload``).",
         "properties": {
@@ -5660,6 +7391,386 @@
         "title": "EvidenceItem",
         "type": "object"
       },
+      "ExpiryAccountOutcome": {
+        "additionalProperties": false,
+        "properties": {
+          "assignment_cash_paid": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignment Cash Paid"
+          },
+          "assignment_shares": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignment Shares"
+          },
+          "cash_after_interest": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cash After Interest"
+          },
+          "cash_before_interest": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cash Before Interest"
+          },
+          "conditional_debt_if_gap_financed": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conditional Debt If Gap Financed"
+          },
+          "fees_total": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fees Total"
+          },
+          "funding_gap": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Funding Gap"
+          },
+          "funding_gap_before_interest": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Funding Gap Before Interest"
+          },
+          "gross_leverage_if_gap_financed": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gross Leverage If Gap Financed"
+          },
+          "incremental_pnl_vs_no_action": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Incremental Pnl Vs No Action"
+          },
+          "initial_net_equity": {
+            "title": "Initial Net Equity",
+            "type": "number"
+          },
+          "interest_cost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interest Cost"
+          },
+          "kind": {
+            "enum": [
+              "no_action",
+              "sale_keep_cash_and_put",
+              "sale_repay_margin_and_put"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "largest_position_weight": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Largest Position Weight"
+          },
+          "min_cash_through_horizon": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Cash Through Horizon"
+          },
+          "net_equity_after_interest": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Equity After Interest"
+          },
+          "net_equity_before_interest": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Net Equity Before Interest"
+          },
+          "not_computable": {
+            "items": {
+              "$ref": "#/components/schemas/NotComputable"
+            },
+            "title": "Not Computable",
+            "type": "array"
+          },
+          "open_leg_coverage": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageRelation"
+            },
+            "title": "Open Leg Coverage",
+            "type": "array"
+          },
+          "position_values": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position Values"
+          },
+          "positions": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Positions"
+          },
+          "principal_debt": {
+            "title": "Principal Debt",
+            "type": "number"
+          },
+          "residual_option_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Residual Option Value"
+          },
+          "residual_valuations": {
+            "items": {
+              "$ref": "#/components/schemas/ResidualValuation"
+            },
+            "title": "Residual Valuations",
+            "type": "array"
+          },
+          "settlement_events": {
+            "items": {
+              "$ref": "#/components/schemas/SettlementEvent"
+            },
+            "title": "Settlement Events",
+            "type": "array"
+          },
+          "short_stock_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Stock Value"
+          },
+          "snapshot_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Id"
+          },
+          "sold_stock_opportunity_cost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sold Stock Opportunity Cost"
+          },
+          "stock_assets": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stock Assets"
+          },
+          "total_pnl": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Pnl"
+          },
+          "total_pnl_before_interest": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Pnl Before Interest"
+          }
+        },
+        "required": [
+          "kind",
+          "positions",
+          "position_values",
+          "stock_assets",
+          "initial_net_equity",
+          "cash_before_interest",
+          "cash_after_interest",
+          "principal_debt",
+          "interest_cost",
+          "net_equity_before_interest",
+          "net_equity_after_interest",
+          "total_pnl_before_interest",
+          "total_pnl",
+          "incremental_pnl_vs_no_action",
+          "assignment_shares",
+          "assignment_cash_paid",
+          "funding_gap_before_interest",
+          "funding_gap",
+          "conditional_debt_if_gap_financed",
+          "largest_position_weight",
+          "gross_leverage_if_gap_financed"
+        ],
+        "title": "ExpiryAccountOutcome",
+        "type": "object"
+      },
+      "ExpiryAccountScenario": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/ExpiryAccountOutcome"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "Outcomes",
+            "type": "array"
+          },
+          "prices": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Prices",
+            "type": "object"
+          }
+        },
+        "required": [
+          "label",
+          "prices",
+          "outcomes"
+        ],
+        "title": "ExpiryAccountScenario",
+        "type": "object"
+      },
       "ExpiryBucketOut": {
         "additionalProperties": true,
         "properties": {
@@ -5692,6 +7803,46 @@
           "net_notional"
         ],
         "title": "ExpiryBucketOut",
+        "type": "object"
+      },
+      "ExpiryPriceScenario": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "prices": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "maxProperties": 120,
+            "minProperties": 1,
+            "title": "Prices",
+            "type": "object"
+          },
+          "settlement_prices": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            "maxProperties": 12,
+            "propertyNames": {
+              "format": "date"
+            },
+            "title": "Settlement Prices",
+            "type": "object"
+          }
+        },
+        "required": [
+          "label",
+          "prices"
+        ],
+        "title": "ExpiryPriceScenario",
         "type": "object"
       },
       "ExplainContributor": {
@@ -6668,6 +8819,639 @@
         "title": "FrontierPoint",
         "type": "object"
       },
+      "FundingAlternative": {
+        "additionalProperties": false,
+        "properties": {
+          "assignment_cash_shortfall": {
+            "default": 0,
+            "title": "Assignment Cash Shortfall",
+            "type": "number"
+          },
+          "cash_before_put": {
+            "title": "Cash Before Put",
+            "type": "number"
+          },
+          "debt_repaid": {
+            "title": "Debt Repaid",
+            "type": "number"
+          },
+          "expiry_funding": {
+            "items": {
+              "$ref": "#/components/schemas/FundingExpiryFunding"
+            },
+            "maxItems": 7,
+            "title": "Expiry Funding",
+            "type": "array"
+          },
+          "hypothetical_debt_if_shortfall_financed": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hypothetical Debt If Shortfall Financed"
+          },
+          "initial_incremental_equity": {
+            "title": "Initial Incremental Equity",
+            "type": "number"
+          },
+          "kind": {
+            "enum": [
+              "no_action",
+              "sale_keep_cash_and_put",
+              "sale_repay_margin_and_put"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "margin_remaining": {
+            "title": "Margin Remaining",
+            "type": "number"
+          },
+          "pre_put_largest_position_weight": {
+            "title": "Pre Put Largest Position Weight",
+            "type": "number"
+          },
+          "pre_put_var_1d_95_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pre Put Var 1D 95 Usd"
+          },
+          "put": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CashSecuredPutResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sale_proceeds_net": {
+            "title": "Sale Proceeds Net",
+            "type": "number"
+          },
+          "shares_sold": {
+            "title": "Shares Sold",
+            "type": "number"
+          },
+          "status": {
+            "enum": [
+              "no_action",
+              "covered_under_assumptions",
+              "insufficient_cash",
+              "financing_rules_required"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "cash_before_put",
+          "margin_remaining",
+          "debt_repaid",
+          "sale_proceeds_net",
+          "shares_sold",
+          "initial_incremental_equity",
+          "status",
+          "pre_put_largest_position_weight",
+          "pre_put_var_1d_95_usd"
+        ],
+        "title": "FundingAlternative",
+        "type": "object"
+      },
+      "FundingExpiryFunding": {
+        "additionalProperties": false,
+        "properties": {
+          "assignment_cash_shortfall": {
+            "title": "Assignment Cash Shortfall",
+            "type": "number"
+          },
+          "hypothetical_debt_if_shortfall_financed": {
+            "title": "Hypothetical Debt If Shortfall Financed",
+            "type": "number"
+          },
+          "interest_cost": {
+            "title": "Interest Cost",
+            "type": "null"
+          },
+          "underlying_price": {
+            "title": "Underlying Price",
+            "type": "number"
+          }
+        },
+        "required": [
+          "underlying_price",
+          "assignment_cash_shortfall",
+          "hypothetical_debt_if_shortfall_financed"
+        ],
+        "title": "FundingExpiryFunding",
+        "type": "object"
+      },
+      "FundingPlanReview": {
+        "additionalProperties": false,
+        "properties": {
+          "changed_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed Fields",
+            "type": "array"
+          },
+          "holdings_changed_by_review": {
+            "const": false,
+            "default": false,
+            "title": "Holdings Changed By Review",
+            "type": "boolean"
+          },
+          "live_quote_checked": {
+            "const": false,
+            "default": false,
+            "title": "Live Quote Checked",
+            "type": "boolean"
+          },
+          "plan_id": {
+            "format": "uuid",
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "reviewed_at": {
+            "format": "date-time",
+            "title": "Reviewed At",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "requires_recalculation",
+              "assumptions_need_confirmation"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan_id",
+          "portfolio_id",
+          "reviewed_at",
+          "verdict",
+          "changed_fields",
+          "reasons"
+        ],
+        "title": "FundingPlanReview",
+        "type": "object"
+      },
+      "FundingRiskAssumptions": {
+        "additionalProperties": false,
+        "properties": {
+          "annual_borrowing_rate": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annual Borrowing Rate"
+          },
+          "broker_rules_provider": {
+            "const": "unknown",
+            "default": "unknown",
+            "title": "Broker Rules Provider",
+            "type": "string"
+          },
+          "objective": {
+            "anyOf": [
+              {
+                "enum": [
+                  "preserve_terminal_equity",
+                  "minimize_funding_gap",
+                  "minimize_conditional_debt"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objective"
+          },
+          "objective_confirmed": {
+            "default": false,
+            "title": "Objective Confirmed",
+            "type": "boolean"
+          },
+          "residual_assumptions_confirmed": {
+            "default": false,
+            "title": "Residual Assumptions Confirmed",
+            "type": "boolean"
+          },
+          "residual_iv_overrides": {
+            "maxProperties": 20,
+            "patternProperties": {
+              "^[A-Z]{1,6}\\d{6}[CP]\\d{8}$": {
+                "exclusiveMinimum": 0.0,
+                "maximum": 5.0,
+                "type": "number"
+              }
+            },
+            "title": "Residual Iv Overrides",
+            "type": "object"
+          },
+          "residual_risk_free_rate": {
+            "anyOf": [
+              {
+                "maximum": 0.2,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Residual Risk Free Rate"
+          },
+          "scenarios": {
+            "items": {
+              "$ref": "#/components/schemas/ExpiryPriceScenario"
+            },
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Scenarios",
+            "type": "array"
+          }
+        },
+        "required": [
+          "scenarios"
+        ],
+        "title": "FundingRiskAssumptions",
+        "type": "object"
+      },
+      "FundingRiskResult": {
+        "additionalProperties": false,
+        "properties": {
+          "alternatives": {
+            "items": {
+              "$ref": "#/components/schemas/AccountAlternative"
+            },
+            "maxItems": 3,
+            "title": "Alternatives",
+            "type": "array"
+          },
+          "assumptions": {
+            "$ref": "#/components/schemas/FundingRiskAssumptions"
+          },
+          "broker_rules": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BrokerRulesOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "days_of_interest": {
+            "minimum": 0.0,
+            "title": "Days Of Interest",
+            "type": "integer"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "market_snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MarketSnapshotOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "methodology_version": {
+            "default": "funding-account-scenarios-v2",
+            "enum": [
+              "funding-common-expiry-v1",
+              "funding-account-scenarios-v2"
+            ],
+            "title": "Methodology Version",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "preferred_alternative": {
+            "title": "Preferred Alternative",
+            "type": "null"
+          },
+          "ranking": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RankingOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scenarios": {
+            "items": {
+              "$ref": "#/components/schemas/ExpiryAccountScenario"
+            },
+            "title": "Scenarios",
+            "type": "array"
+          },
+          "source_result_id": {
+            "format": "uuid",
+            "title": "Source Result Id",
+            "type": "string"
+          },
+          "valuation_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valuation Date"
+          }
+        },
+        "required": [
+          "portfolio_id",
+          "source_result_id",
+          "captured_at",
+          "assumptions",
+          "days_of_interest",
+          "scenarios",
+          "limitations"
+        ],
+        "title": "FundingRiskResult",
+        "type": "object"
+      },
+      "FundingScenarioAssumptions": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          },
+          "protected_holdings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Protected Holdings",
+            "type": "array"
+          },
+          "put": {
+            "$ref": "#/components/schemas/CashSecuredPutRequest"
+          },
+          "risk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundingRiskAssumptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sale_fees": {
+            "maximum": 100000.0,
+            "minimum": 0.0,
+            "multipleOf": 0.01,
+            "title": "Sale Fees",
+            "type": "number"
+          },
+          "source_result_id": {
+            "format": "uuid",
+            "title": "Source Result Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_portfolio_id",
+          "source_result_id",
+          "put",
+          "sale_fees",
+          "confirmed"
+        ],
+        "title": "FundingScenarioAssumptions",
+        "type": "object"
+      },
+      "FundingScenarioRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed": {
+            "title": "Confirmed",
+            "type": "boolean"
+          },
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          },
+          "protected_holdings": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Protected Holdings",
+            "type": "array"
+          },
+          "put": {
+            "$ref": "#/components/schemas/CashSecuredPutRequest"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/ComparisonReceipt"
+          },
+          "risk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundingRiskAssumptions"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sale_fees": {
+            "maximum": 100000.0,
+            "minimum": 0.0,
+            "multipleOf": 0.01,
+            "title": "Sale Fees",
+            "type": "number"
+          },
+          "source_result_id": {
+            "format": "uuid",
+            "title": "Source Result Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_portfolio_id",
+          "source_result_id",
+          "put",
+          "sale_fees",
+          "confirmed",
+          "receipt"
+        ],
+        "title": "FundingScenarioRequest",
+        "type": "object"
+      },
+      "FundingScenarioResult": {
+        "additionalProperties": false,
+        "properties": {
+          "account_risk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FundingRiskResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "alternatives": {
+            "items": {
+              "$ref": "#/components/schemas/FundingAlternative"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "Alternatives",
+            "type": "array"
+          },
+          "assumptions": {
+            "$ref": "#/components/schemas/FundingScenarioAssumptions"
+          },
+          "broker_buying_power": {
+            "title": "Broker Buying Power",
+            "type": "null"
+          },
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "computed_at": {
+            "format": "date-time",
+            "title": "Computed At",
+            "type": "string"
+          },
+          "limitations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Limitations",
+            "type": "array"
+          },
+          "methodology_version": {
+            "const": "funding-scenarios-v1",
+            "default": "funding-scenarios-v1",
+            "title": "Methodology Version",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "preferred_alternative": {
+            "title": "Preferred Alternative",
+            "type": "null"
+          },
+          "receipt": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComparisonReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "result_id": {
+            "format": "uuid",
+            "title": "Result Id",
+            "type": "string"
+          },
+          "sale_price": {
+            "title": "Sale Price",
+            "type": "number"
+          },
+          "sale_ticker": {
+            "title": "Sale Ticker",
+            "type": "string"
+          },
+          "snapshot_digest": {
+            "title": "Snapshot Digest",
+            "type": "string"
+          },
+          "source_result_id": {
+            "format": "uuid",
+            "title": "Source Result Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "computed_at",
+          "portfolio_id",
+          "source_result_id",
+          "snapshot_digest",
+          "captured_at",
+          "assumptions",
+          "sale_ticker",
+          "sale_price",
+          "alternatives",
+          "limitations"
+        ],
+        "title": "FundingScenarioResult",
+        "type": "object"
+      },
       "GreeksOut": {
         "properties": {
           "delta": {
@@ -7217,6 +10001,365 @@
         "title": "HoldingsChange",
         "type": "object"
       },
+      "HypothesisAssumption": {
+        "additionalProperties": false,
+        "description": "A research hypothesis carried in as the USER's price assumption.\n\nOnly an id, the subject and a number the user typed travel here; the claim\ntext never does. ``user_confirmed`` must be literally true: the typed confirm\nstep, not the research card, turns it into a calculation input. It adds one\ndeterministic row to this comparison and authorizes nothing else.",
+        "properties": {
+          "basis": {
+            "const": "user_assumption",
+            "default": "user_assumption",
+            "title": "Basis",
+            "type": "string"
+          },
+          "hypothesis_id": {
+            "pattern": "^[A-Z][A-Z0-9.\\-]{0,11}:h[0-9]$",
+            "title": "Hypothesis Id",
+            "type": "string"
+          },
+          "price_change_pct": {
+            "maximum": 100.0,
+            "minimum": -95.0,
+            "title": "Price Change Pct",
+            "type": "number"
+          },
+          "subject": {
+            "pattern": "^[A-Z][A-Z0-9.\\-]{0,11}$",
+            "title": "Subject",
+            "type": "string"
+          },
+          "user_confirmed": {
+            "title": "User Confirmed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "hypothesis_id",
+          "subject",
+          "price_change_pct",
+          "user_confirmed"
+        ],
+        "title": "HypothesisAssumption",
+        "type": "object"
+      },
+      "HypothesisMissing": {
+        "additionalProperties": false,
+        "properties": {
+          "item": {
+            "maxLength": 120,
+            "title": "Item",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "no_authorized_source",
+              "reporting_period_unavailable",
+              "observation_missing",
+              "observation_stale",
+              "observation_undated",
+              "no_testable_predicate",
+              "cited_source_not_retrieved"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item",
+          "reason"
+        ],
+        "title": "HypothesisMissing",
+        "type": "object"
+      },
+      "HypothesisScenario": {
+        "additionalProperties": false,
+        "description": "Isolated subject price move at the captured close, both sides. Not a forecast.",
+        "properties": {
+          "baseline_equity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Equity"
+          },
+          "baseline_pnl": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Pnl"
+          },
+          "basis": {
+            "const": "user_assumption",
+            "default": "user_assumption",
+            "title": "Basis",
+            "type": "string"
+          },
+          "candidate_equity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Equity"
+          },
+          "candidate_pnl": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Pnl"
+          },
+          "hypothesis_id": {
+            "title": "Hypothesis Id",
+            "type": "string"
+          },
+          "price_change_pct": {
+            "title": "Price Change Pct",
+            "type": "number"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "subject_not_held",
+                  "subject_has_options"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "status": {
+            "enum": [
+              "computed",
+              "not_computable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "subject_value_baseline": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Value Baseline"
+          },
+          "subject_value_candidate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Value Candidate"
+          }
+        },
+        "required": [
+          "hypothesis_id",
+          "subject",
+          "price_change_pct",
+          "status"
+        ],
+        "title": "HypothesisScenario",
+        "type": "object"
+      },
+      "HypothesisSource": {
+        "additionalProperties": false,
+        "description": "Where a claim or its evidence came from. Never an authorization.",
+        "properties": {
+          "author": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author"
+          },
+          "id": {
+            "maxLength": 120,
+            "title": "Id",
+            "type": "string"
+          },
+          "paraphrase": {
+            "default": true,
+            "title": "Paraphrase",
+            "type": "boolean"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "quote_locator": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote Locator"
+          },
+          "retrieved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retrieved At"
+          },
+          "source_type": {
+            "enum": [
+              "user_statement",
+              "provider_snapshot",
+              "method_card"
+            ],
+            "title": "Source Type",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "usage_basis": {
+            "enum": [
+              "user_provided",
+              "provider_api",
+              "public_page_paraphrase"
+            ],
+            "title": "Usage Basis",
+            "type": "string"
+          },
+          "verification": {
+            "enum": [
+              "not_verified",
+              "provider_snapshot",
+              "reviewed_method"
+            ],
+            "title": "Verification",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source_type",
+          "usage_basis",
+          "verification"
+        ],
+        "title": "HypothesisSource",
+        "type": "object"
+      },
+      "HypothesisTest": {
+        "additionalProperties": false,
+        "description": "One observable predicate. The threshold is ALWAYS the user's number.",
+        "properties": {
+          "comparator": {
+            "enum": [
+              "gt",
+              "ge",
+              "lt",
+              "le"
+            ],
+            "title": "Comparator",
+            "type": "string"
+          },
+          "observation_id": {
+            "title": "Observation Id",
+            "type": "string"
+          },
+          "threshold": {
+            "title": "Threshold",
+            "type": "number"
+          },
+          "threshold_basis": {
+            "const": "user_assumption",
+            "default": "user_assumption",
+            "title": "Threshold Basis",
+            "type": "string"
+          },
+          "unit": {
+            "enum": [
+              "ratio",
+              "fraction"
+            ],
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "observation_id",
+          "comparator",
+          "threshold",
+          "unit"
+        ],
+        "title": "HypothesisTest",
+        "type": "object"
+      },
       "InputChange": {
         "properties": {
           "current": {
@@ -7562,6 +10705,42 @@
           "cik"
         ],
         "title": "InstitutionRow",
+        "type": "object"
+      },
+      "InvalidationCondition": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "maxLength": 400,
+            "title": "Description",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "observable_test",
+              "qualitative_check",
+              "not_defined"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "observation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observation Id"
+          }
+        },
+        "required": [
+          "kind",
+          "description"
+        ],
+        "title": "InvalidationCondition",
         "type": "object"
       },
       "JourneyOut": {
@@ -8212,6 +11391,54 @@
         "title": "MarginBuffer",
         "type": "object"
       },
+      "MarketSnapshotOut": {
+        "additionalProperties": false,
+        "properties": {
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/OptionInput"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "price_as_of": {
+            "format": "date",
+            "title": "Price As Of",
+            "type": "string"
+          },
+          "prices": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Prices",
+            "type": "object"
+          },
+          "quote_time_note": {
+            "title": "Quote Time Note",
+            "type": "string"
+          },
+          "snapshot_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Snapshot Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshot_id",
+          "captured_at",
+          "price_as_of",
+          "prices",
+          "options",
+          "quote_time_note"
+        ],
+        "title": "MarketSnapshotOut",
+        "type": "object"
+      },
       "MetaOut": {
         "description": "The ``meta`` block every envelope carries (see ``responses._meta``).",
         "properties": {
@@ -8235,6 +11462,125 @@
           "request_id"
         ],
         "title": "MetaOut",
+        "type": "object"
+      },
+      "MethodComparison": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_version": {
+            "const": "plan-review-metrics-v1",
+            "default": "plan-review-metrics-v1",
+            "title": "Contract Version",
+            "type": "string"
+          },
+          "current_method_version": {
+            "title": "Current Method Version",
+            "type": "string"
+          },
+          "original_method_version": {
+            "title": "Original Method Version",
+            "type": "string"
+          },
+          "reproduced": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reproduced"
+          },
+          "same_method": {
+            "title": "Same Method",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "original_method_version",
+          "current_method_version",
+          "same_method",
+          "reproduced"
+        ],
+        "title": "MethodComparison",
+        "type": "object"
+      },
+      "MethodReference": {
+        "additionalProperties": false,
+        "properties": {
+          "applicability": {
+            "title": "Applicability",
+            "type": "string"
+          },
+          "author": {
+            "title": "Author",
+            "type": "string"
+          },
+          "checks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Checks",
+            "type": "array"
+          },
+          "counterpoint": {
+            "title": "Counterpoint",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "reviewed_at": {
+            "title": "Reviewed At",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "author",
+          "url",
+          "reviewed_at",
+          "version",
+          "summary",
+          "checks",
+          "counterpoint",
+          "applicability"
+        ],
+        "title": "MethodReference",
+        "type": "object"
+      },
+      "MetricReviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_portfolio_id"
+        ],
+        "title": "MetricReviewRequest",
         "type": "object"
       },
       "ModelCardOut": {
@@ -8903,6 +12249,45 @@
         "title": "NewsResponse",
         "type": "object"
       },
+      "NotComputable": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "enum": [
+              "settlement_price_missing",
+              "residual_iv_missing",
+              "residual_rate_missing",
+              "interest_rate_unknown",
+              "broker_collateral_unknown",
+              "nonpositive_equity",
+              "short_stock_unbounded"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "contract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "NotComputable",
+        "type": "object"
+      },
       "OptionAnalyticsOut": {
         "additionalProperties": true,
         "properties": {
@@ -9532,6 +12917,55 @@
           "detail"
         ],
         "title": "OptionFlagOut",
+        "type": "object"
+      },
+      "OptionInput": {
+        "additionalProperties": false,
+        "properties": {
+          "basis": {
+            "const": "captured_two_sided_quote_midpoint",
+            "default": "captured_two_sided_quote_midpoint",
+            "title": "Basis",
+            "type": "string"
+          },
+          "contract": {
+            "title": "Contract",
+            "type": "string"
+          },
+          "iv": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iv"
+          },
+          "mark": {
+            "title": "Mark",
+            "type": "number"
+          },
+          "spot": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spot"
+          }
+        },
+        "required": [
+          "contract",
+          "mark",
+          "iv",
+          "spot"
+        ],
+        "title": "OptionInput",
         "type": "object"
       },
       "OptionScenarioGrid": {
@@ -10202,6 +13636,149 @@
           "monthly_chat"
         ],
         "title": "PlanCard",
+        "type": "object"
+      },
+      "PlanMetricReview": {
+        "additionalProperties": false,
+        "properties": {
+          "account_changes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Account Changes",
+            "type": "array"
+          },
+          "account_window": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataWindow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decomposition": {
+            "const": "sequential_market_then_account",
+            "default": "sequential_market_then_account",
+            "title": "Decomposition",
+            "type": "string"
+          },
+          "holdings_changed_by_review": {
+            "const": false,
+            "default": false,
+            "title": "Holdings Changed By Review",
+            "type": "boolean"
+          },
+          "kind": {
+            "enum": [
+              "comparison",
+              "cash_secured_put",
+              "funding_scenarios"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "live_quote_checked": {
+            "const": false,
+            "default": false,
+            "title": "Live Quote Checked",
+            "type": "boolean"
+          },
+          "market_window": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataWindow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "method": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MethodComparison"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewMetric"
+            },
+            "title": "Metrics",
+            "type": "array"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Notes",
+            "type": "array"
+          },
+          "original_window": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataWindow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plan_id": {
+            "format": "uuid",
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "realised_return_attribution": {
+            "const": false,
+            "default": false,
+            "title": "Realised Return Attribution",
+            "type": "boolean"
+          },
+          "reviewed_at": {
+            "format": "date-time",
+            "title": "Reviewed At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "comparable",
+              "method_changed",
+              "not_computable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "status_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Reason"
+          }
+        },
+        "required": [
+          "plan_id",
+          "portfolio_id",
+          "kind",
+          "reviewed_at",
+          "status"
+        ],
+        "title": "PlanMetricReview",
         "type": "object"
       },
       "PortalSessionRequest": {
@@ -11100,6 +14677,120 @@
         "title": "PublicRiskCheckOut",
         "type": "object"
       },
+      "PutExpiryScenario": {
+        "additionalProperties": false,
+        "properties": {
+          "assumes_assignment": {
+            "title": "Assumes Assignment",
+            "type": "boolean"
+          },
+          "candidate_incremental_pnl": {
+            "title": "Candidate Incremental Pnl",
+            "type": "number"
+          },
+          "cash_after_settlement": {
+            "title": "Cash After Settlement",
+            "type": "number"
+          },
+          "free_cash_after_reserves": {
+            "title": "Free Cash After Reserves",
+            "type": "number"
+          },
+          "funding_gap_after_reserves": {
+            "title": "Funding Gap After Reserves",
+            "type": "number"
+          },
+          "no_action_incremental_pnl": {
+            "const": 0,
+            "default": 0,
+            "title": "No Action Incremental Pnl",
+            "type": "integer"
+          },
+          "shares_acquired": {
+            "title": "Shares Acquired",
+            "type": "integer"
+          },
+          "underlying_price": {
+            "title": "Underlying Price",
+            "type": "number"
+          }
+        },
+        "required": [
+          "underlying_price",
+          "assumes_assignment",
+          "candidate_incremental_pnl",
+          "shares_acquired",
+          "cash_after_settlement",
+          "free_cash_after_reserves",
+          "funding_gap_after_reserves"
+        ],
+        "title": "PutExpiryScenario",
+        "type": "object"
+      },
+      "PutPlanReview": {
+        "additionalProperties": false,
+        "properties": {
+          "changed_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Changed Fields",
+            "type": "array"
+          },
+          "holdings_changed_by_review": {
+            "const": false,
+            "default": false,
+            "title": "Holdings Changed By Review",
+            "type": "boolean"
+          },
+          "live_quote_checked": {
+            "const": false,
+            "default": false,
+            "title": "Live Quote Checked",
+            "type": "boolean"
+          },
+          "plan_id": {
+            "format": "uuid",
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "reviewed_at": {
+            "format": "date-time",
+            "title": "Reviewed At",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "requires_recalculation",
+              "assumptions_need_confirmation"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan_id",
+          "portfolio_id",
+          "reviewed_at",
+          "verdict",
+          "changed_fields",
+          "reasons"
+        ],
+        "title": "PutPlanReview",
+        "type": "object"
+      },
       "QualityBlock": {
         "properties": {
           "current_ratio": {
@@ -11205,6 +14896,67 @@
         "title": "QualityBlock",
         "type": "object"
       },
+      "RankingOut": {
+        "additionalProperties": false,
+        "properties": {
+          "objective": {
+            "anyOf": [
+              {
+                "enum": [
+                  "preserve_terminal_equity",
+                  "minimize_funding_gap",
+                  "minimize_conditional_debt"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Objective"
+          },
+          "preferred_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "no_action",
+                  "sale_keep_cash_and_put",
+                  "sale_repay_margin_and_put"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Kind"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "not_requested",
+              "objective_not_confirmed",
+              "not_computable",
+              "no_dominant_alternative",
+              "preferred"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "reasons"
+        ],
+        "title": "RankingOut",
+        "type": "object"
+      },
       "ReasonCodeOut": {
         "additionalProperties": true,
         "description": "A structured, machine-readable penalty behind the score (the LLM may\nphrase these, never invent). Extra keys (dimension / tickers /\nstabilized_from) ride along per code.",
@@ -11228,6 +14980,21 @@
           "severity"
         ],
         "title": "ReasonCodeOut",
+        "type": "object"
+      },
+      "RecoverCandidateRuns": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_portfolio_id"
+        ],
+        "title": "RecoverCandidateRuns",
         "type": "object"
       },
       "ReferenceSummary": {
@@ -11870,6 +15637,352 @@
         "title": "ResearchCoverageOut",
         "type": "object"
       },
+      "ResearchHypothesis": {
+        "additionalProperties": false,
+        "description": "A checkable research view. Evidence, model inference and user assumption\nare separate fields; none of them can authorize a tool, rank a candidate\nor become a confirmed comparison parameter.",
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "can_authorize_tools": {
+            "const": false,
+            "default": false,
+            "title": "Can Authorize Tools",
+            "type": "boolean"
+          },
+          "claim": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Claim",
+            "type": "string"
+          },
+          "claim_basis": {
+            "enum": [
+              "user_assumption",
+              "model_inference"
+            ],
+            "title": "Claim Basis",
+            "type": "string"
+          },
+          "comparison_input": {
+            "const": "user_entered_price_change_only",
+            "default": "user_entered_price_change_only",
+            "title": "Comparison Input",
+            "type": "string"
+          },
+          "counter_arguments": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Counter Arguments",
+            "type": "array"
+          },
+          "evidence_observation_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 4,
+            "title": "Evidence Observation Ids",
+            "type": "array"
+          },
+          "id": {
+            "pattern": "^[A-Z][A-Z0-9.\\-]{0,11}:h[0-9]$",
+            "title": "Id",
+            "type": "string"
+          },
+          "inference": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 4,
+            "title": "Inference",
+            "type": "array"
+          },
+          "invalidation_conditions": {
+            "items": {
+              "$ref": "#/components/schemas/InvalidationCondition"
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Invalidation Conditions",
+            "type": "array"
+          },
+          "missing": {
+            "items": {
+              "$ref": "#/components/schemas/HypothesisMissing"
+            },
+            "maxItems": 8,
+            "title": "Missing",
+            "type": "array"
+          },
+          "origin": {
+            "enum": [
+              "user_view",
+              "method_question"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "scope": {
+            "const": "company",
+            "default": "company",
+            "title": "Scope",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/HypothesisSource"
+            },
+            "maxItems": 6,
+            "title": "Sources",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "unverified",
+              "supported_by_evidence",
+              "contradicted",
+              "stale"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "test": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HypothesisTest"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "origin",
+          "claim",
+          "claim_basis",
+          "subject",
+          "as_of",
+          "sources",
+          "counter_arguments",
+          "invalidation_conditions",
+          "status"
+        ],
+        "title": "ResearchHypothesis",
+        "type": "object"
+      },
+      "ResearchLead": {
+        "additionalProperties": false,
+        "properties": {
+          "author": {
+            "title": "Author",
+            "type": "null"
+          },
+          "conflicts": {
+            "const": "not_disclosed_in_feed",
+            "default": "not_disclosed_in_feed",
+            "title": "Conflicts",
+            "type": "string"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "publisher": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publisher"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          },
+          "verification": {
+            "const": "metadata_only",
+            "default": "metadata_only",
+            "title": "Verification",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "url"
+        ],
+        "title": "ResearchLead",
+        "type": "object"
+      },
+      "ResearchObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "basis": {
+            "enum": [
+              "provider_projection",
+              "computed_from_series"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "metric": {
+            "title": "Metric",
+            "type": "string"
+          },
+          "provenance": {
+            "enum": [
+              "block_only",
+              "unavailable"
+            ],
+            "title": "Provenance",
+            "type": "string"
+          },
+          "reporting_period": {
+            "title": "Reporting Period",
+            "type": "null"
+          },
+          "scope": {
+            "const": "company_research",
+            "default": "company_research",
+            "title": "Scope",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "source_as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source As Of"
+          },
+          "status": {
+            "enum": [
+              "available",
+              "missing",
+              "stale",
+              "undated"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "unit": {
+            "enum": [
+              "ratio",
+              "fraction"
+            ],
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "id",
+          "ticker",
+          "metric",
+          "value",
+          "unit",
+          "source",
+          "provenance",
+          "status",
+          "basis"
+        ],
+        "title": "ResearchObservation",
+        "type": "object"
+      },
+      "ResearchQuestion": {
+        "additionalProperties": false,
+        "properties": {
+          "counterpoint": {
+            "title": "Counterpoint",
+            "type": "string"
+          },
+          "hypothesis": {
+            "title": "Hypothesis",
+            "type": "string"
+          },
+          "invalidation_check": {
+            "title": "Invalidation Check",
+            "type": "string"
+          },
+          "method_id": {
+            "title": "Method Id",
+            "type": "string"
+          },
+          "observation_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Observation Ids",
+            "type": "array"
+          },
+          "status": {
+            "const": "not_tested",
+            "default": "not_tested",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "method_id",
+          "hypothesis",
+          "observation_ids",
+          "counterpoint",
+          "invalidation_check"
+        ],
+        "title": "ResearchQuestion",
+        "type": "object"
+      },
       "ResearchVerdict": {
         "description": "The LLM's ranked judgment over the FactPack. The model phrases + ranks;\nevery number it cites already lives in the FactPack.",
         "properties": {
@@ -11935,6 +16048,307 @@
           "summary"
         ],
         "title": "ResearchVerdict",
+        "type": "object"
+      },
+      "ResidualValuation": {
+        "additionalProperties": false,
+        "properties": {
+          "contract": {
+            "title": "Contract",
+            "type": "string"
+          },
+          "contracts_signed": {
+            "title": "Contracts Signed",
+            "type": "integer"
+          },
+          "expiry": {
+            "format": "date",
+            "title": "Expiry",
+            "type": "string"
+          },
+          "iv": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iv"
+          },
+          "iv_source": {
+            "enum": [
+              "captured_quote_implied_vol",
+              "user_assumption",
+              "missing"
+            ],
+            "title": "Iv Source",
+            "type": "string"
+          },
+          "position_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position Value"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate"
+          },
+          "rate_source": {
+            "enum": [
+              "user_assumption",
+              "missing"
+            ],
+            "title": "Rate Source",
+            "type": "string"
+          },
+          "tau_years": {
+            "title": "Tau Years",
+            "type": "number"
+          },
+          "underlying_price": {
+            "title": "Underlying Price",
+            "type": "number"
+          },
+          "value_per_share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Per Share"
+          }
+        },
+        "required": [
+          "contract",
+          "expiry",
+          "contracts_signed",
+          "tau_years",
+          "underlying_price",
+          "iv",
+          "iv_source",
+          "rate",
+          "rate_source",
+          "value_per_share",
+          "position_value"
+        ],
+        "title": "ResidualValuation",
+        "type": "object"
+      },
+      "ResumeTask": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          },
+          "task_state": {
+            "$ref": "#/components/schemas/TaskStateToken"
+          }
+        },
+        "required": [
+          "task_state",
+          "expected_portfolio_id"
+        ],
+        "title": "ResumeTask",
+        "type": "object"
+      },
+      "ReviewFundingPlanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_portfolio_id"
+        ],
+        "title": "ReviewFundingPlanRequest",
+        "type": "object"
+      },
+      "ReviewMetric": {
+        "additionalProperties": false,
+        "properties": {
+          "account_change": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Change"
+          },
+          "current": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current"
+          },
+          "horizon": {
+            "title": "Horizon",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "market_change": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Change"
+          },
+          "method_change": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method Change"
+          },
+          "metric_id": {
+            "enum": [
+              "net_equity",
+              "leverage",
+              "largest_position_weight",
+              "annual_volatility",
+              "var_1d_95_usd",
+              "cvar_1d_95_usd"
+            ],
+            "title": "Metric Id",
+            "type": "string"
+          },
+          "not_computable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Not Computable Reason"
+          },
+          "original": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original"
+          },
+          "original_holdings_current_prices": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Holdings Current Prices"
+          },
+          "original_inputs_current_method": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Inputs Current Method"
+          },
+          "total_change": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Change"
+          },
+          "unit": {
+            "enum": [
+              "usd",
+              "ratio",
+              "fraction",
+              "fraction_per_year"
+            ],
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "metric_id",
+          "label",
+          "unit",
+          "horizon",
+          "original",
+          "original_inputs_current_method",
+          "original_holdings_current_prices",
+          "current",
+          "method_change",
+          "market_change",
+          "account_change",
+          "total_change"
+        ],
+        "title": "ReviewMetric",
+        "type": "object"
+      },
+      "ReviewPutPlanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_portfolio_id": {
+            "format": "uuid",
+            "title": "Expected Portfolio Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_portfolio_id"
+        ],
+        "title": "ReviewPutPlanRequest",
         "type": "object"
       },
       "RiskAlert": {
@@ -14191,6 +18605,249 @@
         "title": "SavedComparison",
         "type": "object"
       },
+      "SavedFundingPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed_at": {
+            "format": "date-time",
+            "title": "Confirmed At",
+            "type": "string"
+          },
+          "plan_id": {
+            "format": "uuid",
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/FundingScenarioResult"
+          }
+        },
+        "required": [
+          "plan_id",
+          "portfolio_id",
+          "confirmed_at",
+          "result"
+        ],
+        "title": "SavedFundingPlan",
+        "type": "object"
+      },
+      "SavedPlanDetail": {
+        "additionalProperties": false,
+        "description": "Exactly one of comparison / put / funding is set, matching ``item.kind``.",
+        "properties": {
+          "comparison": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedComparison"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "funding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedFundingPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "item": {
+            "$ref": "#/components/schemas/SavedPlanItem"
+          },
+          "put": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedPutPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "item"
+        ],
+        "title": "SavedPlanDetail",
+        "type": "object"
+      },
+      "SavedPlanItem": {
+        "additionalProperties": false,
+        "properties": {
+          "captured_at": {
+            "format": "date-time",
+            "title": "Captured At",
+            "type": "string"
+          },
+          "confirmed_at": {
+            "format": "date-time",
+            "title": "Confirmed At",
+            "type": "string"
+          },
+          "evidence_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Evidence Sha256",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "comparison",
+              "cash_secured_put",
+              "funding_scenarios"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "methodology_version": {
+            "title": "Methodology Version",
+            "type": "string"
+          },
+          "plan_id": {
+            "format": "uuid",
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "signature_verified": {
+            "const": true,
+            "default": true,
+            "title": "Signature Verified",
+            "type": "boolean"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "plan_id",
+          "portfolio_id",
+          "confirmed_at",
+          "captured_at",
+          "methodology_version",
+          "summary",
+          "evidence_sha256"
+        ],
+        "title": "SavedPlanItem",
+        "type": "object"
+      },
+      "SavedPlanPage": {
+        "additionalProperties": false,
+        "properties": {
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "order": {
+            "const": "stable_plan_id",
+            "default": "stable_plan_id",
+            "title": "Order",
+            "type": "string"
+          },
+          "plans": {
+            "items": {
+              "$ref": "#/components/schemas/SavedPlanItem"
+            },
+            "title": "Plans",
+            "type": "array"
+          },
+          "unverified_records": {
+            "default": 0,
+            "title": "Unverified Records",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "plans"
+        ],
+        "title": "SavedPlanPage",
+        "type": "object"
+      },
+      "SavedPutPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed_at": {
+            "format": "date-time",
+            "title": "Confirmed At",
+            "type": "string"
+          },
+          "plan_id": {
+            "format": "uuid",
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "result": {
+            "$ref": "#/components/schemas/CashSecuredPutResult"
+          }
+        },
+        "required": [
+          "plan_id",
+          "portfolio_id",
+          "confirmed_at",
+          "result"
+        ],
+        "title": "SavedPutPlan",
+        "type": "object"
+      },
+      "SavedPutPlanPage": {
+        "additionalProperties": false,
+        "properties": {
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "plans": {
+            "items": {
+              "$ref": "#/components/schemas/SavedPutPlan"
+            },
+            "title": "Plans",
+            "type": "array"
+          },
+          "skipped_records": {
+            "default": 0,
+            "title": "Skipped Records",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "plans"
+        ],
+        "title": "SavedPutPlanPage",
+        "type": "object"
+      },
       "ScenarioCellOut": {
         "properties": {
           "horizon": {
@@ -15267,6 +19924,51 @@
         "title": "SeriesResultOut",
         "type": "object"
       },
+      "SettlementEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "assigned",
+              "exercised",
+              "expired"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "cash_delta": {
+            "title": "Cash Delta",
+            "type": "number"
+          },
+          "contract": {
+            "title": "Contract",
+            "type": "string"
+          },
+          "expiry": {
+            "format": "date",
+            "title": "Expiry",
+            "type": "string"
+          },
+          "shares_delta": {
+            "title": "Shares Delta",
+            "type": "number"
+          },
+          "underlying_price": {
+            "title": "Underlying Price",
+            "type": "number"
+          }
+        },
+        "required": [
+          "contract",
+          "expiry",
+          "underlying_price",
+          "action",
+          "shares_delta",
+          "cash_delta"
+        ],
+        "title": "SettlementEvent",
+        "type": "object"
+      },
       "ShareCardCapabilityOut": {
         "additionalProperties": false,
         "properties": {
@@ -15412,6 +20114,29 @@
           "card"
         ],
         "title": "ShareCardResolveOut",
+        "type": "object"
+      },
+      "SignedTaskToken": {
+        "additionalProperties": false,
+        "description": "Same wire shape as copilot_task_state.TaskStateToken (kept here to avoid\nan import cycle); verified server-side before use.",
+        "properties": {
+          "record": {
+            "maxLength": 8192,
+            "minLength": 2,
+            "title": "Record",
+            "type": "string"
+          },
+          "signature": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Signature",
+            "type": "string"
+          }
+        },
+        "required": [
+          "record",
+          "signature"
+        ],
+        "title": "SignedTaskToken",
         "type": "object"
       },
       "SimulateHolding": {
@@ -15722,6 +20447,35 @@
         "title": "SourceRef",
         "type": "object"
       },
+      "StartCandidateRun": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "task": {
+            "$ref": "#/components/schemas/CandidateRequest"
+          },
+          "task_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SignedTaskToken"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "task"
+        ],
+        "title": "StartCandidateRun",
+        "type": "object"
+      },
       "StartRun": {
         "additionalProperties": false,
         "properties": {
@@ -15906,6 +20660,332 @@
           "next_step"
         ],
         "title": "SuggestedAction",
+        "type": "object"
+      },
+      "TaskAssumptions": {
+        "additionalProperties": false,
+        "description": "What the user said. ``None`` = not stated; ``[]`` = stated 'none'.",
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 100000000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "goal": {
+            "anyOf": [
+              {
+                "enum": [
+                  "increase_cash",
+                  "reduce_margin"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goal"
+          },
+          "protected_holdings": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protected Holdings"
+          },
+          "stated_at_turn": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "propertyNames": {
+              "enum": [
+                "goal",
+                "amount",
+                "protected_holdings"
+              ]
+            },
+            "title": "Stated At Turn",
+            "type": "object"
+          }
+        },
+        "title": "TaskAssumptions",
+        "type": "object"
+      },
+      "TaskResumeOut": {
+        "additionalProperties": false,
+        "properties": {
+          "dispatched": {
+            "default": false,
+            "title": "Dispatched",
+            "type": "boolean"
+          },
+          "outcome": {
+            "enum": [
+              "needs_input",
+              "ready_to_confirm",
+              "continuing",
+              "completed",
+              "stale_account_changed",
+              "run_missing",
+              "run_failed",
+              "expired",
+              "closed",
+              "superseded"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CandidateRunOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/TaskStateView"
+          },
+          "token": {
+            "$ref": "#/components/schemas/TaskStateToken"
+          }
+        },
+        "required": [
+          "outcome",
+          "state",
+          "token"
+        ],
+        "title": "TaskResumeOut",
+        "type": "object"
+      },
+      "TaskStateEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "enum": [
+              "started",
+              "continued",
+              "ambiguous",
+              "unrelated",
+              "turn_limit",
+              "closed",
+              "expired",
+              "discarded"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskStateView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "token": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskStateToken"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "TaskStateEnvelope",
+        "type": "object"
+      },
+      "TaskStateToken": {
+        "additionalProperties": false,
+        "description": "Opaque to the client: echoed back verbatim; only the server can mint it.",
+        "properties": {
+          "record": {
+            "maxLength": 8192,
+            "minLength": 2,
+            "title": "Record",
+            "type": "string"
+          },
+          "signature": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Signature",
+            "type": "string"
+          }
+        },
+        "required": [
+          "record",
+          "signature"
+        ],
+        "title": "TaskStateToken",
+        "type": "object"
+      },
+      "TaskStateView": {
+        "additionalProperties": false,
+        "properties": {
+          "ambiguities": {
+            "items": {
+              "enum": [
+                "amount_multiple",
+                "amount_percent",
+                "amount_unanchored",
+                "amount_out_of_range",
+                "goal_conflict",
+                "goal_unsupported",
+                "goal_negated",
+                "protected_without_ticker",
+                "ticker_without_instruction"
+              ],
+              "type": "string"
+            },
+            "title": "Ambiguities",
+            "type": "array"
+          },
+          "assumptions": {
+            "$ref": "#/components/schemas/TaskAssumptions"
+          },
+          "clarification_turns": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Clarification Turns",
+            "type": "integer"
+          },
+          "confirmed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfirmedParameters"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "candidate_request",
+              "clarification"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "max_clarification_turns": {
+            "minimum": 1.0,
+            "title": "Max Clarification Turns",
+            "type": "integer"
+          },
+          "missing_inputs": {
+            "items": {
+              "enum": [
+                "goal",
+                "amount",
+                "protected_holdings"
+              ],
+              "type": "string"
+            },
+            "title": "Missing Inputs",
+            "type": "array"
+          },
+          "pending_question": {
+            "anyOf": [
+              {
+                "enum": [
+                  "goal",
+                  "amount",
+                  "protected_holdings"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pending Question"
+          },
+          "portfolio_id": {
+            "format": "uuid",
+            "title": "Portfolio Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "needs_input",
+              "ready_to_confirm",
+              "confirmed",
+              "closed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "superseded_run_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Superseded Run Ids",
+            "type": "array"
+          },
+          "task_id": {
+            "format": "uuid",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "version": {
+            "const": 1,
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "task_id",
+          "portfolio_id",
+          "kind",
+          "status",
+          "max_clarification_turns",
+          "created_at",
+          "updated_at",
+          "expires_at"
+        ],
+        "title": "TaskStateView",
         "type": "object"
       },
       "TickerNewsResponse": {
@@ -17020,6 +22100,47 @@
         ]
       }
     },
+    "/api/v1/copilot/cash-secured-put": {
+      "post": {
+        "operationId": "scenario_api_v1_copilot_cash_secured_put_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CashSecuredPutRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CashSecuredPutResult_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scenario",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
     "/api/v1/copilot/chat": {
       "post": {
         "description": "Answer a chat turn about the caller's active portfolio.\n\nFlow:\n  1. Resolve positions + score (422 codes on empty/unpriceable data).\n  2. Gate on the user's monthly chat quota (429 when exhausted;\n     fail-OPEN on a Supabase blip \u2014 availability over strict metering).\n  3. Dispatch to the orchestrator with the LLM callable (or ``None``\n     \u2192 deterministic templates).",
@@ -17302,6 +22423,458 @@
         ]
       }
     },
+    "/api/v1/copilot/decision-runs": {
+      "get": {
+        "operationId": "recent_api_v1_copilot_decision_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "expected_portfolio_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Expected Portfolio Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CandidateRunList_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recent",
+        "tags": [
+          "copilot"
+        ]
+      },
+      "post": {
+        "operationId": "start_api_v1_copilot_decision_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartCandidateRun"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CandidateRunOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/decision-runs/recover": {
+      "post": {
+        "operationId": "recover_api_v1_copilot_decision_runs_recover_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecoverCandidateRuns"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CandidateRunList_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recover",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/decision-runs/{id}": {
+      "get": {
+        "operationId": "read_api_v1_copilot_decision_runs__id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CandidateRunOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/decision-runs/{id}/cancel": {
+      "post": {
+        "operationId": "cancel_api_v1_copilot_decision_runs__id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CandidateRunOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/decision-runs/{id}/resume": {
+      "post": {
+        "operationId": "resume_api_v1_copilot_decision_runs__id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CandidateRunOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/funding-plans/{result_id}": {
+      "get": {
+        "operationId": "read_api_v1_copilot_funding_plans__result_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "result_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Result Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_portfolio_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Expected Portfolio Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SavedFundingPlan_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/funding-plans/{result_id}/confirm": {
+      "post": {
+        "operationId": "confirm_api_v1_copilot_funding_plans__result_id__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "result_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Result Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmFundingPlan"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SavedFundingPlan_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/funding-plans/{result_id}/review": {
+      "post": {
+        "operationId": "review_api_v1_copilot_funding_plans__result_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "result_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Result Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewFundingPlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_FundingPlanReview_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/funding-scenarios": {
+      "post": {
+        "operationId": "calculate_api_v1_copilot_funding_scenarios_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FundingScenarioRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_FundingScenarioResult_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Calculate",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
     "/api/v1/copilot/insights": {
       "get": {
         "description": "Server-computed, deterministic, credit-free. Materiality thresholds +\none-per-kind dedup + stable episode ids (client dismissal survives while a\ncondition persists). Thin data \u2192 only the data-quality insight. FAIL-SOFT:\nany internal failure degrades to an empty list, never a 500.",
@@ -17398,6 +22971,215 @@
           }
         },
         "summary": "Explicitly CONFIRM (save) Copilot preferences \u2014 the only write path",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/put-plans": {
+      "get": {
+        "operationId": "list_plans_api_v1_copilot_put_plans_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "expected_portfolio_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Expected Portfolio Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_SavedPutPlan__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Plans",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/put-plans/history": {
+      "get": {
+        "operationId": "plan_history_api_v1_copilot_put_plans_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "expected_portfolio_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Expected Portfolio Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 101,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SavedPutPlanPage_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Plan History",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/put-plans/{plan_id}/review": {
+      "post": {
+        "operationId": "review_plan_api_v1_copilot_put_plans__plan_id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Plan Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewPutPlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_PutPlanReview_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Review Plan",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/put-plans/{result_id}/confirm": {
+      "post": {
+        "operationId": "confirm_plan_api_v1_copilot_put_plans__result_id__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "result_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Result Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmPutPlan"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SavedPutPlan_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Plan",
         "tags": [
           "copilot"
         ]
@@ -17525,6 +23307,256 @@
           }
         },
         "summary": "Cancel Run",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/saved-plans": {
+      "get": {
+        "operationId": "history_api_v1_copilot_saved_plans_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "expected_portfolio_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Expected Portfolio Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 101,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SavedPlanPage_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "History",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/saved-plans/{plan_id}": {
+      "get": {
+        "operationId": "detail_api_v1_copilot_saved_plans__plan_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Plan Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_portfolio_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Expected Portfolio Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_SavedPlanDetail_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Detail",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/saved-plans/{plan_id}/metric-review": {
+      "post": {
+        "operationId": "metric_review_api_v1_copilot_saved_plans__plan_id__metric_review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plan_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Plan Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MetricReviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_PlanMetricReview_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Metric Review",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/task-state/confirm": {
+      "post": {
+        "description": "The ONLY way a parameter becomes confirmed: an explicit typed submission.",
+        "operationId": "confirm_api_v1_copilot_task_state_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmTaskParameters"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_TaskStateEnvelope_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm",
+        "tags": [
+          "copilot"
+        ]
+      }
+    },
+    "/api/v1/copilot/task-state/resume": {
+      "post": {
+        "description": "Re-authenticate, re-bind and either continue from the durable confirmed\nrun or report that the account changed (old result stale).",
+        "operationId": "resume_api_v1_copilot_task_state_resume_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResumeTask"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_TaskResumeOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume",
         "tags": [
           "copilot"
         ]

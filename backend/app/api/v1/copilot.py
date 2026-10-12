@@ -186,14 +186,43 @@ def copilot_ask_endpoint(
     # the same question on two pages could return a stale cross-context answer.
     # The per-user GENERATION is bumped when confirmed preferences change, so a
     # cached answer that folded the old preference evidence can't be re-served.
+    from ...core.config import get_settings
+
+    # The decision-support answer embeds which capabilities are AVAILABLE
+    # (candidate comparison / Put / save / funding). Those come from feature
+    # flags, so every flag that shapes the answer must be in the key — else a
+    # flag flip serves a stale "unavailable" for the cache TTL.
+    st = get_settings()
+    flag_fp = "".join(
+        "1" if f else "0"
+        for f in (
+            st.decision_support_enabled,
+            st.async_analysis_enabled,
+            st.cash_secured_put_enabled,
+            st.cash_secured_put_save_enabled,
+            st.funding_scenarios_enabled,
+            st.copilot_comparison_replay_enabled,
+        )
+    )
     cache_key = input_hash(
+        f"decision-v1:{flag_fp}|"
         f"{user.id}|g{user_generation(user.id)}|{body.message.strip()}"
         f"|{body.route or ''}|{(body.ticker or '').upper()}"
         f"|scope:{scope or 'legacy'}"
     )
+    # ── Open decision task (multi-turn). Decided BEFORE the cache: a follow-up
+    # that answers the pending question gets a deterministic, uncached reply.
+    task_env, task_open = _task_follow_up(body, user, scope, st)
+    if isinstance(task_env, dict):  # a handled follow-up: complete answer
+        return ok(task_env, request=request, started_at=started)
+
     cached = ask_cache.get(cache_key)
     if cached is not None:
-        return ok(cached, request=request, started_at=started)
+        return ok(
+            _attach_task(cached, task_env, task_open, body, user, scope),
+            request=request,
+            started_at=started,
+        )
 
     from libs.billing.usage import ESTIMATED_COST_USD, QuotaExceeded, check_credits
 
@@ -218,7 +247,83 @@ def copilot_ask_endpoint(
         _record_ask_cost(user.id, result, started)
         ask_cache.put(cache_key, result.model_dump())
 
-    return ok(result.model_dump(), request=request, started_at=started)
+    return ok(
+        _attach_task(result.model_dump(), task_env, task_open, body, user, scope),
+        request=request,
+        started_at=started,
+    )
+
+
+def _task_follow_up(body, user, scope, settings):
+    """Return ``(envelope_or_answer, still_open)`` for an echoed task token.
+
+    * ``dict`` → the message answered the open task; it is the whole response.
+    * ``TaskStateEnvelope`` → keep/close the task alongside a normal answer.
+    * ``None`` → no task context (flag off, no token, no signing key).
+
+    The token is untrusted: a bad signature, another user's token or another
+    portfolio's token is discarded (never an error that blocks the question).
+    """
+    from ...core.responses import APIError
+    from ...schemas.copilot_task_state import TaskStateEnvelope
+    from ...services import copilot_router, copilot_runs, copilot_scope
+    from ...services import copilot_task_state as tasks
+
+    if not settings.decision_support_enabled or body.task_state is None or scope is None:
+        return None, False
+    try:
+        record = tasks.verify(body.task_state, user.id)
+    except APIError as exc:
+        if exc.status == 503:
+            return None, False
+        return TaskStateEnvelope(outcome="discarded"), False
+    if str(record.portfolio_id) != str(body.expected_portfolio_id):
+        return TaskStateEnvelope(outcome="discarded"), False
+    now = copilot_runs.utcnow()
+    updated, outcome = tasks.follow_up(record, body.message, now)
+    if outcome in ("continued", "ambiguous", "turn_limit", "closed"):
+        lang = copilot_router._lang_code(body.message)
+        answer = copilot_router.task_answer(updated.view(), outcome, lang)
+        copilot_scope.verify_scope(user.access_token, body.expected_portfolio_id, scope)
+        payload = answer.model_dump()
+        payload["task_state"] = tasks.envelope(updated, outcome).model_dump(mode="json")
+        return payload, False
+    if outcome == "expired":
+        return tasks.envelope(updated, "expired"), False
+    return tasks.envelope(record, "unrelated"), True
+
+
+def _attach_task(payload, task_env, task_open, body, user, scope):
+    """Attach the task envelope; open a NEW task only when none is open and the
+    answer is a reduction-candidate clarification bound to a selected book."""
+    from ...core.responses import APIError
+    from ...services import copilot_runs
+    from ...services import copilot_task_state as tasks
+
+    payload = dict(payload)
+    support = payload.get("decision_support") or {}
+    task = support.get("task") or {}
+    if (
+        not task_open
+        and scope is not None
+        and body.expected_portfolio_id
+        and task.get("kind") in ("candidate_request", "clarification")
+        and "goal" in (task.get("missing_inputs") or [])
+    ):
+        try:
+            record = tasks.open_task(
+                user_id=user.id,
+                portfolio_id=body.expected_portfolio_id,
+                kind=task["kind"],
+                message=body.message,
+                now=copilot_runs.utcnow(),
+            )
+            task_env = tasks.envelope(record, "started")
+        except (APIError, ValueError):
+            pass  # no signing key / non-UUID ids: answer without task continuity
+    if task_env is not None:
+        payload["task_state"] = task_env.model_dump(mode="json")
+    return payload
 
 
 def _record_ask_cost(user_id: str, result, started: float) -> None:

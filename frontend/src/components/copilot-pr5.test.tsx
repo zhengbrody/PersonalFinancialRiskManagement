@@ -100,7 +100,7 @@ describe("six-section renderer", () => {
     }
     expect(screen.getByText(/what-if · not a market fact/i)).toBeInTheDocument();
     expect(screen.getByText("Educational analysis, not financial advice.")).toBeInTheDocument();
-    expect(screen.getByText(/AI-phrased · numbers verified/i)).toBeInTheDocument();
+    expect(screen.getByText(/AI-phrased · numeric values checked against sources/i)).toBeInTheDocument();
   });
 
   it("evidence rows expand to show the computing tool and source tier", () => {

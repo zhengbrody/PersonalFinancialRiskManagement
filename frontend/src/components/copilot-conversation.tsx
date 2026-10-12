@@ -4,9 +4,16 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { CopilotRecovery } from "@/components/copilot-recovery";
+import { CopilotPut } from "@/components/copilot-put";
+import { CopilotCandidates } from "@/components/copilot-candidates";
 import { CopilotAnswerCard } from "@/components/copilot-answer";
 import { CopilotRiskCheck } from "@/components/copilot-risk-check";
 import { CopilotChangeForm, CopilotChangeResult } from "@/components/copilot-change";
+import { CopilotFundingPlans } from "./copilot-funding-plans";
+import { emptyChange } from "@/lib/copilot-compare";
+import { CopilotPlanHistory } from "./copilot-plan-history";
+import { planHistoryEnabled } from "@/lib/plan-history";
 import { useAuth } from "@/lib/auth-context";
 import { usePortfolioContext } from "@/lib/portfolio-context";
 import { useCopilotThread } from "@/lib/use-copilot-thread";
@@ -16,9 +23,11 @@ export type CopilotConversationVariant = "page" | "floating";
 export function CopilotConversation({
   variant = "page",
   initialQuestion,
+  fundingPlanId,
 }: {
   variant?: CopilotConversationVariant;
   initialQuestion?: string;
+  fundingPlanId?: string;
 }) {
   const { user, accessToken } = useAuth();
   const { activePortfolioId, current, switchingId, isLoading } =
@@ -35,6 +44,7 @@ export function CopilotConversation({
       switching={!!switchingId || isLoading}
       variant={variant}
       initialQuestion={initialQuestion}
+      fundingPlanId={fundingPlanId}
     />
   );
 }
@@ -47,6 +57,7 @@ function Conversation({
   switching,
   variant,
   initialQuestion,
+  fundingPlanId,
 }: {
   scope: string;
   token: string | null;
@@ -55,6 +66,7 @@ function Conversation({
   switching: boolean;
   variant: CopilotConversationVariant;
   initialQuestion?: string;
+  fundingPlanId?: string;
 }) {
   const thread = useCopilotThread(scope, portfolioId, token);
   const [draft, setDraft] = useState(initialQuestion ?? "");
@@ -65,6 +77,8 @@ function Conversation({
   const previousPrefill = useRef(initialQuestion);
   const floating = variant === "floating";
   const disabled = thread.pending || !thread.ready || switching;
+  const candidatesAvailable = thread.turns.some((t) => t.answer?.decision_support?.candidate_comparison_available);
+  const fundingAvailable = thread.turns.some((t) => t.answer?.decision_support?.funding_scenarios_available);
 
   useEffect(() => {
     if (initialQuestion !== previousPrefill.current) {
@@ -148,6 +162,8 @@ function Conversation({
             </div>
           </div>
         )}
+        {fundingPlanId && portfolioId && token && !switching && <CopilotFundingPlans planId={fundingPlanId} portfolioId={portfolioId} token={token} />}
+        {planHistoryEnabled() && portfolioId && token && !switching && <CopilotPlanHistory key={portfolioId} token={token} portfolioId={portfolioId} />}
         {thread.turns.map((turn) => (
           <div key={turn.id} className="min-w-0 space-y-3">
             <div className="ml-auto w-fit max-w-[90%] whitespace-pre-wrap break-words rounded-2xl bg-primary/10 px-4 py-3 text-sm">
@@ -200,7 +216,22 @@ function Conversation({
               />
             )}
             {turn.status === "completed" && turn.answer && (
-              <CopilotAnswerCard answer={turn.answer} />
+              <>
+                <CopilotAnswerCard answer={turn.answer} onTestHypothesis={portfolioId && !disabled ? (h) => thread.openChange({
+                  ...emptyChange, ticker: h.subject,
+                  hypothesis: { id: h.id, subject: h.subject, claim: h.claim, pct: "", confirmed: false },
+                }) : undefined} />
+                {portfolioId && turn.answer.decision_support?.cash_secured_put_available &&
+                  <CopilotPut key={portfolioId} token={token} portfolioId={portfolioId} plansEnabled={turn.answer.decision_support.cash_secured_put_save_available} />}
+                {portfolioId && thread.task?.turnId === turn.id && candidatesAvailable ? (
+                  // One typed form for the open multi-turn task, at its latest turn.
+                  <CopilotCandidates key={thread.task.task.state?.task_id} token={token} portfolioId={portfolioId} scope={scope}
+                    fundingEnabled={fundingAvailable} task={thread.task.task}
+                    onTask={(next) => thread.updateTask(turn.id, next)} />
+                ) : portfolioId && !turn.answer.task_state?.state && turn.answer.decision_support?.candidate_comparison_available &&
+                  ["candidate_request", "clarification"].includes(turn.answer.decision_support.task.kind) &&
+                  <CopilotCandidates token={token} portfolioId={portfolioId} scope={`${scope}:${turn.id}`} fundingEnabled={turn.answer.decision_support.funding_scenarios_available} />}
+              </>
             )}
             {turn.kind !== "change" && ["failed", "cancelled", "interrupted"].includes(turn.status) && (
               <div
@@ -242,6 +273,9 @@ function Conversation({
         ))}
         <div ref={anchor} />
       </div>
+      {portfolioId && token && thread.turns.some(turn => turn.answer?.decision_support?.candidate_comparison_available) && (
+        <CopilotRecovery key={portfolioId + token} token={token} portfolioId={portfolioId} />
+      )}
       {thread.turns.length > 0 && (
         <div className="px-3"><Button type="button" variant="outline" size="sm" disabled={disabled || !portfolioId}
           onClick={() => thread.openChange()}>Test a change</Button></div>
@@ -254,7 +288,7 @@ function Conversation({
         className={
           floating
             ? "space-y-2 border-t border-border bg-background p-3"
-            : "sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-20 space-y-2 rounded-xl border border-border bg-background/95 p-3 backdrop-blur lg:bottom-4"
+            : "z-20 space-y-2 rounded-xl border border-border bg-background/95 p-3 backdrop-blur lg:sticky lg:bottom-4"
         }
       >
         {newResult && (

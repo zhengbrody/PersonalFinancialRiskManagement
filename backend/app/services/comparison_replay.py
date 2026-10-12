@@ -107,9 +107,20 @@ class CalculationSnapshot(BaseModel):
 
 
 def signing_key() -> bytes:
-    settings = get_settings()
-    key = settings.risk_run_signing_secret.encode()
-    if not settings.copilot_comparison_replay_enabled or len(key) < 32:
+    if not get_settings().copilot_comparison_replay_enabled:
+        raise APIError(
+            503, "comparison_replay_unavailable", "Calculation verification is not enabled."
+        )
+    return read_key()
+
+
+def read_key() -> bytes:
+    """The same key, derivable from the signing secret alone. ONLY for
+    authenticating records that already exist (saved-plan history): disabling a
+    feature flag later must not turn previously saved evidence "unverified".
+    Writing and new verification stay behind :func:`signing_key`."""
+    key = get_settings().risk_run_signing_secret.encode()
+    if len(key) < 32:
         raise APIError(
             503, "comparison_replay_unavailable", "Calculation verification is not enabled."
         )
@@ -267,9 +278,14 @@ def require_enabled() -> None:
 
 
 def read_receipt(
-    receipt: ComparisonReceipt, user_id: str, portfolio_id: str, result_id: str
+    receipt: ComparisonReceipt,
+    user_id: str,
+    portfolio_id: str,
+    result_id: str,
+    *,
+    history: bool = False,
 ) -> CalculationSnapshot:
-    key = signing_key()
+    key = read_key() if history else signing_key()
     # Authenticate bytes BEFORE parsing or executing any captured calculation.
     if len(receipt.record.encode()) > MAX_BYTES or not hmac.compare_digest(
         hmac.new(key, receipt.record.encode(), hashlib.sha256).hexdigest(), receipt.signature

@@ -66,7 +66,16 @@ services:
       # Blank fails closed: mint is unavailable and public resolution is 404.
       - MINDMARKET_SHARE_SIGNING_SECRET=${MINDMARKET_SHARE_SIGNING_SECRET:-}
       # Saved checks require migration 0014 plus a separate server-only HMAC key.
+      - MINDMARKET_DECISION_SUPPORT_ENABLED=${MINDMARKET_DECISION_SUPPORT_ENABLED:-false}
+      - MINDMARKET_JEV_INTENT_ENABLED=${MINDMARKET_JEV_INTENT_ENABLED:-false}
+      - MINDMARKET_CASH_SECURED_PUT_SAVE_ENABLED=${MINDMARKET_CASH_SECURED_PUT_SAVE_ENABLED:-false}
+      - MINDMARKET_CASH_SECURED_PUT_ENABLED=${MINDMARKET_CASH_SECURED_PUT_ENABLED:-false}
+      - MINDMARKET_FUNDING_SCENARIOS_ENABLED=${MINDMARKET_FUNDING_SCENARIOS_ENABLED:-false}
+      - MINDMARKET_FUNDING_SCENARIOS_SAVE_ENABLED=${MINDMARKET_FUNDING_SCENARIOS_SAVE_ENABLED:-false}
+      - MINDMARKET_ASYNC_ANALYSIS_ENABLED=${MINDMARKET_ASYNC_ANALYSIS_ENABLED:-false}
       - MINDMARKET_COPILOT_RUNS_ENABLED=${MINDMARKET_COPILOT_RUNS_ENABLED:-false}
+      # Read-only saved-plan history + metric review; off by default, no migration.
+      - MINDMARKET_PLAN_HISTORY_ENABLED=${MINDMARKET_PLAN_HISTORY_ENABLED:-false}
       # Signed comparison receipts (replay) and explicitly confirmed saved
       # drafts. Both default off and fail closed without the signing key below;
       # save additionally requires migration 0015. These MUST be listed here —
@@ -98,6 +107,7 @@ services:
       # DeepSeek is the default AI provider while Anthropic quota is constrained.
       - MINDMARKET_LLM_PROVIDER=${MINDMARKET_LLM_PROVIDER:-deepseek}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - TYPESAFE_API_KEY=${TYPESAFE_API_KEY:-}
       - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-}
       - DEEPSEEK_MODEL=${DEEPSEEK_MODEL:-}
       # Turns v4 reasoning off (blank => send no parameter). Documented as
@@ -152,6 +162,7 @@ services:
         NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:-}
         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
         NEXT_PUBLIC_COPILOT_RUNS_ENABLED: ${NEXT_PUBLIC_COPILOT_RUNS_ENABLED:-false}
+        NEXT_PUBLIC_PLAN_HISTORY_ENABLED: ${NEXT_PUBLIC_PLAN_HISTORY_ENABLED:-false}
     expose:
       - "3000"
     environment:

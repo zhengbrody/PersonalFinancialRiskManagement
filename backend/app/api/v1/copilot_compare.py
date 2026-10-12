@@ -34,6 +34,14 @@ router = APIRouter(prefix="/api/v1/copilot", tags=["copilot"])
 
 @router.post("/compare-change", response_model=Envelope[ChangeComparison])
 def compare_change(body: CompareChange, request: Request, user: AuthedUser = Depends(require_user)):
+    # Cheap configuration gates before the single analysis lane: with replay or
+    # save enabled but no signing secret, the comparison used to fetch prices
+    # and compute while holding the lane, then 503 at receipt signing.
+    settings = get_settings()
+    if settings.copilot_comparison_save_enabled:
+        comparison_save.require_enabled()
+    if settings.copilot_comparison_replay_enabled:
+        comparison_replay.require_enabled()
     if not risk._check_capacity.acquire(blocking=False):
         raise APIError(
             429, "analysis_busy", "Another risk analysis is running. Please try again shortly."
@@ -41,8 +49,7 @@ def compare_change(body: CompareChange, request: Request, user: AuthedUser = Dep
     try:
         expected = str(body.expected_portfolio_id)
         revision = None
-        if get_settings().copilot_comparison_save_enabled:
-            comparison_save.require_enabled()
+        if settings.copilot_comparison_save_enabled:
             revision = comparison_save.portfolio_revision(user.access_token, user.id, expected)
         context = deepcopy(risk._resolve_active_context_or_raise(user))
         if context.portfolio_id != expected:
@@ -69,7 +76,7 @@ def compare_change(body: CompareChange, request: Request, user: AuthedUser = Dep
             option_results=option_results,
         )
         copilot_scope.verify_scope(user.access_token, expected, digest)
-        if get_settings().copilot_comparison_replay_enabled:
+        if settings.copilot_comparison_replay_enabled:
             receipt = comparison_replay.issue_receipt(
                 user.id,
                 context,

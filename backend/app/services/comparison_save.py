@@ -40,6 +40,11 @@ def _key() -> bytes:
     return hmac.new(replay.signing_key(), DOMAIN, hashlib.sha256).digest()
 
 
+def read_key() -> bytes:
+    """Flag-independent confirmation key: authenticates EXISTING saved rows only."""
+    return hmac.new(replay.read_key(), DOMAIN, hashlib.sha256).digest()
+
+
 def portfolio_revision(access_token: str, user_id: str, portfolio_id: str) -> UUID:
     """Read BEFORE collecting context. SQL rejects even edit-and-revert ABA."""
     try:
@@ -82,13 +87,16 @@ def _existing(access_token: str, user_id: str, plan_id: str) -> dict | None:
         ) from None
 
 
-def _verified_row(row: dict, user_id: str, portfolio_id: str, result_id: str) -> SavedComparison:
+def _verified_row(
+    row: dict, user_id: str, portfolio_id: str, result_id: str, *, history: bool = False
+) -> SavedComparison:
     """Authenticate durable bytes and ALL row bindings, not a source label."""
     try:
         record = row["record"]
         if not isinstance(record, str) or len(record.encode()) > MAX_CONFIRMATION_BYTES:
             raise ValueError("Invalid record")
-        expected = hmac.new(_key(), record.encode(), hashlib.sha256).hexdigest()
+        key = read_key() if history else _key()
+        expected = hmac.new(key, record.encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(expected, row["signature"]):
             raise ValueError("Invalid signature")
         proof = Confirmation.model_validate_json(record)
@@ -101,7 +109,9 @@ def _verified_row(row: dict, user_id: str, portfolio_id: str, result_id: str) ->
             or row["plan_id"] != result_id
         ):
             raise ValueError("Invalid scope")
-        snapshot = replay.read_receipt(proof.receipt, user_id, portfolio_id, result_id)
+        snapshot = replay.read_receipt(
+            proof.receipt, user_id, portfolio_id, result_id, history=history
+        )
         age = (proof.confirmed_at - snapshot.captured_at).total_seconds()
         if snapshot.portfolio_revision is None or not 0 <= age <= 900:
             raise ValueError("Invalid confirmation time/version")
