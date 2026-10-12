@@ -12059,7 +12059,8 @@
               "residual_rate_missing",
               "interest_rate_unknown",
               "broker_collateral_unknown",
-              "nonpositive_equity"
+              "nonpositive_equity",
+              "short_stock_unbounded"
             ],
             "title": "Code",
             "type": "string"

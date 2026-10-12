@@ -283,6 +283,19 @@ def _evaluate(start, scenario, risk, *, horizon, days, reserve_base, initial_equ
 
     open_coverage = []
     gap_blocked = False
+    short_tickers = sorted(t for t, q in shares.items() if q < 0)
+    if not unknown_state and short_tickers:
+        # Exercise/assignment left a short stock position: loss is unbounded as
+        # the price rises and its collateral needs a broker rule.
+        gap_blocked = True
+        missing.append(
+            _not(
+                "short_stock_unbounded",
+                f"A short stock position ({', '.join(short_tickers)}) remains at the valuation "
+                "date; its loss is unbounded as the price rises and its collateral needs a "
+                "broker rule, so the funding gap is unknown and no alternative is ranked.",
+            )
+        )
     if not unknown_state:
         open_coverage = option_coverage.relations(shares, open_legs)
         if option_coverage.has_unbounded(open_coverage):
@@ -409,6 +422,17 @@ def rank(risk, scenarios, alternatives) -> RankingOut:
             reasons.append(
                 f"{alternative.kind} carries an uncovered short call whose loss is "
                 "unbounded beyond these scenarios."
+            )
+        if any(
+            item.code == "short_stock_unbounded"
+            for scenario in scenarios
+            for outcome in scenario.outcomes
+            if outcome.kind == alternative.kind
+            for item in outcome.not_computable
+        ):
+            reasons.append(
+                f"{alternative.kind} leaves a short stock position whose loss is unbounded "
+                "beyond these scenarios."
             )
     if reasons:
         return RankingOut(status="not_computable", objective=risk.objective, reasons=reasons)
@@ -632,9 +656,9 @@ LIMITATIONS = [
     "Every alternative, including no action, is evaluated from the same captured account and the same captured prices and option quotes (one snapshot id). Scenario prices are explicit assumptions with no probabilities; they are not forecasts.",
     "Valuation date is the new Put's expiry. Legs expiring at or before it settle physically at the explicit price on their own expiry date: in-the-money short legs are assigned and in-the-money long legs are assumed exercised; at- or out-of-the-money legs expire. Early exercise and early assignment are not modelled.",
     "Legs still open at the valuation date are valued by Black-Scholes using the captured quote's implied volatility (or your confirmed override) and your explicit risk-free rate, with constant volatility to the horizon. Without those inputs the leg and every total that includes it are reported as not computable, never as zero or as an expiry payoff.",
-    "Selling stock that covers a short call, or that a long put protects, recomputes the relationship; an uncovered short call has unbounded loss and a broker-defined collateral requirement.",
+    "Selling stock that covers a short call, or that a long put protects, recomputes the relationship; an uncovered short call has unbounded loss and a broker-defined collateral requirement. Likewise a long put exercised without the shares (or any settlement that leaves negative shares) creates a short stock position: its loss is unbounded, its funding gap is reported as not computable, and no alternative is ranked.",
     "Total P&L uses the original captured equity including existing option marks. New premium is not instant profit; terminal obligations and both fee types are included once. Sold-stock opportunity cost is a decomposition already inside total P&L, never subtracted twice.",
-    "Interest is simple actual/365 on each branch's initial debt from capture to the valuation date. An unknown APR leaves debt-bearing equity, P&L and funding gaps unknown; zero-debt branches incur none. Cash earns no yield here.",
+    "Interest is simple actual/365 on each branch's initial debt from capture to the valuation date. A cash deficit created by an assignment or exercise on an earlier expiry date accrues NO interest between that settlement date and the valuation date: interest there is understated (its financing appears only as the funding gap at the valuation date). An unknown APR leaves debt-bearing equity, P&L and funding gaps unknown; zero-debt branches incur none. Cash earns no yield here.",
     "Open short Puts at the valuation date reserve gross strike cash without spread netting. Conditional deficit borrowing adds equal cash and debt and does not imply broker approval or available credit.",
     "Broker buying power, maintenance requirements and uncovered-call collateral are unknown: no verified broker rule set is connected (provider 'unknown'). Actual fills, early exercise, margin calls and liquidation paths are not modelled.",
     "A preferred alternative is shown only under your confirmed objective when every compared figure is computable and bounded for every alternative; otherwise no ranking is given. It is conditional arithmetic, not a recommendation.",

@@ -87,6 +87,11 @@ At `T`: `cash_T` after all settlements; positions `Q_T`; stock value
 `O_T = Σ_{e>T} q μ V`.
 
 * interest `I = 0` if debt `= 0`, else `D·a·days(t0→T)/365` if `a` given, else `None`.
+  Known understatement (stated in the result limitations, not modelled): a cash
+  deficit created by an assignment/exercise on an earlier expiry date `d < T`
+  accrues no interest over `d → T`; its financing appears only as the funding
+  gap at `T`. Modelling it would change the cash path the existing
+  conservation oracles pin, so it is disclosed instead.
 * `E_T = Σ_u Q_T[u]S_T[u] + O_T + cash_T − D − I`.
 * `PnL = E_T − E0`; `ΔPnL_k = PnL_k − PnL_{no action}`.
 * **Opportunity cost of sold stock** `OC = n_x·(S_T[x] − P0[x])` (gain forgone;
@@ -163,5 +168,8 @@ LLM opinion.
 * residual IV or rate not supplied/confirmed;
 * interest with unknown APR on a debt-bearing branch;
 * funding gap with an open uncovered short call (broker collateral);
+* any negative share position at `T` (e.g. a long put exercised without the
+  shares): `short_stock_unbounded` — loss unbounded as the price rises, funding
+  gap `None`, and ranking refused for that alternative;
 * buying power, maintenance requirements, margin calls, liquidation paths,
   actual fills, early exercise, dividends, taxes, settlement timing.

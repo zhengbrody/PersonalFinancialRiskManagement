@@ -6225,7 +6225,7 @@ export interface components {
              * Code
              * @enum {string}
              */
-            code: "settlement_price_missing" | "residual_iv_missing" | "residual_rate_missing" | "interest_rate_unknown" | "broker_collateral_unknown" | "nonpositive_equity";
+            code: "settlement_price_missing" | "residual_iv_missing" | "residual_rate_missing" | "interest_rate_unknown" | "broker_collateral_unknown" | "nonpositive_equity" | "short_stock_unbounded";
             /** Contract */
             contract?: string | null;
             /** Message */

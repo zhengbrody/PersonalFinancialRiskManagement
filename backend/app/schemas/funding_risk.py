@@ -83,6 +83,9 @@ class NotComputable(BaseModel):
         "interest_rate_unknown",
         "broker_collateral_unknown",
         "nonpositive_equity",
+        # Additive: a negative share position at the valuation date (e.g. a long
+        # put exercised without the shares) is a short stock with unbounded loss.
+        "short_stock_unbounded",
     ]
     contract: str | None = None
     message: str

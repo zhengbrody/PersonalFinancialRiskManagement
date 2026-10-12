@@ -523,3 +523,77 @@ def test_formerly_unsupported_books_are_valued_without_dropping_legs(monkeypatch
     for row in risk.scenarios[0].outcomes:
         assert (row.total_pnl is None) == residual
         assert ("residual_rate_missing" in {n.code for n in row.not_computable}) == residual
+
+
+
+@pytest.mark.parametrize("x_price", [20, 40])
+def test_settlement_into_short_stock_is_flagged_and_blocks_ranking(x_price):
+    """Hand ledger on the engine's own valuation step (the request path rejects
+    long legs today; the engine must still be honest if one reaches it).
+
+    One LONG X 30 put, no X shares, cash 1000, no debt, valuation date = expiry.
+    X=20: exercised, delivering 100 X not owned -> X = -100 (short stock worth
+    100 * 20 = 2000), cash = 1000 + 30 * 100 = 4000, equity = 4000 - 2000 = 2000.
+    Short stock loses without bound as X rises: flagged, funding gap unknown,
+    never ranked. X=40: expires, nothing flagged."""
+    from backend.app.services import funding_risk
+
+    leg = dict(
+        symbol="X261016P00030000",
+        underlying="X",
+        option_type="put",
+        quantity=1,
+        strike=Decimal(30),
+        expiry=EXPIRY,
+        mark=Decimal(1),
+        iv=None,
+        spot=40,
+    )
+    risk = SimpleNamespace(
+        residual_iv_overrides={},
+        residual_risk_free_rate=None,
+        annual_borrowing_rate=None,
+        objective="preserve_terminal_equity",
+        objective_confirmed=True,
+    )
+    outcomes = []
+    for kind in funding_risk.KINDS:
+        start = dict(
+            kind=kind,
+            legs=[leg],
+            shares={"X": Decimal(0)},
+            cash=Decimal(1000),
+            debt=Decimal(0),
+            sold=Decimal(0),
+            fees=Decimal(0),
+        )
+        outcomes.append(
+            funding_risk._evaluate(
+                start,
+                SimpleNamespace(prices={"X": x_price}, settlement_prices={}),
+                risk,
+                horizon=datetime.fromisoformat(EXPIRY).date(),
+                days=30,
+                reserve_base=Decimal(0),
+                initial_equity=Decimal(1100),
+                market=SimpleNamespace(snapshot_id="a" * 64),
+            )
+        )
+    for outcome in outcomes:
+        codes = {item.code for item in outcome.not_computable}
+        if x_price == 20:
+            assert outcome.positions["X"] == -100
+            assert outcome.short_stock_value == 2000.0
+            assert outcome.cash_before_interest == 4000.0
+            assert outcome.net_equity_after_interest == 2000.0
+            assert "short_stock_unbounded" in codes and outcome.funding_gap is None
+        else:
+            assert outcome.positions["X"] == 0 and "short_stock_unbounded" not in codes
+    scenario = SimpleNamespace(label="explicit", outcomes=outcomes)
+    alternatives = [SimpleNamespace(kind=k, unbounded_loss=False) for k in funding_risk.KINDS]
+    ranking = funding_risk.rank(risk, [scenario], alternatives)
+    if x_price == 20:
+        assert ranking.status == "not_computable"
+        assert any("short stock" in reason for reason in ranking.reasons)
+    else:
+        assert ranking.status != "not_computable"
