@@ -6,7 +6,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from backend.app.ml.config import load_config
 from backend.app.services import model_card
+
+_TRAIN_CONFIG = Path(__file__).resolve().parents[1] / "app" / "ml" / "configs" / "risk_today.yaml"
 
 
 def _committed_artifacts() -> tuple[dict, dict]:
@@ -49,13 +52,55 @@ def test_committed_model_keeps_the_public_quality_floor():
 
 
 def test_headline_is_honest_and_composed_from_numbers():
+    _meta, validation = _committed_artifacts()
+    aggregate = validation["aggregate_accuracy"]
     card = model_card.get_model_card()
     h = card["headline"].lower()
-    assert "does not beat a persistence baseline" in h
     assert "probability-ranking signal" in h
     assert "not a price or return forecast" in h
-    # and it names the actual numbers (composed, not hand-typed).
-    assert "0.490" in card["headline"] and "0.523" in card["headline"]
+    # The verdict follows the committed numbers (the weekly retrain regenerates
+    # validation_report.json), and the numbers are composed in, not hand-typed.
+    beats = round(aggregate["model"], 3) > round(aggregate["persistence"], 3)
+    verdict = "beats a persistence baseline" if beats else "does not beat a persistence baseline"
+    assert verdict in h
+    assert f"{aggregate['model']:.3f}" in card["headline"]
+    assert f"{aggregate['persistence']:.3f}" in card["headline"]
+
+
+def _card_with_accuracy(monkeypatch, model: float, persistence: float) -> dict:
+    meta, validation = _committed_artifacts()
+    validation = json.loads(json.dumps(validation))
+    validation["aggregate_accuracy"]["model"] = model
+    validation["aggregate_accuracy"]["persistence"] = persistence
+    loaded = {model_card._META_PATH: meta, model_card._VALIDATION_PATH: validation}
+    monkeypatch.setattr(model_card, "_load", lambda path: loaded[path])
+    return model_card.get_model_card()
+
+
+def test_headline_says_beats_when_model_beats_persistence(monkeypatch):
+    card = _card_with_accuracy(monkeypatch, model=0.561, persistence=0.523)
+    h = card["headline"].lower()
+    assert "beats a persistence baseline" in h
+    assert "does not beat" not in h
+    assert "0.561" in card["headline"] and "0.523" in card["headline"]
+    assert "probability-ranking signal" in h
+    # No other surface may keep claiming the opposite.
+    for text in [*card["not_for"], *card["limitations"]]:
+        assert "does not beat" not in text.lower()
+        assert "loses to" not in text.lower()
+
+
+def test_headline_says_does_not_beat_when_model_trails_persistence(monkeypatch):
+    card = _card_with_accuracy(monkeypatch, model=0.490, persistence=0.523)
+    h = card["headline"].lower()
+    assert "does not beat a persistence baseline" in h
+    assert any("does not beat" in lim.lower() for lim in card["limitations"])
+    assert any("does not beat" in n.lower() for n in card["not_for"])
+
+
+def test_a_display_tie_is_not_reported_as_beating(monkeypatch):
+    card = _card_with_accuracy(monkeypatch, model=0.5231, persistence=0.5229)
+    assert "does not beat a persistence baseline" in card["headline"].lower()
 
 
 def test_intended_use_and_limitations_present():
@@ -81,6 +126,11 @@ def test_endpoint_envelope(test_client):
     assert resp.status_code == 200
     body = resp.json()
     assert body["error"] is None
-    assert body["data"]["model_version"] == "regime-v1.1.0"
-    assert body["data"]["persistence_baseline_accuracy"] == 0.523
+    _meta, validation = _committed_artifacts()
+    # Pinned to the YAML's semantic version, not the meta: a retrain run without
+    # --config stamps the code default ("regime-v1") and must fail here.
+    assert body["data"]["model_version"] == load_config(_TRAIN_CONFIG).model_version
+    assert body["data"]["persistence_baseline_accuracy"] == round(
+        validation["aggregate_accuracy"]["persistence"], 4
+    )
     assert body["meta"]["request_id"]

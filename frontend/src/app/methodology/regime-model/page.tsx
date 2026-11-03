@@ -3,8 +3,9 @@
  * classifier. Server-rendered; every number is fetched from the backend, which
  * reads them straight from the committed ML artifacts (regime_meta.json +
  * validation_report.json) — so the page can never drift from what validated the
- * model. Honest by construction: it leads with "loses to persistence on 4-class,
- * value is the elevated-risk probability".
+ * model. Honest by construction: the 4-class verdict versus the persistence
+ * baseline is computed from those numbers (the weekly retrain regenerates them),
+ * and the page leads with "the value is the elevated-risk probability".
  */
 
 import type { Metadata } from "next";
@@ -88,6 +89,17 @@ async function fetchModelCard(): Promise<ModelCard | null> {
 }
 
 const num = (x: number | null | undefined, d = 3) => (x == null ? "—" : x.toFixed(d));
+
+/** Same rule as the backend headline: compared at the 3-dp display precision,
+ * a tie is "does not beat", missing numbers are "unknown". */
+function persistenceVerdict(
+  card: { cv_accuracy: number | null; persistence_baseline_accuracy: number | null } | null | undefined,
+): "beats" | "does_not_beat" | "unknown" {
+  const model = card?.cv_accuracy;
+  const persistence = card?.persistence_baseline_accuracy;
+  if (model == null || persistence == null) return "unknown";
+  return Number(model.toFixed(3)) > Number(persistence.toFixed(3)) ? "beats" : "does_not_beat";
+}
 const pct = (x: number | null | undefined, d = 1) => (x == null ? "—" : `${(x * 100).toFixed(d)}%`);
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -183,8 +195,19 @@ export default async function RegimeModelCardPage() {
 
         <Section title="Honest validation metrics">
           <p>
-            On 4-class accuracy the model <Em>loses</Em> to a naive persistence baseline. The skill
-            that survives honest walk-forward validation is the calibrated elevated-risk
+            {persistenceVerdict(card) === "beats" ? (
+              <>
+                On 4-class accuracy the model <Em>beats</Em> a naive persistence baseline in the latest
+                walk-forward validation, but the class label is still not its validated output.
+              </>
+            ) : persistenceVerdict(card) === "does_not_beat" ? (
+              <>
+                On 4-class accuracy the model <Em>does not beat</Em> a naive persistence baseline.
+              </>
+            ) : (
+              <>The 4-class comparison with a persistence baseline is unavailable right now.</>
+            )}{" "}
+            The skill that survives honest walk-forward validation is the calibrated elevated-risk
             probability. These numbers are read directly from the committed model artifacts.
           </p>
           <div style={{ overflowX: "auto", margin: "16px 0" }}>

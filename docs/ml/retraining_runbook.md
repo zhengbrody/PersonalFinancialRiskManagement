@@ -1,12 +1,12 @@
 # Retraining Runbook — Risk-Today Regime Classifier
 
-_Applies to `backend/app/ml/` · artifact `regime_model.joblib` + `regime_meta.json` + `regime_reference.json`_
+_Applies to `backend/app/ml/` · artifact `regime_model.joblib` + `regime_meta.json` + `regime_reference.json` (+ the walk-forward `validation_report.json` that the public model card reads)_
 
 ## When to retrain
 
 | Trigger | Source |
 |---|---|
-| **Scheduled** — every Monday 06:00 UTC | `train-regime.yml` (automatic; commits the artifact `[skip ci]`) |
+| **Scheduled** — every Monday 06:00 UTC | `train-regime.yml` (automatic: trains, regenerates the walk-forward validation report from the same cached data, runs the release gate + model-card contract, then opens an `ml/retrain-*` PR — never a direct push, never auto-merged) |
 | **Drift** — `GET /api/v1/ml/health` shows `overall_status: drift` | daily `ml-health.yml` cron / Sentry "ML drift" warning — **investigate first, don't reflex-retrain** (see below) |
 | **Watch** — `overall_status: watch` | look, don't act — see the measured operating point below |
 | **sklearn upgrade** — `sklearn_match: false` in `/ml/health` | dependency bumps (the pickle is pinned to `scikit-learn>=1.8,<1.9`) |
@@ -72,14 +72,24 @@ change — not for a routine data refresh.
 
 1. `regime_meta.json` sanity: `elevated_risk_auc` in a familiar band (~0.7);
    `class_distribution` has no empty class; `sklearn_version` matches the pin.
-2. `docs/ml/validation_report.md` regenerated — the **Headline conclusion**
-   wording is data-driven; read it and make sure the model card still tells
-   the same story (update the card's numbers if they moved).
+2. Validation report regenerated (`validation_report.json` + `docs/ml/validation_report.md`
+   + the reliability PNG) from the SAME `--cache-dir` snapshot as training.
+   The weekly workflow does this automatically; by hand, run the `validate`
+   command above. The served card's headline (beats / does not beat the
+   persistence baseline) and `test_model_card.py`'s expectations are derived
+   from that JSON, so nothing needs hand-editing when the numbers move — but
+   read the headline anyway. `test_model_card.py` also enforces the public
+   quality floor on the regenerated report (hold-out size ≥ 500, elevated-risk
+   AUC ≥ 0.70, Brier below the base-rate reference) and fails the run if a
+   fresh report drops below it.
 3. `pytest backend/tests/test_ml_regime.py backend/tests/test_ml_train_repro.py -q`
    (the inference-schema test exercises the NEW artifact).
 4. Commit `regime_model.joblib + regime_meta.json + regime_reference.json`
    together — the reference must describe the SAME training run as the model,
-   or `/ml/health` compares live data against a stale distribution.
+   or `/ml/health` compares live data against a stale distribution. Commit the
+   validation report (json + md + png) with them for the same reason: the model
+   card must describe the fit that ships. `regime_provenance.json` records the
+   sha256 of the validation report alongside the model artifacts.
 
 ## Rollback
 
