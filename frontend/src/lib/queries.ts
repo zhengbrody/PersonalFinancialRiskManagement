@@ -759,6 +759,14 @@ export const factorBetaRowSchema = z.looseObject({
 });
 export type FactorBetaRow = z.infer<typeof factorBetaRowSchema>;
 
+// Per-HOLDING factor betas (regression of each holding's daily returns on
+// each factor ETF). Distinct from the portfolio-level `factor_betas` table.
+export const holdingFactorBetaRowSchema = z.looseObject({
+  ticker: z.string(),
+  betas: z.record(z.string(), z.number().nullable()),
+});
+export type HoldingFactorBetaRow = z.infer<typeof holdingFactorBetaRowSchema>;
+
 export const componentVarRowSchema = z.looseObject({
   ticker: z.string(),
   pct: z.number(),
@@ -893,6 +901,7 @@ export const riskReportSchema = z.looseObject({
   total_return: z.number().nullable().optional(),
   betas: z.record(z.string(), z.number()),
   factor_betas: z.array(factorBetaRowSchema),
+  holding_factor_betas: z.array(holdingFactorBetaRowSchema).optional().default([]),
   component_var_pct: z.array(componentVarRowSchema),
   component_return: z.array(componentReturnRowSchema).optional().default([]),
   stress_loss: z.number().nullable(),

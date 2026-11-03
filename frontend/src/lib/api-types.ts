@@ -5427,6 +5427,21 @@ export interface components {
             scenarios?: components["schemas"]["HistoricalScenarioRow"][];
         };
         /**
+         * HoldingFactorBetaRow
+         * @description One holding's factor betas (per-asset OLS on daily returns).
+         *
+         *     ``betas`` is keyed by factor ETF ticker (SPY/QQQ/GLD/TLT/IWM/VTV); a
+         *     factor whose regression could not be estimated is ``None`` (never 0).
+         */
+        HoldingFactorBetaRow: {
+            /** Betas */
+            betas?: {
+                [key: string]: number | null;
+            };
+            /** Ticker */
+            ticker: string;
+        };
+        /**
          * HoldingIn
          * @description One row in the request body. Maps 1:1 to
          *     ``domain.models.AssetPositionInput`` minus a couple of nullable
@@ -8301,6 +8316,8 @@ export interface components {
             /** Factor Betas */
             factor_betas?: components["schemas"]["FactorBetaRow"][];
             financing_resilience?: components["schemas"]["FinancingResilienceOut"] | null;
+            /** Holding Factor Betas */
+            holding_factor_betas?: components["schemas"]["HoldingFactorBetaRow"][];
             /** Liquidity */
             liquidity?: components["schemas"]["LiquidityRow"][];
             losses?: components["schemas"]["LossBreakdown"] | null;
@@ -8395,6 +8412,8 @@ export interface components {
             /** Factor Betas */
             factor_betas?: components["schemas"]["FactorBetaRow"][];
             financing_resilience?: components["schemas"]["FinancingResilienceOut"] | null;
+            /** Holding Factor Betas */
+            holding_factor_betas?: components["schemas"]["HoldingFactorBetaRow"][];
             /** Liquidity */
             liquidity?: components["schemas"]["LiquidityRow"][];
             losses?: components["schemas"]["LossBreakdown"] | null;

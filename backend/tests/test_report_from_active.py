@@ -410,6 +410,91 @@ def test_happy_path_returns_full_report(
     assert fake_engine.last_kwargs["market_shock"] == pytest.approx(-0.10)
 
 
+def _post_report(test_client, mint_token):
+    resp = test_client.post(
+        "/api/v1/risk/report_from_active",
+        json={},
+        headers={"Authorization": f"Bearer {mint_token()}"},
+    )
+    assert resp.status_code == 200, resp.json()
+    return resp.json()["data"]
+
+
+def test_report_ships_per_holding_factor_betas(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_engine
+):
+    """report.factor_betas is the engine's ticker x factor matrix whose
+    COLUMNS are display names; the wire maps them back to factor tickers,
+    keeps the portfolio-level factor_betas untouched, and nulls NaN cells."""
+    fake_active_portfolio.set(
+        {
+            "AAPL": {"shares": 10, "avg_cost": 150.0},
+            "BND": {"shares": 50, "avg_cost": 70.0},
+        }
+    )
+    fake_price_history.set(_make_history(["AAPL", "BND"]))
+    nan = float("nan")
+    # Asymmetric on purpose: rows differ, columns differ, so a transposed or
+    # mis-keyed serialization cannot accidentally reproduce these values.
+    per_asset = pd.DataFrame(
+        {
+            "S&P 500": [1.3, 0.05],
+            "NASDAQ 100": [1.5, nan],
+            "Gold": [0.1, 0.2],
+            "US Treasury 20Y+": [-0.2, 0.9],
+            "Small Cap (Size)": [0.7, 0.01],
+            "Value (Style)": [0.4, float("inf")],
+        },
+        index=["AAPL", "BND"],
+    )
+    portfolio_level = pd.DataFrame(
+        {"beta": [1.02], "r_squared": [0.9], "t_stat": [40.0], "p_value": [0.0]},
+        index=["SPY"],
+    )
+    fake_engine.last_report = _FakeReport(
+        factor_betas=per_asset, portfolio_factor_betas=portfolio_level
+    )
+
+    data = _post_report(test_client, mint_token)
+
+    rows = {r["ticker"]: r["betas"] for r in data["holding_factor_betas"]}
+    assert list(rows) == ["AAPL", "BND"]
+    assert rows["AAPL"]["SPY"] == pytest.approx(1.3)
+    assert rows["AAPL"]["QQQ"] == pytest.approx(1.5)
+    assert rows["AAPL"]["TLT"] == pytest.approx(-0.2)
+    assert set(rows["AAPL"]) == {"SPY", "QQQ", "GLD", "TLT", "IWM", "VTV"}
+    # Non-finite -> None (never 0, never dropped silently into a number).
+    assert rows["BND"]["QQQ"] is None
+    assert rows["BND"]["VTV"] is None
+    assert rows["BND"]["TLT"] == pytest.approx(0.9)
+
+    # Portfolio-level table is unchanged by the new field.
+    assert data["factor_betas"] == [
+        {"factor": "SPY", "beta": 1.02, "r_squared": 0.9, "t_stat": 40.0, "p_value": 0.0}
+    ]
+
+
+@pytest.mark.parametrize(
+    "matrix",
+    [
+        None,
+        pd.DataFrame(),
+        pd.DataFrame({"S&P 500": [float("nan")], "NASDAQ 100": [float("nan")]}, index=["AAPL"]),
+    ],
+    ids=["absent", "empty", "all_nan"],
+)
+def test_holding_factor_betas_empty_when_unavailable(
+    test_client, mint_token, fake_active_portfolio, fake_price_history, fake_engine, matrix
+):
+    fake_active_portfolio.set({"AAPL": {"shares": 10, "avg_cost": 150.0}})
+    fake_price_history.set(_make_history(["AAPL"]))
+    fake_engine.last_report = _FakeReport(factor_betas=matrix)
+
+    data = _post_report(test_client, mint_token)
+
+    assert data["holding_factor_betas"] == []
+
+
 def test_report_ships_cockpit_dimensions_and_losses(
     test_client,
     mint_token,

@@ -9677,6 +9677,34 @@
         "title": "HistoricalScenariosOut",
         "type": "object"
       },
+      "HoldingFactorBetaRow": {
+        "description": "One holding's factor betas (per-asset OLS on daily returns).\n\n``betas`` is keyed by factor ETF ticker (SPY/QQQ/GLD/TLT/IWM/VTV); a\nfactor whose regression could not be estimated is ``None`` (never 0).",
+        "properties": {
+          "betas": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Betas",
+            "type": "object"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker"
+        ],
+        "title": "HoldingFactorBetaRow",
+        "type": "object"
+      },
       "HoldingIn": {
         "description": "One row in the request body. Maps 1:1 to\n``domain.models.AssetPositionInput`` minus a couple of nullable\nquality-of-life fields. Same validation rules apply once we\nrebuild the engine's model \u2014 keeping the schema deliberately\npermissive here lets the engine emit the precise error code.",
         "properties": {
@@ -17804,6 +17832,13 @@
               }
             ]
           },
+          "holding_factor_betas": {
+            "items": {
+              "$ref": "#/components/schemas/HoldingFactorBetaRow"
+            },
+            "title": "Holding Factor Betas",
+            "type": "array"
+          },
           "liquidity": {
             "items": {
               "$ref": "#/components/schemas/LiquidityRow"
@@ -18191,6 +18226,13 @@
                 "type": "null"
               }
             ]
+          },
+          "holding_factor_betas": {
+            "items": {
+              "$ref": "#/components/schemas/HoldingFactorBetaRow"
+            },
+            "title": "Holding Factor Betas",
+            "type": "array"
           },
           "liquidity": {
             "items": {
