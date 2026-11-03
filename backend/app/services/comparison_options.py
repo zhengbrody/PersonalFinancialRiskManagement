@@ -123,9 +123,11 @@ def option_specs(holdings: dict, *, now: datetime | None = None) -> list[SimpleN
 # 4 calendar days still admits a Friday close captured on a Tuesday after a
 # Monday holiday.
 MAX_SPOT_AGE_DAYS = 4
-# A contract whose last print is more than one business day away from the stock
-# close is a different market moment; its quote cannot be trusted to line up.
+# Pricing uses the current two-sided bid/ask MIDPOINT, never the last trade, so an
+# old print does not misalign the price with the stock close. An illiquid but
+# quoted leg is disclosed (warning + limitation), not refused.
 MAX_TRADE_GAP_BUSINESS_DAYS = 1
+TRADE_GAP_PREFIX = "Last traded on"
 # Disclosure only (never a refusal, never used for pricing): the solved IV is
 # flagged when it differs from the chain's own quoted IV by BOTH margins.
 IV_DIVERGENCE_ABS = 0.10
@@ -150,6 +152,19 @@ def _trade_date(value) -> date | None:
         return date.fromisoformat(str(value)[:10])
     except ValueError:
         return None
+
+
+def trade_gap_warning(traded: date | None, spot_date: date) -> str | None:
+    if traded is None:
+        return None
+    first, last = sorted((traded, spot_date))
+    gap = int(np.busday_count(first, last))
+    if gap > MAX_TRADE_GAP_BUSINESS_DAYS:
+        return (
+            f"{TRADE_GAP_PREFIX} {traded.isoformat()}, {gap} business days from the stock close "
+            f"{spot_date.isoformat()}; priced from its current bid/ask midpoint."
+        )
+    return None
 
 
 def iv_divergence_warning(solved, chain_iv) -> str | None:
@@ -210,17 +225,6 @@ def capture_options(
             _bad(
                 "A two-sided, non-crossed option quote with spread ≤50% of midpoint is required. Last trade alone is not enough."
             )
-        traded = _trade_date(row.get("last_trade_date"))
-        if traded is not None:
-            first, last = sorted((traded, spot_date))
-            gap = int(np.busday_count(first, last))
-            if gap > MAX_TRADE_GAP_BUSINESS_DAYS:
-                _bad(
-                    f"The {s.underlying} {s.expiry} {s.strike:g} {s.option_type} last traded on "
-                    f"{traded.isoformat()}, but the stock close used for pricing is "
-                    f"{spot_date.isoformat()} ({gap} business days apart). Its quote cannot be "
-                    "aligned with the stock price. No option legs were excluded."
-                )
         # The chain's own IV is kept for comparison only; pricing calibrates to
         # the captured spot/mark.
         rows[key] = {
@@ -251,9 +255,16 @@ def capture_options(
         traded = _trade_date(row.get("last_trade_date"))
         r["last_trade_date"] = traded.isoformat() if traded else None
         r["spot_date"] = spot_date.isoformat()
-        warning = iv_divergence_warning(r.get("iv"), row["chain_iv"])
-        if warning:
-            r["warnings"] = [*r.get("warnings", []), warning]
+        added = [
+            w
+            for w in (
+                trade_gap_warning(traded, spot_date),
+                iv_divergence_warning(r.get("iv"), row["chain_iv"]),
+            )
+            if w
+        ]
+        if added:
+            r["warnings"] = [*r.get("warnings", []), *added]
     return results
 
 

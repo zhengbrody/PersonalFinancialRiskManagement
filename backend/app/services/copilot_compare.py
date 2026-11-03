@@ -379,15 +379,16 @@ def compare_change(
             0,
             "This reduction removes some stock backing from short calls on the same underlying. Option-only expiry bounds do not measure that lost stock cover; inspect the paired account stresses.",
         )
-    iv_warnings = sorted(
+    disclosed = (comparison_options.TRADE_GAP_PREFIX, comparison_options.IV_DIVERGENCE_PREFIX)
+    leg_warnings = sorted(
         {
             f"{r['underlying']} {r['expiry']} {float(r['strike']):g} {r['option_type']}: {w}"
             for r in option_results
             for w in (r.get("warnings") or [])
-            if str(w).startswith(comparison_options.IV_DIVERGENCE_PREFIX)
+            if str(w).startswith(disclosed)
         }
     )
-    mixed_limits.extend(iv_warnings)
+    mixed_limits.extend(leg_warnings)
     hypothesis_scenario = (
         _hypothesis_scenario(change, values, candidate, equity, option_results)
         if change.hypothesis is not None

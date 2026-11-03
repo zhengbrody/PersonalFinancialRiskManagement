@@ -350,14 +350,25 @@ def test_option_book_accepts_a_weekend_old_close(book, prices):
     assert all(r["spot_date"] == "2026-09-04" for r in rows)
 
 
-def test_last_trade_far_from_stock_close_is_refused(book, prices):
+def test_last_trade_far_from_stock_close_warns_but_still_compares(book, prices):
     def old_print(*key):
         return {**quote(*key), "last_trade_date": "2026-08-31"}  # Mon vs Fri close
 
-    with pytest.raises(APIError) as exc:
-        _capture_at(book, prices, now=NOW, chain_fn=old_print)
-    assert exc.value.code == "option_comparison_unavailable"
-    assert "2026-08-31" in exc.value.message and "2026-09-04" in exc.value.message
+    rows = _capture_at(book, prices, now=NOW, chain_fn=old_print)
+    plain = _capture_at(book, prices, now=NOW)
+    expected = (
+        "Last traded on 2026-08-31, 4 business days from the stock close 2026-09-04; "
+        "priced from its current bid/ask midpoint."
+    )
+    assert all(expected in r["warnings"] for r in rows)
+    # Disclosure only: pricing comes from the midpoint, unchanged by the old print.
+    assert [r["mark"] for r in rows] == [r["mark"] for r in plain]
+    assert [r["iv"] for r in rows] == [r["iv"] for r in plain]
+    result = service.compare_change(book, change(), prices, {}, now=NOW, option_results=rows)
+    assert result.risk_method == "mixed_instant_stress"
+    assert sum(expected in limit for limit in result.limitations) == len(
+        {(t, e, k) for t, e, k, _, _ in TERMS}
+    )
 
 
 def test_last_trade_one_business_day_away_is_accepted(book, prices):
@@ -366,6 +377,7 @@ def test_last_trade_one_business_day_away_is_accepted(book, prices):
 
     rows = _capture_at(book, prices, now=NOW, chain_fn=recent)
     assert all(r["last_trade_date"] == "2026-09-03" for r in rows)
+    assert not any(str(w).startswith(options.TRADE_GAP_PREFIX) for r in rows for w in r["warnings"])
 
 
 def test_divergent_chain_iv_warns_without_refusing_or_repricing(book, prices):
