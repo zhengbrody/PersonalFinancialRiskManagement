@@ -56,10 +56,21 @@ describe("regime model card page", () => {
     expect(body).toContain("0.770"); // elevated-risk ROC-AUC (the signal)
     expect(body).toContain("0.1042"); // Brier
     expect(body).toContain("does not beat a persistence baseline");
+    expect(body).toContain("does not beat a naive persistence baseline");
+    expect(body).not.toContain("beats a naive persistence baseline");
     expect(body).toContain("probability-ranking signal");
     // Must NOT frame it as a reliable/validated classifier.
     expect(body.toLowerCase()).not.toContain("reliable classifier");
     expect(body.toLowerCase()).not.toContain("accurate classifier");
+  });
+
+  it("states the 4-class verdict from the numbers when a retrain beats persistence", async () => {
+    const beats = { ...CARD, cv_accuracy: 0.561, persistence_baseline_accuracy: 0.523 };
+    global.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ data: beats }) })) as never;
+    render(await RegimeModelCardPage());
+    const body = document.body.textContent ?? "";
+    expect(body).toContain("beats a naive persistence baseline");
+    expect(body).not.toContain("does not beat a naive persistence baseline");
   });
 
   it("falls back gracefully when the endpoint is down", async () => {

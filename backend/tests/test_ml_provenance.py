@@ -261,6 +261,43 @@ def test_provenance_binds_commit_gates_and_artifact_hashes(tmp_path):
     }
 
 
+def test_provenance_hashes_the_validation_report_when_given(tmp_path):
+    model, meta, ref = _artifacts(tmp_path)
+    report = tmp_path / "validation_report.json"
+    report.write_text(json.dumps({"aggregate_accuracy": {"model": 0.5}}))
+    record = prov.build_provenance(
+        gates=prov.quality_gate(_meta_with(0.76, 706)),
+        source_commit="d" * 40,
+        run_id="9",
+        run_url="u",
+        model_path=model,
+        meta_path=meta,
+        reference_path=ref,
+        validation_path=report,
+    )
+    assert (
+        record["artifacts"]["validation_report.json"]
+        == hashlib.sha256(report.read_bytes()).hexdigest()
+    )
+
+
+def test_record_cli_includes_the_validation_report(monkeypatch, tmp_path):
+    """The workflow's `record` call must bind the regenerated report to the run."""
+    model, meta, ref = _artifacts(tmp_path)
+    report = tmp_path / "validation_report.json"
+    report.write_text("{}")
+    out = tmp_path / "regime_provenance.json"
+    gates = tmp_path / "gates.json"
+    gates.write_text(json.dumps(prov.quality_gate(_meta_with(0.76, 706))))
+    monkeypatch.setattr(prov, "MODEL_PATH", model)
+    monkeypatch.setattr(prov, "META_PATH", meta)
+    monkeypatch.setattr(prov, "REFERENCE_PATH", ref)
+    monkeypatch.setattr(prov, "VALIDATION_PATH", report)
+    monkeypatch.setattr(prov, "PROVENANCE_PATH", out)
+    assert prov.main(["record", "--gates", str(gates), "--source-commit", "e" * 40]) == 0
+    assert "validation_report.json" in json.loads(out.read_text())["artifacts"]
+
+
 def test_a_failed_extra_gate_fails_the_record(tmp_path):
     model, meta, ref = _artifacts(tmp_path)
     record = prov.build_provenance(

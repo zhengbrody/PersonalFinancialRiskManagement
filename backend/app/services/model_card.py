@@ -37,17 +37,39 @@ _INTENDED_USE = (
     "your Health Score, VaR, or any deterministic risk number."
 )
 
-_NOT_FOR = [
+_NOT_FOR_BASE = [
     "Predicting prices, returns, or market direction.",
     "A buy / sell / hold recommendation or any investment advice.",
-    "A precise 4-class verdict — on that task it does not beat a naive baseline.",
 ]
 
-_LIMITATIONS = [
+# The persistence comparison is NOT a constant: the weekly retrain regenerates
+# validation_report.json, so a future fit can beat persistence. Every sentence
+# that states the outcome is chosen from the artifact numbers (see
+# _beats_persistence) — a hard-coded verdict would silently become false.
+_NOT_FOR_CLASS_VERDICT = {
+    False: "A precise 4-class verdict — on that task it does not beat a naive "
+    "persistence baseline.",
+    True: "A precise 4-class verdict — it beats a naive persistence baseline on "
+    "that task, but the class label is not the validated output.",
+    None: "A precise 4-class verdict — the class label is not the validated output.",
+}
+
+_LIMITATION_PERSISTENCE = {
+    False: "On 4-class regime accuracy it does not beat a persistence baseline; the "
+    "value is the calibrated elevated-risk probability, not the class label.",
+    True: "On 4-class regime accuracy it beats a persistence baseline in the latest "
+    "walk-forward validation; the validated value is still the calibrated "
+    "elevated-risk probability, not the class label.",
+    None: "Its 4-class accuracy versus a persistence baseline is unavailable; the "
+    "value is the calibrated elevated-risk probability, not the class label.",
+}
+
+_SCOPE_LIMITATION = (
     "US large-cap equity view only (built from SPY/QQQ/VIX/Treasury history) — it "
-    "cannot see your specific holdings, sectors, or non-US assets.",
-    "On 4-class regime accuracy it loses to a persistence baseline; the value is "
-    "the calibrated elevated-risk probability, not the class label.",
+    "cannot see your specific holdings, sectors, or non-US assets."
+)
+
+_LIMITATIONS_REST = [
     "The 'stress' class is rare in the training data, so its individual calls are "
     "the least reliable.",
     "Fixed volatility thresholds and a fixed ~2-week horizon; regimes near a "
@@ -97,6 +119,18 @@ def _class_definitions(meta: dict) -> list[dict]:
     return [{"key": k, "label": _LABELS.get(k, k.title()), "definition": d} for k, d in defs]
 
 
+def _beats_persistence(agg: dict) -> bool | None:
+    """True/False from the walk-forward accuracies; None when either is missing.
+
+    Compared at the headline's display precision (3 dp) so the card can never
+    print "0.523 beats 0.523"; a tie counts as "does not beat"."""
+    model = agg.get("model")
+    persistence = agg.get("persistence")
+    if model is None or persistence is None:
+        return None
+    return round(float(model), 3) > round(float(persistence), 3)
+
+
 def _headline(agg: dict, cal: dict, metrics: dict) -> str:
     """Composed from the artifact numbers (no hand-typed values → no drift)."""
     model = agg.get("model")
@@ -109,10 +143,19 @@ def _headline(agg: dict, cal: dict, metrics: dict) -> str:
             "An experimental probability-ranking signal for elevated-risk pressure — "
             "not a price or return forecast. See the validated metrics below."
         )
+    if _beats_persistence(agg):
+        comparison = (
+            f"On 4-class regime accuracy the model ({model:.3f}) beats a persistence "
+            f"baseline ({persistence:.3f}) in walk-forward validation. Its validated value is "
+        )
+    else:
+        comparison = (
+            f"On 4-class regime accuracy the model ({model:.3f}) does not beat a persistence "
+            f"baseline ({persistence:.3f}) — classification is weak. Its validated value is "
+        )
     return (
-        f"On 4-class regime accuracy the model ({model:.3f}) does not beat a persistence "
-        f"baseline ({persistence:.3f}) — classification is weak. Its validated value is "
-        f"ranking elevated-risk probability: Brier {brier:.4f} vs a {base:.4f} base-rate "
+        comparison
+        + f"ranking elevated-risk probability: Brier {brier:.4f} vs a {base:.4f} base-rate "
         f"reference, hold-out ROC-AUC {auc:.3f}. It is a probability-ranking signal, not a "
         "classifier, and not a price or return forecast."
     )
@@ -127,6 +170,7 @@ def get_model_card() -> dict:
     agg = val.get("aggregate_accuracy") or {}
     cal = val.get("calibration") or {}
     importances = meta.get("feature_importances") or {}
+    verdict = _beats_persistence(agg)
 
     features = [
         {"name": name, "importance": _round(imp, 4)}
@@ -150,8 +194,8 @@ def get_model_card() -> dict:
         "estimator": meta.get("estimator"),
         "headline": _headline(agg, cal, metrics),
         "intended_use": _INTENDED_USE,
-        "not_for": _NOT_FOR,
-        "limitations": _LIMITATIONS,
+        "not_for": [*_NOT_FOR_BASE, _NOT_FOR_CLASS_VERDICT[verdict]],
+        "limitations": [_SCOPE_LIMITATION, _LIMITATION_PERSISTENCE[verdict], *_LIMITATIONS_REST],
         "excluded_signals": _EXCLUDED_SIGNALS,
         "classes": meta.get("classes") or [],
         "class_definitions": _class_definitions(meta),

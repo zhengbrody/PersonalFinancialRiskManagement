@@ -15,9 +15,9 @@ the recorded hash, so "production serves the approved artifact" is checkable
 from the outside rather than assumed.
 
 The gate thresholds are deliberately NOT ``holdout_accuracy >= baseline``: the
-public model card says the model does not beat persistence on 4-class point
-accuracy and that its value is probability ranking. That number is recorded
-(informational) but never gates.
+public model card positions the model's value as probability ranking, not
+4-class point accuracy (which has historically trailed a persistence baseline).
+That number is recorded (informational) but never gates.
 """
 
 from __future__ import annotations
@@ -35,6 +35,9 @@ MODEL_PATH = ARTIFACT_DIR / "regime_model.joblib"
 META_PATH = ARTIFACT_DIR / "regime_meta.json"
 REFERENCE_PATH = ARTIFACT_DIR / "regime_reference.json"
 PROVENANCE_PATH = ARTIFACT_DIR / "regime_provenance.json"
+# Written by `python -m backend.app.ml.validate` in the same retrain run; hashed
+# into the record so the walk-forward report is bound to the run that made it.
+VALIDATION_PATH = ARTIFACT_DIR / "validation_report.json"
 
 # The release floor. Unchanged from the inline gate it replaces.
 MIN_ELEVATED_RISK_AUC = 0.70
@@ -80,11 +83,19 @@ def build_provenance(
     model_path: Path = MODEL_PATH,
     meta_path: Path = META_PATH,
     reference_path: Path = REFERENCE_PATH,
+    validation_path: Optional[Path] = None,
 ) -> dict[str, Any]:
     meta = json.loads(meta_path.read_text())
     checks = dict(gates.get("checks") or {})
     for name, passed in (extra_gates or {}).items():
         checks[name] = bool(passed)
+    artifacts = {
+        model_path.name: sha256_file(model_path),
+        meta_path.name: sha256_file(meta_path),
+        reference_path.name: sha256_file(reference_path),
+    }
+    if validation_path is not None:
+        artifacts[validation_path.name] = sha256_file(validation_path)
     return {
         "schema": 1,
         "model_version": meta.get("model_version"),
@@ -99,11 +110,7 @@ def build_provenance(
             "observed": gates.get("observed") or {},
             "informational": gates.get("informational") or {},
         },
-        "artifacts": {
-            model_path.name: sha256_file(model_path),
-            meta_path.name: sha256_file(meta_path),
-            reference_path.name: sha256_file(reference_path),
-        },
+        "artifacts": artifacts,
     }
 
 
@@ -147,6 +154,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         run_id=args.run_id,
         run_url=args.run_url,
         extra_gates=_parse_extra(args.extra),
+        model_path=MODEL_PATH,
+        meta_path=META_PATH,
+        reference_path=REFERENCE_PATH,
+        validation_path=VALIDATION_PATH,
     )
     PROVENANCE_PATH.write_text(json.dumps(record, indent=2) + "\n")
     print(json.dumps(record["artifacts"], indent=2))

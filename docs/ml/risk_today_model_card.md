@@ -1,44 +1,44 @@
 # Model Card — Risk-Today Regime Classifier (`regime-risk-today`)
 
-_Last updated: 2026-09-10 · shipped artifact `regime-v1.1.0` trained **2026-09-07** · walk-forward validation last regenerated **2026-07-08** (see "Two artifacts, two dates" below) · owner: MindMarket_
+_Last updated: 2026-11-02 · semantic version `regime-v1.1.0` · retrained weekly · owner: MindMarket_
+
+> **Where the numbers live.** This page deliberately does not hard-code metrics:
+> they change every week. The current figures are served, straight from the
+> committed artifacts, by `GET https://mindmarket.app/api/v1/ml/model_card`
+> (rendered at `/methodology/regime-model`), and the full walk-forward tables
+> are in the auto-generated [validation report](validation_report.md).
 
 ## Headline conclusion — read this first
 
-**On 4-class point accuracy this model LOSES to the persistence baseline
-(0.490 vs 0.523 mean fold accuracy, purged walk-forward — regimes persist,
-and carrying the last observable label is genuinely hard to beat).**
+**4-class point accuracy is not this model's validated value.** Regimes
+persist, so carrying the last observable label (the persistence baseline) is
+genuinely hard to beat, and historically the model has trailed it on mean
+walk-forward fold accuracy. The served headline states the current comparison
+(beats / does not beat) from the regenerated report rather than a fixed claim.
 
-Classification is weak; the skill that survives honest validation is
-probabilistic: the elevated-risk probability beats the base-rate reference
-(Brier **0.1042 vs 0.1133**, July fit) and ranks risk well (elevated-risk
-ROC-AUC **0.7642** on the shipped September artifact; **0.7701** on the July
-validation run — embargoed hold-out in both). The model is therefore positioned as a **probability-ranking
-signal** — "how much elevated-risk pressure is building" — **not a
-classifier**, and every product surface uses it exactly that way
-(calm/normal vs elevated coloring, never a hard class call).
+The skill that survives honest validation is probabilistic: the elevated-risk
+probability beats the base-rate reference on Brier score and ranks risk well
+(elevated-risk ROC-AUC on an embargoed hold-out). The model is therefore
+positioned as a **probability-ranking signal** — "how much elevated-risk
+pressure is building" — **not a classifier**, and every product surface uses it
+exactly that way (calm/normal vs elevated coloring, never a hard class call).
 
-### Two artifacts, two dates — read the metrics with this in mind
+### One fit, two artifacts
 
-The served model card and this page are assembled from **two committed JSON
-artifacts that are refreshed on different schedules**, so the figures below do
-not all describe the same fit:
+The served model card is assembled from two committed JSON artifacts:
 
-| Artifact | Refreshed by | Current vintage | Figures it supplies |
-|---|---|---|---|
-| `regime_meta.json` | `train-regime.yml`, **every Monday** | trained **2026-09-07**, window 2012-08-13 → 2026-08-21 | hold-out accuracy + majority baseline, macro-F1, CV macro-F1, class distribution, training window, permutation importances |
-| `validation_report.json` | `python -m backend.app.ml.validate`, **run by hand** | **2026-07-08**, window 2012-06-12 → 2026-06-22 | walk-forward CV accuracy, the persistence / majority / logistic baselines, Brier, calibration bins, elevated-risk AUC |
+| Artifact | Produced by | Figures it supplies |
+|---|---|---|
+| `regime_meta.json` | `python -m backend.app.ml.train` | hold-out accuracy + majority baseline, macro-F1, CV macro-F1, class distribution, training window, permutation importances |
+| `validation_report.json` | `python -m backend.app.ml.validate` | walk-forward CV accuracy, the persistence / majority / logistic baselines, Brier, calibration bins, elevated-risk AUC |
 
-So the headline persistence verdict (0.490 vs 0.523), the Brier numbers and the
-calibration table describe the **July fit**, while the hold-out accuracy
-describes the **September fit**. `train-regime.yml` says so outright — it
-"never regenerates" `validation_report.json`, which is exactly why its release
-gate reads the freshly-trained meta instead (see Limitations).
-`services/model_card.py` prefers the validation report's `elevated_risk_auc`
-when present (**0.7701**, July fit) and falls back to the meta's (**0.7642**,
-September fit) — the two agree closely, but they are not the same measurement.
-
-To resynchronise them, regenerate the validation report on the current
-artifact; the report's wording is data-driven and flips if the numbers ever do.
+Since 2026-11 the weekly `train-regime.yml` run produces **both** from the same
+cached data snapshot (`--cache-dir`), so they describe the same fit. (Before
+that, the validation report was regenerated only by hand and lagged the weekly
+model by months.) `services/model_card.py` prefers the validation report's
+`elevated_risk_auc` and falls back to the meta's — both come from the same
+data, but they are different measurements (walk-forward hold-out vs the
+training script's hold-out).
 
 ## Intended use
 
@@ -89,46 +89,40 @@ forward-looking operation; the last 10 rows are unlabeled and dropped.
 
 ## Training data & window
 
-Free yfinance daily closes, 2012-08-13 → 2026-08-21 (**3,526 labeled rows**
+Free yfinance daily closes over a rolling ~15-year window (~3,500 labeled rows
 after a ~1-year / 252-trading-day warmup — the longest feature window; the
-window slides forward with each weekly retrain). Class distribution:
-risk_on 1,881 · neutral 916 · volatile 548 · **stress 181** — the tail class is rare by nature; treat
+window slides forward with each weekly retrain; the exact window and class
+counts are in `regime_meta.json` and the served model card). `stress` is by far
+the smallest class — the tail class is rare by nature; treat
 per-class stress metrics as low-sample. The committed
 `regime_reference.json` (feature quantile grids + per-feature calibrated
 drift nulls + training-time predicted class mix) anchors the live drift
 monitor at `GET /api/v1/ml/health`.
 
-## Evaluation — the shipped artifact (`regime_meta.json`, trained 2026-09-07)
+## Evaluation
 
 Purged walk-forward CV (`TimeSeriesSplit`, expanding window, a horizon-row
 embargo at every boundary — training labels overlapping the test window are
-dropped) + a final chronological 20% hold-out (706 rows). **Every number in
-this table comes from `regime_meta.json`** — the cross-baseline and calibration
-figures elsewhere on this page come from the older `validation_report.json`
-(see "Two artifacts, two dates"):
+dropped) + a final chronological 20% hold-out. The current values of every
+metric below are in the served model card and the
+[validation report](validation_report.md):
 
-| Metric | Value |
+| Metric | Source |
 |---|---|
-| Hold-out accuracy (4-class) | **0.5368** |
-| Majority-class baseline (`risk_on`) | 0.5269 |
-| Hold-out macro-F1 | 0.3813 |
-| CV macro-F1 mean | 0.2956 |
-| **Elevated-risk ROC-AUC** (binary volatile∪stress) | **0.7642** |
+| Hold-out accuracy (4-class) + majority-class baseline | `regime_meta.json` |
+| Hold-out macro-F1, CV macro-F1 mean | `regime_meta.json` |
+| Walk-forward accuracy vs persistence / majority / logistic baselines | `validation_report.json` |
+| **Elevated-risk ROC-AUC** (binary volatile∪stress) | `validation_report.json` (falls back to the meta) |
+| Brier score vs base-rate reference, calibration bins | `validation_report.json` |
+| Top features by permutation importance | `regime_meta.json` |
 
-Per-fold walk-forward table, baseline comparison (majority / persistence /
-logistic), and the calibration table live in the auto-generated
-[validation report](validation_report.md).
-
-Read this honestly: the 4-class accuracy barely beats always-guessing
-`risk_on` (and loses to persistence — see the headline). The model's real,
-defensible signal is the **threshold-free ~0.76 AUC on "is elevated risk ahead?"** — that binary question is what the product
-surfaces (calm/normal vs elevated/stressed coloring). Top features by
-permutation importance (`regime_meta.json`): `vol_63d` (0.18917),
-`vix_level` (0.16306), `golden_cross` (0.09698), `yield_slope` (0.07948),
-`vol_ratio` (0.07790). Note ranks 4 and 5 are the reverse of the older
-`validation_report.json` ordering — the two features sit within ~0.002 of each
-other and trade places between fits, which is itself a reason not to
-over-read the tail of this list.
+Read this honestly: the 4-class accuracy sits close to always-guessing
+`risk_on`. The model's defensible signal is the **threshold-free AUC on "is
+elevated risk ahead?"** — that binary question is what the product surfaces
+(calm/normal vs elevated/stressed coloring). The lower ranks of the
+permutation-importance list trade places between weekly fits (adjacent
+features sit within a few thousandths of each other), so do not over-read the
+tail of that list.
 
 ## Serving & degradation
 
@@ -167,32 +161,31 @@ but that internal split is random-order by estimator design.
   shift would change class meanings. Thresholds live in `labels.py` and the
   config, cross-validated to stay in sync (the serving fallback buckets with
   the same constants).
-- **Rare stress class** (181 rows) → wide uncertainty on stress-specific
+- **Rare stress class** (on the order of 180 rows) → wide uncertainty on stress-specific
   precision/recall.
 - **Weekly auto-retrain is gated, but only on a release floor.**
-  `train-regime.yml` now runs its checks BEFORE committing anything: a quality
-  floor on the freshly-trained `regime_meta.json` (`elevated_risk_auc >= 0.70`
-  and `holdout_size >= 500` — failing either exits with
-  `::error::freshly trained model is below the release floor — NOT committing`)
-  plus `pytest backend/tests/test_model_card.py`. A below-floor artifact never
-  reaches `main`, so no feature deploy can ship it. Two deliberate gaps remain:
-  (a) it does **not** gate on `holdout_accuracy >= baseline_accuracy`, because
-  this card's own verdict is that the model's value is probability RANKING, not
-  4-class point accuracy — that figure is printed, not enforced; and (b) the
-  workflow never regenerates `validation_report.json`, so the walk-forward /
-  calibration half of this card ages until someone reruns `validate` by hand.
-  The artifact commit still lands `[skip ci]`, and the runtime loader
-  fail-softs if a bad artifact somehow arrives.
+  `train-regime.yml` trains, regenerates the walk-forward validation report
+  from the same cached data, and runs its checks BEFORE proposing anything: a
+  quality floor on the freshly-trained `regime_meta.json` (`elevated_risk_auc
+  >= 0.70` and `holdout_size >= 500`) plus `pytest
+  backend/tests/test_model_card.py`, which also holds the regenerated report to
+  the public floor (hold-out size, elevated-risk AUC, Brier below the base
+  rate). A passing run opens an `ml/retrain-*` pull request — never a direct
+  push, never auto-merged, never auto-deployed. One deliberate gap remains: it
+  does **not** gate on 4-class accuracy against a baseline, because this card's
+  verdict is that the model's value is probability RANKING — that figure is
+  printed, not enforced. The runtime loader fail-softs if a bad artifact
+  somehow arrives.
 - The estimator's internal early-stopping split shuffles within each fit
   (seeded; reported eval boundaries stay chronological) — with
   autocorrelated vol labels this can mildly flatter iteration selection.
-- **Walk-forward validation** (`docs/ml/validation_report.md`, Phase 2,
-  purged/embargoed folds): the persistence baseline (carry the last
-  observable label) BEATS the model on mean 4-class fold accuracy
-  (0.523 vs 0.490) — regimes persist; the model's value is the
-  elevated-risk probability, not 4-class point calls.
+- **Walk-forward validation** (`docs/ml/validation_report.md`, purged/
+  embargoed folds): the persistence baseline (carry the last observable label)
+  is a strong 4-class benchmark because regimes persist; the current comparison
+  is in the served headline. Either way, the model's value is the elevated-risk
+  probability, not 4-class point calls.
 - **Calibration** (hold-out, embargoed fit): higher predicted bins do see
-  higher observed frequency, but the probability OVER-FORECASTS in the mid
+  higher observed frequency, but the probability has historically OVER-FORECAST in the mid
   bins — treat mid-range probabilities as a watch signal, not a base rate.
   Caveat on precision: bins sit on OVERLAPPING 10-day windows (effective
   sample ≈ n/10), so sparse upper bins may reflect only a couple of market
