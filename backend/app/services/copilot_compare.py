@@ -379,6 +379,16 @@ def compare_change(
             0,
             "This reduction removes some stock backing from short calls on the same underlying. Option-only expiry bounds do not measure that lost stock cover; inspect the paired account stresses.",
         )
+    disclosed = (comparison_options.TRADE_GAP_PREFIX, comparison_options.IV_DIVERGENCE_PREFIX)
+    leg_warnings = sorted(
+        {
+            f"{r['underlying']} {r['expiry']} {float(r['strike']):g} {r['option_type']}: {w}"
+            for r in option_results
+            for w in (r.get("warnings") or [])
+            if str(w).startswith(disclosed)
+        }
+    )
+    mixed_limits.extend(leg_warnings)
     hypothesis_scenario = (
         _hypothesis_scenario(change, values, candidate, equity, option_results)
         if change.hypothesis is not None
@@ -401,7 +411,8 @@ def compare_change(
         scenarios=scenarios,
         option_groups=groups,
         option_quote_basis=(
-            "Delayed chain midpoints captured once; quote timestamps unavailable; not a synchronized broker valuation"
+            f"Delayed chain midpoints captured once and calibrated to the {last.date().isoformat()} "
+            "stock close; quote timestamps unavailable; not a synchronized broker valuation"
             if option_results
             else None
         ),

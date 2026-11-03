@@ -458,7 +458,9 @@ def compute(record, user, progress=None):
     from .copilot_compare import prepare_prices
 
     frame, _ = prepare_prices(prices, symbols, now=now)
-    options = comparison_options.capture_options(specs, frame.iloc[-1].to_dict(), now=now)
+    options = comparison_options.capture_options(
+        specs, frame.iloc[-1].to_dict(), now=now, spot_date=frame.index[-1].date()
+    )
     if progress:
         progress("evaluating")
     batch = copilot_candidates.evaluate(
