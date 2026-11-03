@@ -47,6 +47,7 @@ import {
   useVarBacktest,
   type ComponentVarRow,
   type FactorBetaRow,
+  type HoldingFactorBetaRow,
   type LiquidityRow,
   type RiskReport,
   type Scenarios,
@@ -158,6 +159,7 @@ export function ReportSections({ report }: { report: RiskReport }) {
       ) : (
         <FactorBetasTable report={report} />
       )}
+      <HoldingFactorTable report={report} />
       <ComponentVarTable report={report} />
       <StressSummary report={report} />
       {Object.keys(report.macro_betas).length > 0 && <MacroBetas report={report} />}
@@ -457,6 +459,54 @@ function FactorBetasTable({ report }: { report: RiskReport }) {
           rowKey={(r) => r.factor}
           initialSort={{ key: "beta", dir: "desc" }}
           minWidth={360}
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
+// Display order for the per-holding factor columns (matches the engine's
+// factor set). Unknown keys from a newer backend are appended after these.
+const HOLDING_FACTOR_ORDER = ["SPY", "QQQ", "GLD", "TLT", "IWM", "VTV"];
+
+export function HoldingFactorTable({ report }: { report: RiskReport }) {
+  const rows = report.holding_factor_betas ?? [];
+  if (rows.length === 0) return null;
+  const present = new Set(rows.flatMap((r) => Object.keys(r.betas)));
+  const factors = [
+    ...HOLDING_FACTOR_ORDER.filter((f) => present.has(f)),
+    ...[...present].filter((f) => !HOLDING_FACTOR_ORDER.includes(f)).sort(),
+  ];
+  const columns: Column<HoldingFactorBetaRow>[] = [
+    { key: "ticker", header: "Holding", render: (r) => <TickerBadge ticker={r.ticker} />, sortValue: (r) => r.ticker },
+    ...factors.map<Column<HoldingFactorBetaRow>>((f) => ({
+      key: f,
+      header: f,
+      align: "right",
+      render: (r) => fmtNum(r.betas[f], 2),
+      sortValue: (r) => r.betas[f] ?? 0,
+    })),
+  ];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Per-holding factor betas</CardTitle>
+        <CardDescription>
+          Each holding&apos;s beta to each factor ETF — a regression of that
+          holding&apos;s daily returns on the factor&apos;s daily returns. Unlike the
+          portfolio table above, these are per position; &quot;—&quot; means there was
+          not enough overlapping history to estimate it.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-4">
+        <DataTable
+          rows={rows}
+          columns={columns}
+          rowKey={(r) => r.ticker}
+          filterKey="ticker"
+          initialSort={{ key: "SPY", dir: "desc" }}
+          minWidth={520}
         />
       </CardContent>
     </Card>

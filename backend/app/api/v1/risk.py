@@ -55,6 +55,7 @@ from ...schemas.risk import (
     FrontierPoint,
     HistoricalScenarioRow,
     HistoricalScenariosOut,
+    HoldingFactorBetaRow,
     LiquidityRow,
     OptionScoreImpactOut,
     PortfolioMetricsOut,
@@ -539,6 +540,41 @@ def score_portfolio_endpoint(body: ScoreRequest, request: Request):
 
 
 # ── /score_from_active ─────────────────────────────────────────────
+
+
+def _factor_name_to_ticker() -> dict[str, str]:
+    """Inverse of ``risk_engine.FACTOR_TICKERS`` (display name -> ETF ticker)."""
+    from risk_engine import FACTOR_TICKERS
+
+    return {name: tk for tk, name in FACTOR_TICKERS.items()}
+
+
+def _holding_factor_betas(matrix) -> list[HoldingFactorBetaRow]:
+    """Serialize the engine's per-asset factor-beta matrix.
+
+    ``matrix`` is ``report.factor_betas``: index = holding ticker, columns =
+    factor DISPLAY names. Columns are mapped back to factor ETF tickers;
+    non-finite cells become ``None``; a holding whose betas are all missing
+    is dropped. Fail-soft: any malformed input yields ``[]`` (logged), never
+    an exception into the report.
+    """
+    if not isinstance(matrix, pd.DataFrame) or matrix.empty:
+        return []
+    try:
+        name_to_ticker = _factor_name_to_ticker()
+        rows: list[HoldingFactorBetaRow] = []
+        for ticker, series in matrix.iterrows():
+            betas = {
+                name_to_ticker[str(col)]: _finite_float(val)
+                for col, val in series.items()
+                if str(col) in name_to_ticker
+            }
+            if any(v is not None for v in betas.values()):
+                rows.append(HoldingFactorBetaRow(ticker=str(ticker), betas=betas))
+        return rows
+    except Exception as exc:  # noqa: BLE001 — never break the report
+        _log.warning("risk.holding_factor_betas.failed err=%s", type(exc).__name__)
+        return []
 
 
 def _finite_float(v) -> float | None:
@@ -2018,6 +2054,8 @@ def _serialize_report(
                 )
             )
 
+    holding_factor_betas = _holding_factor_betas(getattr(report, "factor_betas", None))
+
     component_var: list[ComponentVarRow] = []
     cv = getattr(report, "component_var_pct", None)
     if cv is not None:
@@ -2109,6 +2147,7 @@ def _serialize_report(
         total_return=(account_metrics or {}).get("total_return"),
         betas={k: float(v) for k, v in (report.betas or {}).items() if _finite(v) is not None},
         factor_betas=factor_betas,
+        holding_factor_betas=holding_factor_betas,
         component_var_pct=component_var,
         stress_loss=_scaled(report.stress_loss),
         stress_market_shock=_finite(report.stress_market_shock),

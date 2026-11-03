@@ -55,6 +55,17 @@ class FactorBetaRow(BaseModel):
     p_value: Optional[float] = None
 
 
+class HoldingFactorBetaRow(BaseModel):
+    """One holding's factor betas (per-asset OLS on daily returns).
+
+    ``betas`` is keyed by factor ETF ticker (SPY/QQQ/GLD/TLT/IWM/VTV); a
+    factor whose regression could not be estimated is ``None`` (never 0).
+    """
+
+    ticker: str
+    betas: dict[str, Optional[float]] = Field(default_factory=dict)
+
+
 class ComponentVarRow(BaseModel):
     """One ticker's share of total portfolio VaR."""
 
@@ -349,6 +360,10 @@ class RiskReportOut(BaseModel):
     betas: dict[str, float] = Field(default_factory=dict)
     # Factor attribution table (SPY/QQQ/GLD/TLT/IWM/VTV).
     factor_betas: list[FactorBetaRow] = Field(default_factory=list)
+    # Per-HOLDING factor betas (the engine's ticker x factor matrix). Distinct
+    # from ``factor_betas`` above, which is the PORTFOLIO-level regression.
+    # Asset betas are leverage-invariant, so these are never risk-scaled.
+    holding_factor_betas: list[HoldingFactorBetaRow] = Field(default_factory=list)
     # Per-ticker share of total VaR.
     component_var_pct: list[ComponentVarRow] = Field(default_factory=list)
     # Per-ticker contribution to annualized return (decimal, sums to the

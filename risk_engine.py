@@ -84,6 +84,19 @@ class RiskReport:
 # ══════════════════════════════════════════════════════════════
 #  Risk engine
 # ══════════════════════════════════════════════════════════════
+# Multi-factor benchmarks: factor ETF ticker -> display name. Module-level so
+# consumers (e.g. the API serializer mapping the per-asset factor matrix's
+# display-name columns back to tickers) don't depend on the engine class.
+FACTOR_TICKERS = {
+    "SPY": "S&P 500",
+    "QQQ": "NASDAQ 100",
+    "GLD": "Gold",
+    "TLT": "US Treasury 20Y+",
+    "IWM": "Small Cap (Size)",
+    "VTV": "Value (Style)",
+}
+
+
 class RiskEngine:
     """Deterministic portfolio risk-computation engine."""
 
@@ -91,14 +104,7 @@ class RiskEngine:
     EWMA_LAMBDA = 0.94
 
     # Multi-factor benchmarks
-    FACTOR_TICKERS = {
-        "SPY": "S&P 500",
-        "QQQ": "NASDAQ 100",
-        "GLD": "Gold",
-        "TLT": "US Treasury 20Y+",
-        "IWM": "Small Cap (Size)",
-        "VTV": "Value (Style)",
-    }
+    FACTOR_TICKERS = FACTOR_TICKERS
 
     # Reserved prefix used to namespace factor columns when they are aligned
     # (``pd.concat``) against the holdings return frame. A user can HOLD a
