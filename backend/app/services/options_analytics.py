@@ -64,6 +64,28 @@ def _default_spot(underlying: str) -> Optional[float]:
     return None
 
 
+def _trade_date(value: Any) -> Optional[str]:
+    """ISO date of a chain row's last trade, or None when absent/unparseable.
+
+    Kept so callers can tell a stale contract print from a current one; the
+    timestamp is the trade's, not the bid/ask quote's (yfinance has no quote
+    timestamp).
+    """
+    if value is None:
+        return None
+    try:
+        import pandas as pd
+
+        stamp = pd.Timestamp(value)
+        if pd.isna(stamp):
+            return None
+        if stamp.tzinfo is not None:
+            stamp = stamp.tz_convert("UTC")
+        return stamp.date().isoformat()
+    except Exception:  # noqa: BLE001 - unparseable → unknown, never a guess
+        return None
+
+
 def _default_chain_row(
     underlying: str, expiry: str, option_type: str, strike: float
 ) -> Optional[dict[str, Any]]:
@@ -100,6 +122,7 @@ def _default_chain_row(
             "implied_volatility": _f("impliedVolatility"),
             "open_interest": _f("openInterest"),
             "volume": _f("volume"),
+            "last_trade_date": _trade_date(row.get("lastTradeDate")),
         }
     except Exception as exc:  # noqa: BLE001 - fail-soft to None
         _log.warning(

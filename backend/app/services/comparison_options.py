@@ -6,9 +6,11 @@ Existing analytics, expiry strategy and scenario engines remain authoritative.
 
 import math
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 from typing import NoReturn
+
+import numpy as np
 
 from libs.mindmarket_core.options_positions import (
     LONG_ALIASES,
@@ -114,10 +116,76 @@ def option_specs(holdings: dict, *, now: datetime | None = None) -> list[SimpleN
     return specs
 
 
-def capture_options(specs, spots: dict[str, float], *, now: datetime, chain_fn=None) -> list[dict]:
-    """Fetch each exact contract once; reuse frozen quotes + spot + clock."""
+# IV is SOLVED from the option midpoint at the captured stock close. A midpoint
+# from today against a close several sessions old makes the solved IV silently
+# absorb the stock's move since that close, so option books get a tighter close
+# window than equity-only books (copilot_compare.prepare_prices allows 7 days):
+# 4 calendar days still admits a Friday close captured on a Tuesday after a
+# Monday holiday.
+MAX_SPOT_AGE_DAYS = 4
+# A contract whose last print is more than one business day away from the stock
+# close is a different market moment; its quote cannot be trusted to line up.
+MAX_TRADE_GAP_BUSINESS_DAYS = 1
+# Disclosure only (never a refusal, never used for pricing): the solved IV is
+# flagged when it differs from the chain's own quoted IV by BOTH margins.
+IV_DIVERGENCE_ABS = 0.10
+IV_DIVERGENCE_REL = 0.25
+IV_DIVERGENCE_PREFIX = "Implied volatility solved from the captured midpoint"
+
+
+def _optional_positive(value) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) and number > 0 else None
+
+
+def _trade_date(value) -> date | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
+
+
+def iv_divergence_warning(solved, chain_iv) -> str | None:
+    solved, chain_iv = _optional_positive(solved), _optional_positive(chain_iv)
+    if solved is None or chain_iv is None:
+        return None
+    gap = abs(solved - chain_iv)
+    if gap > IV_DIVERGENCE_ABS and gap / chain_iv > IV_DIVERGENCE_REL:
+        return (
+            f"{IV_DIVERGENCE_PREFIX} ({solved:.1%}) differs from "
+            f"the chain's quoted IV ({chain_iv:.1%}); the stock close and option quote may not "
+            "be from the same moment."
+        )
+    return None
+
+
+def capture_options(
+    specs, spots: dict[str, float], *, now: datetime, spot_date: date, chain_fn=None
+) -> list[dict]:
+    """Fetch each exact contract once; reuse frozen quotes + spot + clock.
+
+    ``spot_date`` is the date of the stock close used as spot. It is required so
+    no caller can skip the timing guard by omission.
+    """
     if not specs:
         return []
+    if isinstance(spot_date, datetime):
+        spot_date = spot_date.date()
+    age = (now.date() - spot_date).days
+    if age < 0 or age > MAX_SPOT_AGE_DAYS:
+        _bad(
+            f"The latest common stock close is {spot_date.isoformat()}, {age} calendar days "
+            f"before this capture ({now.date().isoformat()}). Option volatility would be "
+            f"solved against a stale stock price; option books need a close within "
+            f"{MAX_SPOT_AGE_DAYS} days. Refresh data before comparing."
+        )
     fetch = chain_fn or options_analytics._default_chain_row
     rows = {}
     for s in specs:
@@ -142,7 +210,24 @@ def capture_options(specs, spots: dict[str, float], *, now: datetime, chain_fn=N
             _bad(
                 "A two-sided, non-crossed option quote with spread ≤50% of midpoint is required. Last trade alone is not enough."
             )
-        rows[key] = {**row, "implied_volatility": None}  # calibrate to captured spot/mark
+        traded = _trade_date(row.get("last_trade_date"))
+        if traded is not None:
+            first, last = sorted((traded, spot_date))
+            gap = int(np.busday_count(first, last))
+            if gap > MAX_TRADE_GAP_BUSINESS_DAYS:
+                _bad(
+                    f"The {s.underlying} {s.expiry} {s.strike:g} {s.option_type} last traded on "
+                    f"{traded.isoformat()}, but the stock close used for pricing is "
+                    f"{spot_date.isoformat()} ({gap} business days apart). Its quote cannot be "
+                    "aligned with the stock price. No option legs were excluded."
+                )
+        # The chain's own IV is kept for comparison only; pricing calibrates to
+        # the captured spot/mark.
+        rows[key] = {
+            **row,
+            "chain_iv": _optional_positive(row.get("implied_volatility")),
+            "implied_volatility": None,
+        }
     results = options_analytics.analyze_contracts(
         specs,
         as_of=now,
@@ -161,6 +246,14 @@ def capture_options(specs, spots: dict[str, float], *, now: datetime, chain_fn=N
             )
         if any(not math.isfinite(float(v)) for v in r["greeks"].values()):
             _bad("Option model produced invalid sensitivities.")
+        row = rows[(r["underlying"], r["expiry"], r["option_type"], float(r["strike"]))]
+        r["chain_iv"] = row["chain_iv"]
+        traded = _trade_date(row.get("last_trade_date"))
+        r["last_trade_date"] = traded.isoformat() if traded else None
+        r["spot_date"] = spot_date.isoformat()
+        warning = iv_divergence_warning(r.get("iv"), row["chain_iv"])
+        if warning:
+            r["warnings"] = [*r.get("warnings", []), warning]
     return results
 
 

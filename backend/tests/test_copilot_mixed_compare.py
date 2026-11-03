@@ -96,6 +96,7 @@ def captured(book, prices, chain_fn=quote):
         options.option_specs(book.holdings, now=NOW),
         prices.iloc[-1].to_dict(),
         now=NOW,
+        spot_date=prices.index[-1].date(),
         chain_fn=chain_fn,
     )
 
@@ -311,3 +312,110 @@ def _fixed_endpoint_clock(monkeypatch):
     from backend.app.api.v1 import copilot_compare as api
 
     monkeypatch.setattr(api, "datetime", SimpleNamespace(now=lambda tz: NOW))
+
+
+# ── stock-close / option-quote timing guard ─────────────────────────────────
+
+
+def _capture_at(book, prices, *, now, chain_fn=quote, spot_date=None):
+    return options.capture_options(
+        options.option_specs(book.holdings, now=now),
+        prices.iloc[-1].to_dict(),
+        now=now,
+        spot_date=spot_date or prices.index[-1].date(),
+        chain_fn=chain_fn,
+    )
+
+
+def _ending(prices, end):
+    """Same price path, relabelled so the last close falls on ``end``."""
+    shifted = prices.copy()
+    shifted.index = pd.bdate_range(end=end, periods=len(prices))
+    return shifted
+
+
+def test_option_book_refuses_a_five_day_old_stock_close(book, prices):
+    stale = _ending(prices, "2026-09-01")  # Tuesday close, captured Sunday 9/6
+    with pytest.raises(APIError) as exc:
+        _capture_at(book, stale, now=NOW)
+    assert exc.value.code == "option_comparison_unavailable"
+    assert "2026-09-01" in exc.value.message and "5 calendar days" in exc.value.message
+    assert "2026-09-06" in exc.value.message
+
+
+def test_option_book_accepts_a_weekend_old_close(book, prices):
+    # Friday 9/4 close captured Monday 9/7 (holiday) = 3 calendar days.
+    rows = _capture_at(book, prices, now=datetime(2026, 9, 7, 15, tzinfo=timezone.utc))
+    assert len(rows) == len(TERMS)
+    assert all(r["spot_date"] == "2026-09-04" for r in rows)
+
+
+def test_last_trade_far_from_stock_close_is_refused(book, prices):
+    def old_print(*key):
+        return {**quote(*key), "last_trade_date": "2026-08-31"}  # Mon vs Fri close
+
+    with pytest.raises(APIError) as exc:
+        _capture_at(book, prices, now=NOW, chain_fn=old_print)
+    assert exc.value.code == "option_comparison_unavailable"
+    assert "2026-08-31" in exc.value.message and "2026-09-04" in exc.value.message
+
+
+def test_last_trade_one_business_day_away_is_accepted(book, prices):
+    def recent(*key):
+        return {**quote(*key), "last_trade_date": "2026-09-03"}
+
+    rows = _capture_at(book, prices, now=NOW, chain_fn=recent)
+    assert all(r["last_trade_date"] == "2026-09-03" for r in rows)
+
+
+def test_divergent_chain_iv_warns_without_refusing_or_repricing(book, prices):
+    plain = _capture_at(
+        book, prices, now=NOW, chain_fn=lambda *k: {**quote(*k), "implied_volatility": None}
+    )
+    solved = {(r["underlying"], r["strike"]): r["iv"] for r in plain}
+
+    def near(*key):  # chain IV within tolerance of the solved IV → no warning
+        u, _, _, k = key
+        return {**quote(*key), "implied_volatility": solved[(u, k)] * 1.05}
+
+    assert not any(
+        str(w).startswith(options.IV_DIVERGENCE_PREFIX)
+        for r in _capture_at(book, prices, now=NOW, chain_fn=near)
+        for w in r["warnings"]
+    )
+
+    def far(*key):
+        u, _, _, k = key
+        return {**quote(*key), "implied_volatility": solved[(u, k)] + 0.30}
+
+    rows = _capture_at(book, prices, now=NOW, chain_fn=far)
+    assert all(
+        any(str(w).startswith(options.IV_DIVERGENCE_PREFIX) for w in r["warnings"]) for r in rows
+    )
+    # Pricing is unchanged: the chain IV is disclosed, never used.
+    assert [r["iv"] for r in rows] == [r["iv"] for r in plain]
+    assert all(
+        r["chain_iv"] == pytest.approx(solved[(r["underlying"], r["strike"])] + 0.30) for r in rows
+    )
+    result = service.compare_change(book, change(), prices, {}, now=NOW, option_results=rows)
+    assert any(options.IV_DIVERGENCE_PREFIX in limit for limit in result.limitations)
+    assert "2026-09-04 stock close" in result.option_quote_basis
+
+
+def test_iv_divergence_needs_both_absolute_and_relative_margins():
+    assert options.iv_divergence_warning(0.85, 0.70) is None  # +0.15 but only +21%
+    assert options.iv_divergence_warning(0.95, 0.70) is not None  # +0.25 and +36%
+    assert options.iv_divergence_warning(0.40, 0.25) is not None  # +0.15 and +60%
+    assert options.iv_divergence_warning(0.32, 0.25) is None  # +28% but only +0.07
+    assert options.iv_divergence_warning(1.95, 1.80) is None  # +0.15 but only +8%
+    assert options.iv_divergence_warning(0.40, None) is None
+
+
+def test_equity_only_book_still_accepts_a_six_day_old_close(prices):
+    stock_only = ActivePortfolioContext(
+        BOOK, {"SGOV": {"shares": 100}, "SPY": {"shares": 10}}, 1000, 5000, 7500
+    )
+    stale = _ending(prices[["SGOV", "SPY"]], "2026-08-31")  # 6 calendar days before NOW
+    result = service.compare_change(stock_only, change(), stale, {}, now=NOW, option_results=[])
+    assert result.price_as_of == "2026-08-31"
+    assert result.option_quote_basis is None

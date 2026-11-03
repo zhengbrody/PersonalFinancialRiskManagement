@@ -65,7 +65,7 @@ def compare_change(body: CompareChange, request: Request, user: AuthedUser = Dep
         prices = market_data.get_price_history(fetch_symbols, days=365, provenance=sources)
         frame, _ = copilot_compare.prepare_prices(prices, fetch_symbols, now=now)
         option_results = comparison_options.capture_options(
-            specs, frame.iloc[-1].to_dict(), now=now
+            specs, frame.iloc[-1].to_dict(), now=now, spot_date=frame.index[-1].date()
         )
         result = copilot_compare.compare_change(
             context,

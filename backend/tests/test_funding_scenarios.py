@@ -247,6 +247,7 @@ def test_same_underlying_puts_reserve_gross_cash_without_netting(inputs, sell_un
         comparison_options.option_specs(context.holdings, now=NOW),
         frame.iloc[-1].to_dict(),
         now=NOW,
+        spot_date=frame.index[-1].date(),
         chain_fn=quote,
     )
     result = copilot_compare.compare_change(

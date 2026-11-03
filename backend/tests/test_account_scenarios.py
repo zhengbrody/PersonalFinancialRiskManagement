@@ -101,6 +101,7 @@ def capture(
         comparison_options.option_specs(context.holdings, now=NOW),
         prices.iloc[-1].to_dict(),
         now=NOW,
+        spot_date=prices.index[-1].date(),
         chain_fn=chain,
     )
     comparison = copilot_compare.compare_change(

@@ -66,6 +66,7 @@ def captured(monkeypatch):
         comparison_options.option_specs(context.holdings, now=NOW),
         prices.iloc[-1].to_dict(),
         now=NOW,
+        spot_date=prices.index[-1].date(),
         chain_fn=lambda *args: {"contract_symbol": option, "strike": 30, "bid": 1.9, "ask": 2.1},
     )
     comparison = copilot_compare.compare_change(
@@ -344,6 +345,7 @@ def _capture(monkeypatch, *, options, cash, debt, sell="A", amount=500.0, put=No
         comparison_options.option_specs(context.holdings, now=NOW),
         prices.iloc[-1].to_dict(),
         now=NOW,
+        spot_date=prices.index[-1].date(),
         chain_fn=chain,
     )
     comparison = copilot_compare.compare_change(
