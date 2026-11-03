@@ -239,6 +239,17 @@ def _massive_fallback(missing: list[str], days: int, frames: dict, src_map: dict
                 src_map[t] = "massive"
 
 
+def _massive_max_days() -> float:
+    """Longest window Massive can serve in full. Unknown (provider import
+    failed) is treated as unlimited, which keeps the historic Massive-first
+    ordering -- and with no provider, Massive is skipped anyway."""
+    try:
+        from .providers import massive_provider as massive
+    except Exception:  # noqa: BLE001 - provider import must never break pricing
+        return float("inf")
+    return getattr(massive, "_MAX_HISTORY_DAYS", float("inf"))
+
+
 def _massive_primary(tickers: list[str], days: int, frames: dict, src_map: dict) -> None:
     """Populate ``frames`` from Massive first. Fail-soft per ticker; yfinance
     fills whatever remains missing. This is the production path when
@@ -289,7 +300,9 @@ def get_price_history(
     per ticker.
 
     Massive is attempted first when configured; yfinance fills whatever remains
-    missing. Pass a ``provenance`` dict to receive
+    missing. Windows longer than Massive can serve (~2y) are the exception:
+    yfinance goes first and Massive only backfills, so a long request is never
+    silently truncated. Pass a ``provenance`` dict to receive
     ``{"by_ticker": {tk: "massive"|"yfinance"}, "missing": [...]}`` (the param
     is additive — existing callers are unaffected). We do NOT raise on partial
     coverage — most risk-engine math handles missing columns.
@@ -306,7 +319,16 @@ def get_price_history(
     # Production: configured Massive is the primary OHLC source. Tests and
     # callers that pass an explicit cache_provider keep the old deterministic
     # yfinance-first path so provider tests stay hermetic.
-    if cache_provider is None:
+    #
+    # Massive serves at most ``_massive_max_days()`` of daily bars and silently
+    # TRUNCATES longer requests. yfinance only runs for tickers Massive left
+    # missing, so letting Massive go first on a long window handed every caller
+    # ~2 years no matter what it asked for (the historical replay lost every
+    # episode before ~2024). Long windows therefore go to yfinance first; Massive
+    # only backfills what yfinance could not serve (a short series beats none,
+    # and provenance still says "massive" for those).
+    long_window = max(days, 30) > _massive_max_days()
+    if cache_provider is None and not long_window:
         _massive_primary(tk, max(days, 30), frames, src_map)
 
     provider = cache_provider or _build_cache_provider()
@@ -330,6 +352,8 @@ def get_price_history(
     missing = [t for t in tk if t not in frames]
     if cache_provider is not None:
         _massive_fallback(missing, max(days, 30), frames, src_map)
+    elif long_window:
+        _massive_primary(missing, max(days, 30), frames, src_map)
     if provenance is not None:
         provenance["by_ticker"] = src_map
         provenance["missing"] = [t for t in tk if t not in frames]

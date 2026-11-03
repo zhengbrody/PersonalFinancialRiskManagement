@@ -29,8 +29,24 @@ _EPISODES: list[tuple[str, str, str]] = [
 ]
 
 _BENCH = "SPY"
-# Cover the oldest episode (2007) plus headroom for the recovery search.
-_HISTORY_DAYS = 6800
+# Headroom before the oldest episode's start. The fetch window is derived from
+# today (see _history_days): a fixed constant decays -- 6800 days only reached
+# back to 2008-03 by late 2026, so the GFC window silently replayed from March
+# 2008 instead of its 2007-10-09 peak.
+_HISTORY_HEADROOM_DAYS = 30
+# An episode whose first available row lands more than this after its start
+# date is incomplete (price history begins mid-window) and is skipped rather
+# than replayed over a shorter window under the original label.
+_START_TOLERANCE_DAYS = 7
+
+
+def _history_days(today=None) -> int:
+    """Calendar days from the oldest episode start (minus headroom) to today."""
+    from datetime import date
+
+    today = today or date.today()
+    oldest = min(date.fromisoformat(start) for _, start, _ in _EPISODES)
+    return (today - oldest).days + _HISTORY_HEADROOM_DAYS
 
 
 def _finite(v) -> Optional[float]:
@@ -72,6 +88,8 @@ def _episode(price_frame, weights: dict[str, float], start: str, end: str) -> Op
     win = price_frame.loc[start:end]
     if win.empty or len(win) < 2:
         return None
+    if win.index[0] > pd.Timestamp(start) + pd.Timedelta(days=_START_TOLERANCE_DAYS):
+        return None  # history begins mid-episode: never relabel a partial window
 
     # Tickers that actually traded across this window (data at both ends).
     avail = [
@@ -141,7 +159,7 @@ def run_historical_scenarios(user) -> dict:
 
     fetch = sorted(set(tickers) | {_BENCH})
     try:
-        price_frame = market_data.get_price_history(fetch, days=_HISTORY_DAYS)
+        price_frame = market_data.get_price_history(fetch, days=_history_days())
     except Exception as exc:
         raise server_error("Market data fetch failed.", reason=type(exc).__name__) from exc
     if price_frame.empty:
