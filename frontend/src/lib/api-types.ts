@@ -1862,6 +1862,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/risk/factor_stress": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Seven-factor stress test of the active portfolio
+         * @description Hypothetical, historical and user-defined factor scenarios with per-factor
+         *     and per-holding attribution, option repricing, a margin view and a loss
+         *     distribution. Deterministic (fixed simulation seed), no LLM, no credits.
+         */
+        post: operations["factor_stress_endpoint_api_v1_risk_factor_stress_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/risk/historical_scenarios": {
         parameters: {
             query?: never;
@@ -2232,6 +2254,21 @@ export interface components {
             /** Subscription Canceled */
             subscription_canceled: boolean;
         };
+        /** AccountOut */
+        AccountOut: {
+            /** Cash */
+            cash: number;
+            /** Gross Long */
+            gross_long: number;
+            /** Leverage */
+            leverage: number | null;
+            /** Margin Loan */
+            margin_loan: number;
+            /** Net Equity */
+            net_equity: number;
+            /** Option Value */
+            option_value: number | null;
+        };
         /** ActionCard */
         ActionCard: {
             /** Assumptions */
@@ -2412,7 +2449,7 @@ export interface components {
             /** As Of */
             as_of?: string | null;
             brinson?: components["schemas"]["BrinsonOut"] | null;
-            factor?: components["schemas"]["FactorOut"] | null;
+            factor?: components["schemas"]["backend__app__schemas__quant__FactorOut"] | null;
             /** Hit Ratio */
             hit_ratio?: number | null;
             /** Information Ratio */
@@ -3592,7 +3629,7 @@ export interface components {
          *     the matrix; numerator and denominator share one frame and ddof, so
          *     DR ≥ 1 holds by construction regardless. The UI labels both windows.
          */
-        CorrelationOut: {
+        "CorrelationOut-Input": {
             /** Avg Pairwise */
             avg_pairwise?: number | null;
             best_diversifier?: components["schemas"]["BestDiversifier"] | null;
@@ -3624,6 +3661,21 @@ export interface components {
             contract: string;
             /** Reason */
             reason: string;
+        };
+        /** CoverageOut */
+        CoverageOut: {
+            /** Modelled Weight */
+            modelled_weight: number;
+            /** Option Legs Repriced */
+            option_legs_repriced: number;
+            /** Option Legs Skipped */
+            option_legs_skipped: components["schemas"]["SkippedLeg"][];
+            /** Proxied */
+            proxied: string[];
+            /** Unmodelled */
+            unmodelled: components["schemas"]["UnmodelledRow"][];
+            /** Unpriced */
+            unpriced: string[];
         };
         /** CoverageRelation */
         CoverageRelation: {
@@ -3975,6 +4027,17 @@ export interface components {
             /** Missing Inputs */
             missing_inputs?: string[];
         };
+        /** DecompositionOut */
+        DecompositionOut: {
+            /** Factor Share */
+            factor_share: {
+                [key: string]: number;
+            };
+            /** Idio Share */
+            idio_share: number;
+            /** Weekly Vol */
+            weekly_vol: number;
+        };
         /** DigestPrefIn */
         DigestPrefIn: {
             /** Enabled */
@@ -4002,6 +4065,23 @@ export interface components {
             score: number;
             /** Status */
             status: string;
+        };
+        /** DistributionOut */
+        DistributionOut: {
+            /** Histogram */
+            histogram: components["schemas"]["backend__app__schemas__factor_stress__HistogramBin"][];
+            /** Mean Pct */
+            mean_pct: number;
+            /** N Obs */
+            n_obs: number;
+            /** N Sims */
+            n_sims: number;
+            /** Prob Margin Call */
+            prob_margin_call: number | null;
+            /** Tails */
+            tails: components["schemas"]["TailMetric"][];
+            /** Worst Pct */
+            worst_pct: number;
         };
         /** DriverChange */
         DriverChange: {
@@ -4179,6 +4259,14 @@ export interface components {
         /** Envelope[EfficientFrontierOut] */
         Envelope_EfficientFrontierOut_: {
             data?: components["schemas"]["EfficientFrontierOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[FactorStressOut] */
+        Envelope_FactorStressOut_: {
+            data?: components["schemas"]["FactorStressOut"] | null;
             error?: components["schemas"]["ErrorOut"] | null;
             meta: components["schemas"]["MetaOut"];
         } & {
@@ -4839,6 +4927,33 @@ export interface components {
             /** Prev Sharpe Ratio */
             prev_sharpe_ratio?: number | null;
         };
+        /** ExposureRow */
+        ExposureRow: {
+            /** Betas */
+            betas: {
+                [key: string]: number;
+            };
+            /** N Obs */
+            n_obs: number;
+            /** R2 */
+            r2: number;
+            /** Resid Vol Weekly */
+            resid_vol_weekly: number;
+            /** Source */
+            source: string;
+            /** T Stats */
+            t_stats: {
+                [key: string]: number | null;
+            };
+            /** Ticker */
+            ticker: string;
+            /** Unstable */
+            unstable: boolean;
+            /** Value Usd */
+            value_usd: number;
+            /** Weight */
+            weight: number;
+        };
         /**
          * FactPack
          * @description The compact, source-attributed fact sheet for one ticker.
@@ -4899,22 +5014,81 @@ export interface components {
             /** T Stat */
             t_stat?: number | null;
         };
-        /** FactorOut */
-        FactorOut: {
-            /** Alpha */
-            alpha?: number | null;
-            /** Factor Betas */
-            factor_betas?: {
-                [key: string]: number | null;
+        /** FactorPnl */
+        FactorPnl: {
+            /**
+             * Factor
+             * @enum {string}
+             */
+            factor: "equity" | "rates" | "credit" | "usd" | "oil" | "vol" | "gold";
+            /** Pnl Usd */
+            pnl_usd: number;
+        };
+        /** FactorStressOut */
+        FactorStressOut: {
+            account: components["schemas"]["AccountOut"];
+            /** As Of */
+            as_of: string;
+            /** Assumptions */
+            assumptions: string[];
+            concentration: components["schemas"]["backend__app__schemas__factor_stress__ConcentrationOut"];
+            /** Confidence */
+            confidence: number;
+            correlation: components["schemas"]["backend__app__schemas__factor_stress__CorrelationOut"];
+            coverage: components["schemas"]["CoverageOut"];
+            /** Decomposition */
+            decomposition: {
+                [key: string]: components["schemas"]["DecompositionOut"];
             };
-            /** Factor Contributions */
-            factor_contributions?: {
-                [key: string]: number | null;
+            /** Distribution */
+            distribution: {
+                [key: string]: components["schemas"]["DistributionOut"];
             };
-            /** R Squared */
-            r_squared?: number | null;
-            /** Residual Return */
-            residual_return?: number | null;
+            /** Exposures */
+            exposures: components["schemas"]["ExposureRow"][];
+            /** Factors */
+            factors: components["schemas"]["backend__app__schemas__factor_stress__FactorOut"][];
+            /** Horizon Weeks */
+            horizon_weeks: number;
+            /** Maintenance Requirement */
+            maintenance_requirement: number;
+            /** Model Version */
+            model_version: string;
+            /** Scenarios */
+            scenarios: components["schemas"]["StressScenarioOut"][];
+            /** Warnings */
+            warnings: string[];
+        };
+        /** FactorStressRequest */
+        FactorStressRequest: {
+            /**
+             * Confidence
+             * @default 0.95
+             * @enum {number}
+             */
+            confidence?: 0.9 | 0.95 | 0.99;
+            /** Custom Shocks */
+            custom_shocks?: {
+                [key: string]: number;
+            } | null;
+            /** Expected Portfolio Id */
+            expected_portfolio_id?: string | null;
+            /**
+             * Fill Unspecified
+             * @default true
+             */
+            fill_unspecified?: boolean;
+            /**
+             * Horizon Weeks
+             * @default 2
+             * @enum {integer}
+             */
+            horizon_weeks?: 1 | 2 | 4;
+            /**
+             * Risk Free Rate
+             * @default 0.045
+             */
+            risk_free_rate?: number;
         };
         /**
          * FeatureDriftOut
@@ -5392,16 +5566,6 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
-        /** HistogramBin */
-        HistogramBin: {
-            /**
-             * Count
-             * @default 0
-             */
-            count?: number;
-            /** X */
-            x?: number | null;
-        };
         /** HistoricalScenarioRow */
         HistoricalScenarioRow: {
             /** Coverage */
@@ -5482,6 +5646,17 @@ export interface components {
              * @default api
              */
             source?: string;
+            /** Ticker */
+            ticker: string;
+        };
+        /** HoldingPnl */
+        HoldingPnl: {
+            /** Move Pct */
+            move_pct: number;
+            /** Pnl Usd */
+            pnl_usd: number;
+            /** Source */
+            source: string;
             /** Ticker */
             ticker: string;
         };
@@ -5859,6 +6034,21 @@ export interface components {
              */
             milestone: "first_score_at" | "first_stress_test_at" | "last_workspace_view";
         };
+        /** LadderPoint */
+        LadderPoint: {
+            /** Breach */
+            breach: boolean;
+            /** Linear Pnl Usd */
+            linear_pnl_usd: number;
+            /** Margin Utilisation */
+            margin_utilisation: number | null;
+            /** Multiple */
+            multiple: number;
+            /** Pnl Pct */
+            pnl_pct: number;
+            /** Pnl Usd */
+            pnl_usd: number;
+        };
         /** LiquidityRow */
         LiquidityRow: {
             /** Adv 30D */
@@ -6015,6 +6205,21 @@ export interface components {
              * @enum {string}
              */
             status?: "none" | "comfortable" | "tight" | "call_risk" | "n/a";
+        };
+        /** MarginOut */
+        MarginOut: {
+            /** Breach */
+            breach: boolean;
+            /** Breach Multiple */
+            breach_multiple: number | null;
+            /** Equity After */
+            equity_after: number;
+            /** Requirement After */
+            requirement_after: number;
+            /** Utilisation After */
+            utilisation_after: number | null;
+            /** Utilisation Before */
+            utilisation_before: number | null;
         };
         /** MarketSnapshotOut */
         MarketSnapshotOut: {
@@ -6527,6 +6732,17 @@ export interface components {
             /** Spot */
             spot: number | null;
         };
+        /** OptionPnl */
+        OptionPnl: {
+            /** Convexity Usd */
+            convexity_usd: number;
+            /** Delta Usd */
+            delta_usd: number;
+            /** Pnl Usd */
+            pnl_usd: number;
+            /** Vega Usd */
+            vega_usd: number;
+        };
         /** OptionScenarioGrid */
         OptionScenarioGrid: {
             /** As Of */
@@ -6754,6 +6970,17 @@ export interface components {
             shocks: {
                 [key: string]: number;
             };
+        };
+        /** PathPoint */
+        PathPoint: {
+            /** Date */
+            date: string;
+            /** Drawdown */
+            drawdown: number | null;
+            /** Equity */
+            equity: number;
+            /** Margin Utilisation */
+            margin_utilisation: number | null;
         };
         /** PayoffPointOut */
         PayoffPointOut: {
@@ -7297,6 +7524,15 @@ export interface components {
              * @enum {string}
              */
             status: "not_requested" | "objective_not_confirmed" | "not_computable" | "no_dominant_alternative" | "preferred";
+        };
+        /** RealisedCheck */
+        RealisedCheck: {
+            /** Coverage */
+            coverage: number;
+            /** Model Return Pct */
+            model_return_pct: number;
+            /** Return Pct */
+            return_pct: number;
         };
         /**
          * ReasonCodeOut
@@ -8297,7 +8533,7 @@ export interface components {
             /** Contributed Capital */
             contributed_capital?: number | null;
             copilot_check?: components["schemas"]["RiskCheck-Input"] | null;
-            correlation?: components["schemas"]["CorrelationOut"] | null;
+            correlation?: components["schemas"]["CorrelationOut-Input"] | null;
             /** Cvar 95 */
             cvar_95?: number | null;
             /** Daily Pnl */
@@ -8393,7 +8629,7 @@ export interface components {
             /** Contributed Capital */
             contributed_capital?: number | null;
             copilot_check?: components["schemas"]["RiskCheck-Output"] | null;
-            correlation?: components["schemas"]["CorrelationOut"] | null;
+            correlation?: components["schemas"]["backend__app__schemas__risk__CorrelationOut"] | null;
             /** Cvar 95 */
             cvar_95?: number | null;
             /** Daily Pnl */
@@ -9171,6 +9407,13 @@ export interface components {
             /** Ticker */
             ticker: string;
         };
+        /** SkippedLeg */
+        SkippedLeg: {
+            /** Contract */
+            contract: string;
+            /** Reason */
+            reason: string;
+        };
         /** SmartMoneyOut */
         SmartMoneyOut: {
             /** As Of */
@@ -9315,6 +9558,49 @@ export interface components {
             /** Market Shock Pct */
             market_shock_pct: number;
         };
+        /** StressScenarioOut */
+        StressScenarioOut: {
+            /** Band High Usd */
+            band_high_usd: number;
+            /** Band Low Usd */
+            band_low_usd: number;
+            /** By Factor */
+            by_factor: components["schemas"]["FactorPnl"][];
+            /** By Holding */
+            by_holding: components["schemas"]["HoldingPnl"][];
+            /** Filled */
+            filled: string[];
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "hypothetical" | "historical" | "custom";
+            /** Label */
+            label: string;
+            /** Ladder */
+            ladder: components["schemas"]["LadderPoint"][];
+            margin: components["schemas"]["MarginOut"];
+            options: components["schemas"]["OptionPnl"];
+            /** Path */
+            path: components["schemas"]["PathPoint"][] | null;
+            /** Pnl Pct */
+            pnl_pct: number;
+            /** Pnl Usd */
+            pnl_usd: number;
+            realised: components["schemas"]["RealisedCheck"] | null;
+            /** Shocks */
+            shocks: {
+                [key: string]: number;
+            };
+            /** Source */
+            source: string;
+            /** Specified */
+            specified: string[];
+            /** Stock Pnl Usd */
+            stock_pnl_usd: number;
+        };
         /**
          * SubscriptionOut
          * @description Mirror of the ``public.subscriptions`` row for the current user.
@@ -9352,6 +9638,19 @@ export interface components {
             next_step: string;
             /** Reason */
             reason: string;
+        };
+        /** TailMetric */
+        TailMetric: {
+            /** Cvar */
+            cvar: number;
+            /** Cvar Se */
+            cvar_se: number | null;
+            /** Level */
+            level: number;
+            /** Var */
+            var: number;
+            /** Var Se */
+            var_se: number | null;
         };
         /**
          * TaskAssumptions
@@ -9534,6 +9833,15 @@ export interface components {
             /** Url */
             url?: string | null;
         };
+        /** UnmodelledRow */
+        UnmodelledRow: {
+            /** Reason */
+            reason: string;
+            /** Ticker */
+            ticker: string;
+            /** Weight */
+            weight: number;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -9591,7 +9899,7 @@ export interface components {
             /** Hist Var 99 */
             hist_var_99?: number | null;
             /** Histogram */
-            histogram?: components["schemas"]["HistogramBin"][];
+            histogram?: components["schemas"]["backend__app__schemas__risk__HistogramBin"][];
             /** Mean Daily */
             mean_daily?: number | null;
             /**
@@ -9653,6 +9961,59 @@ export interface components {
             stale?: boolean;
         };
         /** ConcentrationOut */
+        backend__app__schemas__factor_stress__ConcentrationOut: {
+            /** Effective Holdings */
+            effective_holdings: number | null;
+            /** Hhi */
+            hhi: number;
+            /** Top Weight */
+            top_weight: number | null;
+        };
+        /** CorrelationOut */
+        backend__app__schemas__factor_stress__CorrelationOut: {
+            /** Calm */
+            calm: number[][];
+            /** Calm N Obs */
+            calm_n_obs: number;
+            /** Crisis */
+            crisis: number[][];
+            /** Crisis N Obs */
+            crisis_n_obs: number;
+        };
+        /** FactorOut */
+        backend__app__schemas__factor_stress__FactorOut: {
+            /** Available */
+            available: boolean;
+            /** Crisis Weekly Vol */
+            crisis_weekly_vol: number;
+            /** Description */
+            description: string;
+            /**
+             * Id
+             * @enum {string}
+             */
+            id: "equity" | "rates" | "credit" | "usd" | "oil" | "vol" | "gold";
+            /** Label */
+            label: string;
+            /** Portfolio Loading */
+            portfolio_loading: number;
+            /** Proxy */
+            proxy: string;
+            /** Unit */
+            unit: string;
+            /** Weekly Vol */
+            weekly_vol: number;
+        };
+        /** HistogramBin */
+        backend__app__schemas__factor_stress__HistogramBin: {
+            /** Hi */
+            hi: number;
+            /** Lo */
+            lo: number;
+            /** P */
+            p: number;
+        };
+        /** ConcentrationOut */
         backend__app__schemas__public_risk__ConcentrationOut: {
             /** Effective Holdings */
             effective_holdings?: number | null;
@@ -9666,6 +10027,23 @@ export interface components {
             weights?: {
                 [key: string]: number;
             };
+        };
+        /** FactorOut */
+        backend__app__schemas__quant__FactorOut: {
+            /** Alpha */
+            alpha?: number | null;
+            /** Factor Betas */
+            factor_betas?: {
+                [key: string]: number | null;
+            };
+            /** Factor Contributions */
+            factor_contributions?: {
+                [key: string]: number | null;
+            };
+            /** R Squared */
+            r_squared?: number | null;
+            /** Residual Return */
+            residual_return?: number | null;
         };
         /**
          * ConcentrationOut
@@ -9695,6 +10073,50 @@ export interface components {
             top_sector?: string | null;
             /** Top Sector Weight */
             top_sector_weight?: number | null;
+        };
+        /**
+         * CorrelationOut
+         * @description Pairwise correlation of holdings' daily returns (the engine's plain
+         *     Pearson ``corr_matrix``, estimated on the engine DataProvider's ~2-year
+         *     window) plus deterministic diversification insights. Insights are
+         *     computed over the FULL matrix; ``tickers``/``matrix`` are capped at the
+         *     top 30 by portfolio weight (``truncated`` flags the cut).
+         *     ``diversification_ratio`` = Σŵᵢσᵢ / σₚ — computed on the ENDPOINT's
+         *     price window (``history_days``, default ~1y), a different window than
+         *     the matrix; numerator and denominator share one frame and ddof, so
+         *     DR ≥ 1 holds by construction regardless. The UI labels both windows.
+         */
+        backend__app__schemas__risk__CorrelationOut: {
+            /** Avg Pairwise */
+            avg_pairwise?: number | null;
+            best_diversifier?: components["schemas"]["BestDiversifier"] | null;
+            /** Diversification Ratio */
+            diversification_ratio?: number | null;
+            /** Matrix */
+            matrix: (number | null)[][];
+            /** Tickers */
+            tickers: string[];
+            top_pair?: components["schemas"]["CorrTopPair"] | null;
+            /**
+             * Total Tickers
+             * @default 0
+             */
+            total_tickers?: number;
+            /**
+             * Truncated
+             * @default false
+             */
+            truncated?: boolean;
+        };
+        /** HistogramBin */
+        backend__app__schemas__risk__HistogramBin: {
+            /**
+             * Count
+             * @default 0
+             */
+            count?: number;
+            /** X */
+            x?: number | null;
         };
     };
     responses: never;
@@ -12601,6 +13023,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_RiskExplainOutput_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    factor_stress_endpoint_api_v1_risk_factor_stress_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FactorStressRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_FactorStressOut_"];
                 };
             };
             /** @description Validation Error */

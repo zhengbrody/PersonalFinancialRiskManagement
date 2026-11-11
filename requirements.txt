@@ -11,7 +11,11 @@
 # all arrived unannounced — verified in the 2026-06-25 GHCR build log). Each
 # ceiling sits ABOVE what production currently runs, so nothing downgrades;
 # bump ceilings deliberately, with CI green, not by surprise.
-yfinance>=0.2.30,<2
+# Floor is a CORRECTNESS floor: before 1.4, yf.download kept its results in a
+# module-global dict, so the 8 parallel fetches in market_data handed back
+# another ticker's prices (verified on 1.2.0: SPY came back with NVDA's series).
+# 1.4+ keeps them per call.
+yfinance>=1.4,<2
 pandas>=2.0,<4
 numpy>=1.24,<3
 scipy>=1.11,<2

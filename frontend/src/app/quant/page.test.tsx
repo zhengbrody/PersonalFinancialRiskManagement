@@ -48,7 +48,23 @@ vi.mock("@/components/ui/chart-line", () => ({
   ),
 }));
 
+// The Stress Lab is the default tab and has its own test file; here it is a
+// stub so these tests stay about the backtest state machine.
+vi.mock("@/components/factor-stress-lab", () => ({
+  FactorStressLab: () => <div data-testid="stress-lab-stub" />,
+}));
+
 import QuantPage from "./page";
+
+/** Render the page and switch from the default Stress Lab tab to Backtest. */
+async function renderOnBacktest() {
+  const user = userEvent.setup();
+  renderWithQuery(<QuantPage />);
+  if (screen.queryByRole("tab", { name: "Backtest" })) {
+    await user.click(screen.getByRole("tab", { name: "Backtest" }));
+  }
+  return user;
+}
 
 function authed() {
   useAuthMock.mockReturnValue({
@@ -123,9 +139,16 @@ afterEach(() => {
 });
 
 describe("QuantPage", () => {
-  it("renders the controls and the run button", () => {
+  it("opens on the Stress Lab", () => {
     routeFetch({ body: { data: {}, error: null, meta: { request_id: "r" } } });
     renderWithQuery(<QuantPage />);
+    expect(screen.getByRole("tab", { name: "Stress Lab" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("stress-lab-stub")).toBeInTheDocument();
+  });
+
+  it("renders the controls and the run button", async () => {
+    routeFetch({ body: { data: {}, error: null, meta: { request_id: "r" } } });
+    await renderOnBacktest();
 
     expect(
       screen.getByRole("heading", { name: /quant lab/i }),
@@ -147,8 +170,7 @@ describe("QuantPage", () => {
 
   it("renders KPIs and the equity curve after running a backtest", async () => {
     routeFetch({ body: successBody });
-    const user = userEvent.setup();
-    renderWithQuery(<QuantPage />);
+    const user = await renderOnBacktest();
 
     await user.click(screen.getByRole("button", { name: /run backtest/i }));
 
@@ -187,8 +209,7 @@ describe("QuantPage", () => {
       status: 422,
     });
 
-    const user = userEvent.setup();
-    renderWithQuery(<QuantPage />);
+    const user = await renderOnBacktest();
 
     await user.click(screen.getByRole("button", { name: /run backtest/i }));
 
@@ -229,8 +250,7 @@ describe("QuantPage", () => {
       return envelope({ data: {}, error: null, meta: { request_id: "r" } });
     });
 
-    const user = userEvent.setup();
-    renderWithQuery(<QuantPage />);
+    const user = await renderOnBacktest();
     await user.click(screen.getByRole("tab", { name: /attribution/i }));
     await user.click(screen.getByRole("button", { name: /run attribution/i }));
 
@@ -264,8 +284,7 @@ describe("QuantPage", () => {
       return envelope({ data: {}, error: null, meta: { request_id: "r" } });
     });
 
-    const user = userEvent.setup();
-    renderWithQuery(<QuantPage />);
+    const user = await renderOnBacktest();
     await user.click(screen.getByRole("tab", { name: /regime/i }));
 
     // "Bull" shows in the hero + the matrix; just assert it appeared.
