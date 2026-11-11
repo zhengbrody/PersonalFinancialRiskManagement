@@ -8709,11 +8709,6 @@
         "properties": {
           "confidence": {
             "default": 0.95,
-            "enum": [
-              0.9,
-              0.95,
-              0.99
-            ],
             "title": "Confidence",
             "type": "number"
           },

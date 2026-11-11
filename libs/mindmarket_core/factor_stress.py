@@ -405,6 +405,74 @@ def linear_stress(
     return LinearStress(moves, by_factor, by_asset, float(by_asset.sum()), band, beta_var, idio_var)
 
 
+VOL_INDEX = FACTOR_IDS.index("vol")
+
+
+def log_shock(shock: np.ndarray) -> np.ndarray:
+    """Factor shocks as log returns. Every factor is a simple return except
+    volatility, which is already a log change. A simple return is floored just
+    above −100% so the log exists."""
+    s = np.asarray(shock, dtype=float)
+    out = np.log1p(np.maximum(s, -0.999))
+    out[..., VOL_INDEX] = s[..., VOL_INDEX]
+    return out
+
+
+def compounded_moves(betas: np.ndarray, shock: np.ndarray) -> np.ndarray:
+    """Asset moves under a shock, compounded: ``exp(β · log-shock) − 1``.
+
+    For a small shock this equals the first-order ``β · s``. For a crisis-sized
+    one it is what a constant loading implies when returns compound, and it can
+    never fall below −100% — the first-order form gives a stock with β = 2 a
+    −110% move when the market halves. ``shock`` may be one vector ``(K,)`` or
+    many ``(n_sims, K)``; the result is ``(n_assets,)`` or ``(n_sims, n_assets)``.
+    """
+    b = np.asarray(betas, dtype=float).reshape(-1, K)
+    return np.expm1(log_shock(shock) @ b.T)
+
+
+def compounded_stress(
+    betas: np.ndarray,
+    weights: np.ndarray,
+    shock: np.ndarray,
+    *,
+    cov_betas: Optional[Sequence[np.ndarray]] = None,
+    resid_sigmas: Optional[np.ndarray] = None,
+    horizon_periods: float = 1.0,
+    idio_multiplier: float = 1.0,
+    z: float = 1.6449,
+) -> LinearStress:
+    """Stressed return of a weighted book with compounded asset moves.
+
+    Each holding's move is split across factors in proportion to that factor's
+    share of its log move, so the per-factor numbers add up to the total
+    exactly. The band is the first-order band carried through the same
+    transform (each holding's log-move error scaled by ``1 + move``).
+    """
+    b = np.asarray(betas, dtype=float).reshape(-1, K)
+    w = np.asarray(weights, dtype=float).reshape(-1)
+    ls = log_shock(np.asarray(shock, dtype=float).reshape(K))
+    parts = b * ls  # (n, K) log-move contributed by each factor
+    log_moves = parts.sum(axis=1)
+    moves = np.expm1(log_moves)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        share = np.where(log_moves[:, None] != 0, parts / log_moves[:, None], 0.0)
+    by_factor = (w[:, None] * moves[:, None] * share).sum(axis=0)
+    by_asset = w * moves
+    scale = 1.0 + moves
+    beta_var = 0.0
+    if cov_betas is not None:
+        beta_var = float(
+            sum((w[i] * scale[i]) ** 2 * float(ls @ cov_betas[i] @ ls) for i in range(len(w)))
+        )
+    idio_var = 0.0
+    if resid_sigmas is not None:
+        sig = np.asarray(resid_sigmas, dtype=float) * idio_multiplier
+        idio_var = float(((w * scale) ** 2 * sig**2).sum() * horizon_periods)
+    band = z * float(np.sqrt(max(beta_var + idio_var, 0.0)))
+    return LinearStress(moves, by_factor, by_asset, float(by_asset.sum()), band, beta_var, idio_var)
+
+
 def risk_decomposition(
     betas: np.ndarray, weights: np.ndarray, cov: np.ndarray, resid_sigmas: np.ndarray
 ) -> dict[str, object]:

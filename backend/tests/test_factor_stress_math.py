@@ -122,6 +122,64 @@ def test_linear_stress_band_combines_beta_and_idio_error():
     assert out.band == pytest.approx(2.0 * np.sqrt(0.0148))
 
 
+def test_compounded_move_oracles():
+    b = np.zeros((1, fs.K))
+    b[0, 0] = 2.0
+    s = np.zeros(fs.K)
+    s[0] = -0.5
+    # beta 2, market halves: first-order says −100%; compounded is 0.5² − 1.
+    assert fs.compounded_moves(b, s)[0] == pytest.approx(-0.75)
+    assert fs.linear_stress(b, np.array([1.0]), s).portfolio_return == pytest.approx(-1.0)
+    # Small shock: the two agree to first order.
+    s[0] = -0.001
+    assert fs.compounded_moves(b, s)[0] == pytest.approx(-0.002, rel=2e-3)
+    # The volatility factor is already a log change: beta −0.1, VIX doubles.
+    b2 = np.zeros((1, fs.K))
+    b2[0, fs.VOL_INDEX] = -0.1
+    s2 = np.zeros(fs.K)
+    s2[fs.VOL_INDEX] = np.log(2.0)
+    assert fs.compounded_moves(b2, s2)[0] == pytest.approx(2.0**-0.1 - 1.0)
+    # Never below −100%, even for an absurd shock; and it vectorises.
+    s3 = np.zeros((4, fs.K))
+    s3[:, 0] = [-0.999, -0.5, 0.0, 0.5]
+    got = fs.compounded_moves(np.vstack([b, b2]), s3)
+    assert got.shape == (4, 2) and (got >= -1.0).all() and got[2, 0] == 0.0
+
+
+def test_compounded_stress_attribution_adds_up_exactly():
+    betas = np.zeros((2, fs.K))
+    betas[0, 0], betas[0, 1] = 0.8, -4.0
+    betas[1, 0] = 1.5
+    w = np.array([0.6, 0.4])
+    s = np.zeros(fs.K)
+    s[0], s[1] = -0.2, 0.05
+    out = fs.compounded_stress(betas, w, s)
+    m0 = 0.8**0.8 * 1.05**-4.0 - 1.0
+    m1 = 0.8**1.5 - 1.0
+    assert out.asset_moves == pytest.approx([m0, m1])
+    assert out.portfolio_return == pytest.approx(0.6 * m0 + 0.4 * m1)
+    assert out.contrib_by_factor.sum() == pytest.approx(out.portfolio_return)
+    # Asset 0's move splits by each factor's share of its log move.
+    l_eq, l_rt = 0.8 * np.log(0.8), -4.0 * np.log(1.05)
+    want_eq = 0.6 * m0 * l_eq / (l_eq + l_rt) + 0.4 * m1
+    assert out.contrib_by_factor[0] == pytest.approx(want_eq)
+    # A zero shock moves nothing and attributes nothing (no 0/0).
+    zero = fs.compounded_stress(betas, w, np.zeros(fs.K))
+    assert zero.portfolio_return == 0.0 and not np.isnan(zero.contrib_by_factor).any()
+
+
+def test_compounded_band_scales_with_what_is_left():
+    b = np.zeros((1, fs.K))
+    b[0, 0] = 1.0
+    s = np.zeros(fs.K)
+    s[0] = -0.5
+    out = fs.compounded_stress(
+        b, np.array([1.0]), s, resid_sigmas=np.array([0.04]), horizon_periods=1.0, z=1.0
+    )
+    # move −50% → scale 0.5 → band = 0.5 · 0.04.
+    assert out.band == pytest.approx(0.02)
+
+
 def test_risk_decomposition_shares_sum_to_one():
     betas = np.zeros((2, fs.K))
     betas[0, 0], betas[1, 1] = 1.0, 1.0

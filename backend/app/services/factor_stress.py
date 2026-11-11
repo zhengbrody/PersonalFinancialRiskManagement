@@ -122,8 +122,9 @@ SECTOR_ETF: dict[str, str] = {
 ASSUMPTIONS = [
     "Loadings are OLS regressions of weekly returns on the seven factors over up to "
     "three years, with Newey–West standard errors.",
-    "A stress is first-order in the factors for stocks and funds; options are fully "
-    "repriced (Black–Scholes, European exercise, no dividends).",
+    "A holding's move compounds its loadings over the shock (exp(beta x log-shock) - 1), "
+    "so a loss can never exceed 100%; for a small shock this equals beta x shock. "
+    "Options are fully repriced (Black–Scholes, European exercise, no dividends).",
     "Implied volatility moves in parallel by the scenario's change in VIX points.",
     "Factors without a specified shock are set to their expected move given the "
     "specified ones, using correlations measured in past crises.",
@@ -439,7 +440,7 @@ def run_factor_stress(
         full = lin = spot_only = 0.0
         ivc = float(_iv_change(float(shock[5])))
         for leg in legs:
-            move = np.array([float(fits[leg.underlying].beta @ shock)])
+            move = fs.compounded_moves(fits[leg.underlying].beta, shock)
             capped = np.array([min(ivc, MAX_IV - leg.iv)])
             full += float(
                 fs.option_pnl(leg, move, capped, rate=risk_free_rate, horizon_years=horizon_years)[
@@ -474,7 +475,7 @@ def run_factor_stress(
         for i, f in enumerate(fs.FACTOR_IDS):
             if f in unavailable_factors:
                 shock[i] = 0.0
-        lin = fs.linear_stress(
+        lin = fs.compounded_stress(
             betas,
             w,
             shock,
@@ -499,10 +500,17 @@ def run_factor_stress(
             gross_change=stock_pnl,
             maintenance=MAINTENANCE,
         )
+        # Straight-line reference for the ladder: first-order stock move plus
+        # option delta, both linear in the size of the shock.
+        first_order = float(w @ (betas @ shock)) * gross if len(w) else 0.0
+        for leg in legs:
+            first_order += float(
+                fs.option_delta_pnl(leg, np.array([float(fits[leg.underlying].beta @ shock)]))[0]
+            )
         ladder = []
         for m in LADDER:
             s_m = shock * m
-            sp = fs.linear_stress(betas, w, s_m).portfolio_return * gross
+            sp = fs.compounded_stress(betas, w, s_m).portfolio_return * gross
             op = _options_pnl(s_m)["total"] if legs else 0.0
             ms = fs.margin_state(
                 gross_long=gross,
@@ -516,7 +524,7 @@ def run_factor_stress(
                     "multiple": m,
                     "pnl_usd": sp + op,
                     "pnl_pct": (sp + op) / base,
-                    "linear_pnl_usd": m * (stock_pnl + opt["delta"]),
+                    "linear_pnl_usd": m * first_order,
                     "margin_utilisation": ms["utilisation_after"],
                     "breach": ms["breach"],
                 }
@@ -620,7 +628,9 @@ def run_factor_stress(
                 s = seg[t].dropna() if t in seg.columns else pd.Series(dtype=float)
                 if len(s) >= 2 and s.index[0] <= tol:
                     model_same += w[i] * float(
-                        betas[i] @ np.array([sc["shocks"][f] for f in fs.FACTOR_IDS])
+                        fs.compounded_moves(
+                            betas[i], np.array([sc["shocks"][f] for f in fs.FACTOR_IDS])
+                        )[0]
                     )
             sc["realised"] = {
                 "coverage": cov_w,
@@ -644,11 +654,13 @@ def run_factor_stress(
         )
         rng = np.random.default_rng(seed + 1)
         idio_sd = float(np.sqrt((w**2 * resid**2).sum() * horizon_weeks)) if len(w) else 0.0
-        pnl = gross * (sims @ bp + rng.standard_normal(N_SIMS) * idio_sd)
+        stock_ret = fs.compounded_moves(betas, sims) @ w if len(w) else np.zeros(N_SIMS)
+        stock_pnl = gross * stock_ret
+        pnl = stock_pnl + gross * rng.standard_normal(N_SIMS) * idio_sd
         if legs:
             ivc = _iv_change(sims[:, 5])
             for leg in legs:
-                move = sims @ fits[leg.underlying].beta
+                move = fs.compounded_moves(fits[leg.underlying].beta, sims)[:, 0]
                 pnl = pnl + fs.option_pnl(
                     leg,
                     move,
@@ -664,11 +676,7 @@ def run_factor_stress(
             "mean_pct": float(pct.mean()),
             "worst_pct": float(pct.min()),
             "prob_margin_call": (
-                float(
-                    np.mean(
-                        net_equity + pnl < MAINTENANCE * np.maximum(gross + gross * (sims @ bp), 0)
-                    )
-                )
+                float(np.mean(net_equity + pnl < MAINTENANCE * np.maximum(gross + stock_pnl, 0)))
                 if loan > 0
                 else None
             ),

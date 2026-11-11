@@ -49,6 +49,7 @@ const LOSS = "hsl(var(--destructive))";
 const GAIN = "hsl(var(--success))";
 const INK = "hsl(var(--primary))";
 const AXIS = "hsl(var(--muted-foreground))";
+const NEUTRAL = "hsl(var(--foreground) / 0.55)";
 const GRID = "hsl(var(--border))";
 
 const SHORT: Record<string, string> = {
@@ -64,7 +65,23 @@ const SHORT: Record<string, string> = {
 const usd = (v: number) =>
   `${v < 0 ? "−" : ""}$${Math.abs(v).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 const pct = (v: number, d = 1) => `${v < 0 ? "−" : ""}${Math.abs(v * 100).toFixed(d)}%`;
-const signedPct = (v: number, d = 1) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v * 100).toFixed(d)}%`;
+const signedPct = (v: number, d = 1) => {
+  const text = Math.abs(v * 100).toFixed(d);
+  // A value that rounds to zero carries no sign ("−0%" reads as a number).
+  return Number(text) === 0 ? `${text}%` : `${v > 0 ? "+" : "−"}${text}%`;
+};
+/** Compact dollars for tight tiles: −$28.0k, $1.2M. */
+const usdShort = (v: number) => {
+  const a = Math.abs(v);
+  const body = a >= 1e6 ? `${(a / 1e6).toFixed(2)}M` : a >= 1e4 ? `${(a / 1e3).toFixed(1)}k` : a.toLocaleString(undefined, { maximumFractionDigits: 0 });
+  return `${v < 0 ? "−" : ""}$${body}`;
+};
+const dayTick = (iso: string) => {
+  const d = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "2-digit" });
+};
 
 function Seg<T extends string | number | boolean>({
   label,
@@ -254,23 +271,24 @@ export function FactorStressLab() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Factor exposure by holding</CardTitle>
+          <CardDescription>
+            Each cell is the holding&apos;s sensitivity (beta) to a factor. Faded cells are not
+            statistically distinguishable from zero. Select a row for details.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ExposureHeatmap
+            data={data}
+            holding={holding}
+            onHolding={(t) => setHolding((cur) => (cur === t ? null : t))}
+          />
+        </CardContent>
+      </Card>
+
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Factor exposure by holding</CardTitle>
-            <CardDescription>
-              Each cell is the holding&apos;s sensitivity (beta) to a factor. Faded cells are not
-              statistically distinguishable from zero. Select a row for details.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ExposureHeatmap
-              data={data}
-              holding={holding}
-              onHolding={(t) => setHolding((cur) => (cur === t ? null : t))}
-            />
-          </CardContent>
-        </Card>
         <Card>
           <CardHeader>
             <CardTitle>Factor correlations</CardTitle>
@@ -284,20 +302,19 @@ export function FactorStressLab() {
             <FactorCorr matrix={data.correlation[regime]} />
           </CardContent>
         </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Where the risk comes from</CardTitle>
+            <CardDescription>
+              Share of your stock book&apos;s {regime} volatility explained by each factor, and by
+              single-name risk the factors do not explain. A negative share is a hedge.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Decomposition data={data} regime={regime} />
+          </CardContent>
+        </Card>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Where the risk comes from</CardTitle>
-          <CardDescription>
-            Share of your stock book&apos;s {regime} volatility explained by each factor, and by
-            single-name risk the factors do not explain. A negative share is a hedge.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Decomposition data={data} regime={regime} />
-        </CardContent>
-      </Card>
 
       <details className="rounded-lg border border-border bg-card px-4 py-3 text-sm">
         <summary className="cursor-pointer font-medium">How this is calculated</summary>
@@ -417,7 +434,7 @@ function ScenarioBars({
               onClick={() => onSelect(s.id)}
               aria-pressed={on}
               title={`${s.label}: ${signedPct(s.pnl_pct)} (${usd(s.band_low_usd)} to ${usd(s.band_high_usd)})`}
-              className={`grid w-full grid-cols-[minmax(7rem,13rem)_1fr_4.5rem] items-center gap-3 rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
+              className={`grid w-full grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 rounded-md px-2 py-1.5 text-left text-sm transition-colors sm:grid-cols-[minmax(7rem,17rem)_1fr_4.5rem] ${
                 on ? "bg-muted" : "hover:bg-muted/50"
               }`}
             >
@@ -429,7 +446,7 @@ function ScenarioBars({
                   </span>
                 ) : null}
               </span>
-              <span className="relative h-5">
+              <span className="relative order-last col-span-2 h-4 sm:order-none sm:col-span-1 sm:h-5">
                 <span className="absolute inset-y-0 left-1/2 w-px bg-border" />
                 <span
                   className="absolute top-1/2 h-px -translate-y-1/2"
@@ -499,7 +516,7 @@ function ScenarioDetail({
           <Kpi label="Estimated P&L" value={usd(s.pnl_usd)} tone={s.pnl_usd < 0 ? "bad" : "ok"} />
           <Kpi
             label={`${Math.round(data.confidence * 100)}% range`}
-            value={`${usd(s.band_low_usd)} to ${usd(s.band_high_usd)}`}
+            value={`${usdShort(s.band_low_usd)} to ${usdShort(s.band_high_usd)}`}
           />
           <Kpi
             label="Margin used after"
@@ -551,7 +568,7 @@ function ScenarioDetail({
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={waterfall} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid stroke={GRID} strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: AXIS }} tickLine={false} axisLine={{ stroke: GRID }} interval={0} />
+                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: AXIS }} tickLine={false} axisLine={{ stroke: GRID }} interval={0} angle={-35} textAnchor="end" height={44} />
                   <YAxis tickFormatter={usd} tick={{ fontSize: 11, fill: AXIS }} width={64} tickLine={false} axisLine={false} />
                   <ReferenceLine y={0} stroke={AXIS} />
                   <Tooltip
@@ -563,7 +580,7 @@ function ScenarioDetail({
                   />
                   <Bar dataKey="range" radius={2} isAnimationActive={false}>
                     {waterfall.map((r) => (
-                      <Cell key={r.label} fill={r.total ? INK : r.delta < 0 ? LOSS : GAIN} />
+                      <Cell key={r.label} fill={r.total ? NEUTRAL : r.delta < 0 ? LOSS : GAIN} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -618,9 +635,9 @@ function ScenarioDetail({
             <p className="mb-2 text-xs text-muted-foreground">
               {hasOptions
                 ? "The solid line reprices options at every size; the dashed line is the straight-line (delta-only) estimate. The gap is convexity."
-                : "P&L at 0.25× to 2× this shock."}
+                : "Losses compound, so doubling the shock loses less than twice as much. The dashed line is the straight-line estimate."}
             </p>
-            <Ladder s={s} showLinear={hasOptions} />
+            <Ladder s={s} />
           </div>
           <div>
             <h4 className="mb-1 text-sm font-medium">Margin used at each shock size</h4>
@@ -647,7 +664,7 @@ function ScenarioDetail({
   );
 }
 
-function Ladder({ s, showLinear }: { s: StressScenario; showLinear: boolean }) {
+function Ladder({ s }: { s: StressScenario }) {
   const rows = s.ladder.map((l) => ({ x: `${l.multiple}×`, full: l.pnl_usd, linear: l.linear_pnl_usd }));
   return (
     <div style={{ width: "100%", height: 220 }} role="img" aria-label="Profit and loss at different shock sizes">
@@ -662,13 +679,11 @@ function Ladder({ s, showLinear }: { s: StressScenario; showLinear: boolean }) {
               const row = active ? (payload?.[0]?.payload as (typeof rows)[number] | undefined) : undefined;
               if (!row) return null;
               const out: [string, string][] = [[`${label} shock`, usd(row.full)]];
-              if (showLinear) out.push(["Straight-line", usd(row.linear)]);
+              out.push(["Straight-line", usd(row.linear)]);
               return <Tip rows={out} />;
             }}
           />
-          {showLinear ? (
-            <Line dataKey="linear" stroke={AXIS} strokeDasharray="4 4" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-          ) : null}
+          <Line dataKey="linear" stroke={AXIS} strokeDasharray="4 4" strokeWidth={1.5} dot={false} isAnimationActive={false} />
           <Line dataKey="full" stroke={INK} strokeWidth={2} dot={{ r: 3 }} isAnimationActive={false} />
         </LineChart>
       </ResponsiveContainer>
@@ -736,7 +751,8 @@ function EpisodePath({ s }: { s: StressScenario }) {
         variant={view === "drawdown" ? "area" : "line"}
         color={view === "drawdown" ? LOSS : INK}
         height={220}
-        valueFormatter={view === "equity" ? usd : (v) => pct(v, 0)}
+        valueFormatter={view === "equity" ? usdShort : (v) => pct(v, 0)}
+        dateFormatter={dayTick}
         ariaLabel={`Modelled ${view} through ${s.label}`}
       />
       <p className="mt-1 text-xs text-muted-foreground">
@@ -871,8 +887,8 @@ function Distribution({ data, regime }: { data: FactorStress; regime: Regime }) 
                 ) : null;
               }}
             />
-            {t95 ? <ReferenceLine x={-t95.var} stroke={AXIS} strokeDasharray="4 4" label={{ value: "VaR 95", fontSize: 10, fill: AXIS, position: "top" }} /> : null}
-            {t99 ? <ReferenceLine x={-t99.var} stroke={LOSS} strokeDasharray="4 4" label={{ value: "VaR 99", fontSize: 10, fill: AXIS, position: "top" }} /> : null}
+            {t95 ? <ReferenceLine x={-t95.var} stroke={AXIS} strokeDasharray="4 4" label={{ value: "VaR 95", fontSize: 10, fill: AXIS, position: "insideTopRight" }} /> : null}
+            {t99 ? <ReferenceLine x={-t99.var} stroke={LOSS} strokeDasharray="4 4" label={{ value: "VaR 99", fontSize: 10, fill: AXIS, position: "insideTopLeft" }} /> : null}
             <Bar dataKey="p" isAnimationActive={false}>
               {rows.map((r) => (
                 <Cell key={r.mid} fill={t95 && r.hi <= -t95.var ? LOSS : INK} />
@@ -936,7 +952,7 @@ function ExposureHeatmap({
   return (
     <div className="space-y-3">
       <div className="overflow-x-auto">
-        <table className="w-max min-w-full border-separate border-spacing-px font-mono text-[11px] tabular-nums">
+        <table className="w-max border-separate border-spacing-px font-mono text-[11px] tabular-nums">
           <thead>
             <tr className="text-muted-foreground">
               <th className="px-1 py-1 text-left font-medium">Holding</th>
@@ -1083,7 +1099,7 @@ function Decomposition({ data, regime }: { data: FactorStress; regime: Regime })
                 style={{
                   left: r.v >= 0 ? "50%" : `${50 - (Math.abs(r.v) / max) * 50}%`,
                   width: `${(Math.abs(r.v) / max) * 50}%`,
-                  backgroundColor: r.v >= 0 ? INK : GAIN,
+                  backgroundColor: INK,
                 }}
               />
             </span>

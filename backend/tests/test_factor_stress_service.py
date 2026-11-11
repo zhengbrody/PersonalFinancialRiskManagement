@@ -109,7 +109,10 @@ def test_equity_crash_matches_the_hand_calculation(base):
     rows = {r["ticker"]: r for r in base["exposures"]}
     shock = np.array([crash["shocks"][f] for f in fs.FACTOR_IDS])
     want = sum(
-        rows[t]["value_usd"] * float(np.array([rows[t]["betas"][f] for f in fs.FACTOR_IDS]) @ shock)
+        rows[t]["value_usd"]
+        * float(
+            fs.compounded_moves(np.array([rows[t]["betas"][f] for f in fs.FACTOR_IDS]), shock)[0]
+        )
         for t in ("AAA", "BBB")
     )
     assert crash["pnl_usd"] == pytest.approx(want, rel=1e-9)
@@ -191,7 +194,11 @@ def test_margin_loan_changes_the_base_and_the_margin_view():
     assert acct["net_equity"] == pytest.approx(acct["gross_long"] - 300.0)
     assert b["margin"]["utilisation_after"] > b["margin"]["utilisation_before"]
     assert b["ladder"][-1]["multiple"] == 2.0
-    assert b["ladder"][-1]["pnl_usd"] == pytest.approx(2.0 * b["pnl_usd"])  # no options: linear
+    # Compounding: doubling the shock loses LESS than twice as much, and the
+    # straight-line reference is the first-order estimate.
+    top = b["ladder"][-1]
+    assert 2.0 * b["pnl_usd"] < top["pnl_usd"] < b["pnl_usd"] < 0
+    assert top["linear_pnl_usd"] < top["pnl_usd"]
     assert levered["distribution"]["crisis"]["prob_margin_call"] is not None
 
 
@@ -234,7 +241,9 @@ def test_long_put_is_fully_repriced_and_shows_convexity():
     # Independent reprice of the same leg.
     rows = {r["ticker"]: r for r in out["exposures"]}
     shock = np.array([crash["shocks"][f] for f in fs.FACTOR_IDS])
-    move = float(np.array([rows["AAA"]["betas"][f] for f in fs.FACTOR_IDS]) @ shock)
+    move = float(
+        fs.compounded_moves(np.array([rows["AAA"]["betas"][f] for f in fs.FACTOR_IDS]), shock)[0]
+    )
     vix = float(df["^VIX"].iloc[-1])
     new_iv = result["iv"] + vix * np.expm1(crash["shocks"]["vol"]) / 100.0
     want = (
@@ -272,6 +281,14 @@ def test_unpriceable_leg_is_skipped_and_said_so():
     assert any("could not be repriced" in w for w in out["warnings"])
 
 
+def test_no_holding_can_lose_more_than_everything():
+    # A shock far beyond any history: the first-order model would say −150%.
+    out = _run(custom_shocks={"equity": -0.9}, fill_unspecified=False)
+    custom = out["scenarios"][-1]
+    assert all(-1.0 <= h["move_pct"] < 0 for h in custom["by_holding"])
+    assert custom["stock_pnl_usd"] >= -out["account"]["gross_long"]
+
+
 def test_negative_equity_is_flagged_not_hidden():
     out = _run(margin_loan=1e9)
     assert out["account"]["net_equity"] < 0 and out["account"]["leverage"] is None
@@ -283,3 +300,20 @@ def test_nothing_modellable_is_an_error_not_a_zero():
         _run(holdings={"CCC": {"shares": 5, "asset_type": "stock"}})
     with pytest.raises(ValueError, match="no_factor_data"):
         _run(_market(drop=("SPY",)))
+
+
+def test_option_on_an_underlying_without_loadings_is_skipped_not_repriced_blind():
+    # The option's underlying has no price history, so there is nothing to move
+    # it by. It must be left out and named — not repriced at an unchanged spot.
+    df, spec, result, holdings = _option_setup(1)
+    orphan = {**result, "underlying": "ZZZ"}
+    out = _run(
+        df,
+        holdings=holdings,
+        option_specs_fn=lambda h: [SimpleNamespace(underlying="ZZZ", quantity=1)],
+        option_fn=lambda s: [orphan],
+    )
+    skipped = out["coverage"]["option_legs_skipped"]
+    assert out["coverage"]["option_legs_repriced"] == 0
+    assert len(skipped) == 1 and "ZZZ has no factor loadings" in skipped[0]["reason"]
+    assert all(s["options"]["pnl_usd"] == 0.0 for s in out["scenarios"])

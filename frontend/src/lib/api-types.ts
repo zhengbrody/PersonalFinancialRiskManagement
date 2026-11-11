@@ -5064,9 +5064,8 @@ export interface components {
             /**
              * Confidence
              * @default 0.95
-             * @enum {number}
              */
-            confidence?: 0.9 | 0.95 | 0.99;
+            confidence?: number;
             /** Custom Shocks */
             custom_shocks?: {
                 [key: string]: number;

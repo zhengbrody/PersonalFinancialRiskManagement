@@ -21,12 +21,19 @@ class FactorStressRequest(BaseModel):
     custom_shocks: Optional[dict[FactorId, float]] = None
     fill_unspecified: bool = True
     horizon_weeks: Literal[1, 2, 4] = 2
-    confidence: Literal[0.9, 0.95, 0.99] = 0.95
+    confidence: float = 0.95
     risk_free_rate: float = Field(default=0.045, ge=0.0, le=0.20)
+
+    @field_validator("confidence")
+    @classmethod
+    def _known_level(cls, v: float) -> float:
+        if v not in (0.9, 0.95, 0.99):
+            raise ValueError("confidence must be 0.9, 0.95 or 0.99")
+        return v
 
     @field_validator("custom_shocks")
     @classmethod
-    def _bounded(cls, v):
+    def _bounded(cls, v: Optional[dict[str, float]]) -> Optional[dict[str, float]]:
         if v is None:
             return v
         for factor, shock in v.items():
