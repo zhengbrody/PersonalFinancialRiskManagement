@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "model_version": "regime-v1.1.0",
-  "trained_at": "2026-11-03T01:25:09.576227+00:00",
-  "source_commit": "bcfab396ac710ef69d13a946a7067c8b024d9d3f",
-  "run_id": "41559484804",
-  "run_url": "https://github.com/zhengbrody/PersonalFinancialRiskManagement/actions/runs/41559484804",
-  "recorded_at": "2026-11-03T01:25:13.808259+00:00",
+  "trained_at": "2026-11-09T14:54:07.776003+00:00",
+  "source_commit": "965f3a7e2472faa1019fdd386bbb0625754f8cce",
+  "run_id": "42638997247",
+  "run_url": "https://github.com/zhengbrody/PersonalFinancialRiskManagement/actions/runs/42638997247",
+  "recorded_at": "2026-11-09T14:54:23.858833+00:00",
   "gates": {
     "passed": true,
     "checks": {
@@ -14,17 +14,18 @@
       "test_model_card": true
     },
     "observed": {
-      "elevated_risk_auc": 0.7242,
-      "holdout_size": 705
+      "elevated_risk_auc": 0.732,
+      "holdout_size": 706
     },
     "informational": {
-      "holdout_accuracy": 0.5035,
-      "baseline_accuracy": 0.5277
+      "holdout_accuracy": 0.5368,
+      "baseline_accuracy": 0.5198
     }
   },
   "artifacts": {
-    "regime_model.joblib": "5d24967ab1357748f35796289b172c4ff81a33b691c3aaf78c8778e63e3c38ee",
-    "regime_meta.json": "38d60476cc654423e5fc8eb48aa11100eb6289be3c09f943496a06624261b6f0",
-    "regime_reference.json": "76e4439e6ef09662634e08090bcca628b3a974c40b2f44a12d10ae1c3844170e"
+    "regime_model.joblib": "fae70350e3a6f7e622f7c4ad8e77061a4c7b9ac28226ddec4357db712acbe6d0",
+    "regime_meta.json": "c43d5eaf24988df547dd86467cd041c885f1292821b0abc081fa999014f25809",
+    "regime_reference.json": "59aa0435ae614f9f5b570eab1ce9ef4653f53629b0622fe81268b5deccb7c518",
+    "validation_report.json": "cd4eb50d1594072a01051968ad916f8f6d160013177441a718bc34a1ab51a048"
   }
 }
