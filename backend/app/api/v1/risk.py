@@ -39,6 +39,7 @@ from libs.mindmarket_core.score_version import SCORE_VERSION
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import APIError, ok, server_error, unprocessable
 from ...schemas.envelope import Envelope
+from ...schemas.factor_stress import FactorStressOut, FactorStressRequest
 from ...schemas.risk import (
     BenchmarkRow,
     BenchmarksOut,
@@ -2872,3 +2873,89 @@ def var_backtest_endpoint(
     data = svc.run_var_backtest(user)
     out = VarBacktestOut(**data)
     return ok(out.model_dump(), request=request, started_at=started)
+
+
+# ── seven-factor stress engine ────────────────────────────────────────
+# Equity / rates / credit / dollar / oil / volatility / gold. Loadings, crisis
+# correlations, full option repricing, a margin view and a simulated loss
+# distribution are all computed in ``services.factor_stress``; this route only
+# resolves the active portfolio and maps "nothing to model" to a 422.
+
+_FACTOR_STRESS_ERRORS = {
+    "no_market_data": "Could not fetch prices for this portfolio.",
+    "no_factor_data": "Factor market data is unavailable right now. Try again shortly.",
+    "no_priced_holdings": "Could not price any holding (shares = 0 or no quote).",
+    "no_modelled_holdings": "No holding has enough price history to estimate factor loadings.",
+    "no_equity_base": "The portfolio has no positive value to stress.",
+    "unknown_factor": "Unknown factor in the custom scenario.",
+}
+
+
+@router.post(
+    "/factor_stress",
+    summary="Seven-factor stress test of the active portfolio",
+    response_model=Envelope[FactorStressOut],
+)
+def factor_stress_endpoint(
+    body: FactorStressRequest,
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    """Hypothetical, historical and user-defined factor scenarios with per-factor
+    and per-holding attribution, option repricing, a margin view and a loss
+    distribution. Deterministic (fixed simulation seed), no LLM, no credits."""
+    started = time.perf_counter()
+
+    from ...services import context_cache as cc
+    from ...services import factor_stress as svc
+
+    active_context = _resolve_active_context_or_raise(user)
+    if (
+        body.expected_portfolio_id is not None
+        and body.expected_portfolio_id != active_context.portfolio_id
+    ):
+        raise APIError(
+            status=409,
+            code="portfolio_changed",
+            message="The active portfolio changed. Run the stress test again.",
+        )
+
+    def _compute() -> dict:
+        try:
+            raw = svc.run_factor_stress(
+                holdings=active_context.holdings,
+                cash_balance=active_context.cash_balance,
+                margin_loan=active_context.margin_loan,
+                custom_shocks=body.custom_shocks,
+                fill_unspecified=body.fill_unspecified,
+                horizon_weeks=body.horizon_weeks,
+                confidence=body.confidence,
+                risk_free_rate=body.risk_free_rate,
+                option_specs_fn=_option_specs_from_holdings,
+            )
+        except ValueError as exc:
+            code = str(exc)
+            if code not in _FACTOR_STRESS_ERRORS:
+                raise
+            raise APIError(status=422, code=code, message=_FACTOR_STRESS_ERRORS[code]) from exc
+        except APIError:
+            raise
+        except Exception as exc:
+            raise server_error("Factor stress failed.", reason=type(exc).__name__) from exc
+        return FactorStressOut.model_validate(raw).model_dump()
+
+    out = cc.cached_scenarios(
+        user_id=user.id,
+        holdings=active_context.holdings,
+        portfolio_context={
+            "portfolio_id": active_context.portfolio_id,
+            "cash": active_context.cash_balance,
+            "margin": active_context.margin_loan,
+        },
+        scenario_params={
+            "kind": "factor_stress",
+            **body.model_dump(exclude={"expected_portfolio_id"}),
+        },
+        producer=_compute,
+    ).value
+    return ok(out, request=request, started_at=started)

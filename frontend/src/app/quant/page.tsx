@@ -39,6 +39,7 @@ import { TimeSeriesChart } from "@/components/ui/chart-line";
 import { QuantAttribution } from "@/components/quant-attribution";
 import { DataProvenance } from "@/components/data-provenance";
 import { QuantRegime } from "@/components/quant-regime";
+import { FactorStressLab } from "@/components/factor-stress-lab";
 import { track } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -51,6 +52,7 @@ import {
 } from "@/lib/queries";
 
 const QUANT_TABS = [
+  { value: "stress", label: "Stress Lab" },
   { value: "backtest", label: "Backtest" },
   { value: "attribution", label: "Attribution" },
   { value: "regime", label: "Regime" },
@@ -142,12 +144,12 @@ export default function QuantPage() {
   const result = backtest.data;
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6">
+    <div className="mx-auto flex max-w-5xl flex-col gap-6">
       <header className="space-y-1">
         <h1 className="text-3xl font-semibold tracking-tight">Quant Lab</h1>
         <p className="text-sm text-muted-foreground">
-          Backtest your portfolio, see where your return came from, and read the
-          market&apos;s regime — in plain English.
+          Stress your portfolio across seven market factors, backtest it, see where
+          your return came from, and read the market&apos;s regime.
         </p>
       </header>
 
@@ -160,6 +162,7 @@ export default function QuantPage() {
         }}
       />
 
+      {tab === "stress" && <FactorStressLab />}
       {tab === "backtest" && (
         <>
           <Controls

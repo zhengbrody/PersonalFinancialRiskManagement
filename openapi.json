@@ -83,6 +83,58 @@
         "title": "AccountDeleteOut",
         "type": "object"
       },
+      "AccountOut": {
+        "properties": {
+          "cash": {
+            "title": "Cash",
+            "type": "number"
+          },
+          "gross_long": {
+            "title": "Gross Long",
+            "type": "number"
+          },
+          "leverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Leverage"
+          },
+          "margin_loan": {
+            "title": "Margin Loan",
+            "type": "number"
+          },
+          "net_equity": {
+            "title": "Net Equity",
+            "type": "number"
+          },
+          "option_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Option Value"
+          }
+        },
+        "required": [
+          "gross_long",
+          "option_value",
+          "cash",
+          "margin_loan",
+          "net_equity",
+          "leverage"
+        ],
+        "title": "AccountOut",
+        "type": "object"
+      },
       "ActionCard": {
         "properties": {
           "assumptions": {
@@ -697,7 +749,7 @@
           "factor": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/FactorOut"
+                "$ref": "#/components/schemas/backend__app__schemas__quant__FactorOut"
               },
               {
                 "type": "null"
@@ -3620,7 +3672,7 @@
         "title": "CorrTopPair",
         "type": "object"
       },
-      "CorrelationOut": {
+      "CorrelationOut-Input": {
         "description": "Pairwise correlation of holdings' daily returns (the engine's plain\nPearson ``corr_matrix``, estimated on the engine DataProvider's ~2-year\nwindow) plus deterministic diversification insights. Insights are\ncomputed over the FULL matrix; ``tickers``/``matrix`` are capped at the\ntop 30 by portfolio weight (``truncated`` flags the cut).\n``diversification_ratio`` = \u03a3\u0175\u1d62\u03c3\u1d62 / \u03c3\u209a \u2014 computed on the ENDPOINT's\nprice window (``history_days``, default ~1y), a different window than\nthe matrix; numerator and denominator share one frame and ddof, so\nDR \u2265 1 holds by construction regardless. The UI labels both windows.",
         "properties": {
           "avg_pairwise": {
@@ -3734,6 +3786,56 @@
           "reason"
         ],
         "title": "CoverageChange",
+        "type": "object"
+      },
+      "CoverageOut": {
+        "properties": {
+          "modelled_weight": {
+            "title": "Modelled Weight",
+            "type": "number"
+          },
+          "option_legs_repriced": {
+            "title": "Option Legs Repriced",
+            "type": "integer"
+          },
+          "option_legs_skipped": {
+            "items": {
+              "$ref": "#/components/schemas/SkippedLeg"
+            },
+            "title": "Option Legs Skipped",
+            "type": "array"
+          },
+          "proxied": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Proxied",
+            "type": "array"
+          },
+          "unmodelled": {
+            "items": {
+              "$ref": "#/components/schemas/UnmodelledRow"
+            },
+            "title": "Unmodelled",
+            "type": "array"
+          },
+          "unpriced": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unpriced",
+            "type": "array"
+          }
+        },
+        "required": [
+          "modelled_weight",
+          "proxied",
+          "unmodelled",
+          "unpriced",
+          "option_legs_repriced",
+          "option_legs_skipped"
+        ],
+        "title": "CoverageOut",
         "type": "object"
       },
       "CoverageRelation": {
@@ -4720,6 +4822,32 @@
         "title": "DecisionTask",
         "type": "object"
       },
+      "DecompositionOut": {
+        "properties": {
+          "factor_share": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Factor Share",
+            "type": "object"
+          },
+          "idio_share": {
+            "title": "Idio Share",
+            "type": "number"
+          },
+          "weekly_vol": {
+            "title": "Weekly Vol",
+            "type": "number"
+          }
+        },
+        "required": [
+          "factor_share",
+          "idio_share",
+          "weekly_vol"
+        ],
+        "title": "DecompositionOut",
+        "type": "object"
+      },
       "DigestPrefIn": {
         "properties": {
           "enabled": {
@@ -4784,6 +4912,62 @@
           "detail"
         ],
         "title": "DimensionScoreOut",
+        "type": "object"
+      },
+      "DistributionOut": {
+        "properties": {
+          "histogram": {
+            "items": {
+              "$ref": "#/components/schemas/backend__app__schemas__factor_stress__HistogramBin"
+            },
+            "title": "Histogram",
+            "type": "array"
+          },
+          "mean_pct": {
+            "title": "Mean Pct",
+            "type": "number"
+          },
+          "n_obs": {
+            "title": "N Obs",
+            "type": "integer"
+          },
+          "n_sims": {
+            "title": "N Sims",
+            "type": "integer"
+          },
+          "prob_margin_call": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prob Margin Call"
+          },
+          "tails": {
+            "items": {
+              "$ref": "#/components/schemas/TailMetric"
+            },
+            "title": "Tails",
+            "type": "array"
+          },
+          "worst_pct": {
+            "title": "Worst Pct",
+            "type": "number"
+          }
+        },
+        "required": [
+          "histogram",
+          "tails",
+          "mean_pct",
+          "worst_pct",
+          "prob_margin_call",
+          "n_sims",
+          "n_obs"
+        ],
+        "title": "DistributionOut",
         "type": "object"
       },
       "DriverChange": {
@@ -5486,6 +5670,39 @@
           "meta"
         ],
         "title": "Envelope[EfficientFrontierOut]",
+        "type": "object"
+      },
+      "Envelope_FactorStressOut_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FactorStressOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[FactorStressOut]",
         "type": "object"
       },
       "Envelope_FundingPlanReview_": {
@@ -8069,6 +8286,77 @@
         "title": "ExplainSnapshotDelta",
         "type": "object"
       },
+      "ExposureRow": {
+        "properties": {
+          "betas": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Betas",
+            "type": "object"
+          },
+          "n_obs": {
+            "title": "N Obs",
+            "type": "integer"
+          },
+          "r2": {
+            "title": "R2",
+            "type": "number"
+          },
+          "resid_vol_weekly": {
+            "title": "Resid Vol Weekly",
+            "type": "number"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "t_stats": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "T Stats",
+            "type": "object"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "unstable": {
+            "title": "Unstable",
+            "type": "boolean"
+          },
+          "value_usd": {
+            "title": "Value Usd",
+            "type": "number"
+          },
+          "weight": {
+            "title": "Weight",
+            "type": "number"
+          }
+        },
+        "required": [
+          "ticker",
+          "source",
+          "betas",
+          "t_stats",
+          "r2",
+          "n_obs",
+          "resid_vol_weekly",
+          "unstable",
+          "weight",
+          "value_usd"
+        ],
+        "title": "ExposureRow",
+        "type": "object"
+      },
       "FactPack": {
         "description": "The compact, source-attributed fact sheet for one ticker.",
         "properties": {
@@ -8285,71 +8573,207 @@
         "title": "FactorBetaRow",
         "type": "object"
       },
-      "FactorOut": {
+      "FactorPnl": {
         "properties": {
-          "alpha": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
+          "factor": {
+            "enum": [
+              "equity",
+              "rates",
+              "credit",
+              "usd",
+              "oil",
+              "vol",
+              "gold"
             ],
-            "title": "Alpha"
+            "title": "Factor",
+            "type": "string"
           },
-          "factor_betas": {
-            "additionalProperties": {
-              "anyOf": [
-                {
-                  "type": "number"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "title": "Factor Betas",
-            "type": "object"
-          },
-          "factor_contributions": {
-            "additionalProperties": {
-              "anyOf": [
-                {
-                  "type": "number"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "title": "Factor Contributions",
-            "type": "object"
-          },
-          "r_squared": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "R Squared"
-          },
-          "residual_return": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Residual Return"
+          "pnl_usd": {
+            "title": "Pnl Usd",
+            "type": "number"
           }
         },
-        "title": "FactorOut",
+        "required": [
+          "factor",
+          "pnl_usd"
+        ],
+        "title": "FactorPnl",
+        "type": "object"
+      },
+      "FactorStressOut": {
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/AccountOut"
+          },
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Assumptions",
+            "type": "array"
+          },
+          "concentration": {
+            "$ref": "#/components/schemas/backend__app__schemas__factor_stress__ConcentrationOut"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "correlation": {
+            "$ref": "#/components/schemas/backend__app__schemas__factor_stress__CorrelationOut"
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/CoverageOut"
+          },
+          "decomposition": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DecompositionOut"
+            },
+            "title": "Decomposition",
+            "type": "object"
+          },
+          "distribution": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DistributionOut"
+            },
+            "title": "Distribution",
+            "type": "object"
+          },
+          "exposures": {
+            "items": {
+              "$ref": "#/components/schemas/ExposureRow"
+            },
+            "title": "Exposures",
+            "type": "array"
+          },
+          "factors": {
+            "items": {
+              "$ref": "#/components/schemas/backend__app__schemas__factor_stress__FactorOut"
+            },
+            "title": "Factors",
+            "type": "array"
+          },
+          "horizon_weeks": {
+            "title": "Horizon Weeks",
+            "type": "integer"
+          },
+          "maintenance_requirement": {
+            "title": "Maintenance Requirement",
+            "type": "number"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "scenarios": {
+            "items": {
+              "$ref": "#/components/schemas/StressScenarioOut"
+            },
+            "title": "Scenarios",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "model_version",
+          "as_of",
+          "horizon_weeks",
+          "confidence",
+          "maintenance_requirement",
+          "account",
+          "factors",
+          "exposures",
+          "coverage",
+          "concentration",
+          "correlation",
+          "decomposition",
+          "distribution",
+          "scenarios",
+          "assumptions",
+          "warnings"
+        ],
+        "title": "FactorStressOut",
+        "type": "object"
+      },
+      "FactorStressRequest": {
+        "properties": {
+          "confidence": {
+            "default": 0.95,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "custom_shocks": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "propertyNames": {
+                  "enum": [
+                    "equity",
+                    "rates",
+                    "credit",
+                    "usd",
+                    "oil",
+                    "vol",
+                    "gold"
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Shocks"
+          },
+          "expected_portfolio_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Portfolio Id"
+          },
+          "fill_unspecified": {
+            "default": true,
+            "title": "Fill Unspecified",
+            "type": "boolean"
+          },
+          "horizon_weeks": {
+            "default": 2,
+            "enum": [
+              1,
+              2,
+              4
+            ],
+            "title": "Horizon Weeks",
+            "type": "integer"
+          },
+          "risk_free_rate": {
+            "default": 0.045,
+            "maximum": 0.2,
+            "minimum": 0.0,
+            "title": "Risk Free Rate",
+            "type": "number"
+          }
+        },
+        "title": "FactorStressRequest",
         "type": "object"
       },
       "FeatureDriftOut": {
@@ -9564,28 +9988,6 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
-      "HistogramBin": {
-        "properties": {
-          "count": {
-            "default": 0,
-            "title": "Count",
-            "type": "integer"
-          },
-          "x": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "X"
-          }
-        },
-        "title": "HistogramBin",
-        "type": "object"
-      },
       "HistoricalScenarioRow": {
         "properties": {
           "coverage": {
@@ -9783,6 +10185,34 @@
           "market_value"
         ],
         "title": "HoldingIn",
+        "type": "object"
+      },
+      "HoldingPnl": {
+        "properties": {
+          "move_pct": {
+            "title": "Move Pct",
+            "type": "number"
+          },
+          "pnl_usd": {
+            "title": "Pnl Usd",
+            "type": "number"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "move_pct",
+          "pnl_usd",
+          "source"
+        ],
+        "title": "HoldingPnl",
         "type": "object"
       },
       "HoldingRow": {
@@ -10874,6 +11304,51 @@
         "title": "JourneyRecordRequest",
         "type": "object"
       },
+      "LadderPoint": {
+        "properties": {
+          "breach": {
+            "title": "Breach",
+            "type": "boolean"
+          },
+          "linear_pnl_usd": {
+            "title": "Linear Pnl Usd",
+            "type": "number"
+          },
+          "margin_utilisation": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Margin Utilisation"
+          },
+          "multiple": {
+            "title": "Multiple",
+            "type": "number"
+          },
+          "pnl_pct": {
+            "title": "Pnl Pct",
+            "type": "number"
+          },
+          "pnl_usd": {
+            "title": "Pnl Usd",
+            "type": "number"
+          }
+        },
+        "required": [
+          "multiple",
+          "pnl_usd",
+          "pnl_pct",
+          "linear_pnl_usd",
+          "margin_utilisation",
+          "breach"
+        ],
+        "title": "LadderPoint",
+        "type": "object"
+      },
       "LiquidityRow": {
         "properties": {
           "adv_30d": {
@@ -11417,6 +11892,65 @@
           }
         },
         "title": "MarginBuffer",
+        "type": "object"
+      },
+      "MarginOut": {
+        "properties": {
+          "breach": {
+            "title": "Breach",
+            "type": "boolean"
+          },
+          "breach_multiple": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Breach Multiple"
+          },
+          "equity_after": {
+            "title": "Equity After",
+            "type": "number"
+          },
+          "requirement_after": {
+            "title": "Requirement After",
+            "type": "number"
+          },
+          "utilisation_after": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utilisation After"
+          },
+          "utilisation_before": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Utilisation Before"
+          }
+        },
+        "required": [
+          "equity_after",
+          "requirement_after",
+          "utilisation_before",
+          "utilisation_after",
+          "breach",
+          "breach_multiple"
+        ],
+        "title": "MarginOut",
         "type": "object"
       },
       "MarketSnapshotOut": {
@@ -12996,6 +13530,34 @@
         "title": "OptionInput",
         "type": "object"
       },
+      "OptionPnl": {
+        "properties": {
+          "convexity_usd": {
+            "title": "Convexity Usd",
+            "type": "number"
+          },
+          "delta_usd": {
+            "title": "Delta Usd",
+            "type": "number"
+          },
+          "pnl_usd": {
+            "title": "Pnl Usd",
+            "type": "number"
+          },
+          "vega_usd": {
+            "title": "Vega Usd",
+            "type": "number"
+          }
+        },
+        "required": [
+          "pnl_usd",
+          "delta_usd",
+          "convexity_usd",
+          "vega_usd"
+        ],
+        "title": "OptionPnl",
+        "type": "object"
+      },
       "OptionScenarioGrid": {
         "additionalProperties": true,
         "properties": {
@@ -13534,6 +14096,48 @@
           "candidate_equity"
         ],
         "title": "PairedStress",
+        "type": "object"
+      },
+      "PathPoint": {
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "drawdown": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drawdown"
+          },
+          "equity": {
+            "title": "Equity",
+            "type": "number"
+          },
+          "margin_utilisation": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Margin Utilisation"
+          }
+        },
+        "required": [
+          "date",
+          "equity",
+          "drawdown",
+          "margin_utilisation"
+        ],
+        "title": "PathPoint",
         "type": "object"
       },
       "PayoffPointOut": {
@@ -14983,6 +15587,29 @@
           "reasons"
         ],
         "title": "RankingOut",
+        "type": "object"
+      },
+      "RealisedCheck": {
+        "properties": {
+          "coverage": {
+            "title": "Coverage",
+            "type": "number"
+          },
+          "model_return_pct": {
+            "title": "Model Return Pct",
+            "type": "number"
+          },
+          "return_pct": {
+            "title": "Return Pct",
+            "type": "number"
+          }
+        },
+        "required": [
+          "coverage",
+          "return_pct",
+          "model_return_pct"
+        ],
+        "title": "RealisedCheck",
         "type": "object"
       },
       "ReasonCodeOut": {
@@ -17739,7 +18366,7 @@
           "correlation": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/CorrelationOut"
+                "$ref": "#/components/schemas/CorrelationOut-Input"
               },
               {
                 "type": "null"
@@ -18134,7 +18761,7 @@
           "correlation": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/CorrelationOut"
+                "$ref": "#/components/schemas/backend__app__schemas__risk__CorrelationOut"
               },
               {
                 "type": "null"
@@ -20205,6 +20832,24 @@
         "title": "SimulateHolding",
         "type": "object"
       },
+      "SkippedLeg": {
+        "properties": {
+          "contract": {
+            "title": "Contract",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract",
+          "reason"
+        ],
+        "title": "SkippedLeg",
+        "type": "object"
+      },
       "SmartMoneyOut": {
         "properties": {
           "as_of": {
@@ -20592,6 +21237,146 @@
         "title": "StressRowOut",
         "type": "object"
       },
+      "StressScenarioOut": {
+        "properties": {
+          "band_high_usd": {
+            "title": "Band High Usd",
+            "type": "number"
+          },
+          "band_low_usd": {
+            "title": "Band Low Usd",
+            "type": "number"
+          },
+          "by_factor": {
+            "items": {
+              "$ref": "#/components/schemas/FactorPnl"
+            },
+            "title": "By Factor",
+            "type": "array"
+          },
+          "by_holding": {
+            "items": {
+              "$ref": "#/components/schemas/HoldingPnl"
+            },
+            "title": "By Holding",
+            "type": "array"
+          },
+          "filled": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Filled",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "hypothetical",
+              "historical",
+              "custom"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "ladder": {
+            "items": {
+              "$ref": "#/components/schemas/LadderPoint"
+            },
+            "title": "Ladder",
+            "type": "array"
+          },
+          "margin": {
+            "$ref": "#/components/schemas/MarginOut"
+          },
+          "options": {
+            "$ref": "#/components/schemas/OptionPnl"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/PathPoint"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "pnl_pct": {
+            "title": "Pnl Pct",
+            "type": "number"
+          },
+          "pnl_usd": {
+            "title": "Pnl Usd",
+            "type": "number"
+          },
+          "realised": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RealisedCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shocks": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Shocks",
+            "type": "object"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "specified": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Specified",
+            "type": "array"
+          },
+          "stock_pnl_usd": {
+            "title": "Stock Pnl Usd",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "source",
+          "shocks",
+          "specified",
+          "filled",
+          "pnl_usd",
+          "pnl_pct",
+          "band_low_usd",
+          "band_high_usd",
+          "stock_pnl_usd",
+          "by_factor",
+          "options",
+          "by_holding",
+          "margin",
+          "ladder",
+          "path",
+          "realised"
+        ],
+        "title": "StressScenarioOut",
+        "type": "object"
+      },
       "SubscriptionOut": {
         "description": "Mirror of the ``public.subscriptions`` row for the current user.\n\nAll fields are optional because users on the implicit free tier\nnever had a row created \u2014 the frontend renders the table-row-\nmissing case as \"Free plan, no Stripe history\".",
         "properties": {
@@ -20702,6 +21487,53 @@
           "next_step"
         ],
         "title": "SuggestedAction",
+        "type": "object"
+      },
+      "TailMetric": {
+        "properties": {
+          "cvar": {
+            "title": "Cvar",
+            "type": "number"
+          },
+          "cvar_se": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cvar Se"
+          },
+          "level": {
+            "title": "Level",
+            "type": "number"
+          },
+          "var": {
+            "title": "Var",
+            "type": "number"
+          },
+          "var_se": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Var Se"
+          }
+        },
+        "required": [
+          "level",
+          "var",
+          "cvar",
+          "var_se",
+          "cvar_se"
+        ],
+        "title": "TailMetric",
         "type": "object"
       },
       "TaskAssumptions": {
@@ -21256,6 +22088,29 @@
         "title": "UnifiedNewsItem",
         "type": "object"
       },
+      "UnmodelledRow": {
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "weight": {
+            "title": "Weight",
+            "type": "number"
+          }
+        },
+        "required": [
+          "ticker",
+          "weight",
+          "reason"
+        ],
+        "title": "UnmodelledRow",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -21479,7 +22334,7 @@
           },
           "histogram": {
             "items": {
-              "$ref": "#/components/schemas/HistogramBin"
+              "$ref": "#/components/schemas/backend__app__schemas__risk__HistogramBin"
             },
             "title": "Histogram",
             "type": "array"
@@ -21638,6 +22493,168 @@
         "title": "YieldCurveResponse",
         "type": "object"
       },
+      "backend__app__schemas__factor_stress__ConcentrationOut": {
+        "properties": {
+          "effective_holdings": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Holdings"
+          },
+          "hhi": {
+            "title": "Hhi",
+            "type": "number"
+          },
+          "top_weight": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Top Weight"
+          }
+        },
+        "required": [
+          "top_weight",
+          "hhi",
+          "effective_holdings"
+        ],
+        "title": "ConcentrationOut",
+        "type": "object"
+      },
+      "backend__app__schemas__factor_stress__CorrelationOut": {
+        "properties": {
+          "calm": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Calm",
+            "type": "array"
+          },
+          "calm_n_obs": {
+            "title": "Calm N Obs",
+            "type": "integer"
+          },
+          "crisis": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Crisis",
+            "type": "array"
+          },
+          "crisis_n_obs": {
+            "title": "Crisis N Obs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "calm",
+          "crisis",
+          "calm_n_obs",
+          "crisis_n_obs"
+        ],
+        "title": "CorrelationOut",
+        "type": "object"
+      },
+      "backend__app__schemas__factor_stress__FactorOut": {
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "crisis_weekly_vol": {
+            "title": "Crisis Weekly Vol",
+            "type": "number"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "id": {
+            "enum": [
+              "equity",
+              "rates",
+              "credit",
+              "usd",
+              "oil",
+              "vol",
+              "gold"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "portfolio_loading": {
+            "title": "Portfolio Loading",
+            "type": "number"
+          },
+          "proxy": {
+            "title": "Proxy",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          },
+          "weekly_vol": {
+            "title": "Weekly Vol",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "proxy",
+          "unit",
+          "description",
+          "available",
+          "weekly_vol",
+          "crisis_weekly_vol",
+          "portfolio_loading"
+        ],
+        "title": "FactorOut",
+        "type": "object"
+      },
+      "backend__app__schemas__factor_stress__HistogramBin": {
+        "properties": {
+          "hi": {
+            "title": "Hi",
+            "type": "number"
+          },
+          "lo": {
+            "title": "Lo",
+            "type": "number"
+          },
+          "p": {
+            "title": "P",
+            "type": "number"
+          }
+        },
+        "required": [
+          "lo",
+          "hi",
+          "p"
+        ],
+        "title": "HistogramBin",
+        "type": "object"
+      },
       "backend__app__schemas__public_risk__ConcentrationOut": {
         "properties": {
           "effective_holdings": {
@@ -21693,6 +22710,73 @@
           }
         },
         "title": "ConcentrationOut",
+        "type": "object"
+      },
+      "backend__app__schemas__quant__FactorOut": {
+        "properties": {
+          "alpha": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alpha"
+          },
+          "factor_betas": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Factor Betas",
+            "type": "object"
+          },
+          "factor_contributions": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Factor Contributions",
+            "type": "object"
+          },
+          "r_squared": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "R Squared"
+          },
+          "residual_return": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Residual Return"
+          }
+        },
+        "title": "FactorOut",
         "type": "object"
       },
       "backend__app__schemas__risk__ConcentrationOut": {
@@ -21791,6 +22875,115 @@
           "num_holdings"
         ],
         "title": "ConcentrationOut",
+        "type": "object"
+      },
+      "backend__app__schemas__risk__CorrelationOut": {
+        "description": "Pairwise correlation of holdings' daily returns (the engine's plain\nPearson ``corr_matrix``, estimated on the engine DataProvider's ~2-year\nwindow) plus deterministic diversification insights. Insights are\ncomputed over the FULL matrix; ``tickers``/``matrix`` are capped at the\ntop 30 by portfolio weight (``truncated`` flags the cut).\n``diversification_ratio`` = \u03a3\u0175\u1d62\u03c3\u1d62 / \u03c3\u209a \u2014 computed on the ENDPOINT's\nprice window (``history_days``, default ~1y), a different window than\nthe matrix; numerator and denominator share one frame and ddof, so\nDR \u2265 1 holds by construction regardless. The UI labels both windows.",
+        "properties": {
+          "avg_pairwise": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Pairwise"
+          },
+          "best_diversifier": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BestDiversifier"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "diversification_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Diversification Ratio"
+          },
+          "matrix": {
+            "items": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "title": "Matrix",
+            "type": "array"
+          },
+          "tickers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tickers",
+            "type": "array"
+          },
+          "top_pair": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CorrTopPair"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "total_tickers": {
+            "default": 0,
+            "title": "Total Tickers",
+            "type": "integer"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tickers",
+          "matrix"
+        ],
+        "title": "CorrelationOut",
+        "type": "object"
+      },
+      "backend__app__schemas__risk__HistogramBin": {
+        "properties": {
+          "count": {
+            "default": 0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "x": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X"
+          }
+        },
+        "title": "HistogramBin",
         "type": "object"
       }
     }
@@ -25681,6 +26874,48 @@
           }
         },
         "summary": "Structured AI risk diagnosis over already-computed metrics",
+        "tags": [
+          "risk"
+        ]
+      }
+    },
+    "/api/v1/risk/factor_stress": {
+      "post": {
+        "description": "Hypothetical, historical and user-defined factor scenarios with per-factor\nand per-holding attribution, option repricing, a margin view and a loss\ndistribution. Deterministic (fixed simulation seed), no LLM, no credits.",
+        "operationId": "factor_stress_endpoint_api_v1_risk_factor_stress_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FactorStressRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_FactorStressOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Seven-factor stress test of the active portfolio",
         "tags": [
           "risk"
         ]
