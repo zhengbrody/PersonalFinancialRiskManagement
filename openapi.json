@@ -4057,6 +4057,71 @@
         "title": "CoverageTestOut",
         "type": "object"
       },
+      "CrisisReplayOut": {
+        "properties": {
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "benchmark": {
+            "title": "Benchmark",
+            "type": "string"
+          },
+          "data_source": {
+            "title": "Data Source",
+            "type": "string"
+          },
+          "episodes": {
+            "items": {
+              "$ref": "#/components/schemas/ReplayEpisode"
+            },
+            "title": "Episodes",
+            "type": "array"
+          },
+          "gross_long": {
+            "title": "Gross Long",
+            "type": "number"
+          },
+          "loadings": {
+            "items": {
+              "$ref": "#/components/schemas/ReplayLoading"
+            },
+            "title": "Loadings",
+            "type": "array"
+          },
+          "method": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Method",
+            "type": "array"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "model_version",
+          "as_of",
+          "benchmark",
+          "gross_long",
+          "loadings",
+          "episodes",
+          "data_source",
+          "method",
+          "warnings"
+        ],
+        "title": "CrisisReplayOut",
+        "type": "object"
+      },
       "CurvePoint": {
         "description": "One point on a time series (equity curve / drawdown). ``date`` is an\nISO ``YYYY-MM-DD`` string; ``value`` is a finite float.",
         "properties": {
@@ -4705,6 +4770,24 @@
           "observations"
         ],
         "title": "DataWindow",
+        "type": "object"
+      },
+      "DatedReturn": {
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "return_pct": {
+            "title": "Return Pct",
+            "type": "number"
+          }
+        },
+        "required": [
+          "date",
+          "return_pct"
+        ],
+        "title": "DatedReturn",
         "type": "object"
       },
       "DecisionSupport": {
@@ -5637,6 +5720,39 @@
           "meta"
         ],
         "title": "Envelope[CopilotPreferencesOut]",
+        "type": "object"
+      },
+      "Envelope_CrisisReplayOut_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CrisisReplayOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[CrisisReplayOut]",
         "type": "object"
       },
       "Envelope_EfficientFrontierOut_": {
@@ -7254,6 +7370,39 @@
           "meta"
         ],
         "title": "Envelope[SmartMoneyOut]",
+        "type": "object"
+      },
+      "Envelope_StressValidationOut_": {
+        "additionalProperties": true,
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StressValidationOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "meta": {
+            "$ref": "#/components/schemas/MetaOut"
+          }
+        },
+        "required": [
+          "meta"
+        ],
+        "title": "Envelope[StressValidationOut]",
         "type": "object"
       },
       "Envelope_TaskResumeOut_": {
@@ -16127,6 +16276,29 @@
         "title": "RegimeYieldCurveOut",
         "type": "object"
       },
+      "ReplayBenchmark": {
+        "properties": {
+          "max_drawdown": {
+            "title": "Max Drawdown",
+            "type": "number"
+          },
+          "return_pct": {
+            "title": "Return Pct",
+            "type": "number"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "return_pct",
+          "max_drawdown"
+        ],
+        "title": "ReplayBenchmark",
+        "type": "object"
+      },
       "ReplayComparison": {
         "additionalProperties": false,
         "properties": {
@@ -16144,6 +16316,415 @@
           "receipt"
         ],
         "title": "ReplayComparison",
+        "type": "object"
+      },
+      "ReplayCorrelation": {
+        "properties": {
+          "assets_compared": {
+            "title": "Assets Compared",
+            "type": "integer"
+          },
+          "episode_avg_pairwise": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Avg Pairwise"
+          },
+          "recent_avg_pairwise": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recent Avg Pairwise"
+          },
+          "stock_bond_episode": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stock Bond Episode"
+          },
+          "stock_bond_recent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stock Bond Recent"
+          }
+        },
+        "required": [
+          "episode_avg_pairwise",
+          "recent_avg_pairwise",
+          "assets_compared",
+          "stock_bond_episode",
+          "stock_bond_recent"
+        ],
+        "title": "ReplayCorrelation",
+        "type": "object"
+      },
+      "ReplayCoverage": {
+        "properties": {
+          "observed_weight": {
+            "title": "Observed Weight",
+            "type": "number"
+          },
+          "reconstructed_weight": {
+            "title": "Reconstructed Weight",
+            "type": "number"
+          },
+          "unavailable_weight": {
+            "title": "Unavailable Weight",
+            "type": "number"
+          }
+        },
+        "required": [
+          "observed_weight",
+          "reconstructed_weight",
+          "unavailable_weight"
+        ],
+        "title": "ReplayCoverage",
+        "type": "object"
+      },
+      "ReplayEpisode": {
+        "properties": {
+          "benchmark": {
+            "$ref": "#/components/schemas/ReplayBenchmark"
+          },
+          "beta_to_benchmark": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beta To Benchmark"
+          },
+          "by_factor": {
+            "items": {
+              "$ref": "#/components/schemas/ReplayFactor"
+            },
+            "title": "By Factor",
+            "type": "array"
+          },
+          "correlation": {
+            "$ref": "#/components/schemas/ReplayCorrelation"
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/ReplayCoverage"
+          },
+          "end": {
+            "title": "End",
+            "type": "string"
+          },
+          "excess_return_pct": {
+            "title": "Excess Return Pct",
+            "type": "number"
+          },
+          "factor_explained_pct": {
+            "title": "Factor Explained Pct",
+            "type": "number"
+          },
+          "factor_moves": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Factor Moves",
+            "type": "object"
+          },
+          "factors_unavailable": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Factors Unavailable",
+            "type": "array"
+          },
+          "holdings": {
+            "items": {
+              "$ref": "#/components/schemas/ReplayHolding"
+            },
+            "title": "Holdings",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "path": {
+            "items": {
+              "$ref": "#/components/schemas/ReplayPoint"
+            },
+            "title": "Path",
+            "type": "array"
+          },
+          "portfolio": {
+            "$ref": "#/components/schemas/ReplayPortfolio"
+          },
+          "start": {
+            "title": "Start",
+            "type": "string"
+          },
+          "trading_days": {
+            "title": "Trading Days",
+            "type": "integer"
+          },
+          "unexplained_pct": {
+            "title": "Unexplained Pct",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "start",
+          "end",
+          "trading_days",
+          "coverage",
+          "portfolio",
+          "benchmark",
+          "excess_return_pct",
+          "beta_to_benchmark",
+          "holdings",
+          "by_factor",
+          "factor_explained_pct",
+          "unexplained_pct",
+          "factor_moves",
+          "factors_unavailable",
+          "correlation",
+          "path"
+        ],
+        "title": "ReplayEpisode",
+        "type": "object"
+      },
+      "ReplayFactor": {
+        "properties": {
+          "contribution_pct": {
+            "title": "Contribution Pct",
+            "type": "number"
+          },
+          "factor": {
+            "title": "Factor",
+            "type": "string"
+          }
+        },
+        "required": [
+          "factor",
+          "contribution_pct"
+        ],
+        "title": "ReplayFactor",
+        "type": "object"
+      },
+      "ReplayHolding": {
+        "properties": {
+          "contribution_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contribution Pct"
+          },
+          "fit_r2": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fit R2"
+          },
+          "kind": {
+            "enum": [
+              "observed",
+              "reconstructed",
+              "unavailable"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "loadings_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loadings Source"
+          },
+          "return_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return Pct"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "weight": {
+            "title": "Weight",
+            "type": "number"
+          }
+        },
+        "required": [
+          "ticker",
+          "weight",
+          "kind",
+          "return_pct",
+          "contribution_pct",
+          "loadings_source",
+          "fit_r2"
+        ],
+        "title": "ReplayHolding",
+        "type": "object"
+      },
+      "ReplayLoading": {
+        "properties": {
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "source"
+        ],
+        "title": "ReplayLoading",
+        "type": "object"
+      },
+      "ReplayPoint": {
+        "properties": {
+          "benchmark": {
+            "title": "Benchmark",
+            "type": "number"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "drawdown": {
+            "title": "Drawdown",
+            "type": "number"
+          },
+          "portfolio": {
+            "title": "Portfolio",
+            "type": "number"
+          }
+        },
+        "required": [
+          "date",
+          "portfolio",
+          "benchmark",
+          "drawdown"
+        ],
+        "title": "ReplayPoint",
+        "type": "object"
+      },
+      "ReplayPortfolio": {
+        "properties": {
+          "max_drawdown": {
+            "title": "Max Drawdown",
+            "type": "number"
+          },
+          "return_pct": {
+            "title": "Return Pct",
+            "type": "number"
+          },
+          "trough_date": {
+            "title": "Trough Date",
+            "type": "string"
+          },
+          "worst_day": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DatedReturn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "worst_week": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WindowReturn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "return_pct",
+          "max_drawdown",
+          "trough_date",
+          "worst_day",
+          "worst_week"
+        ],
+        "title": "ReplayPortfolio",
+        "type": "object"
+      },
+      "ReplayRequest": {
+        "properties": {
+          "expected_portfolio_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Portfolio Id"
+          }
+        },
+        "title": "ReplayRequest",
         "type": "object"
       },
       "ReportFromActiveRequest": {
@@ -21377,6 +21958,72 @@
         "title": "StressScenarioOut",
         "type": "object"
       },
+      "StressValidationOut": {
+        "properties": {
+          "caveats": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Caveats",
+            "type": "array"
+          },
+          "conditional": {
+            "$ref": "#/components/schemas/ValidationConditional"
+          },
+          "content_sha256": {
+            "title": "Content Sha256",
+            "type": "string"
+          },
+          "data": {
+            "additionalProperties": true,
+            "title": "Data",
+            "type": "object"
+          },
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "hash_verified": {
+            "title": "Hash Verified",
+            "type": "boolean"
+          },
+          "method": {
+            "additionalProperties": true,
+            "title": "Method",
+            "type": "object"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "model_version_current": {
+            "title": "Model Version Current",
+            "type": "boolean"
+          },
+          "report_version": {
+            "title": "Report Version",
+            "type": "integer"
+          },
+          "rolling_var": {
+            "$ref": "#/components/schemas/ValidationRolling"
+          }
+        },
+        "required": [
+          "report_version",
+          "model_version",
+          "generated_at",
+          "data",
+          "method",
+          "conditional",
+          "rolling_var",
+          "caveats",
+          "content_sha256",
+          "hash_verified",
+          "model_version_current"
+        ],
+        "title": "StressValidationOut",
+        "type": "object"
+      },
       "SubscriptionOut": {
         "description": "Mirror of the ``public.subscriptions`` row for the current user.\n\nAll fields are optional because users on the implicit free tier\nnever had a row created \u2014 the frontend renders the table-row-\nmissing case as \"Free plan, no Stripe history\".",
         "properties": {
@@ -22111,6 +22758,62 @@
         "title": "UnmodelledRow",
         "type": "object"
       },
+      "ValidationConditional": {
+        "properties": {
+          "by_episode": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "By Episode",
+            "type": "array"
+          },
+          "hindsight_rows": {
+            "title": "Hindsight Rows",
+            "type": "integer"
+          },
+          "interval": {
+            "additionalProperties": true,
+            "title": "Interval",
+            "type": "object"
+          },
+          "models": {
+            "additionalProperties": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Models",
+            "type": "object"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "skipped": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Skipped",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rows",
+          "skipped",
+          "models",
+          "interval",
+          "by_episode",
+          "hindsight_rows"
+        ],
+        "title": "ValidationConditional",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -22149,6 +22852,140 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "ValidationRolling": {
+        "properties": {
+          "pooled": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Pooled",
+            "type": "array"
+          },
+          "portfolios": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Portfolios",
+            "type": "array"
+          }
+        },
+        "required": [
+          "portfolios",
+          "pooled"
+        ],
+        "title": "ValidationRolling",
+        "type": "object"
+      },
+      "ValidationRow": {
+        "properties": {
+          "band_high": {
+            "title": "Band High",
+            "type": "number"
+          },
+          "band_low": {
+            "title": "Band Low",
+            "type": "number"
+          },
+          "end": {
+            "title": "End",
+            "type": "string"
+          },
+          "episode": {
+            "title": "Episode",
+            "type": "string"
+          },
+          "episode_label": {
+            "title": "Episode Label",
+            "type": "string"
+          },
+          "error": {
+            "title": "Error",
+            "type": "number"
+          },
+          "factors_used": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Factors Used",
+            "type": "array"
+          },
+          "fit_cutoff": {
+            "title": "Fit Cutoff",
+            "type": "string"
+          },
+          "outcome": {
+            "const": "observed",
+            "title": "Outcome",
+            "type": "string"
+          },
+          "portfolio": {
+            "title": "Portfolio",
+            "type": "string"
+          },
+          "portfolio_label": {
+            "title": "Portfolio Label",
+            "type": "string"
+          },
+          "predicted": {
+            "title": "Predicted",
+            "type": "number"
+          },
+          "predicted_beta_one": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Predicted Beta One"
+          },
+          "predicted_equity_only": {
+            "title": "Predicted Equity Only",
+            "type": "number"
+          },
+          "realised": {
+            "title": "Realised",
+            "type": "number"
+          },
+          "selection": {
+            "enum": [
+              "rule_based",
+              "hindsight"
+            ],
+            "title": "Selection",
+            "type": "string"
+          },
+          "start": {
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "episode",
+          "episode_label",
+          "start",
+          "end",
+          "portfolio",
+          "portfolio_label",
+          "selection",
+          "outcome",
+          "fit_cutoff",
+          "factors_used",
+          "realised",
+          "predicted",
+          "band_low",
+          "band_high",
+          "predicted_equity_only",
+          "predicted_beta_one",
+          "error"
+        ],
+        "title": "ValidationRow",
         "type": "object"
       },
       "ValuationBlock": {
@@ -22431,6 +23268,29 @@
           }
         },
         "title": "VerdictRequest",
+        "type": "object"
+      },
+      "WindowReturn": {
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "string"
+          },
+          "return_pct": {
+            "title": "Return Pct",
+            "type": "number"
+          },
+          "start": {
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "return_pct"
+        ],
+        "title": "WindowReturn",
         "type": "object"
       },
       "YieldCurvePointOut": {
@@ -26797,6 +27657,48 @@
         ]
       }
     },
+    "/api/v1/risk/crisis_replay": {
+      "post": {
+        "description": "Each holding is observed, reconstructed from its factor loadings, or\nreported unavailable \u2014 never silently dropped. Deterministic, no credits.",
+        "operationId": "crisis_replay_endpoint_api_v1_risk_crisis_replay_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReplayRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_CrisisReplayOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Replay the active stock book through past crises, with proxies labelled",
+        "tags": [
+          "risk"
+        ]
+      }
+    },
     "/api/v1/risk/efficient_frontier": {
       "post": {
         "operationId": "efficient_frontier_endpoint_api_v1_risk_efficient_frontier_post",
@@ -27504,6 +28406,28 @@
           }
         },
         "summary": "Recent portfolio snapshots (score/vol/VaR over time) for trend lines",
+        "tags": [
+          "risk"
+        ]
+      }
+    },
+    "/api/v1/risk/stress_validation": {
+      "get": {
+        "description": "The committed out-of-sample backtest: no user data, so it is public. The\nserver re-derives the content hash on every request.",
+        "operationId": "stress_validation_endpoint_api_v1_risk_stress_validation_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_StressValidationOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Point-in-time validation report for the stress model (public)",
         "tags": [
           "risk"
         ]
