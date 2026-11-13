@@ -210,6 +210,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/copilot/agent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Research agent: plans, calls risk tools, streams progress and a grounded answer
+         * @description Server-Sent Events: ``start``, ``tool_call``, ``tool_result``, ``notice``,
+         *     ``answer``, ``done`` (or a single ``error``). Read-only — no tool can trade,
+         *     save, or change holdings.
+         */
+        post: operations["agent_endpoint_api_v1_copilot_agent_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/copilot/ask": {
         parameters: {
             query?: never;
@@ -2351,6 +2373,13 @@ export interface components {
             baseline_score: number;
             /** Baseline Var 95 Daily */
             baseline_var_95_daily?: number | null;
+        };
+        /** AgentRequest */
+        AgentRequest: {
+            /** Expected Portfolio Id */
+            expected_portfolio_id?: string | null;
+            /** Question */
+            question: string;
         };
         /** AlertComponentVar */
         AlertComponentVar: {
@@ -10688,6 +10717,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_PortalSessionResponse_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_endpoint_api_v1_copilot_agent_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

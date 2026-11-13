@@ -275,6 +275,34 @@
         "title": "ActionSimulateOut",
         "type": "object"
       },
+      "AgentRequest": {
+        "properties": {
+          "expected_portfolio_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Portfolio Id"
+          },
+          "question": {
+            "maxLength": 1500,
+            "minLength": 2,
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "AgentRequest",
+        "type": "object"
+      },
       "AlertComponentVar": {
         "properties": {
           "pct": {
@@ -24158,6 +24186,46 @@
         "summary": "Create a Stripe Customer Portal session",
         "tags": [
           "billing"
+        ]
+      }
+    },
+    "/api/v1/copilot/agent": {
+      "post": {
+        "description": "Server-Sent Events: ``start``, ``tool_call``, ``tool_result``, ``notice``,\n``answer``, ``done`` (or a single ``error``). Read-only \u2014 no tool can trade,\nsave, or change holdings.",
+        "operationId": "agent_endpoint_api_v1_copilot_agent_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Research agent: plans, calls risk tools, streams progress and a grounded answer",
+        "tags": [
+          "copilot"
         ]
       }
     },

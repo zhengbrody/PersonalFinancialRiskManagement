@@ -57,6 +57,7 @@ CORE_CONTRACT = {
 # JSON endpoints that legitimately have no typed 200 body (streaming / bodyless).
 ENVELOPE_EXEMPT = {
     ("post", "/api/v1/copilot/chat/stream"),  # Server-Sent Events, not an envelope
+    ("post", "/api/v1/copilot/agent"),  # Server-Sent Events, not an envelope
 }
 
 

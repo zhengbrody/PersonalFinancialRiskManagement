@@ -16,9 +16,11 @@ from __future__ import annotations
 import json
 import logging
 import time
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import APIError, ok, service_unavailable, too_many_requests
@@ -613,3 +615,126 @@ def copilot_insights_endpoint(request: Request, user: AuthedUser = Depends(requi
         _log.warning("copilot.insights_failed err=%s", type(exc).__name__)
         out = InsightsOut(insights=[], portfolio_available=False)
     return ok(out.model_dump(), request=request, started_at=started)
+
+
+# ── research agent (tool-using, streamed) ─────────────────────────────
+# The model picks tools from a closed registry; deterministic services compute
+# every number; the run loop bounds steps, tool calls, time and tokens and
+# replaces any answer that cites a figure no tool produced. The portfolio is
+# resolved here from the caller's token and never from the model.
+
+
+class AgentRequest(BaseModel):
+    question: str = Field(..., min_length=2, max_length=1500)
+    expected_portfolio_id: Optional[str] = Field(default=None, min_length=1, max_length=64)
+
+
+def _agent_context(user: AuthedUser, expected_portfolio_id: Optional[str]):
+    """Tool context for the caller's ACTIVE portfolio (empty book allowed)."""
+    from ...services.agent.tools import ToolContext
+    from . import risk as risk_api
+
+    try:
+        active = risk_api._resolve_active_context_or_raise(user)
+    except APIError as exc:
+        if exc.code != "no_active_portfolio":
+            raise
+        return ToolContext(holdings={}), None
+    if expected_portfolio_id is not None and expected_portfolio_id != active.portfolio_id:
+        raise APIError(
+            status=409,
+            code="portfolio_changed",
+            message="The active portfolio changed. Ask again for the selected portfolio.",
+        )
+    return (
+        ToolContext(
+            holdings=active.holdings,
+            cash_balance=active.cash_balance,
+            margin_loan=active.margin_loan,
+            option_specs_fn=risk_api._option_specs_from_holdings,
+        ),
+        active.portfolio_id,
+    )
+
+
+def _record_agent_run(user_id: str, done: dict, grounding: dict) -> None:
+    """Meter the run and keep privacy-safe quality signals (no question text)."""
+    try:
+        from ...services.ai_telemetry import record_ai_call
+
+        if not done.get("tokens_in") and not done.get("tokens_out"):
+            return
+        record_ai_call(
+            user_id,
+            "chat",
+            model=str(done.get("model") or "unknown"),
+            provider=str(done.get("provider") or "deepseek"),
+            tokens_in=int(done.get("tokens_in") or 0),
+            tokens_out=int(done.get("tokens_out") or 0),
+            latency_ms=float(done.get("duration_ms") or 0),
+            eval_metadata={
+                "surface": "research_agent",
+                "mode": done.get("mode"),
+                "tool_turn_count": done.get("tool_calls"),
+                "steps": done.get("steps"),
+                "ai_written": done.get("ai_written"),
+                "grounding_passed": grounding.get("passed"),
+                "unsupported_figures": len(grounding.get("unsupported") or []),
+                "direct_advice_detected": bool(grounding.get("advice")),
+            },
+        )
+    except Exception as exc:  # noqa: BLE001 - metering must never break a run
+        _log.warning("copilot.agent.record_failed reason=%s", type(exc).__name__)
+
+
+@router.post(
+    "/agent",
+    summary="Research agent: plans, calls risk tools, streams progress and a grounded answer",
+    response_model=None,
+)
+def agent_endpoint(
+    body: AgentRequest,
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    """Server-Sent Events: ``start``, ``tool_call``, ``tool_result``, ``notice``,
+    ``answer``, ``done`` (or a single ``error``). Read-only — no tool can trade,
+    save, or change holdings."""
+    from ...services.agent import runner
+
+    ctx, portfolio_id = _agent_context(user, body.expected_portfolio_id)
+
+    driver = runner.default_driver()
+    if driver is not None:
+        from libs.billing.usage import ESTIMATED_COST_USD, QuotaExceeded, check_credits
+
+        try:
+            check_credits(user.id, email=user.email, estimated_cost_usd=ESTIMATED_COST_USD["chat"])
+        except QuotaExceeded:
+            # Out of AI credits: the analysis still runs, without the model.
+            driver = None
+        except Exception as exc:  # noqa: BLE001 - fail-open on a metering blip
+            _log.warning("copilot.agent.credit_failed reason=%s", type(exc).__name__)
+
+    def gen():
+        grounding: dict = {}
+        try:
+            for event, payload in runner.run_agent(body.question, ctx, driver=driver):
+                if event == "start":
+                    payload = {**payload, "portfolio_id": portfolio_id}
+                elif event == "answer":
+                    grounding = payload.get("grounding") or {}
+                elif event == "done":
+                    _record_agent_run(user.id, payload, grounding)
+                yield _sse(event, payload)
+        except Exception as exc:  # noqa: BLE001 - never leave the stream hanging
+            _log.warning("copilot.agent.stream_failed reason=%s", type(exc).__name__)
+            yield _sse(
+                "error", {"code": "server_error", "message": "The analysis could not be completed."}
+            )
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
