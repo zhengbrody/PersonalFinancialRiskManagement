@@ -1828,6 +1828,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/risk/crisis_replay": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Replay the active stock book through past crises, with proxies labelled
+         * @description Each holding is observed, reconstructed from its factor loadings, or
+         *     reported unavailable — never silently dropped. Deterministic, no credits.
+         */
+        post: operations["crisis_replay_endpoint_api_v1_risk_crisis_replay_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/risk/efficient_frontier": {
         parameters: {
             query?: never;
@@ -2134,6 +2155,27 @@ export interface paths {
          *     sparklines. Fail-soft to an empty list.
          */
         get: operations["snapshot_history_endpoint_api_v1_risk_snapshot_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/stress_validation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Point-in-time validation report for the stress model (public)
+         * @description The committed out-of-sample backtest: no user data, so it is public. The
+         *     server re-derives the content hash on every request.
+         */
+        get: operations["stress_validation_endpoint_api_v1_risk_stress_validation_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3753,6 +3795,29 @@ export interface components {
             /** Passed */
             passed?: boolean | null;
         };
+        /** CrisisReplayOut */
+        CrisisReplayOut: {
+            /** As Of */
+            as_of: string;
+            /** Benchmark */
+            benchmark: string;
+            /** Data Source */
+            data_source: string;
+            /** Episodes */
+            episodes: components["schemas"]["ReplayEpisode"][];
+            /** Gross Long */
+            gross_long: number;
+            /** Loadings */
+            loadings: components["schemas"]["ReplayLoading"][];
+            /** Method */
+            method: string[];
+            /** Model Version */
+            model_version: string;
+            /** Unpriced */
+            unpriced: string[];
+            /** Warnings */
+            warnings: string[];
+        };
         /**
          * CurvePoint
          * @description One point on a time series (equity curve / drawdown). ``date`` is an
@@ -3965,6 +4030,13 @@ export interface components {
             observations: number;
             /** Price As Of */
             price_as_of: string;
+        };
+        /** DatedReturn */
+        DatedReturn: {
+            /** Date */
+            date: string;
+            /** Return Pct */
+            return_pct: number;
         };
         /** DecisionSupport */
         DecisionSupport: {
@@ -4251,6 +4323,14 @@ export interface components {
         /** Envelope[CopilotPreferencesOut] */
         Envelope_CopilotPreferencesOut_: {
             data?: components["schemas"]["CopilotPreferencesOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[CrisisReplayOut] */
+        Envelope_CrisisReplayOut_: {
+            data?: components["schemas"]["CrisisReplayOut"] | null;
             error?: components["schemas"]["ErrorOut"] | null;
             meta: components["schemas"]["MetaOut"];
         } & {
@@ -4643,6 +4723,14 @@ export interface components {
         /** Envelope[SmartMoneyOut] */
         Envelope_SmartMoneyOut_: {
             data?: components["schemas"]["SmartMoneyOut"] | null;
+            error?: components["schemas"]["ErrorOut"] | null;
+            meta: components["schemas"]["MetaOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** Envelope[StressValidationOut] */
+        Envelope_StressValidationOut_: {
+            data?: components["schemas"]["StressValidationOut"] | null;
             error?: components["schemas"]["ErrorOut"] | null;
             meta: components["schemas"]["MetaOut"];
         } & {
@@ -7698,6 +7786,15 @@ export interface components {
             /** Status */
             status?: string | null;
         };
+        /** ReplayBenchmark */
+        ReplayBenchmark: {
+            /** Max Drawdown */
+            max_drawdown: number;
+            /** Return Pct */
+            return_pct: number;
+            /** Ticker */
+            ticker: string;
+        };
         /** ReplayComparison */
         ReplayComparison: {
             /**
@@ -7706,6 +7803,126 @@ export interface components {
              */
             expected_portfolio_id: string;
             receipt: components["schemas"]["ComparisonReceipt"];
+        };
+        /** ReplayCorrelation */
+        ReplayCorrelation: {
+            /** Assets Compared */
+            assets_compared: number;
+            /** Episode Avg Pairwise */
+            episode_avg_pairwise: number | null;
+            /** Recent Avg Pairwise */
+            recent_avg_pairwise: number | null;
+            /** Stock Bond Episode */
+            stock_bond_episode: number | null;
+            /** Stock Bond Recent */
+            stock_bond_recent: number | null;
+        };
+        /** ReplayCoverage */
+        ReplayCoverage: {
+            /** Observed Weight */
+            observed_weight: number;
+            /** Reconstructed Weight */
+            reconstructed_weight: number;
+            /** Unavailable Weight */
+            unavailable_weight: number;
+        };
+        /** ReplayEpisode */
+        ReplayEpisode: {
+            benchmark: components["schemas"]["ReplayBenchmark"];
+            /** Beta To Benchmark */
+            beta_to_benchmark: number | null;
+            /** By Factor */
+            by_factor: components["schemas"]["ReplayFactor"][];
+            correlation: components["schemas"]["ReplayCorrelation"];
+            coverage: components["schemas"]["ReplayCoverage"];
+            /** End */
+            end: string;
+            /** Excess Return Pct */
+            excess_return_pct: number;
+            /** Factor Explained Pct */
+            factor_explained_pct: number;
+            /** Factor Moves */
+            factor_moves: {
+                [key: string]: number | null;
+            };
+            /** Factors Unavailable */
+            factors_unavailable: string[];
+            /** Holdings */
+            holdings: components["schemas"]["ReplayHolding"][];
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Path */
+            path: components["schemas"]["ReplayPoint"][];
+            portfolio: components["schemas"]["ReplayPortfolio"];
+            /** Start */
+            start: string;
+            /** Trading Days */
+            trading_days: number;
+            /** Unexplained Pct */
+            unexplained_pct: number;
+        };
+        /** ReplayFactor */
+        ReplayFactor: {
+            /** Contribution Pct */
+            contribution_pct: number;
+            /** Factor */
+            factor: string;
+        };
+        /** ReplayHolding */
+        ReplayHolding: {
+            /** Contribution Pct */
+            contribution_pct: number | null;
+            /** Fit R2 */
+            fit_r2: number | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "observed" | "reconstructed" | "unavailable";
+            /** Loadings Source */
+            loadings_source: string | null;
+            /** Return Pct */
+            return_pct: number | null;
+            /** Ticker */
+            ticker: string;
+            /** Weight */
+            weight: number;
+        };
+        /** ReplayLoading */
+        ReplayLoading: {
+            /** Source */
+            source: string;
+            /** Ticker */
+            ticker: string;
+        };
+        /** ReplayPoint */
+        ReplayPoint: {
+            /** Benchmark */
+            benchmark: number;
+            /** Date */
+            date: string;
+            /** Drawdown */
+            drawdown: number;
+            /** Portfolio */
+            portfolio: number;
+        };
+        /** ReplayPortfolio */
+        ReplayPortfolio: {
+            /** Max Drawdown */
+            max_drawdown: number;
+            /** Return Pct */
+            return_pct: number;
+            /** Trough Date */
+            trough_date: string;
+            worst_day: components["schemas"]["DatedReturn"] | null;
+            worst_week: components["schemas"]["WindowReturn"] | null;
+        };
+        /** ReplayRequest */
+        ReplayRequest: {
+            /** Expected Portfolio Id */
+            expected_portfolio_id?: string | null;
         };
         /**
          * ReportFromActiveRequest
@@ -9600,6 +9817,33 @@ export interface components {
             /** Stock Pnl Usd */
             stock_pnl_usd: number;
         };
+        /** StressValidationOut */
+        StressValidationOut: {
+            /** Caveats */
+            caveats: string[];
+            conditional: components["schemas"]["ValidationConditional"];
+            /** Content Sha256 */
+            content_sha256: string;
+            /** Data */
+            data: {
+                [key: string]: unknown;
+            };
+            /** Generated At */
+            generated_at: string;
+            /** Hash Verified */
+            hash_verified: boolean;
+            /** Method */
+            method: {
+                [key: string]: unknown;
+            };
+            /** Model Version */
+            model_version: string;
+            /** Model Version Current */
+            model_version_current: boolean;
+            /** Report Version */
+            report_version: number;
+            rolling_var: components["schemas"]["ValidationRolling"];
+        };
         /**
          * SubscriptionOut
          * @description Mirror of the ``public.subscriptions`` row for the current user.
@@ -9841,6 +10085,31 @@ export interface components {
             /** Weight */
             weight: number;
         };
+        /** ValidationConditional */
+        ValidationConditional: {
+            /** By Episode */
+            by_episode: {
+                [key: string]: unknown;
+            }[];
+            /** Hindsight Rows */
+            hindsight_rows: number;
+            /** Interval */
+            interval: {
+                [key: string]: unknown;
+            };
+            /** Models */
+            models: {
+                [key: string]: {
+                    [key: string]: unknown;
+                };
+            };
+            /** Rows */
+            rows: components["schemas"]["ValidationRow"][];
+            /** Skipped */
+            skipped: {
+                [key: string]: string;
+            }[];
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -9853,6 +10122,60 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** ValidationRolling */
+        ValidationRolling: {
+            /** Pooled */
+            pooled: {
+                [key: string]: unknown;
+            }[];
+            /** Portfolios */
+            portfolios: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** ValidationRow */
+        ValidationRow: {
+            /** Band High */
+            band_high: number;
+            /** Band Low */
+            band_low: number;
+            /** End */
+            end: string;
+            /** Episode */
+            episode: string;
+            /** Episode Label */
+            episode_label: string;
+            /** Error */
+            error: number;
+            /** Factors Used */
+            factors_used: string[];
+            /** Fit Cutoff */
+            fit_cutoff: string;
+            /**
+             * Outcome
+             * @constant
+             */
+            outcome: "observed";
+            /** Portfolio */
+            portfolio: string;
+            /** Portfolio Label */
+            portfolio_label: string;
+            /** Predicted */
+            predicted: number;
+            /** Predicted Beta One */
+            predicted_beta_one: number | null;
+            /** Predicted Equity Only */
+            predicted_equity_only: number;
+            /** Realised */
+            realised: number;
+            /**
+             * Selection
+             * @enum {string}
+             */
+            selection: "rule_based" | "hindsight";
+            /** Start */
+            start: string;
         };
         /** ValuationBlock */
         ValuationBlock: {
@@ -9921,6 +10244,15 @@ export interface components {
             fact_pack?: components["schemas"]["FactPack"] | null;
             /** Ticker */
             ticker?: string | null;
+        };
+        /** WindowReturn */
+        WindowReturn: {
+            /** End */
+            end: string;
+            /** Return Pct */
+            return_pct: number;
+            /** Start */
+            start: string;
         };
         /** YieldCurvePointOut */
         YieldCurvePointOut: {
@@ -12969,6 +13301,39 @@ export interface operations {
             };
         };
     };
+    crisis_replay_endpoint_api_v1_risk_crisis_replay_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplayRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_CrisisReplayOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     efficient_frontier_endpoint_api_v1_risk_efficient_frontier_post: {
         parameters: {
             query?: never;
@@ -13518,6 +13883,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+        };
+    };
+    stress_validation_endpoint_api_v1_risk_stress_validation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_StressValidationOut_"];
                 };
             };
         };

@@ -40,6 +40,8 @@ import { QuantAttribution } from "@/components/quant-attribution";
 import { DataProvenance } from "@/components/data-provenance";
 import { QuantRegime } from "@/components/quant-regime";
 import { FactorStressLab } from "@/components/factor-stress-lab";
+import { CrisisReplayPanel } from "@/components/crisis-replay";
+import { StressValidationPanel } from "@/components/stress-validation";
 import { track } from "@/lib/analytics";
 import { ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -53,6 +55,8 @@ import {
 
 const QUANT_TABS = [
   { value: "stress", label: "Stress Lab" },
+  { value: "replay", label: "Crisis replay" },
+  { value: "validation", label: "Model accuracy" },
   { value: "backtest", label: "Backtest" },
   { value: "attribution", label: "Attribution" },
   { value: "regime", label: "Regime" },
@@ -163,6 +167,8 @@ export default function QuantPage() {
       />
 
       {tab === "stress" && <FactorStressLab />}
+      {tab === "replay" && <CrisisReplayPanel />}
+      {tab === "validation" && <StressValidationPanel />}
       {tab === "backtest" && (
         <>
           <Controls

@@ -38,6 +38,7 @@ from libs.mindmarket_core.score_version import SCORE_VERSION
 
 from ...core.deps_auth import AuthedUser, require_user
 from ...core.responses import APIError, ok, server_error, unprocessable
+from ...schemas.crisis_replay import CrisisReplayOut, ReplayRequest, StressValidationOut
 from ...schemas.envelope import Envelope
 from ...schemas.factor_stress import FactorStressOut, FactorStressRequest
 from ...schemas.risk import (
@@ -2959,3 +2960,88 @@ def factor_stress_endpoint(
         producer=_compute,
     ).value
     return ok(out, request=request, started_at=started)
+
+
+# ── crisis replay + published model validation ────────────────────────
+
+_REPLAY_ERRORS = {
+    "no_market_data": "Could not fetch prices for this portfolio.",
+    "no_factor_data": "Benchmark market data is unavailable right now. Try again shortly.",
+    "no_priced_holdings": "No stock or fund holding could be priced.",
+    "no_replayable_episode": "No past episode could be replayed for this portfolio.",
+}
+
+
+@router.post(
+    "/crisis_replay",
+    summary="Replay the active stock book through past crises, with proxies labelled",
+    response_model=Envelope[CrisisReplayOut],
+)
+def crisis_replay_endpoint(
+    body: ReplayRequest,
+    request: Request,
+    user: AuthedUser = Depends(require_user),
+):
+    """Each holding is observed, reconstructed from its factor loadings, or
+    reported unavailable — never silently dropped. Deterministic, no credits."""
+    started = time.perf_counter()
+
+    from ...services import context_cache as cc
+    from ...services import crisis_replay as svc
+
+    active_context = _resolve_active_context_or_raise(user)
+    if (
+        body.expected_portfolio_id is not None
+        and body.expected_portfolio_id != active_context.portfolio_id
+    ):
+        raise APIError(
+            status=409,
+            code="portfolio_changed",
+            message="The active portfolio changed. Run the replay again.",
+        )
+
+    def _compute() -> dict:
+        try:
+            raw = svc.run_crisis_replay(holdings=active_context.holdings)
+        except ValueError as exc:
+            code = str(exc)
+            if code not in _REPLAY_ERRORS:
+                raise
+            raise APIError(status=422, code=code, message=_REPLAY_ERRORS[code]) from exc
+        except Exception as exc:
+            raise server_error("Crisis replay failed.", reason=type(exc).__name__) from exc
+        return CrisisReplayOut.model_validate(raw).model_dump()
+
+    out = cc.cached_scenarios(
+        user_id=user.id,
+        holdings=active_context.holdings,
+        portfolio_context={"portfolio_id": active_context.portfolio_id},
+        scenario_params={"kind": "crisis_replay"},
+        producer=_compute,
+    ).value
+    return ok(out, request=request, started_at=started)
+
+
+@router.get(
+    "/stress_validation",
+    summary="Point-in-time validation report for the stress model (public)",
+    response_model=Envelope[StressValidationOut],
+)
+def stress_validation_endpoint(request: Request):
+    """The committed out-of-sample backtest: no user data, so it is public. The
+    server re-derives the content hash on every request."""
+    started = time.perf_counter()
+    from ...services import stress_validation
+
+    report = stress_validation.get_report()
+    if report is None:
+        raise APIError(
+            status=503,
+            code="validation_unavailable",
+            message="The validation report is not available.",
+        )
+    return ok(
+        StressValidationOut.model_validate(report).model_dump(),
+        request=request,
+        started_at=started,
+    )

@@ -202,6 +202,55 @@ def _fit_row(ticker: str, fit: fs.LoadingFit, source: str) -> dict[str, Any]:
     }
 
 
+def available_factors(recent: pd.DataFrame) -> list[str]:
+    """Factors with a year of data AND some variance in the fitting window. A
+    flat or missing series carries no information and is excluded."""
+    return [
+        f
+        for f in fs.FACTOR_IDS
+        if recent[f].notna().sum() >= fs.MIN_OBS_WEEKLY and float(recent[f].std()) > 0
+    ]
+
+
+def fit_book(
+    prices: pd.DataFrame,
+    tickers: list[str],
+    proxies: Mapping[str, Optional[str]],
+    fit_frame: pd.DataFrame,
+    available: list[str],
+) -> tuple[dict[str, fs.LoadingFit], dict[str, str]]:
+    """Loadings for each ticker, and where each came from.
+
+    ``own`` — the ticker's own weekly returns. ``sector_proxy:<ETF>`` — too
+    little history of its own, so its sector fund's loadings stand in.
+    ``unavailable`` — neither; the ticker gets NO fit (never a default beta).
+    """
+    fits: dict[str, fs.LoadingFit] = {}
+    sources: dict[str, str] = {}
+    proxy_fits: dict[str, Optional[fs.LoadingFit]] = {}
+
+    def _one(col: str) -> Optional[fs.LoadingFit]:
+        series = _weekly(prices, col)
+        if series is None:
+            return None
+        return fs.fit_loadings(series.tail(len(fit_frame)), fit_frame, active=available)
+
+    for ticker in tickers:
+        fit = _one(ticker)
+        if fit is not None:
+            fits[ticker], sources[ticker] = fit, "own"
+            continue
+        proxy = proxies.get(ticker)
+        if proxy:
+            if proxy not in proxy_fits:
+                proxy_fits[proxy] = _one(proxy)
+            if proxy_fits[proxy] is not None:
+                fits[ticker], sources[ticker] = proxy_fits[proxy], f"sector_proxy:{proxy}"
+                continue
+        sources[ticker] = "unavailable"
+    return fits, sources
+
+
 def run_factor_stress(
     *,
     holdings: Mapping[str, Mapping[str, Any]],
@@ -273,11 +322,7 @@ def run_factor_stress(
     recent = weekly.tail(LOADING_WEEKS)
     # A factor needs a year of data AND some variance to be regressed on; a flat
     # series carries no information and would make every fit refuse.
-    available = [
-        f
-        for f in fs.FACTOR_IDS
-        if recent[f].notna().sum() >= fs.MIN_OBS_WEEKLY and float(recent[f].std()) > 0
-    ]
+    available = available_factors(recent)
     unavailable_factors = [f for f in fs.FACTOR_IDS if f not in available]
     # A factor with no data is excluded from every regression (loading exactly
     # 0) and carried as a zero column in the covariance; it is reported as
@@ -309,36 +354,13 @@ def run_factor_stress(
             )
 
     # ── loadings ─────────────────────────────────────────────────────
-    fits: dict[str, fs.LoadingFit] = {}
-    sources: dict[str, str] = {}
-    proxy_fit_cache: dict[str, Optional[fs.LoadingFit]] = {}
-
-    def _fit(ticker: str) -> None:
-        own = _weekly(prices, ticker)
-        fit = (
-            fs.fit_loadings(own.tail(LOADING_WEEKS), fit_frame, active=available)
-            if own is not None
-            else None
-        )
-        if fit is not None:
-            fits[ticker], sources[ticker] = fit, "own"
-            return
-        proxy = proxies.get(ticker)
-        if proxy:
-            if proxy not in proxy_fit_cache:
-                pr = _weekly(prices, proxy)
-                proxy_fit_cache[proxy] = (
-                    fs.fit_loadings(pr.tail(LOADING_WEEKS), fit_frame, active=available)
-                    if pr is not None
-                    else None
-                )
-            if proxy_fit_cache[proxy] is not None:
-                fits[ticker], sources[ticker] = proxy_fit_cache[proxy], f"sector_proxy:{proxy}"
-                return
-        sources[ticker] = "unavailable"
-
-    for t in list(values) + [u for u in underlyings if u not in values]:
-        _fit(t)
+    fits, sources = fit_book(
+        prices,
+        list(values) + [u for u in underlyings if u not in values],
+        proxies,
+        fit_frame,
+        available,
+    )
 
     modelled = [t for t in values if t in fits]
     unmodelled = [t for t in values if t not in fits]
