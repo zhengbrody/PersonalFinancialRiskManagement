@@ -174,3 +174,12 @@ def test_options_are_named_as_out_of_scope_and_empty_books_are_an_error():
         svc.run_crisis_replay(
             holdings=HOLDINGS, price_fn=_prices(df.drop(columns=["SPY"])), today=TODAY
         )
+
+
+def test_a_holding_with_no_price_is_named_not_dropped_silently():
+    df = _market()
+    holdings = {**HOLDINGS, "GHOST": {"shares": 7, "asset_type": "stock"}}
+    out = svc.run_crisis_replay(holdings=holdings, price_fn=_prices(df), today=TODAY)
+    assert out["unpriced"] == ["GHOST"]
+    assert any("No price is available for GHOST" in w for w in out["warnings"])
+    assert "GHOST" not in {h["ticker"] for h in out["episodes"][0]["holdings"]}

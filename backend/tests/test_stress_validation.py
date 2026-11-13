@@ -123,7 +123,9 @@ def test_rolling_var_excludes_hindsight_and_pools_counts(synthetic_report):
     assert {p["portfolio"] for p in rv["portfolios"]} == {"aaa", "mix"}
     for pooled in rv["pooled"]:
         assert pooled["windows"] == sum(p["windows"] for p in rv["portfolios"])
-        assert pooled["breach_rate"] == pytest.approx(pooled["breaches"] / pooled["windows"], abs=1e-6)
+        assert pooled["breach_rate"] == pytest.approx(
+            pooled["breaches"] / pooled["windows"], abs=1e-6
+        )
 
 
 def test_markdown_carries_the_hashes_and_the_headline(synthetic_report):

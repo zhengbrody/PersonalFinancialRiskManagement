@@ -81,10 +81,20 @@ def run_crisis_replay(
         raise ValueError("no_factor_data")
 
     values: dict[str, float] = {}
+    unpriced: list[str] = []
     for t, h in rows.items():
         last = prices[t].dropna() if t in prices.columns else pd.Series(dtype=float)
-        if not last.empty:
+        if last.empty:
+            unpriced.append(t)
+        else:
             values[t] = float(h.get("shares")) * float(last.iloc[-1])
+    if unpriced:
+        # No price means no market value, so no weight can be assigned. Say so
+        # rather than letting the holding vanish from the replay.
+        warnings.append(
+            f"No price is available for {', '.join(sorted(unpriced))}, so "
+            f"{'it is' if len(unpriced) == 1 else 'they are'} not in this replay."
+        )
     gross = float(sum(values.values()))
     if gross <= 0:
         raise ValueError("no_priced_holdings")
@@ -100,7 +110,7 @@ def run_crisis_replay(
             fit_frame[f] = 0.0
     fits, sources = stress.fit_book(prices, list(values), proxies, fit_frame, available)
     daily_factors = fs.factor_returns(prices[series], freq=None)
-    daily_returns = prices[list(values)].pct_change()
+    daily_returns = prices[list(values)].pct_change(fill_method=None)
 
     recent_corr = cr.average_pairwise_correlation(daily_returns.tail(RECENT_DAYS))
     recent_stock_bond = cr.correlation(
@@ -185,9 +195,9 @@ def run_crisis_replay(
         observed = [t for t, k in kinds.items() if k == "observed"]
         ep_corr = cr.average_pairwise_correlation(daily_returns[observed].reindex(idx))
         ep_stock_bond = cr.correlation(f_win["equity"], f_win["rates"])
-        port_ret = port.pct_change()
+        port_ret = port.pct_change(fill_method=None)
         beta_to_bench = None
-        b_ret = bench_idx.pct_change()
+        b_ret = bench_idx.pct_change(fill_method=None)
         joined = pd.concat([port_ret, b_ret], axis=1).dropna()
         if len(joined) >= 10 and float(joined.iloc[:, 1].var()) > 0:
             beta_to_bench = float(joined.cov().iloc[0, 1] / joined.iloc[:, 1].var())
@@ -257,6 +267,7 @@ def run_crisis_replay(
         "as_of": prices.index[-1].strftime("%Y-%m-%d"),
         "benchmark": BENCHMARK,
         "gross_long": gross,
+        "unpriced": sorted(unpriced),
         "loadings": [
             {"ticker": t, "source": sources.get(t, "unavailable")}
             for t in sorted(values, key=lambda x: -weights[x])

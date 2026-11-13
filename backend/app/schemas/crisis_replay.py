@@ -106,6 +106,7 @@ class CrisisReplayOut(BaseModel):
     as_of: str
     benchmark: str
     gross_long: float
+    unpriced: list[str]
     loadings: list[ReplayLoading]
     episodes: list[ReplayEpisode]
     data_source: str

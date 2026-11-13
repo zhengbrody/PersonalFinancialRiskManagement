@@ -3813,6 +3813,8 @@ export interface components {
             method: string[];
             /** Model Version */
             model_version: string;
+            /** Unpriced */
+            unpriced: string[];
             /** Warnings */
             warnings: string[];
         };

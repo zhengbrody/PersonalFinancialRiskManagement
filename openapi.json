@@ -4100,6 +4100,13 @@
             "title": "Model Version",
             "type": "string"
           },
+          "unpriced": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unpriced",
+            "type": "array"
+          },
           "warnings": {
             "items": {
               "type": "string"
@@ -4113,6 +4120,7 @@
           "as_of",
           "benchmark",
           "gross_long",
+          "unpriced",
           "loadings",
           "episodes",
           "data_source",
