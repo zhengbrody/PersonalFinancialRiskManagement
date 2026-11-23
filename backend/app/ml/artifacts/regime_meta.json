@@ -1,8 +1,8 @@
 {
   "model_version": "regime-v1.1.0",
-  "trained_at": "2026-11-09T14:54:07.776003+00:00",
+  "trained_at": "2026-11-23T17:03:50.639505+00:00",
   "sklearn_version": "1.8.0",
-  "git_sha": "965f3a7e2472faa1019fdd386bbb0625754f8cce",
+  "git_sha": "cc08c2f716b36e0aba2f09148ed733a728f79044",
   "estimator": "HistGradientBoostingClassifier",
   "config": {
     "model_version": "regime-v1.1.0",
@@ -58,69 +58,69 @@
     ]
   },
   "training_window": {
-    "start": "2012-10-15",
-    "end": "2026-10-26",
+    "start": "2012-10-31",
+    "end": "2026-11-09",
     "rows": 3527
   },
   "class_distribution": {
-    "risk_on": 1882,
-    "neutral": 913,
-    "volatile": 550,
-    "stress": 182
+    "risk_on": 1881,
+    "neutral": 904,
+    "volatile": 552,
+    "stress": 190
   },
   "metrics": {
-    "cv_macro_f1_mean": 0.2818,
-    "cv_accuracy_mean": 0.4491,
-    "holdout_accuracy": 0.5368,
-    "holdout_macro_f1": 0.3656,
-    "elevated_risk_auc": 0.732,
+    "cv_macro_f1_mean": 0.2813,
+    "cv_accuracy_mean": 0.4497,
+    "holdout_accuracy": 0.5255,
+    "holdout_macro_f1": 0.3653,
+    "elevated_risk_auc": 0.7291,
     "baseline_majority_class": "risk_on",
-    "baseline_accuracy": 0.5198,
+    "baseline_accuracy": 0.5071,
     "per_class": {
       "risk_on": {
-        "precision": 0.618,
-        "recall": 0.839,
-        "f1-score": 0.712
+        "precision": 0.612,
+        "recall": 0.81,
+        "f1-score": 0.697
       },
       "neutral": {
-        "precision": 0.436,
-        "recall": 0.198,
-        "f1-score": 0.272
+        "precision": 0.434,
+        "recall": 0.219,
+        "f1-score": 0.291
       },
       "volatile": {
-        "precision": 0.235,
-        "recall": 0.237,
-        "f1-score": 0.236
+        "precision": 0.255,
+        "recall": 0.293,
+        "f1-score": 0.273
       },
       "stress": {
-        "precision": 0.235,
-        "recall": 0.25,
-        "f1-score": 0.242
+        "precision": 0.25,
+        "recall": 0.167,
+        "f1-score": 0.2
       }
     },
     "confusion_matrix": [
       [
-        308,
-        40,
-        17,
-        2
+        290,
+        44,
+        23,
+        1
       ],
       [
-        157,
-        48,
-        35,
-        3
+        151,
+        53,
+        34,
+        4
       ],
       [
-        33,
-        20,
+        32,
         19,
-        8
+        24,
+        7
       ],
       [
-        0,
-        2,
-        10,
+        1,
+        6,
+        13,
         4
       ]
     ],
@@ -133,38 +133,38 @@
     "holdout_size": 706
   },
   "feature_importances": {
-    "vix_level": 0.19528,
-    "vol_63d": 0.16236,
-    "golden_cross": 0.08507,
-    "vol_ratio": 0.07926,
-    "yield_slope": 0.07913,
-    "vol_21d": 0.07141,
-    "mom_60d": 0.06696,
-    "drawdown": 0.04735,
-    "trend_sma50": 0.0395,
-    "vix_change_5d": 0.03709,
-    "qqq_trend": 0.03689,
-    "qqq_spy_spread": 0.03506,
-    "mom_20d": 0.03158,
-    "vix_term": 0.02819,
-    "trend_sma200": 0.02002
+    "vix_level": 0.17548,
+    "vol_63d": 0.14119,
+    "mom_60d": 0.09087,
+    "yield_slope": 0.08893,
+    "golden_cross": 0.08795,
+    "vol_ratio": 0.07953,
+    "vol_21d": 0.05782,
+    "qqq_trend": 0.03897,
+    "qqq_spy_spread": 0.03382,
+    "mom_20d": 0.03059,
+    "trend_sma50": 0.02961,
+    "vix_change_5d": 0.02887,
+    "drawdown": 0.02362,
+    "vix_term": 0.0213,
+    "trend_sma200": 0.01942
   },
   "feature_medians": {
-    "trend_sma200": 0.067338,
-    "trend_sma50": 0.018983,
-    "golden_cross": 0.049258,
+    "trend_sma200": 0.067232,
+    "trend_sma50": 0.018972,
+    "golden_cross": 0.049366,
     "mom_20d": 0.016201,
-    "mom_60d": 0.040907,
-    "vol_21d": 0.11888,
-    "vol_63d": 0.124416,
-    "vol_ratio": 0.826826,
+    "mom_60d": 0.040743,
+    "vol_21d": 0.118975,
+    "vol_63d": 0.124467,
+    "vol_ratio": 0.827915,
     "drawdown": -0.014094,
     "vix_level": 16.049999,
     "vix_change_5d": -0.17,
-    "vix_term": 0.88175,
+    "vix_term": 0.881733,
     "qqq_trend": 0.086558,
     "qqq_spy_spread": 0.004247,
-    "yield_slope": 1.091
+    "yield_slope": 1.078
   },
   "data_coverage": {
     "sources_present": [
@@ -176,12 +176,12 @@
       "vix3m"
     ],
     "sources_missing": [],
-    "spy_start": "2011-10-14",
-    "spy_end": "2026-11-09",
+    "spy_start": "2011-10-28",
+    "spy_end": "2026-11-23",
     "observations": 3789
   },
   "artifact_sha256": {
-    "model": "fae70350e3a6f7e622f7c4ad8e77061a4c7b9ac28226ddec4357db712acbe6d0",
-    "reference": "59aa0435ae614f9f5b570eab1ce9ef4653f53629b0622fe81268b5deccb7c518"
+    "model": "029c92d6ce69242e9176ac39fa61e5dbe8fce62b6426b5b4a21d841c39222ac4",
+    "reference": "db45349272f7ef763b02336f9db11e6bf324c5c795e84f69cbd800b3a791b6d8"
   }
 }
